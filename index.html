@@ -504,20 +504,30 @@
             auth.signInWithPopup(provider).catch(err => { authStatus.textContent = 'خطأ: ' + err.message; });
         });
 
-        // Email/Password Sign-In & Sign-Up
-        document.getElementById('emailSignInBtn').addEventListener('click', () => {
-            const email = document.getElementById('emailInput').value;
-            const pass = document.getElementById('passInput').value;
+        // Email/Password Sign-In & Sign-Up (تم إصلاحه بالكامل)
+        document.getElementById('emailSignInBtn').addEventListener('click', async () => {
+            const email = document.getElementById('emailInput').value.trim();
+            const pass = document.getElementById('passInput').value.trim();
             if (!email || !pass) return authStatus.textContent = 'الرجاء ملء الحقول';
-            auth.signInWithEmailAndPassword(email, pass).catch(err => {
-                if (err.code === 'auth/user-not-found' || err.code === 'auth/wrong-password') {
-                    auth.createUserWithEmailAndPassword(email, pass).then(() => {
-                        authStatus.textContent = 'تم إنشاء الحساب، يرجى إكمال البيانات';
-                    }).catch(e => authStatus.textContent = 'خطأ: ' + e.message);
+
+            authStatus.textContent = 'جاري التحقق...';
+            try {
+                // محاولة تسجيل الدخول
+                await auth.signInWithEmailAndPassword(email, pass);
+                // إذا نجح، سيتم التعامل معه في onAuthStateChanged
+            } catch (err) {
+                if (err.code === 'auth/user-not-found') {
+                    // المستخدم غير موجود -> إنشاء حساب جديد
+                    try {
+                        await auth.createUserWithEmailAndPassword(email, pass);
+                        // سيتم التعامل معه في onAuthStateChanged
+                    } catch (createErr) {
+                        authStatus.textContent = 'خطأ في إنشاء الحساب: ' + createErr.message;
+                    }
                 } else {
-                    authStatus.textContent = 'خطأ: ' + err.message;
+                    authStatus.textContent = 'خطأ في تسجيل الدخول: ' + err.message;
                 }
-            });
+            }
         });
 
         switchToSignup.addEventListener('click', () => {
@@ -527,20 +537,26 @@
         });
 
         // ===== دالة حفظ الملف الشخصي في Firestore =====
-        document.getElementById('saveProfileBtn').addEventListener('click', async () => {
+        document.getElementById('saveProfileBtn').addEventListener('click', async function () {
+            const btn = this;
+            btn.disabled = true;
+            btn.textContent = 'جاري الحفظ...';
+
             const name = document.getElementById('profileName').value.trim();
             const gender = document.getElementById('profileGender').value;
             const code = document.getElementById('countryCode').value;
             const phone = document.getElementById('profilePhone').value.trim();
-            
-            if (!name || !phone) return authStatus.textContent = 'الرجاء إدخال الاسم ورقم الهاتف';
-            
+
+            if (!name || !phone) {
+                authStatus.textContent = 'الرجاء إدخال الاسم ورقم الهاتف';
+                btn.disabled = false;
+                btn.textContent = 'إتمام التسجيل';
+                return;
+            }
+
             if (currentUser) {
                 try {
-                    // تحديث اسم المستخدم في Firebase Auth
                     await currentUser.updateProfile({ displayName: name });
-                    
-                    // حفظ جميع البيانات في Firestore (مجموعة users)
                     await db.collection('users').doc(currentUser.uid).set({
                         uid: currentUser.uid,
                         email: currentUser.email,
@@ -549,13 +565,17 @@
                         phone: code + phone,
                         createdAt: firebase.firestore.FieldValue.serverTimestamp()
                     });
-
+                    console.log('✅ تم حفظ بيانات المستخدم بنجاح في Firestore!');
                     authPopup.classList.remove('active');
                     updateDashboard(currentUser);
                 } catch (error) {
+                    console.error('❌ خطأ أثناء حفظ البيانات:', error);
                     authStatus.textContent = 'حدث خطأ أثناء حفظ البيانات: ' + error.message;
                 }
             }
+
+            btn.disabled = false;
+            btn.textContent = 'إتمام التسجيل';
         });
 
         // ===== التحقق من حالة المصادقة والبيانات في Firestore =====
@@ -564,7 +584,7 @@
                 currentUser = user;
                 authToggleBtn.innerHTML = `<i class="fas fa-user-circle"></i> <span id="authLabel">${user.displayName || 'حسابي'}</span>`;
                 
-                // 1. التحقق من صلاحية المشرف (لأزرار الإدارة)
+                // 1. التحقق من صلاحية المشرف
                 try {
                     const adminDoc = await db.collection('admins').doc('main').get();
                     if (adminDoc.exists) {
@@ -584,7 +604,7 @@
                     const userDoc = await db.collection('users').doc(user.uid).get();
                     
                     if (userDoc.exists) {
-                        // المستخدم مسجل بالفعل، نغلق النافذة ونعرض لوحة التحكم
+                        // المستخدم مسجل بالفعل
                         authPopup.classList.remove('active');
                         updateDashboard(user);
                     } else {
@@ -592,7 +612,6 @@
                         authPopup.classList.add('active');
                         authStep1.style.display = 'none';
                         authStep2.style.display = 'block';
-                        // إذا سجل بجوجل، نملأ حقل الاسم تلقائياً
                         if (user.displayName) {
                             document.getElementById('profileName').value = user.displayName;
                         }
@@ -714,7 +733,7 @@
             await loadNotifications();
         })();
 
-        console.log('🍍 أناناس أكاديمي - تم تحديث النظام: جميع المستخدمين الجدد يُسجلون في Firestore مع الاسم والجنس والهاتف.');
+        console.log('🍍 أناناس أكاديمي - تم إصلاح مشكلة التسجيل بالبريد، وطلب البيانات للمستخدمين الجدد.');
     </script>
 </body>
 </html>
