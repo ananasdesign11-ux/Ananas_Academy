@@ -8,6 +8,7 @@
     <link href="https://unpkg.com/aos@2.3.1/dist/aos.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
     
+    <!-- Firebase & Cloudinary -->
     <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
@@ -481,7 +482,7 @@
         });
 
         // ================================================================
-        // 6. نظام المصادقة والتحقق من المشرف
+        // 6. نظام المصادقة وتخزين البيانات في Firestore
         // ================================================================
         const authPopup = document.getElementById('authPopup');
         const authToggleBtn = document.getElementById('authToggleBtn');
@@ -525,33 +526,45 @@
             authStatus.textContent = 'أدخل البريد وكلمة المرور لإنشاء حساب جديد';
         });
 
-        // حفظ الملف الشخصي
+        // ===== دالة حفظ الملف الشخصي في Firestore =====
         document.getElementById('saveProfileBtn').addEventListener('click', async () => {
-            const name = document.getElementById('profileName').value;
+            const name = document.getElementById('profileName').value.trim();
             const gender = document.getElementById('profileGender').value;
             const code = document.getElementById('countryCode').value;
-            const phone = document.getElementById('profilePhone').value;
+            const phone = document.getElementById('profilePhone').value.trim();
+            
             if (!name || !phone) return authStatus.textContent = 'الرجاء إدخال الاسم ورقم الهاتف';
             
             if (currentUser) {
-                // تحديث الاسم في حساب Firebase
-                await currentUser.updateProfile({ displayName: name });
-                // حفظ المعلومات المتبقية محلياً (الجنس والهاتف) في المتصفح
-                localStorage.setItem('profile_' + currentUser.uid, JSON.stringify({ name, gender, phone: code + phone }));
-                
-                authPopup.classList.remove('active');
-                updateDashboard(currentUser);
+                try {
+                    // تحديث اسم المستخدم في Firebase Auth
+                    await currentUser.updateProfile({ displayName: name });
+                    
+                    // حفظ جميع البيانات في Firestore (مجموعة users)
+                    await db.collection('users').doc(currentUser.uid).set({
+                        uid: currentUser.uid,
+                        email: currentUser.email,
+                        displayName: name,
+                        gender: gender,
+                        phone: code + phone,
+                        createdAt: firebase.firestore.FieldValue.serverTimestamp()
+                    });
+
+                    authPopup.classList.remove('active');
+                    updateDashboard(currentUser);
+                } catch (error) {
+                    authStatus.textContent = 'حدث خطأ أثناء حفظ البيانات: ' + error.message;
+                }
             }
         });
 
-        // التحقق من حالة المصادقة والصلاحيات
+        // ===== التحقق من حالة المصادقة والبيانات في Firestore =====
         auth.onAuthStateChanged(async (user) => {
             if (user) {
                 currentUser = user;
                 authToggleBtn.innerHTML = `<i class="fas fa-user-circle"></i> <span id="authLabel">${user.displayName || 'حسابي'}</span>`;
-                authPopup.classList.remove('active');
-
-                // 1. التحقق من صلاحية المشرف
+                
+                // 1. التحقق من صلاحية المشرف (لأزرار الإدارة)
                 try {
                     const adminDoc = await db.collection('admins').doc('main').get();
                     if (adminDoc.exists) {
@@ -561,27 +574,39 @@
                         isAdmin = false;
                     }
                 } catch (e) { isAdmin = false; }
-
-                // تحديث واجهة المشرف (إظهار/إخفاء أزرار المشرف)
                 document.querySelectorAll('.admin-only').forEach(el => {
                     if (isAdmin) el.classList.add('show');
                     else el.classList.remove('show');
                 });
 
-                // 2. التحقق من المعلومات الإضافية (أول تسجيل دخول)
-                const hasProfile = localStorage.getItem('profile_' + user.uid);
-                
-                // إذا كان المستخدم جديداً (ليس لديه اسم عرض في Firebase وليس لدينا ملف محلي)
-                if (!hasProfile && !user.displayName) {
+                // 2. التحقق من وجود بيانات المستخدم في Firestore
+                try {
+                    const userDoc = await db.collection('users').doc(user.uid).get();
+                    
+                    if (userDoc.exists) {
+                        // المستخدم مسجل بالفعل، نغلق النافذة ونعرض لوحة التحكم
+                        authPopup.classList.remove('active');
+                        updateDashboard(user);
+                    } else {
+                        // مستخدم جديد: نطلب البيانات الإضافية
+                        authPopup.classList.add('active');
+                        authStep1.style.display = 'none';
+                        authStep2.style.display = 'block';
+                        // إذا سجل بجوجل، نملأ حقل الاسم تلقائياً
+                        if (user.displayName) {
+                            document.getElementById('profileName').value = user.displayName;
+                        }
+                        authStatus.textContent = 'أكمل بياناتك لإتمام التسجيل في قاعدة البيانات';
+                    }
+                } catch (error) {
+                    console.error('خطأ في التحقق من بيانات المستخدم:', error);
                     authPopup.classList.add('active');
                     authStep1.style.display = 'none';
                     authStep2.style.display = 'block';
-                    authStatus.textContent = 'أكمل بياناتك لإتمام التسجيل';
-                } else {
-                    // تحديث لوحة التحكم للمستخدم
-                    updateDashboard(user);
+                    authStatus.textContent = 'حدث خطأ، يرجى المحاولة مرة أخرى';
                 }
             } else {
+                // المستخدم غير مسجل
                 currentUser = null;
                 isAdmin = false;
                 document.querySelectorAll('.admin-only').forEach(el => el.classList.remove('show'));
@@ -600,12 +625,10 @@
             const avatarEl = document.querySelector('#welcomeCard .avatar');
 
             if (isAdmin) {
-                // تحية خاصة للمشرف
                 titleEl.textContent = `👑 مرحباً بك أيها المدير، ${name}!`;
                 descEl.textContent = 'أنت الآن في لوحة تحكم المدير. يمكنك إدارة الإشعارات ومتابعة جميع عمليات المنصة.';
                 avatarEl.innerHTML = `<i class="fas fa-crown"></i>`;
             } else {
-                // التحية العادية للطلاب والمستخدمين
                 titleEl.textContent = (translations[currentLang]?.welcomeTitle || 'مرحباً بك') + '، ' + name + '!';
                 descEl.textContent = translations[currentLang]?.welcomeDesc || 'أنت الآن في لوحة التحكم. يمكنك متابعة إشعاراتك من هنا.';
                 avatarEl.innerHTML = `<i class="fas fa-user-check"></i>`;
@@ -691,7 +714,7 @@
             await loadNotifications();
         })();
 
-        console.log('🍍 أناناس أكاديمي - تم تحديث النظام: طلب البيانات للمستخدمين الجدد، وإضافة تحية خاصة للمشرف.');
+        console.log('🍍 أناناس أكاديمي - تم تحديث النظام: جميع المستخدمين الجدد يُسجلون في Firestore مع الاسم والجنس والهاتف.');
     </script>
 </body>
 </html>
