@@ -8,7 +8,6 @@
     <link href="https://unpkg.com/aos@2.3.1/dist/aos.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
     
-    <!-- Firebase & Cloudinary Config -->
     <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
@@ -481,7 +480,7 @@
         });
 
         // ================================================================
-        // 6. نظام المصادقة (حل مشكلة auth/invalid-login-credentials)
+        // 6. نظام المصادقة (مع مسح الخانات عند التسجيل الجديد)
         // ================================================================
         const authPopup = document.getElementById('authPopup');
         const authToggleBtn = document.getElementById('authToggleBtn');
@@ -502,7 +501,7 @@
             auth.signInWithPopup(provider).catch(err => { authStatus.textContent = 'خطأ: ' + err.message; });
         });
 
-        // Email/Password Sign-In & Auto Sign-Up (حل المشكلة هنا)
+        // Email/Password Sign-In & Auto Sign-Up
         document.getElementById('emailSignInBtn').addEventListener('click', async () => {
             const email = document.getElementById('emailInput').value.trim();
             const pass = document.getElementById('passInput').value.trim();
@@ -510,11 +509,9 @@
             if (pass.length < 6) return authStatus.textContent = 'كلمة المرور يجب أن تكون 6 أحرف على الأقل';
 
             try {
-                // محاولة تسجيل الدخول
                 await auth.signInWithEmailAndPassword(email, pass);
                 authStatus.textContent = 'جاري تسجيل الدخول...';
             } catch (error) {
-                // إذا كان الإيميل غير موجود أو بيانات الدخول خاطئة، نقوم بإنشاء حساب جديد
                 if (error.code === 'auth/user-not-found' || error.code === 'auth/invalid-credential' || error.code === 'auth/invalid-login-credentials' || error.code === 'auth/wrong-password') {
                     try {
                         await auth.createUserWithEmailAndPassword(email, pass);
@@ -558,13 +555,24 @@
                         authPopup.classList.remove('active');
                         updateDashboard(user);
                     } else {
-                        // مستخدم جديد: نطلب البيانات الإضافية
+                        // ===== مستخدم جديد: نطلب البيانات الإضافية =====
                         authPopup.classList.add('active');
                         authStep1.style.display = 'none';
                         authStep2.style.display = 'block';
+
+                        // تنظيف جميع الحقول ليست فارغة تماماً
+                        document.getElementById('emailInput').value = '';   // مسح البريد الذي كتبه المستخدم سابقاً
+                        document.getElementById('passInput').value = '';    // مسح كلمة المرور التي كتبها المستخدم سابقاً
+                        document.getElementById('profilePhone').value = ''; // مسح رقم الهاتف
+                        document.getElementById('profileGender').value = 'male'; // إعادة الجنس للافتراضي
+
+                        // تعبئة الاسم فقط إذا كان حساب Google (user.displayName)
                         if (user.displayName) {
                             document.getElementById('profileName').value = user.displayName;
+                        } else {
+                            document.getElementById('profileName').value = ''; // مسح الاسم إذا كان بريد/كلمة سر
                         }
+
                         authStatus.textContent = 'أكمل بياناتك لإتمام التسجيل';
                     }
                 } catch (error) {
@@ -723,7 +731,7 @@
             await loadNotifications();
         })();
 
-        console.log('🍍 أناناس أكاديمي - تم إصلاح مشكلة تسجيل الدخول بالبريد/كلمة السر.');
+        console.log('🍍 أناناس أكاديمي - تم إصلاح مشكلة عدم مسح الخانات. الآن جميع الحقول فارغة تماماً عند التسجيل الجديد، باستثناء الاسم في حالة Google.');
     </script>
 </body>
 </html>
