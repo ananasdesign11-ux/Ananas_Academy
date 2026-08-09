@@ -552,6 +552,20 @@
         <div id="authStatus" style="text-align:center; margin-top:10px; color:var(--text-muted); font-size:0.9rem;"></div>
     </div>
 
+    <!-- ===== NEW MODAL FOR ENROLL CODE ===== -->
+    <div class="edit-modal" id="enrollCodeModal">
+        <button onclick="document.getElementById('enrollCodeModal').classList.remove('active')" style="position:static; float:left; font-size:1.5rem; background:none; border:none; color:var(--text-muted); cursor:pointer;">&times;</button>
+        <h3 id="enrollCodeTitle">أدخل كود الاشتراك</h3>
+        <div style="display:flex; flex-direction:column; gap:15px;">
+            <p id="enrollCodeDesc" style="color:var(--text-muted);">الرجاء إدخال الكود المخصص للوصول إلى محتوى هذه الدورة.</p>
+            <input type="text" id="enrollCodeInput" placeholder="اكتب الكود هنا..." style="width:100%; padding:12px; border-radius:10px; border:1px solid var(--border); background:var(--bg-secondary); color:var(--text-primary); font-family:inherit; text-align:center; font-size:1.2rem; letter-spacing:2px;">
+            <div style="display:flex; gap:10px; justify-content:flex-end;">
+                <button onclick="document.getElementById('enrollCodeModal').classList.remove('active')" style="padding:8px 20px; border-radius:30px; border:1px solid var(--border); background:transparent; color:var(--text-muted); cursor:pointer; font-family:inherit;">إلغاء</button>
+                <button id="enrollCodeSubmitBtn" style="padding:8px 20px; border-radius:30px; border:none; background:var(--accent-gradient); color:#fff; cursor:pointer; font-family:inherit; font-weight:700;">تأكيد الكود</button>
+            </div>
+        </div>
+    </div>
+
     <!-- ===== Edit Modals for Home and Stats ===== -->
     <div class="edit-modal" id="editAboutModal"><button onclick="document.getElementById('editAboutModal').classList.remove('active')" style="position:static; float:left; font-size:1.5rem; background:none; border:none; color:var(--text-muted); cursor:pointer;">&times;</button><h3 id="editAboutModalTitle"></h3><div><label id="editAboutArLabel"></label><textarea id="editAboutAr" rows="4"></textarea><label id="editAboutEnLabel"></label><textarea id="editAboutEn" rows="4"></textarea><button onclick="saveAboutText()" id="saveAboutBtn" style="width:100%; padding:12px; margin-top:15px; background:var(--accent-gradient); color:#fff; border:none; border-radius:30px; font-weight:700; cursor:pointer;"></button></div></div>
     <div class="edit-modal" id="editEncouragementModal"><button onclick="document.getElementById('editEncouragementModal').classList.remove('active')" style="position:static; float:left; font-size:1.5rem; background:none; border:none; color:var(--text-muted); cursor:pointer;">&times;</button><h3 id="editEncouragementModalTitle"></h3><div><label id="editEncArLabel"></label><input type="text" id="editEncAr"><label id="editEncEnLabel"></label><input type="text" id="editEncEn"><button onclick="saveEncouragementText()" id="saveEncouragementBtn" style="width:100%; padding:12px; margin-top:15px; background:var(--accent-gradient); color:#fff; border:none; border-radius:30px; font-weight:700; cursor:pointer;"></button></div></div>
@@ -1600,91 +1614,114 @@
         // === عرض تفاصيل الدورة ===
         window.openCourse = async function(courseId) {
             if (!currentUser) { triggerAuth(); return; }
+            
+            // ===== NEW: Skip code for Admin =====
+            if (isAdmin) {
+                // If user is admin, bypass all enrollment checks and open the course immediately
+                return await openCourseContent(courseId);
+            }
+
             const course = coursesData.find(c => c.id === courseId);
             if (!course) return;
 
-            // 1. Check enrollment status (Check Code Logic)
-            // We will simulate a code verification using Firestore query for demo.
-            // In real production, do a query to 'courses/{courseId}/enrolledUsers' or similar to prevent bypass.
-            
-            // Quick check: Did user already use a valid code for this course?
-            // (For this demo, we'll prompt for code to make it realistic)
-            
-            // NOTE: In a real large app, this check would happen on the server or by verifying a document.
-            // We'll simulate it by checking if user is in `course.enrolledUsers` (mock array).
-            // Since `course.enrolledUsers` doesn't exist in mock data, we will prompt for code.
-            
+            // Check existing enrollment
             const existingEnrollment = await db.collection('users').doc(currentUser.uid).collection('enrolledCourses').doc(courseId).get();
-            
             let isEnrolled = existingEnrollment.exists;
 
             // If not enrolled, we ask for code
             if (!isEnrolled) {
-                const t = translations[currentLang] || translations['ar'] || {};
-                const enteredCode = prompt(t.enterEnrollCode || 'أدخل كود الاشتراك للوصول للدورة:');
-                
-                if (!enteredCode) {
-                    alert(t.cancelEnroll || 'تم إلغاء الاشتراك.');
-                    return;
-                }
-
-                // Verify Code in Firestore
-                try {
-                    const codeSnapshot = await db.collection('courses').doc(courseId).collection('codes')
-                        .where('code', '==', enteredCode)
-                        .where('usedCount', '<', firebase.firestore.FieldValue.increment(0)) // This is tricky for query, better to retrieve and check in code
-                        .get();
+                // Use our custom modal instead of prompt
+                await new Promise((resolve) => {
+                    const modal = document.getElementById('enrollCodeModal');
+                    const input = document.getElementById('enrollCodeInput');
+                    const submitBtn = document.getElementById('enrollCodeSubmitBtn');
+                    const t = translations[currentLang] || translations['ar'] || {};
                     
-                    if (codeSnapshot.empty) {
-                        alert(t.invalidCode || 'الكود غير صحيح أو منتهي الصلاحية.');
-                        return;
-                    }
+                    // Reset fields
+                    input.value = '';
+                    modal.classList.add('active');
+                    input.focus();
 
-                    let validCodeFound = false;
-                    let codeDoc = null;
-                    let codeData = null;
+                    const cleanup = () => {
+                        modal.classList.remove('active');
+                        submitBtn.onclick = null;
+                        resolve();
+                    };
 
-                    codeSnapshot.forEach(doc => {
-                        const data = doc.data();
-                        const now = new Date();
-                        const start = data.startTime ? data.startTime.toDate() : new Date(0);
-                        const end = data.endTime ? data.endTime.toDate() : new Date(8640000000000000); // Far future
-
-                        if (start <= now && end >= now && data.usedCount < data.maxUses) {
-                            validCodeFound = true;
-                            codeDoc = doc;
-                            codeData = data;
+                    const handleSubmit = async () => {
+                        const enteredCode = input.value.trim();
+                        if (!enteredCode) {
+                            alert(t.enterEnrollCode || 'أدخل كود الاشتراك للوصول للدورة:');
+                            return;
                         }
+
+                        // Verify Code in Firestore
+                        try {
+                            const codeSnapshot = await db.collection('courses').doc(courseId).collection('codes')
+                                .where('code', '==', enteredCode).get();
+                            
+                            if (codeSnapshot.empty) {
+                                alert(t.invalidCode || 'الكود غير صحيح أو منتهي الصلاحية.');
+                                return;
+                            }
+
+                            let validCodeFound = false;
+                            let codeDoc = null;
+
+                            codeSnapshot.forEach(doc => {
+                                const data = doc.data();
+                                const now = new Date();
+                                const start = data.startTime ? data.startTime.toDate() : new Date(0);
+                                const end = data.endTime ? data.endTime.toDate() : new Date(8640000000000000);
+
+                                if (start <= now && end >= now && data.usedCount < data.maxUses) {
+                                    validCodeFound = true;
+                                    codeDoc = doc;
+                                }
+                            });
+
+                            if (!validCodeFound) {
+                                alert(t.codeExpired || 'الكود غير صحيح أو انتهت صلاحيته أو تم استخدامه بالكامل.');
+                                return;
+                            }
+
+                            // Process enrollment
+                            await db.collection('courses').doc(courseId).collection('codes').doc(codeDoc.id).update({
+                                usedCount: firebase.firestore.FieldValue.increment(1),
+                                usedBy: firebase.firestore.FieldValue.arrayUnion(currentUser.uid)
+                            });
+
+                            await db.collection('users').doc(currentUser.uid).collection('enrolledCourses').doc(courseId).set({
+                                enrolledAt: firebase.firestore.FieldValue.serverTimestamp(),
+                                codeUsed: enteredCode
+                            });
+
+                            isEnrolled = true;
+                            alert(t.enrollSuccess || 'تم الاشتراك بنجاح! يمكنك الآن بدء التعلم.');
+                            cleanup();
+                            await openCourseContent(courseId);
+                        } catch (error) {
+                            alert('حدث خطأ أثناء التحقق من الكود: ' + error.message);
+                        }
+                    };
+
+                    submitBtn.onclick = handleSubmit;
+                    input.addEventListener('keypress', (e) => {
+                        if (e.key === 'Enter') handleSubmit();
                     });
-
-                    if (!validCodeFound) {
-                        alert(t.codeExpired || 'الكود غير صحيح أو انتهت صلاحيته أو تم استخدامه بالكامل.');
-                        return;
-                    }
-
-                    // Process enrollment
-                    // 1. Increment use count
-                    await db.collection('courses').doc(courseId).collection('codes').doc(codeDoc.id).update({
-                        usedCount: firebase.firestore.FieldValue.increment(1),
-                        usedBy: firebase.firestore.FieldValue.arrayUnion(currentUser.uid)
-                    });
-
-                    // 2. Add user to enrolled course
-                    await db.collection('users').doc(currentUser.uid).collection('enrolledCourses').doc(courseId).set({
-                        enrolledAt: firebase.firestore.FieldValue.serverTimestamp(),
-                        codeUsed: enteredCode
-                    });
-
-                    isEnrolled = true;
-                    alert(t.enrollSuccess || 'تم الاشتراك بنجاح! يمكنك الآن بدء التعلم.');
-
-                } catch (error) {
-                    alert('حدث خطأ أثناء التحقق من الكود: ' + error.message);
-                    return;
-                }
+                });
+                return;
             }
 
-            // ==== Open Course (Overview Mode) ====
+            // Already enrolled, open content
+            await openCourseContent(courseId);
+        };
+
+        // Helper function to actually open the course content (Overview)
+        async function openCourseContent(courseId) {
+            const course = coursesData.find(c => c.id === courseId);
+            if (!course) return;
+
             activeCourseId = courseId;
             document.getElementById('coursesGridContainer').style.display = 'none';
             const view = document.getElementById('courseDetailView');
@@ -1716,7 +1753,7 @@
             activeLessonId = null;
 
             document.getElementById('enrollActionContainer').innerHTML = `<span style="color: var(--text-muted);">${t.enrolledMsg || 'You are enrolled!'} ✅</span>`;
-        };
+        }
 
         // === بدء التعلم (Switch to Split View) ===
         document.getElementById('startLearningBtn').addEventListener('click', function() {
