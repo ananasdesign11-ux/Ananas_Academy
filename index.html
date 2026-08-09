@@ -1,0 +1,678 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl" id="htmlRoot">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ananas Academy | أناناس أكاديمي</title>
+    <link rel="icon" type="image/png" href="https://i.postimg.cc/q7Frnj7k/image.png">
+    <link href="https://unpkg.com/aos@2.3.1/dist/aos.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    
+    <!-- Firebase & Cloudinary Config -->
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+    
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;600;700;900&display=swap');
+
+        :root {
+            --bg-primary: #0a0a0a;
+            --bg-secondary: #111;
+            --bg-card: #1a1a1a;
+            --text-primary: #f0f0f0;
+            --text-muted: #b0b0b0;
+            --accent1: #6c5ce7; /* بنفسجي */
+            --accent2: #0984e3; /* أزرق */
+            --border: #2a2a2a;
+            --shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+            --radius: 16px;
+            --transition: all 0.3s ease;
+        }
+
+        body.light-mode {
+            --bg-primary: #f8f9fa;
+            --bg-secondary: #ffffff;
+            --bg-card: #ffffff;
+            --text-primary: #1a1a1a;
+            --text-muted: #555;
+            --border: #e0e0e0;
+            --shadow: 0 10px 40px rgba(0, 0, 0, 0.08);
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Cairo', sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            transition: var(--transition);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .container { max-width: 1200px; margin: 0 auto; padding: 0 20px; width: 100%; }
+
+        /* ===== Navbar ===== */
+        .navbar {
+            position: fixed; top: 0; width: 100%; z-index: 1000;
+            background: var(--bg-secondary); backdrop-filter: blur(20px);
+            border-bottom: 1px solid var(--border); padding: 12px 0;
+        }
+        .nav-container { display: flex; align-items: center; justify-content: space-between; }
+        .logo { display: flex; align-items: center; text-decoration: none; gap: 10px; }
+        .logo-img { height: 45px; width: auto; transition: var(--transition); }
+        .logo-text { font-size: 1.4rem; font-weight: 900; background: linear-gradient(135deg, var(--accent1), var(--accent2)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+        .nav-actions { display: flex; align-items: center; gap: 12px; }
+        .nav-btn {
+            background: transparent; border: none; color: var(--text-muted);
+            font-size: 1.2rem; cursor: pointer; transition: var(--transition);
+            width: 40px; height: 40px; border-radius: 50%; display: flex;
+            align-items: center; justify-content: center; position: relative;
+            text-decoration: none;
+        }
+        .nav-btn:hover { color: var(--accent1); background: rgba(108, 92, 231, 0.1); }
+        .nav-btn .badge {
+            position: absolute; top: -2px; right: -2px; background: #e74c3c;
+            color: #fff; font-size: 0.65rem; font-weight: 700; width: 20px; height: 20px;
+            border-radius: 50%; display: flex; align-items: center; justify-content: center;
+            display: none;
+        }
+        .auth-btn {
+            background: linear-gradient(135deg, var(--accent1), var(--accent2));
+            color: #fff; border: none; padding: 8px 18px; border-radius: 30px;
+            font-weight: 700; cursor: pointer; transition: var(--transition);
+            display: flex; align-items: center; gap: 8px; font-family: inherit;
+        }
+        .auth-btn:hover { transform: translateY(-2px); box-shadow: 0 8px 25px rgba(108, 92, 231, 0.3); }
+
+        /* ===== إدارة الصفحات (SPA Routing) ===== */
+        .page { display: none; padding-top: 80px; min-height: 100vh; flex: 1; width: 100%; }
+        .page.active { display: block; }
+
+        /* ===== الصفحة الرئيسية ===== */
+        .welcome-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); padding: 30px; text-align: center; box-shadow: var(--shadow); margin-top: 20px; }
+        .welcome-card .avatar { width: 80px; height: 80px; border-radius: 50%; background: linear-gradient(135deg, var(--accent1), var(--accent2)); margin: 0 auto 15px; display: flex; align-items: center; justify-content: center; font-size: 2.5rem; color: #fff; }
+        .welcome-card h1 { font-size: 2rem; margin-bottom: 10px; }
+        .welcome-card p { color: var(--text-muted); max-width: 600px; margin: 0 auto; }
+
+        /* ===== صفحة الإشعارات ===== */
+        #notificationsPage .page-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px; flex-wrap: wrap; gap: 15px; }
+        #notificationsPage .page-header h2 { font-size: 2rem; color: var(--accent1); }
+        #notificationsPage .page-header .back-home { color: var(--text-muted); text-decoration: none; font-weight: 600; transition: 0.3s; }
+        #notificationsPage .page-header .back-home:hover { color: var(--accent1); }
+        .full-notif-list { display: flex; flex-direction: column; gap: 15px; }
+        .full-notif-item { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px; transition: var(--transition); display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; }
+        .full-notif-item:hover { border-color: var(--accent1); transform: translateY(-2px); }
+        .full-notif-item .info { flex: 1; }
+        .full-notif-item .info h4 { margin-bottom: 5px; }
+        .full-notif-item .info p { color: var(--text-muted); }
+        .full-notif-item .info small { color: var(--text-muted); display: block; margin-top: 5px; }
+        .full-notif-item .actions { display: flex; gap: 10px; }
+        .full-notif-item .actions button { background: none; border: none; color: var(--text-muted); cursor: pointer; font-size: 1.2rem; transition: 0.2s; }
+        .full-notif-item .actions button:hover { color: var(--accent1); }
+
+        /* ===== Notifications Dropdown ===== */
+        .notif-panel { position: fixed; top: 75px; inset-inline-end: 20px; width: 380px; max-height: 500px; background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); overflow-y: auto; z-index: 1001; display: none; flex-direction: column; padding: 15px; animation: slideDown 0.3s ease; }
+        .notif-panel.active { display: flex; }
+        @keyframes slideDown { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
+        .notif-panel .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border); padding-bottom: 12px; margin-bottom: 12px; font-weight: 700; }
+        .notif-panel .header span { cursor: pointer; color: var(--accent2); font-size: 0.85rem; }
+        .notif-item { display: flex; gap: 12px; padding: 12px; border-radius: 10px; transition: var(--transition); cursor: pointer; border-bottom: 1px solid var(--border); }
+        .notif-item:hover { background: var(--bg-secondary); }
+        .notif-item .icon { font-size: 1.5rem; color: var(--accent1); }
+        .notif-item .content { flex: 1; }
+        .notif-item .content .title { font-weight: 700; font-size: 0.95rem; }
+        .notif-item .content .desc { font-size: 0.85rem; color: var(--text-muted); }
+        .notif-item .content .time { font-size: 0.75rem; color: var(--text-muted); margin-top: 4px; }
+        .notif-item.unread { background: rgba(108, 92, 231, 0.08); }
+        .notif-empty { text-align: center; color: var(--text-muted); padding: 20px; }
+        .notif-panel .view-all-btn { display: block; text-align: center; padding: 12px; background: var(--bg-secondary); border-radius: 10px; margin-top: 10px; cursor: pointer; color: var(--accent1); font-weight: 700; transition: var(--transition); border: 1px solid var(--border); }
+        .notif-panel .view-all-btn:hover { background: var(--accent1); color: #fff; }
+
+        /* ===== Admin Only ===== */
+        .admin-only { display: none !important; }
+        .admin-only.show { display: flex !important; }
+
+        /* ===== Auth Popup ===== */
+        .auth-popup { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: var(--bg-card); padding: 30px; border-radius: 20px; z-index: 5000; border: 1px solid var(--border); width: 400px; max-width: 95%; display: none; box-shadow: var(--shadow); }
+        .auth-popup.active { display: block; }
+        .auth-popup h3 { text-align: center; margin-bottom: 20px; color: var(--accent1); }
+        .auth-popup .modal-form input, .auth-popup .modal-form select { width: 100%; padding: 10px; margin: 8px 0; border-radius: 10px; border: 1px solid var(--border); background: var(--bg-secondary); color: var(--text-primary); font-family: inherit; }
+        .google-btn { display: flex; align-items: center; justify-content: center; gap: 10px; width: 100%; padding: 12px; border-radius: 30px; border: 1px solid var(--border); background: #fff; color: #333; font-weight: 700; cursor: pointer; transition: 0.2s; margin-bottom: 15px; }
+        .google-btn:hover { box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+        .google-btn i { color: #EA4335; font-size: 1.2rem; }
+        .divider { text-align: center; position: relative; margin: 15px 0; color: var(--text-muted); }
+        .divider::before { content: ''; position: absolute; left: 0; top: 50%; width: 45%; height: 1px; background: var(--border); }
+        .divider::after { content: ''; position: absolute; right: 0; top: 50%; width: 45%; height: 1px; background: var(--border); }
+
+        /* ===== Add Notification Modal ===== */
+        .notif-modal { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); padding: 30px; z-index: 5000; width: 450px; max-width: 95%; display: none; box-shadow: var(--shadow); }
+        .notif-modal.active { display: block; }
+        .notif-modal h3 { text-align: center; margin-bottom: 20px; color: var(--accent1); }
+        .notif-modal input, .notif-modal textarea { width: 100%; padding: 10px; margin: 8px 0; border-radius: 10px; border: 1px solid var(--border); background: var(--bg-secondary); color: var(--text-primary); font-family: inherit; }
+
+        /* ===== Footer ===== */
+        .footer { background: var(--bg-secondary); padding: 30px 0; border-top: 1px solid var(--border); text-align: center; margin-top: auto; }
+        .footer .partners { display: flex; justify-content: center; gap: 25px; flex-wrap: wrap; margin-bottom: 15px; }
+        .footer .partners a { display: flex; align-items: center; gap: 6px; color: var(--text-muted); text-decoration: none; font-weight: 600; font-size: 0.9rem; transition: 0.3s; }
+        .footer .partners a:hover { color: var(--accent1); transform: translateY(-2px); }
+        .footer .partners .fa-google { background: conic-gradient(from 45deg, #EA4335, #FBBC05, #34A853, #4285F4); -webkit-background-clip: text; -webkit-text-fill-color: transparent; font-size: 1.2rem; }
+        .footer .partners .fa-firebase { color: #FFCA28; font-size: 1.2rem; }
+        .footer p { color: var(--text-muted); font-size: 0.85rem; }
+
+        @media(max-width: 768px) {
+            .notif-panel { width: 95%; inset-inline-end: 2.5%; top: 65px; }
+            .auth-popup { width: 95%; }
+            .notif-modal { width: 95%; }
+            .logo-text { display: none; }
+        }
+    </style>
+</head>
+<body class="light-mode">
+    <!-- ===== Navbar ===== -->
+    <nav class="navbar">
+        <div class="container nav-container">
+            <a href="#dashboard" class="logo">
+                <img class="logo-img" id="siteLogo" src="https://i.postimg.cc/q7Frnj7k/image.png" alt="Ananas Academy">
+                <span class="logo-text" id="logoText">أناناس أكاديمي</span>
+            </a>
+            <div class="nav-actions">
+                <a href="#dashboard" class="nav-btn" title="الرئيسية"><i class="fas fa-home"></i></a>
+                <button class="nav-btn" id="notifBtn"><i class="fas fa-bell"></i><span class="badge" id="notifBadge">0</span></button>
+                <button class="nav-btn" id="langToggle"><i class="fas fa-language"></i></button>
+                <button class="nav-btn" id="themeToggle"><i class="fas fa-sun"></i></button>
+                <button class="auth-btn" id="authToggleBtn"><i class="fas fa-user"></i> <span id="authLabel">تسجيل الدخول</span></button>
+            </div>
+        </div>
+    </nav>
+
+    <!-- ===== Notifications Dropdown ===== -->
+    <div class="notif-panel" id="notifPanel">
+        <div class="header">
+            <span id="notifPanelTitle">الإشعارات</span>
+            <span id="markAllRead">تحديد الكل مقروء</span>
+        </div>
+        <div id="notifList"><div class="notif-empty">لا توجد إشعارات</div></div>
+        <div class="view-all-btn" id="viewAllBtn">عرض كل الإشعارات</div>
+    </div>
+
+    <!-- ===== الصفحة الرئيسية ===== -->
+    <div id="dashboard" class="page active">
+        <div class="container">
+            <div class="welcome-card" data-aos="fade-up">
+                <div class="avatar"><i class="fas fa-user-graduate"></i></div>
+                <h1 id="welcomeTitle">مرحباً بك في أناناس أكاديمي</h1>
+                <p id="welcomeDesc">منصة متخصصة في تعليم التصميم الجرافيكي، الهويات البصرية والشعارات. سجل الدخول للوصول إلى لوحة التحكم والإشعارات.</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===== صفحة الإشعارات الكاملة ===== -->
+    <div id="notificationsPage" class="page">
+        <div class="container">
+            <div class="page-header">
+                <div>
+                    <h2 id="notifPageTitle">جميع الإشعارات</h2>
+                    <button class="admin-only show btn" id="addNotifBtn" style="margin-top: 10px; padding: 6px 16px; border-radius: 30px; background: var(--accent1); color: #fff; border: none; font-weight: 700; cursor: pointer;">➕ إضافة إشعار جديد</button>
+                </div>
+                <div style="display: flex; gap: 10px; align-items: center;">
+                    <button class="auth-btn" id="markAllReadFull" style="padding: 8px 16px; font-size: 0.9rem;">تحديد الكل مقروء</button>
+                    <a href="#dashboard" class="back-home"><i class="fas fa-arrow-left"></i> العودة للرئيسية</a>
+                </div>
+            </div>
+            <div class="full-notif-list" id="fullNotifList">
+                <div class="notif-empty">لا توجد إشعارات لعرضها</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===== Auth Popup ===== -->
+    <div class="auth-popup" id="authPopup">
+        <button class="close-lightbox" id="authCloseBtn" style="position:static; float:left; font-size:1.5rem; background:none; border:none; color:var(--text-muted); cursor:pointer;">&times;</button>
+        <h3 id="authTitle">تسجيل الدخول</h3>
+        <div id="authStep1">
+            <button class="google-btn" id="googleSignInBtn"><i class="fab fa-google"></i> تسجيل الدخول بحساب Google</button>
+            <div class="divider">أو</div>
+            <div class="modal-form">
+                <input type="email" id="emailInput" placeholder="البريد الإلكتروني">
+                <input type="password" id="passInput" placeholder="كلمة المرور">
+                <button class="btn" id="emailSignInBtn" style="width:100%; padding:10px; background:var(--accent1); color:#fff; border:none; border-radius:30px; font-weight:700; cursor:pointer;">دخول</button>
+                <p style="text-align:center; margin-top:10px; color:var(--text-muted); font-size:0.9rem;">
+                    ليس لديك حساب؟ <span id="switchToSignup" style="color:var(--accent2); cursor:pointer; font-weight:700;">إنشاء حساب</span>
+                </p>
+            </div>
+        </div>
+        <div id="authStep2" style="display:none;">
+            <div class="modal-form">
+                <label id="profileNameLabel">الاسم الذي سيظهر في الموقع</label>
+                <input type="text" id="profileName" placeholder="اسمك الكامل">
+                <label id="profileGenderLabel">الجنس</label>
+                <select id="profileGender"><option value="male">ذكر</option><option value="female">أنثى</option></select>
+                <label id="profilePhoneLabel">رقم الهاتف (واتساب)</label>
+                <div style="display:flex; gap:8px;">
+                    <select id="countryCode" style="width:40%;">
+                        <option value="+966">🇸🇦 +966</option>
+                        <option value="+971">🇦🇪 +971</option>
+                        <option value="+965">🇰🇼 +965</option>
+                        <option value="+974">🇶🇦 +974</option>
+                        <option value="+973">🇧🇭 +973</option>
+                        <option value="+968">🇴🇲 +968</option>
+                        <option value="+20">🇪🇬 +20</option>
+                        <option value="+1">🇺🇸 +1</option>
+                    </select>
+                    <input type="text" id="profilePhone" placeholder="رقم الهاتف" style="width:60%;">
+                </div>
+                <button class="btn" id="saveProfileBtn" style="width:100%; padding:12px; background:linear-gradient(135deg, var(--accent1), var(--accent2)); color:#fff; border:none; border-radius:30px; font-weight:700; margin-top:15px; cursor:pointer;">إتمام التسجيل</button>
+            </div>
+        </div>
+        <div id="authStatus" style="text-align:center; margin-top:10px; color:var(--text-muted); font-size:0.9rem;"></div>
+    </div>
+
+    <!-- ===== Admin: Add Notification Modal ===== -->
+    <div class="notif-modal" id="addNotifModal">
+        <button onclick="document.getElementById('addNotifModal').classList.remove('active')" style="position:static; float:left; font-size:1.5rem; background:none; border:none; color:var(--text-muted); cursor:pointer;">&times;</button>
+        <h3>إضافة إشعار جديد</h3>
+        <div>
+            <label>العنوان</label>
+            <input type="text" id="notifTitle">
+            <label>المحتوى</label>
+            <textarea id="notifBody" rows="4"></textarea>
+            <label>رفع صورة (اختياري)</label>
+            <input type="file" id="notifImage" accept="image/*">
+            <button onclick="submitNewNotification()" style="width:100%; padding:12px; margin-top:15px; background:var(--accent1); color:#fff; border:none; border-radius:30px; font-weight:700; cursor:pointer;">حفظ الإشعار</button>
+        </div>
+    </div>
+
+    <!-- ===== Footer ===== -->
+    <footer class="footer">
+        <div class="container">
+            <div class="partners">
+                <a href="https://firebase.google.com" target="_blank"><i class="fab fa-firebase"></i> Firebase</a>
+                <a href="https://cloudinary.com" target="_blank"><i class="fas fa-cloud"></i> Cloudinary</a>
+                <a href="https://www.google.com" target="_blank"><i class="fab fa-google"></i> Google</a>
+            </div>
+            <p id="footerText">© 2026 <span style="color:var(--accent1);">أناناس أكاديمي</span> - جميع الحقوق محفوظة</p>
+        </div>
+    </footer>
+
+    <script src="https://unpkg.com/aos@2.3.1/dist/aos.js"></script>
+    <script>
+        // ================================================================
+        // 1. إعداد Firebase & Cloudinary
+        // ================================================================
+        const firebaseConfig = {
+            apiKey: "AIzaSyBdceNR_5ar8T04u-qQDNcmjUptd8ctP_c",
+            authDomain: "ananas-academy-d09e2.firebaseapp.com",
+            projectId: "ananas-academy-d09e2",
+            storageBucket: "ananas-academy-d09e2.firebasestorage.app",
+            messagingSenderId: "964459560905",
+            appId: "1:964459560905:web:46042a3ce20a81cb027218"
+        };
+        firebase.initializeApp(firebaseConfig);
+        const auth = firebase.auth();
+        const db = firebase.firestore();
+        const provider = new firebase.auth.GoogleAuthProvider();
+
+        const CLOUDINARY_CLOUD_NAME = 'gdxfziqt';
+        const CLOUDINARY_UPLOAD_PRESET = 'ananas-academy';
+
+        async function uploadImage(file) {
+            const formData = new FormData();
+            formData.append('file', file);
+            formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
+            try {
+                const response = await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/upload`, {
+                    method: 'POST',
+                    body: formData
+                });
+                if (!response.ok) throw new Error('فشل رفع الصورة');
+                const data = await response.json();
+                return data.secure_url;
+            } catch (error) { console.error('خطأ في الرفع:', error); alert('حدث خطأ أثناء رفع الصورة'); return null; }
+        }
+
+        // ================================================================
+        // 2. متغيرات الحالة
+        // ================================================================
+        let currentUser = null;
+        let isAdmin = false;
+        let currentLang = 'ar';
+        let notifications = [];
+        let translations = {};
+
+        // ================================================================
+        // 3. دوال الترجمة التلقائية
+        // ================================================================
+        async function loadTranslations() {
+            try {
+                const doc = await db.collection('texts').doc('main').get();
+                if (doc.exists) { translations = doc.data(); } 
+                else {
+                    const defaultTexts = {
+                        ar: { logoText: 'أناناس أكاديمي', welcomeTitle: 'مرحباً بك في أناناس أكاديمي', welcomeDesc: 'منصة متخصصة في تعليم التصميم الجرافيكي، الهويات البصرية والشعارات. سجل الدخول للوصول إلى لوحة التحكم والإشعارات.', notifPanelTitle: 'الإشعارات', markAllRead: 'تحديد الكل مقروء', viewAll: 'عرض كل الإشعارات', notifPageTitle: 'جميع الإشعارات', authTitle: 'تسجيل الدخول', authLabel: 'تسجيل الدخول', switchToSignup: 'إنشاء حساب', profileNameLabel: 'الاسم الذي سيظهر في الموقع', profileGenderLabel: 'الجنس', profilePhoneLabel: 'رقم الهاتف (واتساب)', footerText: '© 2026 <span style="color:var(--accent1);">أناناس أكاديمي</span> - جميع الحقوق محفوظة', markAllReadFull: 'تحديد الكل مقروء', backHome: 'العودة للرئيسية' },
+                        en: { logoText: 'Ananas Academy', welcomeTitle: 'Welcome to Ananas Academy', welcomeDesc: 'A platform specialized in graphic design, visual identity and logos. Login to access your dashboard and notifications.', notifPanelTitle: 'Notifications', markAllRead: 'Mark all read', viewAll: 'View all notifications', notifPageTitle: 'All Notifications', authTitle: 'Sign In', authLabel: 'Sign In', switchToSignup: 'Create account', profileNameLabel: 'Display name', profileGenderLabel: 'Gender', profilePhoneLabel: 'Phone number (WhatsApp)', footerText: '© 2026 <span style="color:var(--accent1);">Ananas Academy</span> - All rights reserved', markAllReadFull: 'Mark all read', backHome: 'Back to home' }
+                    };
+                    await db.collection('texts').doc('main').set(defaultTexts);
+                    translations = defaultTexts;
+                }
+            } catch (e) { console.error(e); }
+            applyTranslations(currentLang);
+        }
+
+        function applyTranslations(lang) {
+            const t = translations[lang] || translations['ar'] || {};
+            document.getElementById('logoText').textContent = t.logoText || 'أناناس أكاديمي';
+            document.getElementById('welcomeTitle').textContent = t.welcomeTitle || 'مرحباً بك في أناناس أكاديمي';
+            document.getElementById('welcomeDesc').textContent = t.welcomeDesc || 'منصة متخصصة...';
+            document.getElementById('notifPanelTitle').textContent = t.notifPanelTitle || 'الإشعارات';
+            document.getElementById('markAllRead').textContent = t.markAllRead || 'تحديد الكل مقروء';
+            document.getElementById('viewAllBtn').textContent = t.viewAll || 'عرض كل الإشعارات';
+            document.getElementById('notifPageTitle').textContent = t.notifPageTitle || 'جميع الإشعارات';
+            document.getElementById('authTitle').textContent = t.authTitle || 'تسجيل الدخول';
+            document.getElementById('authLabel').textContent = t.authLabel || 'تسجيل الدخول';
+            document.getElementById('switchToSignup').textContent = t.switchToSignup || 'إنشاء حساب';
+            document.getElementById('profileNameLabel').textContent = t.profileNameLabel || 'الاسم الذي سيظهر في الموقع';
+            document.getElementById('profileGenderLabel').textContent = t.profileGenderLabel || 'الجنس';
+            document.getElementById('profilePhoneLabel').textContent = t.profilePhoneLabel || 'رقم الهاتف (واتساب)';
+            document.getElementById('footerText').innerHTML = t.footerText || '© 2026 أناناس أكاديمي';
+            document.getElementById('markAllReadFull').textContent = t.markAllReadFull || 'تحديد الكل مقروء';
+            document.documentElement.lang = lang;
+            document.documentElement.dir = lang === 'ar' ? 'rtl' : 'ltr';
+            const backLink = document.querySelector('#notificationsPage .back-home');
+            if(backLink) backLink.innerHTML = `<i class="fas fa-arrow-left"></i> ${t.backHome || 'العودة للرئيسية'}`;
+        }
+
+        // ================================================================
+        // 4. دوال الإشعارات
+        // ================================================================
+        async function loadNotifications() {
+            try {
+                const snapshot = await db.collection('notifications').orderBy('createdAt', 'desc').get();
+                notifications = [];
+                snapshot.forEach(doc => { notifications.push({ id: doc.id, ...doc.data() }); });
+                renderNotifications();
+            } catch (e) { console.error(e); }
+        }
+
+        function renderNotifications() {
+            const notifList = document.getElementById('notifList');
+            const notifBadge = document.getElementById('notifBadge');
+            const unread = notifications.filter(n => !n.read).length;
+            notifBadge.style.display = unread > 0 ? 'flex' : 'none';
+            notifBadge.textContent = unread;
+
+            if (notifications.length === 0) {
+                notifList.innerHTML = '<div class="notif-empty">لا توجد إشعارات</div>';
+            } else {
+                let html = '';
+                notifications.slice(0, 3).forEach(n => {
+                    html += `<div class="notif-item ${n.read ? '' : 'unread'}" data-id="${n.id}">
+                                <div class="icon"><i class="fas fa-bell"></i></div>
+                                <div class="content">
+                                    <div class="title">${n.title || 'إشعار'}</div>
+                                    <div class="desc">${n.body || ''}</div>
+                                    <div class="time">${formatTime(n.createdAt) || ''}</div>
+                                </div>
+                            </div>`;
+                });
+                notifList.innerHTML = html;
+                notifList.querySelectorAll('.notif-item').forEach(el => {
+                    el.addEventListener('click', function() { markAsRead(this.dataset.id); });
+                });
+            }
+
+            const fullList = document.getElementById('fullNotifList');
+            if (notifications.length === 0) {
+                fullList.innerHTML = '<div class="notif-empty">لا توجد إشعارات لعرضها</div>';
+            } else {
+                let html = '';
+                notifications.forEach(n => {
+                    html += `<div class="full-notif-item ${n.read ? '' : 'unread'}">
+                                <div class="info">
+                                    <h4>${n.title || 'إشعار'}</h4>
+                                    <p>${n.body || ''}</p>
+                                    <small>${formatTime(n.createdAt) || ''}</small>
+                                </div>
+                                <div class="actions">
+                                    <button onclick="markAsRead('${n.id}')" title="تحديد مقروء"><i class="fas fa-check-circle"></i></button>
+                                    ${isAdmin ? `<button onclick="deleteNotification('${n.id}')" title="حذف"><i class="fas fa-trash"></i></button>` : ''}
+                                </div>
+                            </div>`;
+                });
+                fullList.innerHTML = html;
+            }
+        }
+
+        function formatTime(timestamp) {
+            if (!timestamp) return '';
+            const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
+            return date.toLocaleDateString(currentLang === 'ar' ? 'ar-EG' : 'en-US', { hour: '2-digit', minute: '2-digit' });
+        }
+
+        async function markAsRead(id) {
+            try { await db.collection('notifications').doc(id).update({ read: true }); await loadNotifications(); } catch (e) { console.error(e); }
+        }
+        async function markAllAsRead() {
+            try {
+                const batch = db.batch();
+                notifications.forEach(n => { if (!n.read) batch.update(db.collection('notifications').doc(n.id), { read: true }); });
+                await batch.commit(); await loadNotifications();
+            } catch (e) { console.error(e); }
+        }
+        async function deleteNotification(id) {
+            if (confirm('هل أنت متأكد من حذف هذا الإشعار؟')) {
+                try { await db.collection('notifications').doc(id).delete(); await loadNotifications(); } catch (e) { console.error(e); }
+            }
+        }
+
+        // ================================================================
+        // 5. إدارة الصفحات (Router)
+        // ================================================================
+        function navigateTo(pageId) {
+            document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+            const target = document.getElementById(pageId);
+            if (target) target.classList.add('active');
+            if (window.location.hash !== '#' + pageId) history.pushState(null, '', '#' + pageId);
+            document.getElementById('notifPanel').classList.remove('active');
+        }
+        window.addEventListener('hashchange', () => {
+            const hash = window.location.hash.replace('#', '') || 'dashboard';
+            navigateTo(hash);
+        });
+
+        // ================================================================
+        // 6. نظام المصادقة والتحقق من المشرف
+        // ================================================================
+        const authPopup = document.getElementById('authPopup');
+        const authToggleBtn = document.getElementById('authToggleBtn');
+        const authCloseBtn = document.getElementById('authCloseBtn');
+        const authStatus = document.getElementById('authStatus');
+        const authStep1 = document.getElementById('authStep1');
+        const authStep2 = document.getElementById('authStep2');
+        const switchToSignup = document.getElementById('switchToSignup');
+
+        // فتح/إغلاق نافذة الدخول
+        authToggleBtn.addEventListener('click', () => {
+            if (currentUser) { auth.signOut(); } 
+            else { authPopup.classList.add('active'); authStep1.style.display = 'block'; authStep2.style.display = 'none'; authStatus.textContent = ''; }
+        });
+        authCloseBtn.addEventListener('click', () => authPopup.classList.remove('active'));
+
+        // Google Sign-In
+        document.getElementById('googleSignInBtn').addEventListener('click', () => {
+            auth.signInWithPopup(provider).catch(err => { authStatus.textContent = 'خطأ: ' + err.message; });
+        });
+
+        // Email/Password Sign-In & Sign-Up
+        document.getElementById('emailSignInBtn').addEventListener('click', () => {
+            const email = document.getElementById('emailInput').value;
+            const pass = document.getElementById('passInput').value;
+            if (!email || !pass) return authStatus.textContent = 'الرجاء ملء الحقول';
+            auth.signInWithEmailAndPassword(email, pass).catch(err => {
+                if (err.code === 'auth/user-not-found' || err.code === 'auth/wrong-password') {
+                    auth.createUserWithEmailAndPassword(email, pass).then(() => {
+                        authStatus.textContent = 'تم إنشاء الحساب، يرجى إكمال البيانات';
+                    }).catch(e => authStatus.textContent = 'خطأ: ' + e.message);
+                } else {
+                    authStatus.textContent = 'خطأ: ' + err.message;
+                }
+            });
+        });
+
+        switchToSignup.addEventListener('click', () => {
+            document.getElementById('emailInput').value = '';
+            document.getElementById('passInput').value = '';
+            authStatus.textContent = 'أدخل البريد وكلمة المرور لإنشاء حساب جديد';
+        });
+
+        // حفظ الملف الشخصي
+        document.getElementById('saveProfileBtn').addEventListener('click', async () => {
+            const name = document.getElementById('profileName').value;
+            const gender = document.getElementById('profileGender').value;
+            const code = document.getElementById('countryCode').value;
+            const phone = document.getElementById('profilePhone').value;
+            if (!name || !phone) return authStatus.textContent = 'الرجاء إدخال الاسم ورقم الهاتف';
+            if (currentUser) {
+                await currentUser.updateProfile({ displayName: name });
+                localStorage.setItem('profile_' + currentUser.uid, JSON.stringify({ name, gender, phone: code + phone }));
+                authPopup.classList.remove('active');
+                updateDashboard(currentUser);
+            }
+        });
+
+        // التحقق من حالة المصادقة والصلاحيات
+        auth.onAuthStateChanged(async (user) => {
+            if (user) {
+                currentUser = user;
+                authToggleBtn.innerHTML = `<i class="fas fa-user-circle"></i> <span id="authLabel">${user.displayName || 'حسابي'}</span>`;
+                authPopup.classList.remove('active');
+
+                // التحقق من صلاحية المشرف
+                try {
+                    const adminDoc = await db.collection('admins').doc('main').get();
+                    if (adminDoc.exists) {
+                        const adminEmails = adminDoc.data().adminEmails || [];
+                        isAdmin = adminEmails.includes(user.email);
+                    } else {
+                        isAdmin = false;
+                    }
+                } catch (e) { isAdmin = false; }
+
+                // تحديث واجهة المشرف
+                document.querySelectorAll('.admin-only').forEach(el => {
+                    if (isAdmin) el.classList.add('show');
+                    else el.classList.remove('show');
+                });
+
+                // تحديث لوحة التحكم
+                const hasProfile = localStorage.getItem('profile_' + user.uid);
+                if (!hasProfile && !user.displayName) {
+                    authPopup.classList.add('active');
+                    authStep1.style.display = 'none';
+                    authStep2.style.display = 'block';
+                    authStatus.textContent = 'أكمل بياناتك لإتمام التسجيل';
+                } else {
+                    updateDashboard(user);
+                }
+            } else {
+                currentUser = null;
+                isAdmin = false;
+                document.querySelectorAll('.admin-only').forEach(el => el.classList.remove('show'));
+                authToggleBtn.innerHTML = `<i class="fas fa-user"></i> <span id="authLabel">تسجيل الدخول</span>`;
+                document.getElementById('welcomeTitle').textContent = translations[currentLang]?.welcomeTitle || 'مرحباً بك في أناناس أكاديمي';
+                document.getElementById('welcomeDesc').textContent = translations[currentLang]?.welcomeDesc || 'سجل الدخول للوصول إلى لوحة التحكم والإشعارات.';
+                document.querySelector('.welcome-card .avatar').innerHTML = '<i class="fas fa-user-graduate"></i>';
+            }
+        });
+
+        function updateDashboard(user) {
+            const name = user.displayName || 'عزيزي الطالب';
+            document.getElementById('welcomeTitle').textContent = (translations[currentLang]?.welcomeTitle || 'مرحباً بك') + '، ' + name + '!';
+            document.getElementById('welcomeDesc').textContent = translations[currentLang]?.welcomeDesc || 'أنت الآن في لوحة التحكم. يمكنك متابعة إشعاراتك من هنا.';
+            document.querySelector('.welcome-card .avatar').innerHTML = `<i class="fas fa-user-check"></i>`;
+        }
+
+        // ================================================================
+        // 7. إضافة إشعار جديد (خاص بالمشرف)
+        // ================================================================
+        document.getElementById('addNotifBtn').addEventListener('click', () => {
+            document.getElementById('addNotifModal').classList.add('active');
+        });
+
+        async function submitNewNotification() {
+            const title = document.getElementById('notifTitle').value.trim();
+            const body = document.getElementById('notifBody').value.trim();
+            const file = document.getElementById('notifImage').files[0];
+            if (!title || !body) return alert('الرجاء إدخال العنوان والمحتوى');
+
+            let imageUrl = '';
+            if (file) {
+                imageUrl = await uploadImage(file);
+                if (!imageUrl) return;
+            }
+
+            await db.collection('notifications').add({
+                title,
+                body,
+                image: imageUrl,
+                read: false,
+                createdAt: firebase.firestore.FieldValue.serverTimestamp()
+            });
+
+            document.getElementById('addNotifModal').classList.remove('active');
+            document.getElementById('notifTitle').value = '';
+            document.getElementById('notifBody').value = '';
+            document.getElementById('notifImage').value = '';
+            await loadNotifications();
+            alert('تم إضافة الإشعار بنجاح!');
+        }
+
+        // ================================================================
+        // 8. أحداث الواجهة (الوضع، اللغة، القائمة المنسدلة)
+        // ================================================================
+        document.getElementById('langToggle').addEventListener('click', () => {
+            currentLang = currentLang === 'ar' ? 'en' : 'ar';
+            applyTranslations(currentLang);
+            renderNotifications();
+        });
+
+        document.getElementById('themeToggle').addEventListener('click', () => {
+            document.body.classList.toggle('light-mode');
+            const isLight = document.body.classList.contains('light-mode');
+            document.getElementById('siteLogo').src = isLight ? 'https://i.postimg.cc/q7Frnj7k/image.png' : 'https://i.postimg.cc/WbmsKG5y/image.png';
+            document.getElementById('themeToggle').innerHTML = isLight ? '<i class="fas fa-sun"></i>' : '<i class="fas fa-moon"></i>';
+        });
+
+        const notifBtn = document.getElementById('notifBtn');
+        const notifPanel = document.getElementById('notifPanel');
+        notifBtn.addEventListener('click', (e) => { e.stopPropagation(); notifPanel.classList.toggle('active'); });
+        document.addEventListener('click', (e) => {
+            if (!notifBtn.contains(e.target) && !notifPanel.contains(e.target)) notifPanel.classList.remove('active');
+        });
+
+        document.getElementById('viewAllBtn').addEventListener('click', () => navigateTo('notificationsPage'));
+        document.getElementById('markAllRead').addEventListener('click', markAllAsRead);
+        document.getElementById('markAllReadFull').addEventListener('click', markAllAsRead);
+
+        // ================================================================
+        // 9. التهيئة
+        // ================================================================
+        AOS.init({ duration: 800, once: true });
+        window.addEventListener('scroll', () => {
+            const s = document.documentElement.scrollTop, h = document.documentElement.scrollHeight - window.innerHeight;
+            document.getElementById('progress-bar').style.width = (s / h) * 100 + '%';
+        });
+
+        const initialHash = window.location.hash.replace('#', '') || 'dashboard';
+        navigateTo(initialHash);
+
+        (async function init() {
+            await loadTranslations();
+            await loadNotifications();
+        })();
+
+        console.log('🍍 أناناس أكاديمي - تم إصلاح زر الدخول، وإضافة نظام المشرف.');
+    </script>
+</body>
+</html>
