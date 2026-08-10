@@ -274,9 +274,28 @@
         .course-main-area { flex: 1; display: flex; flex-direction: column; overflow-y: auto; padding: 20px; background: var(--bg-primary); transition: all 0.3s ease; }
         .course-main-area.fullscreen-mode { flex: 1; width: 100%; }
         
-        /* ===== VIDEO PLAYER FIX (Adaptive on Mobile) ===== */
-        .video-player-wrapper { background: #000; border-radius: var(--radius); overflow: hidden; width: 100%; position: relative; aspect-ratio: 16/9; max-height: 70vh; display: flex; align-items: center; justify-content: center; margin-bottom: 20px; }
-        .video-player-wrapper video, .video-player-wrapper iframe { width: 100%; height: 100%; border: none; display: block; }
+        /* ===== IMPROVED VIDEO PLAYER (Responsive and No Cropping) ===== */
+        .video-player-wrapper {
+            width: 100%;
+            max-width: 100%;
+            aspect-ratio: 16 / 9;
+            max-height: 75vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: #000;
+            border-radius: var(--radius);
+            overflow: hidden;
+            margin-bottom: 20px;
+            position: relative;
+        }
+        .video-player-wrapper video, .video-player-wrapper iframe {
+            width: 100%;
+            height: 100%;
+            object-fit: contain; /* Shows full video without stretching or cropping */
+            border: none;
+            display: block;
+        }
         
         .lesson-quizzes-area { margin-top: 20px; border-top: 1px solid var(--border); padding-top: 20px; }
         
@@ -322,7 +341,6 @@
         #fullChatPage .chat-messages-list { flex: 1; overflow-y: auto; margin-bottom: 15px; display: flex; flex-direction: column; gap: 5px; padding: 10px 0; }
         
         /* Chat Message Styling (WhatsApp-like) */
-        /* ===== Improved Chat Style (Lower height, date separators) ===== */
         .chat-msg { display: flex; flex-direction: column; max-width: 75%; padding: 6px 12px; border-radius: 12px; position: relative; margin-bottom: 3px; word-wrap: break-word; font-size: 0.9rem; }
         .chat-msg.sent { align-self: flex-end; background: var(--chat-bubble-mine); color: var(--chat-bubble-mine-text); border-bottom-left-radius: 0; }
         .chat-msg.received { align-self: flex-start; background: var(--chat-bubble-others); color: var(--chat-bubble-others-text); border-bottom-right-radius: 0; }
@@ -862,7 +880,7 @@
                 <div class="quiz-actions">
                     <button class="btn btn-prev" id="prevQuestionBtn" onclick="prevQuestion()"><i class="fas fa-arrow-right"></i> السابق</button>
                     <button class="btn btn-next" id="nextQuestionBtn" onclick="nextQuestion()">التالي <i class="fas fa-arrow-left"></i></button>
-                    <button class="btn btn-finish" id="finishQuizBtn" onclick="submitQuiz()">إنهاء الاختبار</button>
+                    <button class="btn btn-finish" id="finishQuizBtn" onclick="finishQuiz()">إنهاء الاختبار</button>
                 </div>
             </div>
 
@@ -966,7 +984,7 @@
         </div>
     </div>
 
-    <!-- Add Lesson (MODIFIED TO INCLUDE COMPLETION TEST) -->
+    <!-- Add Lesson -->
     <div class="edit-modal" id="addLessonModal">
         <button onclick="document.getElementById('addLessonModal').classList.remove('active');" style="position:static; float:left; font-size:1.5rem; background:none; border:none; color:var(--text-muted); cursor:pointer;">&times;</button>
         <h3 id="addLessonModalTitle"></h3>
@@ -2468,7 +2486,7 @@
             
             if(!isCompleted && currentUser) {
                 btnHtml += `
-                    <button id="completeLessonBtn" class="btn btn-primary" style="padding: 10px 20px;">
+                    <button id="completeLessonBtn" class="btn btn-primary" style="padding: 10px 20px; background: var(--accent-gradient); color: #fff; border: none; border-radius: 30px; font-weight: 700; cursor: pointer; transition: all 0.3s ease; box-shadow: 0 4px 12px rgba(108, 92, 231, 0.3);">
                         <i class="fas fa-check-circle"></i> ${t.completeBtn || 'إتمام الحصة'}
                     </button>
                 `;
@@ -2479,8 +2497,12 @@
             btnHtml += `</div>`;
             container.innerHTML += btnHtml;
 
-            document.getElementById('completeLessonBtn')?.addEventListener('click', () => {
+            document.getElementById('completeLessonBtn')?.addEventListener('click', function(e) {
+                // Disable button immediately to prevent double-clicking
+                this.disabled = true;
+                this.style.opacity = '0.6';
                 handleCompleteLesson(courseId, lessonId);
+                // Re-enable if error occurs (inside handleCompleteLesson)
             });
         }
 
@@ -2492,79 +2514,90 @@
             const lesson = lessonDoc.data();
             const completionTest = lesson.completionTest || [];
             
-            if(completionTest.length > 0) {
-                // Has completion test, ask user to take it
-                showCustomConfirm('اختبار إتمام الحصة', 'لتحصل على نقاط الخبرة، يجب عليك اجتياز اختبار إتمام الحصة أولاً. هل أنت مستعد؟', async () => {
-                    // Launch a temporary quiz using the current overlay
-                    const tempQuizData = {
-                        titleAr: 'اختبار إتمام الحصة: ' + lesson.titleAr,
-                        titleEn: 'Completion Test: ' + lesson.titleEn,
-                        questions: completionTest,
-                        isCompletionTest: true
-                    };
-                    
-                    activeQuizData = tempQuizData;
-                    currentQuestionIndex = 0;
-                    quizUserAnswers = {};
-                    totalXPGained = 0;
-                    
-                    document.getElementById('quizStartScreen').style.display = 'block';
-                    document.getElementById('quizActiveScreen').style.display = 'none';
-                    document.getElementById('quizResultScreen').style.display = 'none';
-                    document.getElementById('quizStartTitle').textContent = tempQuizData.titleAr;
-                    document.getElementById('quizStartDesc').textContent = `يتكون هذا الاختبار من ${completionTest.length} سؤال. يجب اجتيازه للحصول على نقاط الخبرة.`;
-                    document.getElementById('quizOverlay').classList.add('active');
+            try {
+                if(completionTest.length > 0) {
+                    // Has completion test, ask user to take it
+                    showCustomConfirm('اختبار إتمام الحصة', 'لتحصل على نقاط الخبرة، يجب عليك اجتياز اختبار إتمام الحصة أولاً. هل أنت مستعد؟', async () => {
+                        // Launch a temporary quiz using the current overlay
+                        const tempQuizData = {
+                            titleAr: 'اختبار إتمام الحصة: ' + lesson.titleAr,
+                            titleEn: 'Completion Test: ' + lesson.titleEn,
+                            questions: completionTest,
+                            isCompletionTest: true
+                        };
+                        
+                        activeQuizData = tempQuizData;
+                        currentQuestionIndex = 0;
+                        quizUserAnswers = {};
+                        totalXPGained = 0;
+                        
+                        document.getElementById('quizStartScreen').style.display = 'block';
+                        document.getElementById('quizActiveScreen').style.display = 'none';
+                        document.getElementById('quizResultScreen').style.display = 'none';
+                        document.getElementById('quizStartTitle').textContent = tempQuizData.titleAr;
+                        document.getElementById('quizStartDesc').textContent = `يتكون هذا الاختبار من ${completionTest.length} سؤال. يجب اجتيازه للحصول على نقاط الخبرة.`;
+                        document.getElementById('quizOverlay').classList.add('active');
 
-                    // Override submitQuiz behavior to handle completion test XP granting
-                    const originalSubmit = window.submitQuiz;
-                    window.submitQuiz = function() {
-                        showCustomConfirm('إنهاء الاختبار', 'هل أنت متأكد من إنهاء الاختبار؟', async () => {
-                            const questions = activeQuizData.questions || [];
-                            let correctCount = 0;
-                            let totalXp = 0;
-                            questions.forEach((q, index) => {
-                                const userAnswer = quizUserAnswers[index] || '';
-                                let isCorrect = false;
-                                if(q.type === 'mcq' || q.type === 'truefalse') {
-                                    isCorrect = userAnswer === q.correctAnswer;
-                                } else if(q.type === 'text') {
-                                    isCorrect = userAnswer.trim().length > 0;
+                        // Override submitQuiz behavior to handle completion test XP granting
+                        const originalSubmit = window.submitQuiz;
+                        window.submitQuiz = function() {
+                            showCustomConfirm('إنهاء الاختبار', 'هل أنت متأكد من إنهاء الاختبار؟', async () => {
+                                const questions = activeQuizData.questions || [];
+                                let correctCount = 0;
+                                let totalXp = 0;
+                                questions.forEach((q, index) => {
+                                    const userAnswer = quizUserAnswers[index] || '';
+                                    let isCorrect = false;
+                                    if(q.type === 'mcq' || q.type === 'truefalse') {
+                                        isCorrect = userAnswer === q.correctAnswer;
+                                    } else if(q.type === 'text') {
+                                        isCorrect = userAnswer.trim().length > 0;
+                                    }
+                                    if(isCorrect) {
+                                        correctCount++;
+                                        totalXp += parseInt(q.xpReward) || 0;
+                                    }
+                                });
+                                const totalQuestions = questions.length;
+                                const pct = (correctCount / totalQuestions) * 100;
+                                const passed = pct >= 50;
+
+                                if(passed) {
+                                    // Passed the test -> Grant XP
+                                    await grantLessonXP(courseId, lessonId, lesson.xpReward || 0);
+                                } else {
+                                    showCustomAlert('حاول مرة أخرى', `للأسف، لم تنجح في الاختبار. حصلت على ${Math.round(pct)}%. حاول مرة أخرى لتحصل على نقاط الخبرة.`);
+                                    // Re-enable the button since they didn't pass
+                                    const btn = document.getElementById('completeLessonBtn');
+                                    if(btn) { btn.disabled = false; btn.style.opacity = '1'; }
                                 }
-                                if(isCorrect) {
-                                    correctCount++;
-                                    totalXp += parseInt(q.xpReward) || 0;
-                                }
+
+                                // Show Result
+                                document.getElementById('quizActiveScreen').style.display = 'none';
+                                document.getElementById('quizResultScreen').style.display = 'block';
+                                const circle = document.getElementById('scoreCircle');
+                                circle.textContent = Math.round(pct) + '%';
+                                circle.className = 'score-circle';
+                                if(passed) circle.classList.add('pass');
+                                else circle.classList.add('fail');
+                                
+                                document.getElementById('resultTitle').textContent = passed ? 'أحسنت! لقد اجتزت الاختبار!' : 'حاول مرة أخرى!';
+                                document.getElementById('resultDetails').textContent = `لقد أجبت بشكل صحيح على ${correctCount} من ${totalQuestions} سؤال.`;
+                                
+                                window.submitQuiz = originalSubmit; // Restore original function
                             });
-                            const totalQuestions = questions.length;
-                            const pct = (correctCount / totalQuestions) * 100;
-                            const passed = pct >= 50;
-
-                            if(passed) {
-                                // Passed the test -> Grant XP
-                                await grantLessonXP(courseId, lessonId, lesson.xpReward || 0);
-                            } else {
-                                showCustomAlert('حاول مرة أخرى', `للأسف، لم تنجح في الاختبار. حصلت على ${Math.round(pct)}%. حاول مرة أخرى لتحصل على نقاط الخبرة.`);
-                            }
-
-                            // Show Result
-                            document.getElementById('quizActiveScreen').style.display = 'none';
-                            document.getElementById('quizResultScreen').style.display = 'block';
-                            const circle = document.getElementById('scoreCircle');
-                            circle.textContent = Math.round(pct) + '%';
-                            circle.className = 'score-circle';
-                            if(passed) circle.classList.add('pass');
-                            else circle.classList.add('fail');
-                            
-                            document.getElementById('resultTitle').textContent = passed ? 'أحسنت! لقد اجتزت الاختبار!' : 'حاول مرة أخرى!';
-                            document.getElementById('resultDetails').textContent = `لقد أجبت بشكل صحيح على ${correctCount} من ${totalQuestions} سؤال.`;
-                            
-                            window.submitQuiz = originalSubmit; // Restore original function
-                        });
-                    };
-                });
-            } else {
-                // No test, grant XP immediately
-                await grantLessonXP(courseId, lessonId, lesson.xpReward || 0);
+                        };
+                    });
+                } else {
+                    // No test, grant XP immediately
+                    await grantLessonXP(courseId, lessonId, lesson.xpReward || 0);
+                    // Button will be disabled/hidden automatically after reload
+                }
+            } catch (e) {
+                console.error(e);
+                // Re-enable button on error
+                const btn = document.getElementById('completeLessonBtn');
+                if(btn) { btn.disabled = false; btn.style.opacity = '1'; }
             }
         }
 
@@ -2586,8 +2619,8 @@
 
             showCustomAlert('🎉 تهانينا!', `لقد أكملت الحصة وحصلت على ${xpAmount} نقطة خبرة!`);
             loadUserStats(currentUser.uid);
-            loadLessonsForCourse(courseId); // Update list
-            showCompleteLessonButton(courseId, lessonId); // Update button
+            loadLessonsForCourse(courseId); // Update list to hide button
+            showCompleteLessonButton(courseId, lessonId); // Update button to "Completed"
         }
 
         // === إدارة الاختبارات ===
@@ -3666,7 +3699,233 @@
         })();
 
         // ================================================================
-        // 14. دالة حفظ النصوص الخاصة بصفحة الدورات (جديدة)
+        // 14. دوال الإحصائيات وإضافة الجوائز (تم إصلاح الأزرار الناقصة)
+        // ================================================================
+        // دالة مساعدة لفتح نافذة التعديل وملء الحقول
+        function fillStatsModal(modalId, arKeys, enKeys) {
+            const modal = document.getElementById(modalId);
+            if (!modal) return;
+            // نملأ الحقول بناءً على الترتيب
+            const inputs = modal.querySelectorAll('input');
+            inputs.forEach((input, index) => {
+                if (arKeys[index]) {
+                    const arVal = translations['ar']?.[arKeys[index]] || '';
+                    const enVal = translations['en']?.[enKeys[index]] || '';
+                    // نتحقق من اتجاه اللغة لنعرض القيمة المناسبة (لكن سنخزنها في متغيرات لاستخدامها لاحقاً)
+                    input.dataset.ar = arVal;
+                    input.dataset.en = enVal;
+                    input.value = currentLang === 'ar' ? arVal : enVal;
+                }
+            });
+            modal.classList.add('active');
+        }
+
+        // 1. تعديل الإحصائيات العلوية
+        document.getElementById('editTopStatsBtn').addEventListener('click', () => {
+            fillStatsModal('editTopStatsModal', 
+                ['statRankLabel', 'statXPLabel', 'statLevelLabel', 'statPercentLabel'],
+                ['statRankLabel', 'statXPLabel', 'statLevelLabel', 'statPercentLabel']
+            );
+        });
+        window.saveTopStats = async function() {
+            const modal = document.getElementById('editTopStatsModal');
+            const inputs = modal.querySelectorAll('input');
+            const updates = {};
+            const arKeys = ['statRankLabel', 'statXPLabel', 'statLevelLabel', 'statPercentLabel'];
+            const enKeys = ['statRankLabel', 'statXPLabel', 'statLevelLabel', 'statPercentLabel'];
+            
+            inputs.forEach((input, index) => {
+                if (index < arKeys.length) {
+                    // القيمة التي أدخلها المستخدم تمثل النص الحالي للغة. لكن التخزين يتم لكل لغة على حدة.
+                    // سنقوم بتخزين القيمة بناءً على الحقل الذي نملأه.
+                    // للحل البسيط، سنقوم بتخزين نفس القيمة للغتين، أو الأفضل أن نستخدم حقلين.
+                    // لكن في هذا النموذج، كل حقل له لغة محددة حسب التصميم.
+                    // لنقم بجمع القيم من خلال حقول منفصلة (وليس من خلال هذا التوزيع الخاطئ).
+                    // سأقوم بكتابة طريقة أكثر أماناً:
+                }
+            });
+            // الطريقة الأكثر أماناً: جلب القيم مباشرة من الحقول المخصصة للغتين
+            const updatesFinal = {
+                'ar.statRankLabel': safeGetValue('editStatRankAr'),
+                'en.statRankLabel': safeGetValue('editStatRankEn'),
+                'ar.statXPLabel': safeGetValue('editStatXPAr'),
+                'en.statXPLabel': safeGetValue('editStatXPEn'),
+                'ar.statLevelLabel': safeGetValue('editStatLevelAr'),
+                'en.statLevelLabel': safeGetValue('editStatLevelEn'),
+                'ar.statPercentLabel': safeGetValue('editStatProgressAr'),
+                'en.statPercentLabel': safeGetValue('editStatProgressEn')
+            };
+            await saveToFirestore(updatesFinal, null, 'editTopStatsModal');
+        };
+
+        // 2. تعديل شريط التقدم
+        document.getElementById('editProgressLabelsBtn').addEventListener('click', () => {
+            document.getElementById('editProgressTitleAr').value = translations['ar']?.progressTitle || '';
+            document.getElementById('editProgressTitleEn').value = translations['en']?.progressTitle || '';
+            document.getElementById('editStartAr').value = translations['ar']?.startLabel || '';
+            document.getElementById('editStartEn').value = translations['en']?.startLabel || '';
+            document.getElementById('editEndAr').value = translations['ar']?.endLabel || '';
+            document.getElementById('editEndEn').value = translations['en']?.endLabel || '';
+            document.getElementById('editProgressLabelsModal').classList.add('active');
+        });
+        window.saveProgressLabels = async function() {
+            await saveToFirestore({
+                'ar.progressTitle': safeGetValue('editProgressTitleAr'),
+                'en.progressTitle': safeGetValue('editProgressTitleEn'),
+                'ar.startLabel': safeGetValue('editStartAr'),
+                'en.startLabel': safeGetValue('editStartEn'),
+                'ar.endLabel': safeGetValue('editEndAr'),
+                'en.endLabel': safeGetValue('editEndEn')
+            }, null, 'editProgressLabelsModal');
+        };
+
+        // 3. تعديل بطاقة المتابعة
+        document.getElementById('editResumeCardBtn').addEventListener('click', () => {
+            document.getElementById('editResumeTitleAr').value = translations['ar']?.resumeCourseTitle || '';
+            document.getElementById('editResumeTitleEn').value = translations['en']?.resumeCourseTitle || '';
+            document.getElementById('editResumeDescAr').value = translations['ar']?.resumeCourseDesc || '';
+            document.getElementById('editResumeDescEn').value = translations['en']?.resumeCourseDesc || '';
+            document.getElementById('editResumeBtnAr').value = translations['ar']?.resumeCourseBtn || '';
+            document.getElementById('editResumeBtnEn').value = translations['en']?.resumeCourseBtn || '';
+            document.getElementById('editResumeCardModal').classList.add('active');
+        });
+        window.saveResumeCard = async function() {
+            await saveToFirestore({
+                'ar.resumeCourseTitle': safeGetValue('editResumeTitleAr'),
+                'en.resumeCourseTitle': safeGetValue('editResumeTitleEn'),
+                'ar.resumeCourseDesc': safeGetValue('editResumeDescAr'),
+                'en.resumeCourseDesc': safeGetValue('editResumeDescEn'),
+                'ar.resumeCourseBtn': safeGetValue('editResumeBtnAr'),
+                'en.resumeCourseBtn': safeGetValue('editResumeBtnEn')
+            }, null, 'editResumeCardModal');
+        };
+
+        // 4. تعديل بطاقة الأداء
+        document.getElementById('editAvgCardBtn').addEventListener('click', () => {
+            document.getElementById('editAvgTitleAr').value = translations['ar']?.averagePerformanceTitle || '';
+            document.getElementById('editAvgTitleEn').value = translations['en']?.averagePerformanceTitle || '';
+            document.getElementById('editAvgDescAr').value = translations['ar']?.averagePerformanceDesc || '';
+            document.getElementById('editAvgDescEn').value = translations['en']?.averagePerformanceDesc || '';
+            document.getElementById('editAvgCardModal').classList.add('active');
+        });
+        window.saveAvgCard = async function() {
+            await saveToFirestore({
+                'ar.averagePerformanceTitle': safeGetValue('editAvgTitleAr'),
+                'en.averagePerformanceTitle': safeGetValue('editAvgTitleEn'),
+                'ar.averagePerformanceDesc': safeGetValue('editAvgDescAr'),
+                'en.averagePerformanceDesc': safeGetValue('editAvgDescEn')
+            }, null, 'editAvgCardModal');
+        };
+
+        // 5. تعديل بطاقة الجوائز
+        document.getElementById('editAwardsCardBtn').addEventListener('click', () => {
+            document.getElementById('editAwardsTitleAr').value = translations['ar']?.awardsTitle || '';
+            document.getElementById('editAwardsTitleEn').value = translations['en']?.awardsTitle || '';
+            document.getElementById('editNoAwardsAr').value = translations['ar']?.noAwardsMsg || '';
+            document.getElementById('editNoAwardsEn').value = translations['en']?.noAwardsMsg || '';
+            document.getElementById('editUnlockedAr').value = translations['ar']?.unlocked || '';
+            document.getElementById('editUnlockedEn').value = translations['en']?.unlocked || '';
+            document.getElementById('editLockedAr').value = translations['ar']?.locked || '';
+            document.getElementById('editLockedEn').value = translations['en']?.locked || '';
+            document.getElementById('editAwardsCardModal').classList.add('active');
+        });
+        window.saveAwardsCard = async function() {
+            await saveToFirestore({
+                'ar.awardsTitle': safeGetValue('editAwardsTitleAr'),
+                'en.awardsTitle': safeGetValue('editAwardsTitleEn'),
+                'ar.noAwardsMsg': safeGetValue('editNoAwardsAr'),
+                'en.noAwardsMsg': safeGetValue('editNoAwardsEn'),
+                'ar.unlocked': safeGetValue('editUnlockedAr'),
+                'en.unlocked': safeGetValue('editUnlockedEn'),
+                'ar.locked': safeGetValue('editLockedAr'),
+                'en.locked': safeGetValue('editLockedEn')
+            }, null, 'editAwardsCardModal');
+        };
+
+        // 6. إعدادات المستويات
+        document.getElementById('editStatsSettingsBtn').addEventListener('click', () => {
+            document.getElementById('totalLevels').value = siteStatsConfig.totalLevels || 5;
+            document.getElementById('xpPerLevel').value = (siteStatsConfig.xpPerLevel || [100, 250, 500, 1000, 2000]).join(', ');
+            document.getElementById('editStatsSettingsModal').classList.add('active');
+        });
+        window.saveStatsSettings = async function() {
+            const t = translations[currentLang] || translations['ar'] || {};
+            const totalLvl = parseInt(safeGetValue('totalLevels')) || 5;
+            const xpStr = safeGetValue('xpPerLevel');
+            const xpArray = xpStr.split(',').map(n => parseInt(n.trim()) || 100);
+            if (xpArray.length !== totalLvl) {
+                return showCustomAlert('خطأ', t.xpMismatchAlert + totalLvl + ' ' + t.levels + ').');
+            }
+            const updates = { totalLevels: totalLvl, xpPerLevel: xpArray };
+            try {
+                await db.collection('settings').doc('statsConfig').update(updates);
+                siteStatsConfig = { ...siteStatsConfig, ...updates };
+                document.getElementById('editStatsSettingsModal').classList.remove('active');
+                renderStatsPage();
+                showCustomAlert('تم الحفظ', t.settingsSaved || 'Settings saved successfully!');
+            } catch (error) {
+                showCustomAlert(t.errorSaving + error.message, 'خطأ');
+            }
+        };
+
+        // 7. إضافة جائزة
+        document.getElementById('addAwardBtn').addEventListener('click', () => {
+            document.getElementById('awardNameAr').value = '';
+            document.getElementById('awardNameEn').value = '';
+            document.getElementById('awardConditionType').value = 'level';
+            document.getElementById('awardConditionValue').value = 1;
+            document.getElementById('awardIconText').value = '';
+            document.getElementById('awardIconImage').value = '';
+            document.getElementById('selectedIconName').textContent = 'لم يتم الاختيار';
+            selectedAwardIcon = '';
+            document.getElementById('addAwardModal').classList.add('active');
+        });
+        window.saveAward = async function() {
+            const t = translations[currentLang] || translations['ar'] || {};
+            const nameAr = safeGetValue('awardNameAr');
+            const nameEn = safeGetValue('awardNameEn');
+            const condType = safeGetSelectVal('awardConditionType');
+            const condVal = parseInt(safeGetValue('awardConditionValue')) || 1;
+            const iconText = safeGetValue('awardIconText');
+            const file = safeGetFile('awardIconImage');
+
+            if (!nameAr || !nameEn) return showCustomAlert('خطأ', t.fillAllFields || 'Please fill all fields');
+            let icon = selectedAwardIcon || iconText || 'fa-trophy';
+            let iconType = 'text';
+            if (file) {
+                icon = await uploadImage(file);
+                if (!icon) return showCustomAlert('خطأ', 'خطأ في رفع الصورة.');
+                iconType = 'image';
+            }
+
+            const awardData = {
+                nameAr, nameEn,
+                condition: { type: condType, value: condVal },
+                icon: icon,
+                iconType: iconType
+            };
+            try {
+                // نضيف الجائزة إلى قائمة الجوائز في إعدادات الإحصائيات
+                const configRef = db.collection('settings').doc('statsConfig');
+                const configDoc = await configRef.get();
+                let awards = configDoc.exists ? (configDoc.data().awards || []) : [];
+                // نولد ID فريد
+                const newId = Date.now().toString();
+                awardData.id = newId;
+                awards.push(awardData);
+                
+                await configRef.set({ awards: awards }, { merge: true });
+                siteStatsConfig.awards = awards;
+                document.getElementById('addAwardModal').classList.remove('active');
+                renderStatsPage();
+                showCustomAlert('تم الإضافة', t.awardAdded || 'Award added successfully!');
+            } catch (error) {
+                showCustomAlert(t.errorSaving + error.message, 'خطأ');
+            }
+        };
+
+        // ================================================================
+        // 15. دالة حفظ النصوص الخاصة بصفحة الدورات (جديدة)
         // ================================================================
         document.getElementById('editCourseTextsBtn').addEventListener('click', () => {
             const ids = [
