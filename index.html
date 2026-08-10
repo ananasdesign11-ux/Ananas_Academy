@@ -180,6 +180,7 @@
             overflow: hidden;
             margin-bottom: 20px;
             position: relative;
+            touch-action: manipulation; /* enable dblclick */
         }
         .video-player-wrapper .yt-player-container {
             position: absolute;
@@ -198,17 +199,19 @@
         .custom-video-controls {
             position: absolute;
             bottom: 0; left: 0; right: 0;
-            background: linear-gradient(transparent, rgba(0,0,0,0.7));
+            background: linear-gradient(transparent, rgba(0,0,0,0.8));
             padding: 15px 20px;
             display: flex;
             flex-direction: column;
             gap: 8px;
             opacity: 0;
             transition: opacity 0.3s ease;
+            pointer-events: none; /* Hide interactions when hidden */
         }
         .video-player-wrapper:hover .custom-video-controls,
         .custom-video-controls.active {
             opacity: 1;
+            pointer-events: auto;
         }
         
         .controls-row {
@@ -222,11 +225,13 @@
             color: #fff;
             cursor: pointer;
             font-size: 1.1rem;
-            padding: 4px;
+            padding: 6px 8px;
+            border-radius: 6px;
             transition: transform 0.2s, color 0.2s;
             opacity: 0.9;
+            display: flex; align-items: center; gap: 4px;
         }
-        .controls-btn:hover { color: var(--accent1); transform: scale(1.1); }
+        .controls-btn:hover { color: var(--accent1); transform: scale(1.1); background: rgba(255,255,255,0.1); }
         .controls-btn:disabled { opacity: 0.4; cursor: default; transform: none; }
         
         .progress-bar-wrap {
@@ -248,39 +253,83 @@
             color: #fff;
             font-size: 0.85rem;
             font-weight: 600;
-            min-width: 80px;
+            min-width: 90px;
             text-align: center;
         }
         .controls-left, .controls-right {
             display: flex;
             align-items: center;
-            gap: 12px;
+            gap: 8px;
         }
-        .volume-slider {
-            width: 60px; height: 4px;
-            background: rgba(255,255,255,0.3);
-            border-radius: 10px;
-            cursor: pointer;
-            position: relative;
+        .controls-right { position: relative; }
+        
+        /* ===== Skip Ad Button ===== */
+        .skip-ad-btn {
             display: none;
+            position: absolute;
+            bottom: 70px;
+            right: 20px;
+            background: var(--accent1);
+            color: #fff;
+            padding: 8px 20px;
+            border-radius: 30px;
+            border: none;
+            font-weight: 700;
+            cursor: pointer;
+            z-index: 20;
+            font-family: inherit;
+            opacity: 0.8;
+            transition: 0.2s;
         }
-        .volume-slider.fill {
-            height: 100%; width: 100%;
-            background: var(--accent-gradient);
-            border-radius: 10px;
+        .skip-ad-btn:hover { opacity: 1; transform: scale(1.05); }
+        .skip-ad-btn.enabled { opacity: 1; background: var(--accent2); }
+        .skip-ad-btn.enabled:hover { background: #fff; color: #000; }
+
+        /* ===== Dropdown Menus for Speed & Quality ===== */
+        .settings-dropdown {
+            position: absolute;
+            bottom: 100%;
+            right: 0;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 10px;
+            min-width: 120px;
+            display: none;
+            flex-direction: column;
+            gap: 6px;
+            box-shadow: 0 -4px 12px rgba(0,0,0,0.5);
+            z-index: 25;
+            margin-bottom: 8px;
+            direction: inherit;
         }
+        .settings-dropdown.show { display: flex; }
+        .settings-dropdown .option-btn {
+            background: transparent;
+            border: none;
+            color: var(--text-primary);
+            padding: 8px 12px;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: 0.2s;
+            font-family: inherit;
+            font-weight: 600;
+            text-align: right;
+            width: 100%;
+        }
+        .settings-dropdown .option-btn:hover { background: var(--bg-card); color: var(--accent1); }
+        .settings-dropdown .option-btn.active { background: var(--accent1); color: #fff; }
 
         /* ===== Mobile Video & Controls Fix ===== */
         @media(max-width: 768px) {
-            .custom-video-controls { padding: 10px; opacity: 1; }
-            .controls-btn { font-size: 0.9rem; }
-            .controls-timer { font-size: 0.7rem; min-width: 60px; }
+            .custom-video-controls { padding: 10px; opacity: 1; pointer-events: auto; }
+            .controls-btn { font-size: 0.9rem; padding: 4px 6px; }
+            .controls-timer { font-size: 0.7rem; min-width: 70px; }
             .video-player-wrapper { max-height: 40vh; }
-            .controls-right .controls-btn:not(.fs-btn) { display: none; } /* Hide volume on mobile */
+            .controls-right .controls-btn:not(.fs-btn):not(.speed-btn):not(.quality-btn) { display: none; }
+            .skip-ad-btn { bottom: 50px; right: 10px; padding: 6px 12px; font-size: 0.8rem; }
+            .settings-dropdown { right: 0; left: auto; min-width: 100px; }
         }
-
-        /* ===== Old Video Wrapper Cleanup ===== */
-        .old-video-iframe-warning { display: none; }
 
         /* Sidebar Area */
         .course-sidebar { width: 350px; flex-shrink: 0; background: var(--bg-secondary); border-inline-start: 1px solid var(--border); display: flex; flex-direction: column; height: 100%; transition: width 0.3s ease; }
@@ -539,6 +588,10 @@
                         <!-- ===== CUSTOM VIDEO PLAYER ===== -->
                         <div class="video-player-wrapper" id="videoPlayerWrapper">
                             <div id="ytPlayerContainer" class="yt-player-container"></div>
+                            
+                            <!-- Skip Ad Button -->
+                            <button class="skip-ad-btn" id="skipAdBtn">تخطي الإعلان</button>
+
                             <div class="custom-video-controls" id="customControls">
                                 <div class="progress-bar-wrap" id="progressBarWrap">
                                     <div class="progress-bar-fill" id="progressBarFill"></div>
@@ -550,6 +603,12 @@
                                     </div>
                                     <div class="controls-timer" id="timerDisplay">00:00 / 00:00</div>
                                     <div class="controls-right">
+                                        <button class="controls-btn speed-btn" id="speedBtn">1x <i class="fas fa-caret-down"></i></button>
+                                        <div class="settings-dropdown" id="speedDropdown"></div>
+                                        
+                                        <button class="controls-btn quality-btn" id="qualityBtn">Auto <i class="fas fa-caret-down"></i></button>
+                                        <div class="settings-dropdown" id="qualityDropdown"></div>
+                                        
                                         <button class="controls-btn fs-btn" id="fullscreenBtn"><i class="fas fa-expand"></i></button>
                                     </div>
                                 </div>
@@ -828,6 +887,23 @@
 
             <div><label id="editCPTManageCodesTitleAr"></label><input type="text" id="editCPTManageCodesTitleAr"></div>
             <div><label id="editCPTManageCodesTitleEn"></label><input type="text" id="editCPTManageCodesTitleEn"></div>
+
+            <hr>
+            <!-- ===== New Video Player Translations ===== -->
+            <div><label id="editCPTSkipAdAr"></label><input type="text" id="editCPTSkipAdAr"></div>
+            <div><label id="editCPTSkipAdEn"></label><input type="text" id="editCPTSkipAdEn"></div><hr>
+
+            <div><label id="editCPTSpeedAr"></label><input type="text" id="editCPTSpeedAr"></div>
+            <div><label id="editCPTSpeedEn"></label><input type="text" id="editCPTSpeedEn"></div><hr>
+
+            <div><label id="editCPTQualityAr"></label><input type="text" id="editCPTQualityAr"></div>
+            <div><label id="editCPTQualityEn"></label><input type="text" id="editCPTQualityEn"></div><hr>
+
+            <div><label id="editCPTSeekFwdAr"></label><input type="text" id="editCPTSeekFwdAr"></div>
+            <div><label id="editCPTSeekFwdEn"></label><input type="text" id="editCPTSeekFwdEn"></div><hr>
+
+            <div><label id="editCPTSeekBwdAr"></label><input type="text" id="editCPTSeekBwdAr"></div>
+            <div><label id="editCPTSeekBwdEn"></label><input type="text" id="editCPTSeekBwdEn"></div><hr>
         </div>
         <button onclick="saveCoursePageTexts()" style="width:100%; padding:12px; margin-top:15px; background:var(--accent-gradient); color:#fff; border:none; border-radius:30px; font-weight:700; cursor:pointer;" id="saveCoursePageTextsBtn"></button>
     </div>
@@ -1016,6 +1092,8 @@
         let ytPlayer = null;
         let ytPlayerReady = false;
         let isVideoLoaded = false;
+        let adSkippable = false;
+        let adInterval = null;
 
         // ================================================================
         // 4. دوال مساعدة آمنة
@@ -1072,6 +1150,13 @@
                 editCPTAddCourseTitleAr: 'زر إضافة دورة (عربي)', editCPTAddCourseTitleEn: 'زر إضافة دورة (English)',
                 editCPTManageCodesTitleAr: 'عنوان إدارة الأكواد (عربي)', editCPTManageCodesTitleEn: 'عنوان إدارة الأكواد (English)',
                 saveCoursePageTextsBtn: 'حفظ التعديلات',
+
+                // ===== NEW: Video Player Controls =====
+                skipAd: 'تخطي الإعلان',
+                speed: 'السرعة',
+                quality: 'الجودة',
+                seekFwd: 'تقديم 10 ثواني',
+                seekBwd: 'ترجيع 10 ثواني',
                 
                 // Chat
                 fullChatTitle: 'دردشة الدورة',
@@ -1120,6 +1205,13 @@
                 editCPTAddCourseTitleAr: 'Add Course (Arabic)', editCPTAddCourseTitleEn: 'Add Course (English)',
                 editCPTManageCodesTitleAr: 'Manage Codes (Arabic)', editCPTManageCodesTitleEn: 'Manage Codes (English)',
                 saveCoursePageTextsBtn: 'Save Changes',
+
+                // ===== NEW: Video Player Controls =====
+                skipAd: 'Skip Ad',
+                speed: 'Speed',
+                quality: 'Quality',
+                seekFwd: 'Seek Forward 10s',
+                seekBwd: 'Seek Backward 10s',
                 
                 // Chat
                 fullChatTitle: 'Course Chat',
@@ -1270,6 +1362,11 @@
             safeSetText('editCPTManageCodesTitleAr', t.editCPTManageCodesTitleAr || 'Manage Codes (Arabic)');
             safeSetText('editCPTManageCodesTitleEn', t.editCPTManageCodesTitleEn || 'Manage Codes (English)');
             safeSetText('saveCoursePageTextsBtn', t.saveCoursePageTextsBtn || 'Save Changes');
+
+            // ===== Video Player Translations =====
+            document.getElementById('skipAdBtn').textContent = t.skipAd || 'Skip Ad';
+            document.getElementById('speedBtn').innerHTML = '1x <i class="fas fa-caret-down"></i>';
+            document.getElementById('qualityBtn').innerHTML = 'Auto <i class="fas fa-caret-down"></i>';
 
             safeSetInnerHTML('footerText', t.footerText || '© 2026 Ananas Academy - All rights reserved');
         }
@@ -1426,11 +1523,11 @@
 
         // === عرض تفاصيل الدورة ===
         window.openCourse = async function(courseId) {
+            // Allow only if user is logged in
             if (!currentUser) { triggerAuth(); return; }
             
-            // ===== NEW: Skip code for Admin =====
+            // ===== Skip code for Admin =====
             if (isAdmin) {
-                // If user is admin, bypass all enrollment checks and open the course immediately
                 return await openCourseContent(courseId);
             }
 
@@ -1640,10 +1737,9 @@
         }
 
         // ================================================================
-        // ===== NEW: CUSTOM YOUTUBE PLAYER API LOGIC =====
+        // ===== CUSTOM YOUTUBE PLAYER API LOGIC =====
         // ================================================================
         function onYouTubeIframeAPIReady() {
-            // API is ready, we can create players dynamically
             console.log("YouTube IFrame API is ready.");
         }
 
@@ -1696,6 +1792,7 @@
             document.getElementById('customControls').classList.add('active');
             // Update total duration
             updateTimer();
+            setupSpeedAndQuality();
         }
 
         function onPlayerStateChange(event) {
@@ -1710,31 +1807,129 @@
                     document.getElementById('progressBarFill').style.width = '100%';
                 }
             }
-        }
 
-        function updateTimer() {
-            if(!ytPlayer || !ytPlayerReady) return;
-            const current = ytPlayer.getCurrentTime();
-            const total = ytPlayer.getDuration();
-            const formatTime = (seconds) => {
-                const m = Math.floor(seconds / 60);
-                const s = Math.floor(seconds % 60);
-                return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
-            };
-            document.getElementById('timerDisplay').textContent = `${formatTime(current)} / ${formatTime(total)}`;
-        }
-
-        function updateProgressLoop() {
-            if(!ytPlayer || !ytPlayerReady) return;
-            const current = ytPlayer.getCurrentTime();
-            const total = ytPlayer.getDuration();
-            const pct = (current / total) * 100;
-            document.getElementById('progressBarFill').style.width = pct + '%';
-            updateTimer();
-            if(ytPlayer.getPlayerState() === YT.PlayerState.PLAYING) {
-                requestAnimationFrame(updateProgressLoop);
+            // ===== Handle Ads =====
+            const skipBtn = document.getElementById('skipAdBtn');
+            if(event.data === YT.PlayerState.AD_PAUSED || event.data === YT.PlayerState.AD_PLAYING) {
+                // Show skip button
+                skipBtn.style.display = 'block';
+                skipBtn.classList.remove('enabled');
+                skipBtn.textContent = translations[currentLang]?.skipAd || 'Skip Ad';
+                
+                // Logic to enable skip after 5 secs
+                if(adInterval) clearInterval(adInterval);
+                adInterval = setInterval(() => {
+                    if(ytPlayer && ytPlayer.getCurrentTime && ytPlayer.getDuration) {
+                        const current = ytPlayer.getCurrentTime();
+                        if(current > 5) {
+                            skipBtn.classList.add('enabled');
+                            skipBtn.textContent = (translations[currentLang]?.skipAd || 'Skip Ad') + ' ▶';
+                            clearInterval(adInterval);
+                            adInterval = null;
+                        }
+                    }
+                }, 1000);
+            } else {
+                // Hide skip button for normal playback
+                skipBtn.style.display = 'none';
+                if(adInterval) {
+                    clearInterval(adInterval);
+                    adInterval = null;
+                }
             }
         }
+
+        document.getElementById('skipAdBtn').addEventListener('click', function() {
+            if(this.classList.contains('enabled') && ytPlayer) {
+                try {
+                    ytPlayer.skipAd();
+                } catch(e) {
+                    // If skipAd fails, seek to the end of ad
+                    ytPlayer.seekTo(ytPlayer.getDuration(), true);
+                }
+                this.style.display = 'none';
+            }
+        });
+
+        // ===== Speed & Quality Controls =====
+        function setupSpeedAndQuality() {
+            // Speed Dropdown
+            const speedBtn = document.getElementById('speedBtn');
+            const speedDropdown = document.getElementById('speedDropdown');
+            const speeds = [0.5, 0.75, 1, 1.25, 1.5, 2];
+            
+            speedBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                speedDropdown.classList.toggle('show');
+                document.getElementById('qualityDropdown').classList.remove('show');
+            });
+
+            speedDropdown.innerHTML = '';
+            speeds.forEach(rate => {
+                const opt = document.createElement('button');
+                opt.className = 'option-btn';
+                opt.textContent = rate + 'x';
+                if(rate === 1) opt.classList.add('active');
+                opt.onclick = () => {
+                    if(ytPlayer && ytPlayerReady) {
+                        ytPlayer.setPlaybackRate(rate);
+                        document.querySelectorAll('#speedDropdown .option-btn').forEach(b => b.classList.remove('active'));
+                        opt.classList.add('active');
+                        speedBtn.innerHTML = rate + 'x <i class="fas fa-caret-down"></i>';
+                        speedDropdown.classList.remove('show');
+                    }
+                };
+                speedDropdown.appendChild(opt);
+            });
+
+            // Quality Dropdown
+            const qualityBtn = document.getElementById('qualityBtn');
+            const qualityDropdown = document.getElementById('qualityDropdown');
+            
+            qualityBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                qualityDropdown.classList.toggle('show');
+                document.getElementById('speedDropdown').classList.remove('show');
+                // Update available qualities
+                if(ytPlayer && ytPlayerReady) {
+                    const qualities = ytPlayer.getAvailableQualityLevels();
+                    qualityDropdown.innerHTML = '';
+                    // Add "Auto"
+                    const auto = document.createElement('button');
+                    auto.className = 'option-btn active';
+                    auto.textContent = 'Auto';
+                    auto.onclick = () => {
+                        ytPlayer.setPlaybackQuality('auto');
+                        document.querySelectorAll('#qualityDropdown .option-btn').forEach(b => b.classList.remove('active'));
+                        auto.classList.add('active');
+                        qualityBtn.innerHTML = 'Auto <i class="fas fa-caret-down"></i>';
+                        qualityDropdown.classList.remove('show');
+                    };
+                    qualityDropdown.appendChild(auto);
+
+                    qualities.forEach(q => {
+                        const opt = document.createElement('button');
+                        opt.className = 'option-btn';
+                        opt.textContent = q;
+                        opt.onclick = () => {
+                            ytPlayer.setPlaybackQuality(q);
+                            document.querySelectorAll('#qualityDropdown .option-btn').forEach(b => b.classList.remove('active'));
+                            opt.classList.add('active');
+                            qualityBtn.innerHTML = q + ' <i class="fas fa-caret-down"></i>';
+                            qualityDropdown.classList.remove('show');
+                        };
+                        qualityDropdown.appendChild(opt);
+                    });
+                }
+            });
+        }
+
+        // Close dropdowns on click outside
+        document.addEventListener('click', (e) => {
+            if(!e.target.closest('.settings-dropdown') && !e.target.closest('.speed-btn') && !e.target.closest('.quality-btn')) {
+                document.querySelectorAll('.settings-dropdown').forEach(d => d.classList.remove('show'));
+            }
+        });
 
         // ===== CUSTOM CONTROLS EVENT LISTENERS =====
 
@@ -1781,6 +1976,69 @@
             }
         });
 
+        // ===== Double Click for Seek (Mobile & Desktop) =====
+        document.getElementById('videoPlayerWrapper').addEventListener('dblclick', (e) => {
+            if(!ytPlayer || !ytPlayerReady) return;
+            const rect = e.currentTarget.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const width = rect.width;
+            // Left half: Seek Back 10s, Right half: Seek Forward 10s
+            const current = ytPlayer.getCurrentTime();
+            const total = ytPlayer.getDuration();
+            if (x < width / 2) {
+                ytPlayer.seekTo(Math.max(0, current - 10), true);
+            } else {
+                ytPlayer.seekTo(Math.min(total, current + 10), true);
+            }
+        });
+
+        // ===== Keyboard Shortcuts (Arrows) =====
+        document.addEventListener('keydown', (e) => {
+            if(!ytPlayer || !ytPlayerReady || document.activeElement?.tagName === 'INPUT' || document.activeElement?.tagName === 'TEXTAREA') return;
+            const key = e.key;
+            const current = ytPlayer.getCurrentTime();
+            const total = ytPlayer.getDuration();
+            if(key === 'ArrowRight') { // Forward 10s
+                e.preventDefault();
+                ytPlayer.seekTo(Math.min(total, current + 10), true);
+            } else if(key === 'ArrowLeft') { // Backward 10s
+                e.preventDefault();
+                ytPlayer.seekTo(Math.max(0, current - 10), true);
+            } else if(key === 'ArrowUp') { // Volume Up 10%
+                e.preventDefault();
+                const vol = Math.min(100, ytPlayer.getVolume() + 10);
+                ytPlayer.setVolume(vol);
+            } else if(key === 'ArrowDown') { // Volume Down 10%
+                e.preventDefault();
+                const vol = Math.max(0, ytPlayer.getVolume() - 10);
+                ytPlayer.setVolume(vol);
+            }
+        });
+
+        function updateTimer() {
+            if(!ytPlayer || !ytPlayerReady) return;
+            const current = ytPlayer.getCurrentTime();
+            const total = ytPlayer.getDuration();
+            const formatTime = (seconds) => {
+                const m = Math.floor(seconds / 60);
+                const s = Math.floor(seconds % 60);
+                return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+            };
+            document.getElementById('timerDisplay').textContent = `${formatTime(current)} / ${formatTime(total)}`;
+        }
+
+        function updateProgressLoop() {
+            if(!ytPlayer || !ytPlayerReady) return;
+            const current = ytPlayer.getCurrentTime();
+            const total = ytPlayer.getDuration();
+            const pct = (current / total) * 100;
+            document.getElementById('progressBarFill').style.width = pct + '%';
+            updateTimer();
+            if(ytPlayer.getPlayerState() === YT.PlayerState.PLAYING) {
+                requestAnimationFrame(updateProgressLoop);
+            }
+        }
+
         // ===== LOAD VIDEO FOR LESSON (Updated) =====
         async function loadVideoForLesson(courseId, lessonId) {
             const doc = await db.collection('courses').doc(courseId).collection('lessons').doc(lessonId).get();
@@ -1793,6 +2051,8 @@
             document.getElementById('playPauseBtn').innerHTML = '<i class="fas fa-play"></i>';
             document.getElementById('progressBarFill').style.width = '0%';
             document.getElementById('timerDisplay').textContent = '00:00 / 00:00';
+            document.getElementById('skipAdBtn').style.display = 'none';
+            document.querySelectorAll('.settings-dropdown').forEach(d => d.classList.remove('show'));
 
             if(url && url.trim() !== '') {
                 isVideoLoaded = true;
@@ -3204,10 +3464,24 @@
                     }
                 } catch (error) { console.error(error); }
             } else {
+                // ===== LOGOUT LOGIC =====
                 currentUser = null; isAdmin = false;
                 document.querySelectorAll('.admin-only').forEach(el => el.classList.remove('show'));
                 const t = translations[currentLang] || translations['ar'] || {};
                 if (authToggleBtn) authToggleBtn.innerHTML = `<i class="fas fa-user"></i> <span id="authLabel">${t.authLabel || 'Sign In'}</span>`;
+                
+                // If the user was inside a course, close it immediately
+                if (activeCourseId) {
+                    document.getElementById('courseDetailView').style.display = 'none';
+                    document.getElementById('coursesGridContainer').style.display = 'grid';
+                    activeCourseId = null;
+                    activeLessonId = null;
+                    if(ytPlayer) { ytPlayer.destroy(); ytPlayer = null; ytPlayerReady = false; }
+                    if(chatUnsubscriber) { chatUnsubscriber(); chatUnsubscriber = null; }
+                    document.getElementById('courseLearningView').classList.remove('active');
+                    document.getElementById('fullChatPage').classList.remove('active');
+                }
+                
                 loadCourses(); // Reset UI
             }
         });
@@ -3295,17 +3569,24 @@
                 'editCPTCompletedAr', 'editCPTCompletedEn',
                 'editCPTEnrolledMsgAr', 'editCPTEnrolledMsgEn',
                 'editCPTAddCourseTitleAr', 'editCPTAddCourseTitleEn',
-                'editCPTManageCodesTitleAr', 'editCPTManageCodesTitleEn'
+                'editCPTManageCodesTitleAr', 'editCPTManageCodesTitleEn',
+                'editCPTSkipAdAr', 'editCPTSkipAdEn',
+                'editCPTSpeedAr', 'editCPTSpeedEn',
+                'editCPTQualityAr', 'editCPTQualityEn',
+                'editCPTSeekFwdAr', 'editCPTSeekFwdEn',
+                'editCPTSeekBwdAr', 'editCPTSeekBwdEn'
             ];
             const arKeys = [
                 'coursesPageTitle','backToCoursesText','cLessonsLbl','cHoursLbl','cQuizzesLbl','cStudentsLbl',
                 'lbTitle','lessonsTitle','chatTitle','chatPlaceholder','enrollBtn','completeBtn','lesson','quizLabel',
-                'completed','enrolledMsg','addCourseModalTitle','manageCodesTitle'
+                'completed','enrolledMsg','addCourseModalTitle','manageCodesTitle',
+                'skipAd','speed','quality','seekFwd','seekBwd'
             ];
             const enKeys = [
                 'coursesPageTitle','backToCoursesText','cLessonsLbl','cHoursLbl','cQuizzesLbl','cStudentsLbl',
                 'lbTitle','lessonsTitle','chatTitle','chatPlaceholder','enrollBtn','completeBtn','lesson','quizLabel',
-                'completed','enrolledMsg','addCourseModalTitle','manageCodesTitle'
+                'completed','enrolledMsg','addCourseModalTitle','manageCodesTitle',
+                'skipAd','speed','quality','seekFwd','seekBwd'
             ];
 
             for(let i=0; i<ids.length; i+=2) {
@@ -3338,17 +3619,24 @@
                 'editCPTCompletedAr', 'editCPTCompletedEn',
                 'editCPTEnrolledMsgAr', 'editCPTEnrolledMsgEn',
                 'editCPTAddCourseTitleAr', 'editCPTAddCourseTitleEn',
-                'editCPTManageCodesTitleAr', 'editCPTManageCodesTitleEn'
+                'editCPTManageCodesTitleAr', 'editCPTManageCodesTitleEn',
+                'editCPTSkipAdAr', 'editCPTSkipAdEn',
+                'editCPTSpeedAr', 'editCPTSpeedEn',
+                'editCPTQualityAr', 'editCPTQualityEn',
+                'editCPTSeekFwdAr', 'editCPTSeekFwdEn',
+                'editCPTSeekBwdAr', 'editCPTSeekBwdEn'
             ];
             const arKeys = [
                 'coursesPageTitle','backToCoursesText','cLessonsLbl','cHoursLbl','cQuizzesLbl','cStudentsLbl',
                 'lbTitle','lessonsTitle','chatTitle','chatPlaceholder','enrollBtn','completeBtn','lesson','quizLabel',
-                'completed','enrolledMsg','addCourseModalTitle','manageCodesTitle'
+                'completed','enrolledMsg','addCourseModalTitle','manageCodesTitle',
+                'skipAd','speed','quality','seekFwd','seekBwd'
             ];
             const enKeys = [
                 'coursesPageTitle','backToCoursesText','cLessonsLbl','cHoursLbl','cQuizzesLbl','cStudentsLbl',
                 'lbTitle','lessonsTitle','chatTitle','chatPlaceholder','enrollBtn','completeBtn','lesson','quizLabel',
-                'completed','enrolledMsg','addCourseModalTitle','manageCodesTitle'
+                'completed','enrolledMsg','addCourseModalTitle','manageCodesTitle',
+                'skipAd','speed','quality','seekFwd','seekBwd'
             ];
             
             for(let i=0; i<ids.length; i++) {
