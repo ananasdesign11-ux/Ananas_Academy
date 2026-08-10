@@ -13,7 +13,7 @@
     <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
 
-    <!-- ===== NEW: YouTube IFrame API ===== -->
+    <!-- ===== YouTube IFrame API ===== -->
     <script src="https://www.youtube.com/iframe_api"></script>
     
     <style>
@@ -32,12 +32,20 @@
             --btn-radius: 50px;
             --nav-height-desktop: 80px;
             --nav-height-mobile: 70px;
+            --chat-bubble-mine: #6c5ce7;
+            --chat-bubble-mine-text: #fff;
+            --chat-bubble-others: #e5e5ea;
+            --chat-bubble-others-text: #1a1a1a;
         }
 
         body.light-mode {
             --bg-primary: #f1f3f6; --bg-secondary: #ffffff; --bg-card: #ffffff;
             --text-primary: #1a1a1a; --text-muted: #6b7280; --border: #e5e7eb;
             --shadow: 0 20px 60px rgba(0, 0, 0, 0.06);
+            --chat-bubble-mine: #6c5ce7;
+            --chat-bubble-mine-text: #fff;
+            --chat-bubble-others: #e5e5ea;
+            --chat-bubble-others-text: #1a1a1a;
         }
 
         * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -85,20 +93,23 @@
         .edit-modal input, .edit-modal textarea, .edit-modal select { width: 100%; padding: 10px; margin: 6px 0; border-radius: var(--radius); border: 1px solid var(--border); background: var(--bg-secondary); color: var(--text-primary); font-family: inherit; }
         .edit-modal hr { border: 0; border-top: 1px solid var(--border); margin: 20px 0; opacity: 0.3; }
 
-        /* ===== Custom Alert & Confirm Modals ===== */
+        /* ===== Custom Alert & Confirm Modals (Enhanced) ===== */
         .custom-alert-modal { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); z-index: 9998; display: none; justify-content: center; align-items: center; backdrop-filter: blur(4px); }
         .custom-alert-modal.active { display: flex; }
-        .custom-alert-box { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); padding: 30px; max-width: 450px; width: 90%; box-shadow: var(--shadow); text-align: center; }
-        .custom-alert-box h4 { font-size: 1.3rem; margin-bottom: 15px; color: var(--accent1); }
-        .custom-alert-box p { color: var(--text-muted); margin-bottom: 20px; line-height: 1.6; }
-        .custom-alert-box .buttons { display: flex; gap: 10px; justify-content: center; }
-        .custom-alert-box .buttons .btn { padding: 8px 25px; border-radius: var(--btn-radius); border: none; font-weight: 700; cursor: pointer; transition: 0.3s; }
+        .custom-alert-box { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); padding: 30px; max-width: 450px; width: 90%; box-shadow: 0 20px 60px rgba(0,0,0,0.5); text-align: center; position: relative; animation: popIn 0.3s ease-out; }
+        @keyframes popIn { from { transform: scale(0.9); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+        .custom-alert-box h4 { font-size: 1.5rem; margin-bottom: 15px; color: var(--accent1); }
+        .custom-alert-box p { color: var(--text-muted); margin-bottom: 25px; line-height: 1.6; }
+        .custom-alert-box .buttons { display: flex; gap: 12px; justify-content: center; }
+        .custom-alert-box .buttons .btn { padding: 10px 30px; border-radius: var(--btn-radius); border: none; font-weight: 700; cursor: pointer; transition: 0.3s; }
         .custom-alert-box .buttons .btn-primary { background: var(--accent-gradient); color: #fff; }
-        .custom-alert-box .buttons .btn-primary:hover { transform: scale(1.05); }
+        .custom-alert-box .buttons .btn-primary:hover { transform: scale(1.05); box-shadow: 0 4px 12px rgba(108, 92, 231, 0.3); }
         .custom-alert-box .buttons .btn-danger { background: #e74c3c; color: #fff; }
-        .custom-alert-box .buttons .btn-danger:hover { transform: scale(1.05); }
+        .custom-alert-box .buttons .btn-danger:hover { transform: scale(1.05); box-shadow: 0 4px 12px rgba(231, 76, 60, 0.3); }
         .custom-alert-box .buttons .btn-secondary { background: var(--bg-secondary); color: var(--text-muted); border: 1px solid var(--border); }
         .custom-alert-box .buttons .btn-secondary:hover { background: var(--border); }
+        .custom-alert-box .close-lightbox { position: absolute; top: 15px; inset-inline-end: 15px; background: none; border: none; color: var(--text-muted); font-size: 1.5rem; cursor: pointer; transition: 0.3s; }
+        .custom-alert-box .close-lightbox:hover { color: #e74c3c; }
 
         /* ===== Footer ===== */
         .footer { background: var(--bg-secondary); padding: 30px 0; border-top: 1px solid var(--border); text-align: center; margin-top: auto; padding-bottom: 70px; }
@@ -159,7 +170,7 @@
         .course-overview .admin-codes-btn .btn-icon { background: none; border: none; color: var(--text-muted); font-size: 1.1rem; cursor: pointer; transition: 0.2s; font-family: inherit; border-radius: var(--btn-radius); padding: 8px 20px; border: 1px solid var(--border); display: flex; align-items: center; gap: 6px; }
         .course-overview .admin-codes-btn .btn-icon:hover { color: var(--accent1); background: rgba(108, 92, 231, 0.05); }
 
-        /* ==== LEARNING SPLIT VIEW ==== */
+        /* ===== LEARNING SPLIT VIEW (YouTube-like Responsive) ===== */
         .course-split-body { display: none; flex: 1; height: 100%; overflow: hidden; }
         .course-split-body.active { display: flex; }
         
@@ -208,6 +219,7 @@
             opacity: 0;
             transition: opacity 0.3s ease;
             pointer-events: none; /* Hide interactions when hidden */
+            z-index: 15;
         }
         .video-player-wrapper:hover .custom-video-controls,
         .custom-video-controls.active {
@@ -227,7 +239,7 @@
             cursor: pointer;
             font-size: 1.1rem;
             padding: 6px 10px;
-            border-radius: 8px; /* ===== Smooth Controls ===== */
+            border-radius: 8px;
             transition: transform 0.2s, color 0.2s, background 0.2s;
             opacity: 0.9;
             display: flex; align-items: center; gap: 4px;
@@ -268,7 +280,7 @@
         .skip-ad-btn {
             display: none;
             position: absolute;
-            bottom: 70px;
+            bottom: 85px;
             right: 20px;
             background: var(--accent1);
             color: #fff;
@@ -332,9 +344,18 @@
             .settings-dropdown { right: 0; left: auto; min-width: 100px; }
         }
 
-        /* Sidebar Area */
+        /* ===== SIDEBAR AREA (RESPONSIVE YOUTUBE STYLE) ===== */
         .course-sidebar { width: 350px; flex-shrink: 0; background: var(--bg-secondary); border-inline-start: 1px solid var(--border); display: flex; flex-direction: column; height: 100%; transition: width 0.3s ease; }
         .course-sidebar.collapsed { width: 0; overflow: hidden; border: none; }
+        
+        /* Mobile Layout for Sidebar */
+        @media(max-width: 1024px) {
+            .course-split-body.active { flex-direction: column; overflow-y: auto; height: 100%; }
+            .course-main-area { flex: none; padding-bottom: 10px; }
+            .course-sidebar { width: 100%; border-inline-start: none; border-top: 1px solid var(--border); max-height: 45vh; flex-shrink: 0; height: auto; }
+            .course-sidebar.collapsed { max-height: 0; width: 100%; border-top: none; }
+            .toggle-sidebar-btn { inset-inline-end: 15px; top: 100px; }
+        }
         
         .sidebar-tabs { display: flex; border-bottom: 1px solid var(--border); flex-shrink: 0; }
         .sidebar-tabs .tab-btn { flex: 1; padding: 12px 0; background: transparent; border: none; color: var(--text-muted); font-weight: 600; cursor: pointer; transition: 0.3s; font-family: inherit; border-bottom: 3px solid transparent; }
@@ -412,34 +433,47 @@
         #fullChatPage .chat-header button { background: none; border: none; color: var(--text-muted); cursor: pointer; transition: 0.2s; font-size: 1rem; font-weight: 600; }
         #fullChatPage .chat-header button:hover { color: var(--accent1); }
         
-        #fullChatPage .chat-messages-list { flex: 1; overflow-y: auto; margin-bottom: 15px; display: flex; flex-direction: column; gap: 8px; padding: 10px; }
-        .chat-msg { display: flex; flex-direction: column; gap: 4px; padding: 8px 12px; border-radius: var(--radius); max-width: 75%; position: relative; word-wrap: break-word; }
-        .chat-msg.received { align-self: flex-start; background: var(--bg-secondary); color: var(--text-primary); border-bottom-left-radius: 4px; }
-        .chat-msg.sent { align-self: flex-end; background: var(--accent-gradient); color: #fff; border-bottom-right-radius: 4px; }
-        .chat-msg .msg-info { display: flex; justify-content: space-between; gap: 10px; font-size: 0.75rem; opacity: 0.8; margin-top: 5px; }
-        .chat-msg .msg-reply { font-size: 0.8rem; border-inline-start: 2px solid currentColor; padding-inline-start: 10px; margin-bottom: 5px; opacity: 0.7; }
-        .chat-msg img { max-width: 200px; max-height: 200px; border-radius: 10px; margin-top: 5px; display: block; object-fit: contain; }
-        .chat-msg .del-btn { position: absolute; top: 5px; inset-inline-end: 5px; background: none; border: none; color: inherit; cursor: pointer; font-size: 0.8rem; opacity: 0; transition: 0.2s; }
-        .chat-msg:hover .del-btn { opacity: 0.6; }
-        .chat-msg:hover .del-btn:hover { color: #e74c3c; opacity: 1; }
-        .chat-msg .reply-btn { position: absolute; top: 5px; inset-inline-start: 5px; background: none; border: none; color: inherit; cursor: pointer; font-size: 0.8rem; opacity: 0; transition: 0.2s; }
-        .chat-msg:hover .reply-btn { opacity: 0.6; }
-        .chat-msg:hover .reply-btn:hover { color: var(--accent1); opacity: 1; }
-
-        .chat-input-group { display: flex; gap: 10px; flex-shrink: 0; align-items: center; flex-wrap: wrap; }
-        .chat-input-group input { flex: 1; padding: 12px 15px; border-radius: var(--btn-radius); border: 1px solid var(--border); background: var(--bg-card); color: var(--text-primary); min-width: 100px; }
+        #fullChatPage .chat-messages-list { flex: 1; overflow-y: auto; margin-bottom: 15px; display: flex; flex-direction: column; gap: 4px; padding: 10px; }
+        
+        /* ===== WhatsApp Style Chat ===== */
+        .chat-msg { display: flex; flex-direction: column; max-width: 75%; padding: 8px 12px; border-radius: 12px; position: relative; margin-bottom: 4px; word-wrap: break-word; }
+        .chat-msg.sent { align-self: flex-end; background: var(--chat-bubble-mine); color: var(--chat-bubble-mine-text); border-bottom-left-radius: 0; }
+        .chat-msg.received { align-self: flex-start; background: var(--chat-bubble-others); color: var(--chat-bubble-others-text); border-bottom-right-radius: 0; }
+        .chat-msg .msg-header { display: flex; justify-content: space-between; align-items: center; gap: 10px; width: 100%; }
+        .chat-msg .u { font-weight: 700; font-size: 0.85rem; color: inherit; opacity: 0.8; }
+        .chat-msg .msg-time { font-size: 0.7rem; opacity: 0.6; margin-top: 4px; align-self: flex-end; }
+        .chat-msg .t { font-size: 0.95rem; line-height: 1.4; }
+        .chat-msg img { max-width: 200px; max-height: 200px; border-radius: 8px; margin-top: 5px; object-fit: contain; }
+        
+        /* Reply Block */
+        .reply-block { background: rgba(0,0,0,0.05); padding: 5px 10px; border-radius: 6px; margin-bottom: 6px; border-left: 3px solid var(--accent1); }
+        .chat-msg.sent .reply-block { border-left-color: rgba(255,255,255,0.5); background: rgba(255,255,255,0.1); }
+        .reply-block .ru { font-size: 0.75rem; font-weight: 700; color: var(--accent1); opacity: 0.9; }
+        .reply-block .rt { font-size: 0.8rem; opacity: 0.8; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        
+        /* Action Buttons over message */
+        .chat-msg .msg-actions { display: flex; gap: 8px; margin-top: 4px; opacity: 0; transition: 0.2s; justify-content: flex-end; }
+        .chat-msg:hover .msg-actions { opacity: 1; }
+        .chat-msg .msg-actions button { background: none; border: none; color: inherit; cursor: pointer; font-size: 0.8rem; opacity: 0.7; transition: 0.2s; }
+        .chat-msg .msg-actions button:hover { opacity: 1; transform: scale(1.1); }
+        
+        /* Chat Input */
+        .chat-input-group { display: flex; gap: 10px; flex-shrink: 0; align-items: center; flex-wrap: wrap; margin-top: 10px; }
+        .chat-input-group .reply-indicator { display: none; width: 100%; background: var(--bg-card); padding: 10px; border-radius: 10px; border: 1px solid var(--border); margin-bottom: 5px; justify-content: space-between; align-items: center; }
+        .chat-input-group .reply-indicator.active { display: flex; }
+        .chat-input-group .reply-indicator .ri-text { font-size: 0.85rem; color: var(--text-muted); }
+        .chat-input-group .reply-indicator .ri-text strong { color: var(--accent1); }
+        .chat-input-group .reply-indicator .ri-close { background: none; border: none; color: var(--text-muted); cursor: pointer; }
+        .chat-input-group input { flex: 1; padding: 12px 15px; border-radius: var(--btn-radius); border: 1px solid var(--border); background: var(--bg-card); color: var(--text-primary); min-width: 150px; }
         .chat-input-group button { padding: 10px 20px; border-radius: var(--btn-radius); background: var(--accent-gradient); color: #fff; border: none; cursor: pointer; font-weight: 700; }
-        .chat-input-group .btn-upload { background: transparent; color: var(--text-muted); font-size: 1.5rem; padding: 0; position: relative; border-radius: 50%; }
+        .chat-input-group .btn-upload { background: transparent; color: var(--text-muted); font-size: 1.5rem; padding: 0; position: relative; }
         .chat-input-group .btn-upload input { position: absolute; top: 0; left: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }
-        .reply-box-container { width: 100%; display: none; gap: 10px; background: var(--bg-secondary); padding: 10px; border-radius: var(--radius); border: 1px solid var(--border); align-items: center; }
-        .reply-box-container .reply-content { flex: 1; font-size: 0.9rem; color: var(--text-muted); }
-        .reply-box-container .reply-cancel { background: none; border: none; color: var(--text-muted); font-size: 1.2rem; cursor: pointer; }
 
         .toggle-sidebar-btn { position: absolute; top: 70px; inset-inline-end: 360px; z-index: 10; background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 50%; width: 30px; height: 30px; display: flex; align-items: center; justify-content: center; cursor: pointer; color: var(--text-muted); transition: 0.3s; }
         .toggle-sidebar-btn:hover { color: var(--accent1); }
         .course-sidebar.collapsed + .toggle-sidebar-btn { inset-inline-end: 15px; }
 
-        .icon-select-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(50px, 1fr)); gap: 5px; max-height: 200px; overflow-y: auto; border: 1px solid var(--border); padding: 10px; border-radius: var(--radius); margin-top: 10px; background: var(--bg-secondary); }
+        .icon-select-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(50px, 1fr)); gap: 5px; max-height: 200px; overflow-y: auto; border: 1px solid var(--border); padding: 10px; border-radius: 10px; margin-top: 10px; background: var(--bg-secondary); }
         .icon-select-list .icon-opt { display: flex; justify-content: center; align-items: center; height: 40px; width: 40px; border-radius: 8px; cursor: pointer; transition: 0.2s; font-size: 1.2rem; border: 1px solid transparent; }
         .icon-select-list .icon-opt:hover { background: var(--accent1); color: #fff; transform: scale(1.1); }
         .icon-select-list .icon-opt.selected { border: 2px solid var(--accent1); background: rgba(108, 92, 231, 0.1); color: var(--accent1); }
@@ -472,7 +506,7 @@
         .options-area { display: flex; flex-direction: column; gap: 12px; margin-top: 15px; }
         .option-item { background: var(--bg-secondary); border: 2px solid var(--border); border-radius: var(--radius); padding: 15px; display: flex; align-items: center; gap: 15px; cursor: pointer; transition: 0.3s; }
         .option-item:hover { border-color: var(--accent1); background: rgba(108, 92, 231, 0.05); }
-        .option-item input[type="radio"], .option-item input[type="checkbox"] { appearance: none; -webkit-appearance: none; width: 20px; height: 20px; border: 2px solid var(--text-muted); border-radius: 50%; position: relative; cursor: pointer; flex-shrink: 0; }
+        .option-item input[type="radio"] { appearance: none; -webkit-appearance: none; width: 20px; height: 20px; border: 2px solid var(--text-muted); border-radius: 50%; position: relative; cursor: pointer; flex-shrink: 0; }
         .option-item input[type="radio"]:checked { border-color: var(--accent1); background: var(--accent1); }
         .option-item input[type="radio"]:checked::after { content: ''; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 8px; height: 8px; background: #fff; border-radius: 50%; }
         .option-item label { flex: 1; cursor: pointer; font-size: 1rem; }
@@ -517,21 +551,14 @@
             
             #courseDetailView { height: calc(100vh - var(--nav-height-desktop) - var(--nav-height-mobile) - 20px); }
             
-            .course-split-body { flex-direction: column; }
-            .course-sidebar { width: 100%; border-inline-start: none; border-top: 1px solid var(--border); max-height: 300px; }
-            .course-sidebar.collapsed { width: 100%; max-height: 0; }
-            .toggle-sidebar-btn { inset-inline-end: 15px; top: 100px; }
             .quiz-container { padding: 20px; }
             .quiz-actions { flex-direction: column; gap: 10px; }
             .quiz-actions .btn { width: 100%; }
             .course-overview { padding: 15px; }
             .question-area .q-text { font-size: 1rem; }
-            .video-player-wrapper { max-height: 40vh; }
             .course-overview .admin-codes-btn .btn-icon { font-size: 0.9rem; padding: 6px 12px; border: 1px solid var(--border); border-radius: var(--btn-radius); }
             
             .chat-msg { max-width: 90%; }
-            #fullChatPage .chat-input-group { flex-wrap: wrap; }
-            #fullChatPage .chat-input-group input { width: 100%; }
         }
     </style>
 </head>
@@ -547,6 +574,7 @@
     <!-- ===== Custom Alert & Confirm Modals ===== -->
     <div class="custom-alert-modal" id="customAlertModal">
         <div class="custom-alert-box">
+            <button class="close-lightbox" onclick="document.getElementById('customAlertModal').classList.remove('active')">&times;</button>
             <h4 id="customAlertTitle">تنبيه</h4>
             <p id="customAlertMessage">الرسالة هنا</p>
             <div class="buttons">
@@ -556,6 +584,7 @@
     </div>
     <div class="custom-alert-modal" id="customConfirmModal">
         <div class="custom-alert-box">
+            <button class="close-lightbox" onclick="document.getElementById('customConfirmModal').classList.remove('active')">&times;</button>
             <h4 id="customConfirmTitle">تأكيد</h4>
             <p id="customConfirmMessage">هل أنت متأكد؟</p>
             <div class="buttons">
@@ -714,21 +743,21 @@
                             <h4 id="fullChatTitle" style="font-weight:700;"></h4>
                             <span id="fullChatSub" style="font-size:0.8rem; color:var(--text-muted);">دردشة الدورة</span>
                         </div>
-                        <div style="display:flex; gap:10px;">
+                        <div style="display:flex; gap:10px; flex-wrap:wrap;">
                             <button id="clearChatBtn" class="admin-only show btn" style="background:#e74c3c; color:#fff; border:none; border-radius:var(--btn-radius); padding:4px 12px; font-size:0.8rem; cursor:pointer;">حذف الكل</button>
-                            <button id="closeFullChatBtn" style="background:transparent; border:none; color:var(--text-muted); font-weight:600; cursor:pointer;">عودة &larr;</button>
+                            <button id="closeFullChatBtn" style="cursor:pointer; background:none; border:none; color:var(--text-muted); font-weight:600;">عودة &larr;</button>
                         </div>
                     </div>
+                    <div class="chat-messages-list" id="fullChatMessagesList">
+                        <!-- Chat messages will be injected here with 'sent' or 'received' classes -->
+                    </div>
                     
-                    <div class="reply-box-container" id="replyBox">
-                        <div class="reply-content" id="replyBoxContent">الرد على: ...</div>
-                        <button class="reply-cancel" onclick="clearReply()"><i class="fas fa-times"></i></button>
+                    <!-- Reply Indicator (Hidden by default) -->
+                    <div class="reply-indicator" id="replyIndicator">
+                        <div class="ri-text">الرد على: <strong id="replyToName">أحمد</strong> <span id="replyToText">مرحباً بكم</span></div>
+                        <button class="ri-close" onclick="cancelReply()"><i class="fas fa-times"></i></button>
                     </div>
 
-                    <div class="chat-messages-list" id="fullChatMessagesList">
-                        <!-- Messages rendered here via onSnapshot -->
-                    </div>
-                    
                     <div class="chat-input-group">
                         <button class="btn-upload"><i class="fas fa-image"></i><input type="file" id="fullChatFileInput" accept="image/*"></button>
                         <input type="text" id="fullChatInput" placeholder="">
@@ -928,23 +957,6 @@
 
             <div><label id="editCPTManageCodesTitleAr"></label><input type="text" id="editCPTManageCodesTitleAr"></div>
             <div><label id="editCPTManageCodesTitleEn"></label><input type="text" id="editCPTManageCodesTitleEn"></div>
-
-            <hr>
-            <!-- ===== New Video Player Translations ===== -->
-            <div><label id="editCPTSkipAdAr"></label><input type="text" id="editCPTSkipAdAr"></div>
-            <div><label id="editCPTSkipAdEn"></label><input type="text" id="editCPTSkipAdEn"></div><hr>
-
-            <div><label id="editCPTSpeedAr"></label><input type="text" id="editCPTSpeedAr"></div>
-            <div><label id="editCPTSpeedEn"></label><input type="text" id="editCPTSpeedEn"></div><hr>
-
-            <div><label id="editCPTQualityAr"></label><input type="text" id="editCPTQualityAr"></div>
-            <div><label id="editCPTQualityEn"></label><input type="text" id="editCPTQualityEn"></div><hr>
-
-            <div><label id="editCPTSeekFwdAr"></label><input type="text" id="editCPTSeekFwdAr"></div>
-            <div><label id="editCPTSeekFwdEn"></label><input type="text" id="editCPTSeekFwdEn"></div><hr>
-
-            <div><label id="editCPTSeekBwdAr"></label><input type="text" id="editCPTSeekBwdAr"></div>
-            <div><label id="editCPTSeekBwdEn"></label><input type="text" id="editCPTSeekBwdEn"></div><hr>
         </div>
         <button onclick="saveCoursePageTexts()" style="width:100%; padding:12px; margin-top:15px; background:var(--accent-gradient); color:#fff; border:none; border-radius:var(--btn-radius); font-weight:700; cursor:pointer;" id="saveCoursePageTextsBtn"></button>
     </div>
@@ -1124,10 +1136,12 @@
         let currentQuestionIndex = 0;
         let quizUserAnswers = {};
         let totalXPGained = 0;
-        
-        let replyToId = null;
-        let replyToContent = '';
-        let unsubscribeChat = null; // For real-time listener
+
+        // Chat State
+        let replyToMsgId = null;
+        let replyToMsgText = '';
+        let replyToUser = '';
+        let chatUnsubscribe = null; // Global variable for real-time listener
 
         // YouTube Player State
         let ytPlayer = null;
@@ -1721,7 +1735,7 @@
             loadLessonsForCourse(activeCourseId);
             loadQuizzesForCourse(activeCourseId);
             loadAssignmentsForCourse(activeCourseId);
-            subscribeToChat(activeCourseId);
+            loadFullChatForCourse(activeCourseId);
             
             // Reset Sidebar
             document.getElementById('courseSidebar').classList.remove('collapsed');
@@ -1773,8 +1787,39 @@
             loadVideoForLesson(courseId, lessonId);
             // Load Quizzes for this Lesson
             loadQuizzesForLesson(courseId, lessonId);
-            // Trigger Completion Button Logic
+            // ===== Trigger Completion Button Logic =====
             renderLessonCompletion(courseId, lessonId);
+        }
+
+        async function loadVideoForLesson(courseId, lessonId) {
+            const doc = await db.collection('courses').doc(courseId).collection('lessons').doc(lessonId).get();
+            if(!doc.exists) return;
+            const l = doc.data();
+            const url = l.url || '';
+            
+            // Reset Controls UI
+            document.getElementById('customControls').classList.remove('active');
+            document.getElementById('playPauseBtn').innerHTML = '<i class="fas fa-play"></i>';
+            document.getElementById('progressBarFill').style.width = '0%';
+            document.getElementById('timerDisplay').textContent = '00:00 / 00:00';
+            document.getElementById('skipAdBtn').style.display = 'none';
+            document.querySelectorAll('.settings-dropdown').forEach(d => d.classList.remove('show'));
+
+            // Reset players
+            if(ytPlayer) {
+                ytPlayer.destroy();
+                ytPlayer = null;
+                ytPlayerReady = false;
+            }
+            document.getElementById('ytPlayerContainer').innerHTML = '';
+
+            if(url && url.trim() !== '') {
+                isVideoLoaded = true;
+                // Initialize Custom YouTube Player
+                initYouTubePlayer(url);
+            } else {
+                document.getElementById('ytPlayerContainer').innerHTML = '<p style="color:#fff; text-align:center; padding:20px;">لا يوجد فيديو في هذه الحصة.</p>';
+            }
         }
 
         // ================================================================
@@ -2085,30 +2130,6 @@
             }
         }
 
-        // ===== LOAD VIDEO FOR LESSON (Updated) =====
-        async function loadVideoForLesson(courseId, lessonId) {
-            const doc = await db.collection('courses').doc(courseId).collection('lessons').doc(lessonId).get();
-            if(!doc.exists) return;
-            const l = doc.data();
-            const url = l.url || '';
-            
-            // Reset Controls UI
-            document.getElementById('customControls').classList.remove('active');
-            document.getElementById('playPauseBtn').innerHTML = '<i class="fas fa-play"></i>';
-            document.getElementById('progressBarFill').style.width = '0%';
-            document.getElementById('timerDisplay').textContent = '00:00 / 00:00';
-            document.getElementById('skipAdBtn').style.display = 'none';
-            document.querySelectorAll('.settings-dropdown').forEach(d => d.classList.remove('show'));
-
-            if(url && url.trim() !== '') {
-                isVideoLoaded = true;
-                // Initialize Custom YouTube Player
-                initYouTubePlayer(url);
-            } else {
-                document.getElementById('ytPlayerContainer').innerHTML = '<p style="color:#fff; text-align:center; padding:20px;">لا يوجد فيديو في هذه الحصة.</p>';
-            }
-        }
-
         // ================================================================
         // ===== REST OF CODE (LESSON COMPLETION, QUIZZES, ETC.) =====
         // ================================================================
@@ -2376,8 +2397,14 @@
             const btn = document.createElement('button');
             btn.className = 'lesson-complete-btn cta-btn';
             btn.textContent = 'إكمال الحصة والحصول على نقاط الخبرة';
-            btn.style.cssText = 'display:block; margin: 20px auto; padding: 12px 30px; background: var(--accent-gradient); color:#fff; border:none; border-radius:var(--btn-radius); font-weight:700; cursor:pointer;';
-            btn.onclick = () => handleLessonCompletion(courseId, lessonId);
+            btn.style.cssText = 'display:block; margin: 20px auto; padding: 12px 30px; background: var(--accent-gradient); color:#fff; border:none; border-radius:var(--btn-radius); font-weight:700; cursor:pointer; transition: all 0.3s ease; box-shadow: 0 4px 12px rgba(108, 92, 231, 0.3);';
+            btn.onclick = function(e) {
+                // Disable button immediately to prevent double-clicking
+                this.disabled = true;
+                this.style.opacity = '0.6';
+                this.style.cursor = 'default';
+                handleLessonCompletion(courseId, lessonId);
+            };
             videoWrapper.appendChild(btn);
         }
 
@@ -2390,6 +2417,9 @@
                 // If no completion quiz, grant XP immediately
                 showCustomConfirm('إكمال الحصة', 'سوف تحصل على نقاط الخبرة لإكمال هذه الحصة. هل أنت متأكد؟', async () => {
                     await grantLessonXP(courseId, lessonId, l.xpReward || 0);
+                    // Re-enable if error occurs
+                    const btn = document.getElementById('completeLessonBtn');
+                    if(btn) { btn.disabled = false; btn.style.opacity = '1'; btn.style.cursor = 'pointer'; }
                 });
                 return;
             }
@@ -2452,6 +2482,10 @@
                     setTimeout(() => {
                         closeQuiz();
                     }, 3000);
+                } else {
+                    // Re-enable button if failed
+                    const btn = document.getElementById('completeLessonBtn');
+                    if(btn) { btn.disabled = false; btn.style.opacity = '1'; btn.style.cursor = 'pointer'; }
                 }
             };
         }
@@ -3241,93 +3275,144 @@
             }
         };
 
-        // === الدردشة (Real-time OnSnapshot) ===
-        let chatUnsubscriber = null;
-
-        function subscribeToChat(courseId) {
-            if(chatUnsubscriber) {
-                chatUnsubscriber();
-                chatUnsubscriber = null;
-            }
-
+        // === الدردشة (Sidebar & Full Page - Real-time, WhatsApp Style) ===
+        async function loadFullChatForCourse(courseId) {
             const container = document.getElementById('fullChatMessagesList');
-            container.innerHTML = '<p style="color:var(--text-muted);">جاري تحميل الرسائل...</p>';
-            if(!courseId || !currentUser) return;
+            
+            // Unsubscribe previous listener
+            if (chatUnsubscribe) {
+                chatUnsubscribe();
+                chatUnsubscribe = null;
+            }
+            
+            container.innerHTML = '<p style="color:var(--text-muted); text-align:center;">جاري تحميل الرسائل...</p>';
 
-            chatUnsubscriber = db.collection('courses').doc(courseId).collection('chat')
-                .orderBy('createdAt', 'asc')
-                .onSnapshot(async (snapshot) => {
-                    container.innerHTML = '';
-                    if(snapshot.empty) {
-                        container.innerHTML = `<p style="color:var(--text-muted);">لا توجد رسائل.</p>`;
-                        return;
-                    }
-                    
-                    snapshot.forEach(doc => {
-                        const m = doc.data();
-                        const div = document.createElement('div'); 
-                        const isSent = m.senderId === currentUser.uid;
-                        div.className = `chat-msg ${isSent ? 'sent' : 'received'}`;
-                        
-                        let htmlContent = '';
-                        if(m.replyToContent) {
-                            htmlContent += `<div class="msg-reply">الرد على: ${m.replyToContent}</div>`;
-                        }
-                        
-                        htmlContent += `<div class="msg-info"><span>${m.senderName || 'زائر'}</span> <span>${formatTime(m.createdAt)}</span></div>`;
-                        htmlContent += `<div class="t">${m.message || ''}</div>`;
-                        
-                        if(m.imageUrl) {
-                            htmlContent += `<img src="${m.imageUrl}" alt="Image">`;
-                        }
-                        div.innerHTML = htmlContent;
-
-                        if(isAdmin || isSent) {
-                            const btn = document.createElement('button');
-                            btn.className = 'del-btn admin-only show';
-                            if(!isSent) btn.classList.remove('admin-only'); // Allow deletion by anyone? No, only admin, or maybe delete own. Let's keep admin-only for now.
-                            btn.innerHTML = '<i class="fas fa-trash"></i>';
-                            btn.onclick = () => deleteChatMessage(courseId, doc.id);
-                            div.appendChild(btn);
+            try {
+                // Real-time listener
+                chatUnsubscribe = db.collection('courses').doc(courseId).collection('chat')
+                    .orderBy('createdAt', 'asc')
+                    .onSnapshot((snapshot) => {
+                        if (snapshot.empty) {
+                            container.innerHTML = `<p style="color:var(--text-muted); text-align:center;">لا توجد رسائل.</p>`;
+                            return;
                         }
 
-                        // Reply Button (Only for received messages, or all messages)
-                        const replyBtn = document.createElement('button');
-                        replyBtn.className = 'reply-btn';
-                        replyBtn.innerHTML = '<i class="fas fa-reply"></i>';
-                        replyBtn.onclick = () => {
-                            setReply(doc.id, m.message || '[صورة]');
-                        };
-                        div.appendChild(replyBtn);
+                        const currentUserId = currentUser ? currentUser.uid : null;
+                        let messagesHtml = '';
+                        let lastDate = '';
 
-                        container.appendChild(div);
+                        snapshot.forEach(doc => {
+                            const m = doc.data();
+                            const msgDate = m.createdAt ? new Date(m.createdAt.seconds * 1000) : new Date();
+                            const today = new Date();
+                            let dateStr = '';
+
+                            // Calculate Date Separators (Like WhatsApp)
+                            const isToday = msgDate.toDateString() === today.toDateString();
+                            const yesterday = new Date(); yesterday.setDate(today.getDate() - 1);
+                            const isYesterday = msgDate.toDateString() === yesterday.toDateString();
+
+                            if (isToday) dateStr = 'اليوم';
+                            else if (isYesterday) dateStr = 'أمس';
+                            else dateStr = msgDate.toLocaleDateString('ar-EG', { day: 'numeric', month: 'long', year: 'numeric' });
+
+                            // Add date separator if different from last
+                            if (dateStr !== lastDate) {
+                                messagesHtml += `<div style="text-align:center; margin: 15px 0; font-size:0.8rem; color:var(--text-muted); background: var(--bg-card); padding: 5px 15px; border-radius: 20px; display:inline-block; align-self:center;">${dateStr}</div>`;
+                                lastDate = dateStr;
+                            }
+
+                            // Build Message
+                            const isMine = m.userId === currentUserId;
+                            let msgHtml = `<div class="chat-msg ${isMine ? 'sent' : 'received'}">`;
+                            
+                            // Only show name for others
+                            if(!isMine) msgHtml += `<div class="msg-header"><span class="u">${m.userName || 'زائر'}</span></div>`;
+                            
+                            // Reply Block
+                            if(m.replyToText) {
+                                msgHtml += `<div class="reply-block"><div class="ru">${m.replyToName || 'زائر'}</div><div class="rt">${m.replyToText}</div></div>`;
+                            }
+                            
+                            msgHtml += `<div class="t">${m.message || ''}</div>`;
+                            if(m.imageUrl) {
+                                msgHtml += `<img src="${m.imageUrl}" alt="Image">`;
+                            }
+                            // Time only (Date is above)
+                            const timeStr = msgDate.toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' });
+                            msgHtml += `<div class="msg-time">${timeStr}</div>`;
+                            
+                            // Action buttons (Reply and Delete)
+                            msgHtml += `<div class="msg-actions">
+                                <button onclick="replyTo('${doc.id}', '${m.userName || 'زائر'}', '${(m.message || '').substring(0, 50)}')"><i class="fas fa-reply"></i></button>`;
+                            if(isAdmin || isMine) {
+                                msgHtml += `<button onclick="deleteChatMessage('${courseId}', '${doc.id}')" style="color:${isMine ? '#fff' : '#e74c3c'}"><i class="fas fa-trash"></i></button>`;
+                            }
+                            msgHtml += `</div></div>`;
+                            messagesHtml += msgHtml;
+                        });
+
+                        container.innerHTML = messagesHtml;
+                        container.scrollTop = container.scrollHeight;
+                    }, (error) => {
+                        console.error("Chat error: ", error);
+                        container.innerHTML = `<p style="color:var(--text-muted); text-align:center;">حدث خطأ في تحميل الدردشة.</p>`;
                     });
-                    container.scrollTop = container.scrollHeight;
-                }, (error) => {
-                    console.error("Chat listener error:", error);
-                    container.innerHTML = `<p style="color:var(--text-muted);">خطأ في تحميل الدردشة.</p>`;
-                });
+            } catch(e) { 
+                console.error(e);
+                container.innerHTML = `<p style="color:var(--text-muted); text-align:center;">خطأ في الاتصال بالدردشة.</p>`;
+            }
         }
 
-        function setReply(msgId, content) {
-            replyToId = msgId;
-            replyToContent = content;
-            document.getElementById('replyBox').style.display = 'flex';
-            document.getElementById('replyBoxContent').textContent = `الرد على: ${content}`;
+        // Chat Reply functionality
+        function replyTo(msgId, userName, msgText) {
+            replyToMsgId = msgId;
+            replyToUser = userName;
+            replyToMsgText = msgText;
+            
+            const indicator = document.getElementById('replyIndicator');
+            indicator.classList.add('active');
+            document.getElementById('replyToName').textContent = userName;
+            document.getElementById('replyToText').textContent = msgText;
+            document.getElementById('fullChatInput').focus();
         }
 
-        function clearReply() {
-            replyToId = null;
-            replyToContent = '';
-            document.getElementById('replyBox').style.display = 'none';
+        function cancelReply() {
+            replyToMsgId = null;
+            replyToUser = '';
+            replyToMsgText = '';
+            document.getElementById('replyIndicator').classList.remove('active');
         }
 
         window.deleteChatMessage = async function(courseId, msgId) {
             showCustomConfirm('تأكيد الحذف', 'حذف هذه الرسالة؟', async () => {
                 await db.collection('courses').doc(courseId).collection('chat').doc(msgId).delete();
-                // Listener handles the update automatically
+                // Listener handles update automatically
+                cancelReply();
             });
         };
+
+        document.getElementById('openFullChatBtn').addEventListener('click', function() {
+            if(!activeCourseId) return;
+            // Hide split view and show full chat page
+            document.getElementById('courseLearningView').classList.remove('active');
+            document.getElementById('fullChatPage').classList.add('active');
+            const t = translations[currentLang] || translations['ar'] || {};
+            document.getElementById('fullChatTitle').textContent = t.fullChatTitle || 'Course Chat';
+            loadFullChatForCourse(activeCourseId);
+            cancelReply(); // Reset reply
+        });
+
+        document.getElementById('closeFullChatBtn').addEventListener('click', function() {
+            document.getElementById('fullChatPage').classList.remove('active');
+            document.getElementById('courseLearningView').classList.add('active');
+            cancelReply(); // Reset reply
+            // Unsubscribe chat to save resources
+            if (chatUnsubscribe) {
+                chatUnsubscribe();
+                chatUnsubscribe = null;
+            }
+        });
 
         document.getElementById('clearChatBtn').addEventListener('click', async () => {
             if(!activeCourseId) return;
@@ -3336,32 +3421,14 @@
                 const batch = db.batch();
                 snap.forEach(d => batch.delete(d.ref));
                 await batch.commit();
-                // Listener handles update
+                cancelReply();
             });
-        });
-
-        document.getElementById('openFullChatBtn').addEventListener('click', function() {
-            if(!activeCourseId) return;
-            document.getElementById('courseLearningView').classList.remove('active');
-            document.getElementById('fullChatPage').classList.add('active');
-            const t = translations[currentLang] || translations['ar'] || {};
-            document.getElementById('fullChatTitle').textContent = t.fullChatTitle || 'Course Chat';
-            subscribeToChat(activeCourseId);
-        });
-
-        document.getElementById('closeFullChatBtn').addEventListener('click', function() {
-            document.getElementById('fullChatPage').classList.remove('active');
-            document.getElementById('courseLearningView').classList.add('active');
-            if(chatUnsubscriber) {
-                chatUnsubscriber();
-                chatUnsubscriber = null;
-            }
         });
 
         document.getElementById('fullSendChatBtn').addEventListener('click', async () => {
             const input = document.getElementById('fullChatInput');
             const fileInput = document.getElementById('fullChatFileInput');
-            if(!activeCourseId || !currentUser) return;
+            if(!activeCourseId) return;
             
             let imageUrl = null;
             if(fileInput && fileInput.files && fileInput.files[0]) {
@@ -3374,21 +3441,31 @@
             if(!message && !imageUrl) return;
 
             const chatData = {
-                senderId: currentUser.uid,
-                senderName: currentUser.displayName || 'زائر',
+                userId: currentUser ? currentUser.uid : null,
+                userName: currentUser?.displayName || 'زائر',
                 message: message || '',
                 createdAt: firebase.firestore.FieldValue.serverTimestamp()
             };
             if(imageUrl) chatData.imageUrl = imageUrl;
-            if(replyToId) {
-                chatData.replyToId = replyToId;
-                chatData.replyToContent = replyToContent;
-                clearReply();
+            
+            // Add reply data if replying
+            if(replyToMsgId) {
+                chatData.replyToId = replyToMsgId;
+                chatData.replyToName = replyToUser;
+                chatData.replyToText = replyToMsgText;
             }
             
             await db.collection('courses').doc(activeCourseId).collection('chat').add(chatData);
             if(input) input.value = '';
-            // Snapshot handles UI update automatically
+            // ===== FIX: Cancel reply after sending =====
+            cancelReply();
+        });
+
+        // Enter key to send in chat
+        document.getElementById('fullChatInput').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                document.getElementById('fullSendChatBtn').click();
+            }
         });
 
         // === تفعيل التبويبات الجانبية ===
@@ -3421,10 +3498,11 @@
             activeLessonId = null;
             document.getElementById('courseLearningView').classList.remove('active');
             document.getElementById('fullChatPage').classList.remove('active');
-            if(chatUnsubscriber) {
-                chatUnsubscriber();
-                chatUnsubscriber = null;
+            if(chatUnsubscribe) {
+                chatUnsubscribe();
+                chatUnsubscribe = null;
             }
+            cancelReply();
             loadCourses();
         });
 
@@ -3523,7 +3601,7 @@
                     activeCourseId = null;
                     activeLessonId = null;
                     if(ytPlayer) { ytPlayer.destroy(); ytPlayer = null; ytPlayerReady = false; }
-                    if(chatUnsubscriber) { chatUnsubscriber(); chatUnsubscriber = null; }
+                    if(chatUnsubscribe) { chatUnsubscribe(); chatUnsubscribe = null; }
                     document.getElementById('courseLearningView').classList.remove('active');
                     document.getElementById('fullChatPage').classList.remove('active');
                 }
