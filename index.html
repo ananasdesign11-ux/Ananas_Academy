@@ -502,16 +502,24 @@
         .question-area { margin-bottom: 25px; }
         .question-area .q-img { max-width: 100%; max-height: 300px; object-fit: contain; border-radius: var(--radius); margin: 0 auto 20px; display: block; }
         .question-area .q-text { font-size: 1.2rem; line-height: 1.6; font-weight: 600; }
+        .question-area .q-wrap { background: var(--bg-secondary); padding: 20px; border-radius: var(--radius); border: 1px solid var(--border); margin-bottom: 20px; }
         
         .options-area { display: flex; flex-direction: column; gap: 12px; margin-top: 15px; }
         .option-item { background: var(--bg-secondary); border: 2px solid var(--border); border-radius: var(--radius); padding: 15px; display: flex; align-items: center; gap: 15px; cursor: pointer; transition: 0.3s; }
         .option-item:hover { border-color: var(--accent1); background: rgba(108, 92, 231, 0.05); }
+        .option-item.selected { border-color: var(--accent1); background: rgba(108, 92, 231, 0.15); border-width: 3px; }
         .option-item input[type="radio"] { appearance: none; -webkit-appearance: none; width: 20px; height: 20px; border: 2px solid var(--text-muted); border-radius: 50%; position: relative; cursor: pointer; flex-shrink: 0; }
         .option-item input[type="radio"]:checked { border-color: var(--accent1); background: var(--accent1); }
         .option-item input[type="radio"]:checked::after { content: ''; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 8px; height: 8px; background: #fff; border-radius: 50%; }
         .option-item label { flex: 1; cursor: pointer; font-size: 1rem; }
         
-        .text-answer-area textarea { width: 100%; padding: 15px; border-radius: var(--radius); border: 1px solid var(--border); background: var(--bg-secondary); color: var(--text-primary); min-height: 100px; resize: vertical; font-family: inherit; }
+        /* ===== Quiz Result Corrections Table ===== */
+        .quiz-corrections { margin-top: 20px; text-align: right; border-top: 1px solid var(--border); padding-top: 20px; }
+        .quiz-corrections h4 { color: #e74c3c; margin-bottom: 10px; }
+        .quiz-corrections .correction-item { background: var(--bg-secondary); padding: 15px; border-radius: var(--radius); margin-bottom: 10px; border: 1px solid var(--border); }
+        .quiz-corrections .correction-item p { margin: 4px 0; font-size: 0.95rem; }
+        .quiz-corrections .correction-item .correct { color: #2ecc71; font-weight: 700; }
+        .quiz-corrections .correction-item .wrong { color: #e74c3c; font-weight: 700; }
 
         .quiz-actions { display: flex; justify-content: space-between; gap: 10px; margin-top: 20px; border-top: 1px solid var(--border); padding-top: 20px; }
         .quiz-actions .btn { padding: 10px 25px; border-radius: var(--btn-radius); font-weight: 700; border: none; cursor: pointer; transition: 0.3s; font-family: inherit; }
@@ -685,6 +693,7 @@
                             </div>
                         </div>
                         
+                        <!-- Lesson Quiz & Buttons Area -->
                         <div class="lesson-quizzes-area" id="activeLessonQuizzes"></div>
                     </div>
 
@@ -819,7 +828,10 @@
             <label id="addAssignmentTitleEnLbl"></label><input type="text" id="addAssignmentTitleEn">
             <label id="addAssignmentDescArLbl"></label><textarea id="addAssignmentDescAr" rows="3"></textarea>
             <label id="addAssignmentDescEnLbl"></label><textarea id="addAssignmentDescEn" rows="3"></textarea>
-            <label id="addAssignmentFileLbl"></label><input type="file" id="addAssignmentFile" accept="image/*, .pdf, .docx">
+            <label id="addAssignmentXPLbl" style="margin-top:10px; display:block;">نقاط الخبرة عند الموافقة</label>
+            <input type="number" id="addAssignmentXP" value="50">
+            <label id="addAssignmentLessonLbl" style="margin-top:10px; display:block;">ربط الواجب بحصة (اختياري)</label>
+            <select id="addAssignmentLessonId"><option value="">بدون حصة</option></select>
             <button onclick="saveAssignment()" style="width:100%; padding:12px; margin-top:15px; background:var(--accent-gradient); color:#fff; border:none; border-radius:var(--btn-radius); font-weight:700; cursor:pointer;" id="saveAssignmentBtn"></button>
         </div>
     </div>
@@ -872,14 +884,12 @@
                 </div>
 
                 <div class="question-area">
-                    <img id="questionImage" class="q-img" src="" style="display:none;">
-                    <div class="q-text" id="questionText"></div>
+                    <div class="q-wrap">
+                        <img id="questionImage" class="q-img" src="" style="display:none;">
+                        <div class="q-text" id="questionText"></div>
+                    </div>
                     
                     <div class="options-area" id="optionsArea"></div>
-                    
-                    <div class="text-answer-area" id="textAnswerArea" style="display:none;">
-                        <textarea id="textAnswerInput" placeholder="اكتب إجابتك هنا..."></textarea>
-                    </div>
                 </div>
 
                 <div class="quiz-actions">
@@ -894,7 +904,8 @@
                 <div class="score-circle" id="scoreCircle">0%</div>
                 <h3 id="resultTitle">النتيجة</h3>
                 <p id="resultDetails" style="color:var(--text-muted); margin-bottom:20px;"></p>
-                <button class="btn-start" onclick="closeQuiz()" style="background:var(--bg-card); color:var(--text-primary); border:1px solid var(--border);">إغلاق الاختبار</button>
+                <div id="resultCorrections" class="quiz-corrections"></div>
+                <button class="btn-start" onclick="closeQuiz()" style="background:var(--bg-card); color:var(--text-primary); border:1px solid var(--border); margin-top:20px;">إغلاق الاختبار</button>
             </div>
         </div>
     </div>
@@ -977,7 +988,7 @@
         </div>
     </div>
 
-    <!-- Add Lesson (Updated with Completion Quiz) -->
+    <!-- Add Lesson (Updated with Assignment/Project Logic) -->
     <div class="edit-modal" id="addLessonModal">
         <button onclick="document.getElementById('addLessonModal').classList.remove('active');" style="position:static; float:left; font-size:1.5rem; background:none; border:none; color:var(--text-muted); cursor:pointer;">&times;</button>
         <h3 id="addLessonModalTitle"></h3>
@@ -999,6 +1010,22 @@
                     <p style="color:var(--text-muted); font-size:0.9rem; margin-bottom: 10px;">أضف أسئلة لاختبار الطالب عند إكمال الحصة. إذا نجح، يحصل على نقاط الخبرة.</p>
                 </div>
                 <button type="button" class="btn" id="addCompletionQBtn" style="background: var(--bg-card); border: 1px dashed var(--border); padding: 5px 15px; border-radius: var(--btn-radius);"><i class="fas fa-plus-circle"></i> إضافة سؤال</button>
+            </div>
+            <hr>
+            <div style="margin-top: 10px;">
+                <label>طلب تصميم / واجب (يظهر في صفحة الواجبات)</label>
+                <div style="display:flex; align-items:center; gap:10px; margin-bottom:10px;">
+                    <input type="checkbox" id="addLessonHasAssignment" style="width:20px; height:20px;">
+                    <label for="addLessonHasAssignment" style="margin:0;">نعم، هذه الحصة تتطلب تصميم</label>
+                </div>
+                <div id="assignmentXPHidden" style="display:none;">
+                    <label id="addLessonAssignmentXPLbl">نقاط الخبرة عند الموافقة على التصميم</label>
+                    <input type="number" id="addLessonAssignmentXP" value="50">
+                    <label id="addLessonAssignmentTitleArLbl">عنوان الواجب (عربي)</label>
+                    <input type="text" id="addLessonAssignmentTitleAr" placeholder="مثل: تصميم شعار جديد">
+                    <label id="addLessonAssignmentTitleEnLbl">عنوان الواجب (English)</label>
+                    <input type="text" id="addLessonAssignmentTitleEn" placeholder="E.g. Design a new logo">
+                </div>
             </div>
             <hr>
             <button onclick="saveLesson()" style="width:100%; padding:12px; margin-top:15px; background:var(--accent-gradient); color:#fff; border:none; border-radius:var(--btn-radius); font-weight:700; cursor:pointer;" id="saveLessonBtn"></button>
@@ -1136,6 +1163,7 @@
         let currentQuestionIndex = 0;
         let quizUserAnswers = {};
         let totalXPGained = 0;
+        let quizCorrections = [];
 
         // Chat State
         let replyToMsgId = null;
@@ -1182,7 +1210,8 @@
                 completed: 'مكتمل', enrolledMsg: 'أنت مشترك في هذه الدورة بنجاح!',
                 addCourseModalTitle: 'إضافة دورة جديدة', addCourseTitleArLbl: 'عنوان الدورة (عربي)', addCourseTitleEnLbl: 'عنوان الدورة (English)', addCourseDescArLbl: 'الوصف (عربي)', addCourseDescEnLbl: 'الوصف (English)', addCoursePriceLbl: 'السعر (ريال سعودي)', addCourseImgLbl: 'صورة الدورة', saveCourseBtn: 'حفظ الدورة',
                 addLessonModalTitle: 'إضافة حصة جديدة', addLessonTitleArLbl: 'عنوان الحصة (عربي)', addLessonTitleEnLbl: 'عنوان الحصة (English)', addLessonTypeLbl: 'نوع المحتوى', lessonTypeVideo: 'فيديو', lessonTypeUrl: 'رابط', addLessonUrlLbl: 'رابط الحصة', addLessonDurationLbl: 'المدة (دقيقة)', addLessonXPLbl: 'نقاط الخبرة عند الإكمال', saveLessonBtn: 'حفظ الحصة',
-                addAssignmentModalTitle: 'إضافة واجب جديد', addAssignmentTitleArLbl: 'عنوان الواجب (عربي)', addAssignmentTitleEnLbl: 'عنوان الواجب (English)', addAssignmentDescArLbl: 'الوصف (عربي)', addAssignmentDescEnLbl: 'الوصف (English)', addAssignmentFileLbl: 'رفع ملف الواجب', saveAssignmentBtn: 'حفظ الواجب',
+                addAssignmentModalTitle: 'إضافة واجب جديد', addAssignmentTitleArLbl: 'عنوان الواجب (عربي)', addAssignmentTitleEnLbl: 'عنوان الواجب (English)', addAssignmentDescArLbl: 'الوصف (عربي)', addAssignmentDescEnLbl: 'الوصف (English)', addAssignmentXPLbl: 'نقاط الخبرة عند الموافقة', addAssignmentLessonLbl: 'ربط الواجب بحصة (اختياري)', saveAssignmentBtn: 'حفظ الواجب',
+                addQuizModalTitle: 'إنشاء اختبار متقدم', addQuizTitleArLbl: 'عنوان الاختبار (عربي)', addQuizTitleEnLbl: 'عنوان الاختبار (English)', addQuizLessonLbl: 'ربط الاختبار بحصة (اختياري)', saveQuizBtn: 'حفظ الاختبار',
                 manageCodesTitle: 'إدارة أكواد الاشتراك', newCodeLabel: 'إنشاء كود جديد', codeStartLabel: 'وقت البداية', codeEndLabel: 'وقت النهاية', codeMaxUsesLabel: 'الحد الأقصى للاستخدامات', createCodeBtn: 'إنشاء الكود',
                 
                 editCoursePageTextsTitle: 'تعديل نصوص صفحة الدورات',
@@ -1237,7 +1266,8 @@
                 completed: 'Completed', enrolledMsg: 'You are successfully enrolled in this course!',
                 addCourseModalTitle: 'Add New Course', addCourseTitleArLbl: 'Course Title (Arabic)', addCourseTitleEnLbl: 'Course Title (English)', addCourseDescArLbl: 'Description (Arabic)', addCourseDescEnLbl: 'Description (English)', addCoursePriceLbl: 'Price (SAR)', addCourseImgLbl: 'Course Image', saveCourseBtn: 'Save Course',
                 addLessonModalTitle: 'Add New Lesson', addLessonTitleArLbl: 'Lesson Title (Arabic)', addLessonTitleEnLbl: 'Lesson Title (English)', addLessonTypeLbl: 'Content Type', lessonTypeVideo: 'Video', lessonTypeUrl: 'URL', addLessonUrlLbl: 'Lesson URL', addLessonDurationLbl: 'Duration (Minutes)', addLessonXPLbl: 'XP Earned on Completion', saveLessonBtn: 'Save Lesson',
-                addAssignmentModalTitle: 'Add New Assignment', addAssignmentTitleArLbl: 'Assignment Title (Arabic)', addAssignmentTitleEnLbl: 'Assignment Title (English)', addAssignmentDescArLbl: 'Description (Arabic)', addAssignmentDescEnLbl: 'Description (English)', addAssignmentFileLbl: 'Upload Assignment File', saveAssignmentBtn: 'Save Assignment',
+                addAssignmentModalTitle: 'Add New Assignment', addAssignmentTitleArLbl: 'Assignment Title (Arabic)', addAssignmentTitleEnLbl: 'Assignment Title (English)', addAssignmentDescArLbl: 'Description (Arabic)', addAssignmentDescEnLbl: 'Description (English)', addAssignmentXPLbl: 'XP Earned on Approval', addAssignmentLessonLbl: 'Link Assignment to Lesson (Optional)', saveAssignmentBtn: 'Save Assignment',
+                addQuizModalTitle: 'Create Advanced Quiz', addQuizTitleArLbl: 'Quiz Title (Arabic)', addQuizTitleEnLbl: 'Quiz Title (English)', addQuizLessonLbl: 'Link Quiz to Lesson (Optional)', saveQuizBtn: 'Save Quiz',
                 manageCodesTitle: 'Manage Enrollment Codes', newCodeLabel: 'Generate New Code', codeStartLabel: 'Start Time', codeEndLabel: 'End Time', codeMaxUsesLabel: 'Max Uses', createCodeBtn: 'Generate Code',
                 
                 editCoursePageTextsTitle: 'Edit Courses Page Texts',
@@ -1357,19 +1387,20 @@
             safeSetText('addLessonXPLbl', t.addLessonXPLbl || 'XP Earned');
             safeSetText('saveLessonBtn', t.saveLessonBtn || 'Save Lesson');
 
-            safeSetText('addQuizModalTitle', t.addQuizModalTitle || 'Create Advanced Quiz');
-            safeSetText('addQuizTitleArLbl', t.addQuizTitleArLbl || 'Quiz Title (Arabic)');
-            safeSetText('addQuizTitleEnLbl', t.addQuizTitleEnLbl || 'Quiz Title (English)');
-            safeSetText('addQuizLessonLbl', t.addQuizLessonLbl || 'Link Quiz to Lesson (Optional)');
-            safeSetText('saveQuizBtn', t.saveQuizBtn || 'Save Quiz');
-
             safeSetText('addAssignmentModalTitle', t.addAssignmentModalTitle || 'Add New Assignment');
             safeSetText('addAssignmentTitleArLbl', t.addAssignmentTitleArLbl || 'Assignment Title (Arabic)');
             safeSetText('addAssignmentTitleEnLbl', t.addAssignmentTitleEnLbl || 'Assignment Title (English)');
             safeSetText('addAssignmentDescArLbl', t.addAssignmentDescArLbl || 'Description (Arabic)');
             safeSetText('addAssignmentDescEnLbl', t.addAssignmentDescEnLbl || 'Description (English)');
-            safeSetText('addAssignmentFileLbl', t.addAssignmentFileLbl || 'Upload Assignment File');
+            safeSetText('addAssignmentXPLbl', t.addAssignmentXPLbl || 'XP Earned on Approval');
+            safeSetText('addAssignmentLessonLbl', t.addAssignmentLessonLbl || 'Link Assignment to Lesson');
             safeSetText('saveAssignmentBtn', t.saveAssignmentBtn || 'Save Assignment');
+
+            safeSetText('addQuizModalTitle', t.addQuizModalTitle || 'Create Advanced Quiz');
+            safeSetText('addQuizTitleArLbl', t.addQuizTitleArLbl || 'Quiz Title (Arabic)');
+            safeSetText('addQuizTitleEnLbl', t.addQuizTitleEnLbl || 'Quiz Title (English)');
+            safeSetText('addQuizLessonLbl', t.addQuizLessonLbl || 'Link Quiz to Lesson (Optional)');
+            safeSetText('saveQuizBtn', t.saveQuizBtn || 'Save Quiz');
 
             safeSetText('manageCodesTitle', t.manageCodesTitle || 'Manage Codes');
             safeSetText('newCodeLabel', t.newCodeLabel || 'New Code');
@@ -1767,6 +1798,7 @@
                         <div>
                             <div class="l-title">${currentLang === 'ar' ? l.titleAr : l.titleEn}</div>
                             <div class="l-dur">${l.duration || 0} دقيقة | XP: ${l.xpReward || 0}</div>
+                            ${l.hasAssignment ? `<div style="font-size:0.8rem; color:var(--accent1);"><i class="fas fa-paint-brush"></i> واجب</div>` : ''}
                         </div>
                         ${isAdmin ? `
                         <div class="admin-actions">
@@ -1789,6 +1821,8 @@
             loadQuizzesForLesson(courseId, lessonId);
             // ===== Trigger Completion Button Logic =====
             renderLessonCompletion(courseId, lessonId);
+            // ===== Trigger Assignment Button Logic =====
+            renderLessonAssignmentLink(courseId, lessonId);
         }
 
         async function loadVideoForLesson(courseId, lessonId) {
@@ -1927,17 +1961,17 @@
 
         document.getElementById('skipAdBtn').addEventListener('click', function() {
             if(this.classList.contains('enabled') && ytPlayer) {
-                // ===== FIXED: Force seek to end to skip ad =====
                 try {
+                    // Force seek to end to skip ad
                     ytPlayer.seekTo(ytPlayer.getDuration(), true);
+                    this.style.display = 'none';
+                    if(adInterval) {
+                        clearInterval(adInterval);
+                        adInterval = null;
+                    }
                 } catch(e) {
                     // Fallback if .skipAd works better
                     try { ytPlayer.skipAd(); } catch(err) {}
-                }
-                this.style.display = 'none';
-                if(adInterval) {
-                    clearInterval(adInterval);
-                    adInterval = null;
                 }
             }
         });
@@ -2131,7 +2165,7 @@
         }
 
         // ================================================================
-        // ===== REST OF CODE (LESSON COMPLETION, QUIZZES, ETC.) =====
+        // ===== REST OF CODE (LESSON COMPLETION, QUIZZES, ASSIGNMENTS) =====
         // ================================================================
 
         document.getElementById('addLessonBtn').addEventListener('click', () => {
@@ -2145,6 +2179,11 @@
             document.getElementById('addLessonDuration').value = '';
             document.getElementById('addLessonXP').value = '';
             document.getElementById('lessonCompletionQuizContainer').innerHTML = '';
+            document.getElementById('addLessonHasAssignment').checked = false;
+            document.getElementById('assignmentXPHidden').style.display = 'none';
+            document.getElementById('addLessonAssignmentTitleAr').value = '';
+            document.getElementById('addLessonAssignmentTitleEn').value = '';
+            document.getElementById('addLessonAssignmentXP').value = 50;
             document.getElementById('addLessonModalTitle').textContent = translations[currentLang]?.addLessonModalTitle || 'Add New Lesson';
             
             const originalSave = window.saveLesson;
@@ -2155,6 +2194,10 @@
                 const url = safeGetValue('addLessonUrl');
                 const duration = parseInt(safeGetValue('addLessonDuration')) || 0;
                 const xpReward = parseInt(safeGetValue('addLessonXP')) || 0;
+                const hasAssignment = document.getElementById('addLessonHasAssignment').checked;
+                const assignmentXP = parseInt(safeGetValue('addLessonAssignmentXP')) || 50;
+                const assignmentTitleAr = safeGetValue('addLessonAssignmentTitleAr');
+                const assignmentTitleEn = safeGetValue('addLessonAssignmentTitleEn');
                 
                 // Collect completion quiz
                 const completionQuizContainer = document.getElementById('lessonCompletionQuizContainer');
@@ -2166,8 +2209,6 @@
                     const type = item.querySelector('.q-type').value;
                     const correctAnswer = item.querySelector('input[name="correct-radio"]:checked') ? item.querySelector('input[name="correct-radio"]:checked').value : '';
                     const xp = parseInt(item.querySelector('.q-xp').value) || 0;
-                    const fileInput = item.querySelector('.q-image');
-                    // Options
                     const options = [];
                     if(type === 'mcq') {
                         item.querySelectorAll('.q-option').forEach(inp => {
@@ -2186,13 +2227,27 @@
                     const lessonData = { 
                         titleAr, titleEn, type, url, duration, xpReward, 
                         completionQuiz: completionQuestions,
+                        hasAssignment: hasAssignment,
                         order: new Date().getTime() 
                     };
                     if(editingCourseId) {
                         await db.collection('courses').doc(activeCourseId).collection('lessons').doc(editingCourseId).update(lessonData);
                         editingCourseId = null;
                     } else {
-                        await db.collection('courses').doc(activeCourseId).collection('lessons').add(lessonData);
+                        const newLessonRef = await db.collection('courses').doc(activeCourseId).collection('lessons').add(lessonData);
+                        // ===== Create Assignment if required =====
+                        if(hasAssignment && assignmentTitleAr && assignmentTitleEn) {
+                            await db.collection('courses').doc(activeCourseId).collection('assignments').add({
+                                titleAr: assignmentTitleAr,
+                                titleEn: assignmentTitleEn,
+                                lessonId: newLessonRef.id,
+                                xpReward: assignmentXP,
+                                descAr: 'تصميم مطلوب في هذه الحصة',
+                                descEn: 'Design required for this lesson',
+                                submissions: [],
+                                createdAt: firebase.firestore.FieldValue.serverTimestamp()
+                            });
+                        }
                     }
                     
                     // Update course stats (Total lessons and total hours)
@@ -2217,6 +2272,11 @@
             };
             document.getElementById('addLessonModal').classList.add('active');
         });
+        
+        // Toggle Assignment fields in add lesson modal
+        document.getElementById('addLessonHasAssignment').addEventListener('change', function() {
+            document.getElementById('assignmentXPHidden').style.display = this.checked ? 'block' : 'none';
+        });
 
         window.editLesson = async function(courseId, lessonId) {
             editingCourseId = lessonId;
@@ -2238,6 +2298,20 @@
                     addLessonQuizQuestionToForm(container, q, idx);
                 });
             }
+
+            // Populate Assignment fields
+            document.getElementById('addLessonHasAssignment').checked = l.hasAssignment || false;
+            document.getElementById('assignmentXPHidden').style.display = l.hasAssignment ? 'block' : 'none';
+            // Fetch the linked assignment to pre-populate
+            if(l.hasAssignment) {
+                const assignSnapshot = await db.collection('courses').doc(courseId).collection('assignments').where('lessonId', '==', lessonId).get();
+                if(!assignSnapshot.empty) {
+                    const assignData = assignSnapshot.docs[0].data();
+                    document.getElementById('addLessonAssignmentTitleAr').value = assignData.titleAr || '';
+                    document.getElementById('addLessonAssignmentTitleEn').value = assignData.titleEn || '';
+                    document.getElementById('addLessonAssignmentXP').value = assignData.xpReward || 50;
+                }
+            }
             
             document.getElementById('addLessonModalTitle').textContent = 'تعديل الحصة';
             const originalSave = window.saveLesson;
@@ -2248,6 +2322,10 @@
                 const url = safeGetValue('addLessonUrl');
                 const duration = parseInt(safeGetValue('addLessonDuration')) || 0;
                 const xpReward = parseInt(safeGetValue('addLessonXP')) || 0;
+                const hasAssignment = document.getElementById('addLessonHasAssignment').checked;
+                const assignmentXP = parseInt(safeGetValue('addLessonAssignmentXP')) || 50;
+                const assignmentTitleAr = safeGetValue('addLessonAssignmentTitleAr');
+                const assignmentTitleEn = safeGetValue('addLessonAssignmentTitleEn');
 
                 // Collect completion quiz
                 const items = container.querySelectorAll('.question-item');
@@ -2272,8 +2350,35 @@
 
                 if(!titleAr || !titleEn || !url) return showCustomAlert('خطأ', 'يرجى ملء جميع الحقول المطلوبة.');
                 await db.collection('courses').doc(courseId).collection('lessons').doc(lessonId).update({
-                    titleAr, titleEn, type, url, duration, xpReward, completionQuiz: completionQuestions
+                    titleAr, titleEn, type, url, duration, xpReward, completionQuiz: completionQuestions, hasAssignment
                 });
+                
+                // Update or Create Assignment
+                const assignSnapshot = await db.collection('courses').doc(courseId).collection('assignments').where('lessonId', '==', lessonId).get();
+                if(hasAssignment && assignmentTitleAr && assignmentTitleEn) {
+                    if(!assignSnapshot.empty) {
+                        await assignSnapshot.docs[0].ref.update({
+                            titleAr: assignmentTitleAr,
+                            titleEn: assignmentTitleEn,
+                            xpReward: assignmentXP
+                        });
+                    } else {
+                        await db.collection('courses').doc(courseId).collection('assignments').add({
+                            titleAr: assignmentTitleAr,
+                            titleEn: assignmentTitleEn,
+                            lessonId: lessonId,
+                            xpReward: assignmentXP,
+                            descAr: 'تصميم مطلوب في هذه الحصة',
+                            descEn: 'Design required for this lesson',
+                            submissions: [],
+                            createdAt: firebase.firestore.FieldValue.serverTimestamp()
+                        });
+                    }
+                } else if(!hasAssignment && !assignSnapshot.empty) {
+                    // Remove assignment if unchecked
+                    await assignSnapshot.docs[0].ref.delete();
+                }
+
                 document.getElementById('addLessonModal').classList.remove('active');
                 loadLessonsForCourse(courseId);
                 window.saveLesson = originalSave;
@@ -2311,7 +2416,6 @@
                         <select class="q-type" onchange="toggleOptions(this)">
                             <option value="mcq" ${type==='mcq'?'selected':''}>اختيار من متعدد</option>
                             <option value="truefalse" ${type==='truefalse'?'selected':''}>صح/خطأ</option>
-                            <option value="text" ${type==='text'?'selected':''}>نص حر (مقالي)</option>
                         </select>
                     </div>
                     <div style="flex:1;">
@@ -2340,8 +2444,6 @@
                 <div style="display:flex; gap:5px; margin-bottom:5px; align-items:center;">
                     <input type="radio" name="correct-radio" value="${falseVal}" ${correct===falseVal?'checked':''}> <span>خطأ</span>
                 </div>`;
-            } else {
-                html += `<p style="color:var(--text-muted); font-size:0.9rem;">هذا النوع من الأسئلة لا يحتاج لخيارات محددة مسبقاً.</p>`;
             }
             html += `
                     </div>
@@ -2378,8 +2480,9 @@
 
         // === Lesson Completion Logic ===
         async function renderLessonCompletion(courseId, lessonId) {
-            const videoWrapper = document.getElementById('videoPlayerWrapper');
-            let existingBtn = videoWrapper.querySelector('.lesson-complete-btn');
+            const area = document.getElementById('activeLessonQuizzes');
+            // Remove old completion button if exists
+            let existingBtn = area.querySelector('.lesson-complete-container');
             if(existingBtn) existingBtn.remove();
 
             if(!currentUser || !courseId || !lessonId) return;
@@ -2387,17 +2490,21 @@
             // Check if already completed
             const completeCheck = await db.collection('users').doc(currentUser.uid).collection('completedLessons').doc(lessonId).get();
             if(completeCheck.exists) {
-                const msg = document.createElement('span');
-                msg.textContent = '✓ مكتمل';
-                msg.style.cssText = 'display:block; text-align:center; padding:10px; color:#2ecc71; font-weight:700; background:var(--bg-secondary); border-radius:var(--radius);';
-                videoWrapper.appendChild(msg);
+                const msgContainer = document.createElement('div');
+                msgContainer.className = 'lesson-complete-container';
+                msgContainer.innerHTML = `<span style="display:block; text-align:center; padding:15px; color:#2ecc71; font-weight:700; background:var(--bg-secondary); border-radius:var(--radius);">✓ مكتمل</span>`;
+                area.appendChild(msgContainer);
                 return;
             }
 
+            const container = document.createElement('div');
+            container.className = 'lesson-complete-container';
+            container.style.cssText = 'margin-top: 10px; border-top: 1px solid var(--border); padding-top: 15px; text-align: center;';
+
             const btn = document.createElement('button');
-            btn.className = 'lesson-complete-btn cta-btn';
+            btn.className = 'btn btn-primary';
             btn.textContent = 'إكمال الحصة والحصول على نقاط الخبرة';
-            btn.style.cssText = 'display:block; margin: 20px auto; padding: 12px 30px; background: var(--accent-gradient); color:#fff; border:none; border-radius:var(--btn-radius); font-weight:700; cursor:pointer; transition: all 0.3s ease; box-shadow: 0 4px 12px rgba(108, 92, 231, 0.3);';
+            btn.style.cssText = 'padding: 12px 30px; background: var(--accent-gradient); color:#fff; border:none; border-radius:var(--btn-radius); font-weight:700; cursor:pointer; transition: all 0.3s ease; box-shadow: 0 4px 12px rgba(108, 92, 231, 0.3);';
             btn.onclick = function(e) {
                 // Disable button immediately to prevent double-clicking
                 this.disabled = true;
@@ -2405,7 +2512,8 @@
                 this.style.cursor = 'default';
                 handleLessonCompletion(courseId, lessonId);
             };
-            videoWrapper.appendChild(btn);
+            container.appendChild(btn);
+            area.appendChild(container);
         }
 
         async function handleLessonCompletion(courseId, lessonId) {
@@ -2418,7 +2526,7 @@
                 showCustomConfirm('إكمال الحصة', 'سوف تحصل على نقاط الخبرة لإكمال هذه الحصة. هل أنت متأكد؟', async () => {
                     await grantLessonXP(courseId, lessonId, l.xpReward || 0);
                     // Re-enable if error occurs
-                    const btn = document.getElementById('completeLessonBtn');
+                    const btn = document.querySelector('#activeLessonQuizzes .btn-primary');
                     if(btn) { btn.disabled = false; btn.style.opacity = '1'; btn.style.cursor = 'pointer'; }
                 });
                 return;
@@ -2454,8 +2562,6 @@
                     let isCorrect = false;
                     if(q.type === 'mcq' || q.type === 'truefalse') {
                         isCorrect = userAnswer === q.correctAnswer;
-                    } else if(q.type === 'text') {
-                        isCorrect = userAnswer.trim().length > 0; 
                     }
                     if(isCorrect) correctCount++;
                 });
@@ -2484,7 +2590,7 @@
                     }, 3000);
                 } else {
                     // Re-enable button if failed
-                    const btn = document.getElementById('completeLessonBtn');
+                    const btn = document.querySelector('#activeLessonQuizzes .btn-primary');
                     if(btn) { btn.disabled = false; btn.style.opacity = '1'; btn.style.cursor = 'pointer'; }
                 }
             };
@@ -2519,6 +2625,39 @@
             }
             // Refresh lesson button
             renderLessonCompletion(courseId, lessonId);
+        }
+
+        // === Lesson Assignment Link Logic ===
+        async function renderLessonAssignmentLink(courseId, lessonId) {
+            const area = document.getElementById('activeLessonQuizzes');
+            // Remove old link if exists
+            let existingLink = area.querySelector('.lesson-assignment-container');
+            if(existingLink) existingLink.remove();
+
+            if(!currentUser || !courseId || !lessonId) return;
+            
+            // Check if lesson has assignment
+            const lessonSnap = await db.collection('courses').doc(courseId).collection('lessons').doc(lessonId).get();
+            if(!lessonSnap.exists || !lessonSnap.data().hasAssignment) return;
+
+            const container = document.createElement('div');
+            container.className = 'lesson-assignment-container';
+            container.style.cssText = 'margin-top: 10px; border-top: 1px solid var(--border); padding-top: 15px; text-align: center;';
+
+            const btn = document.createElement('button');
+            btn.className = 'btn btn-primary';
+            btn.textContent = 'انتقال إلى صفحة الواجبات';
+            btn.style.cssText = 'padding: 10px 20px; background: var(--accent-gradient); color:#fff; border:none; border-radius:var(--btn-radius); font-weight:700; cursor:pointer; transition: all 0.3s ease; box-shadow: 0 4px 12px rgba(108, 92, 231, 0.3);';
+            btn.onclick = function() {
+                // Switch panel to assignments
+                document.querySelectorAll('.sidebar-tabs .tab-btn').forEach(b => b.classList.remove('active'));
+                document.querySelector('.sidebar-tabs .tab-btn[data-target="panel-assignments"]').classList.add('active');
+                document.querySelectorAll('.sidebar-panel').forEach(p => p.classList.remove('active'));
+                document.getElementById('panel-assignments').classList.add('active');
+                loadAssignmentsForCourse(activeCourseId); // Refresh assignments page to show lesson ID
+            };
+            container.appendChild(btn);
+            area.appendChild(container);
         }
 
         // === إدارة الاختبارات ===
@@ -2567,6 +2706,7 @@
             currentQuestionIndex = 0;
             quizUserAnswers = {};
             totalXPGained = 0;
+            quizCorrections = [];
 
             // Reset UI
             document.getElementById('quizStartScreen').style.display = 'block';
@@ -2621,11 +2761,11 @@
 
             // Display Options
             const optionsArea = document.getElementById('optionsArea');
-            const textArea = document.getElementById('textAnswerArea');
             optionsArea.innerHTML = '';
             optionsArea.style.display = 'none';
-            textArea.style.display = 'none';
-            document.getElementById('textAnswerInput').value = '';
+
+            // Remove old .selected class
+            document.querySelectorAll('.option-item').forEach(el => el.classList.remove('selected'));
 
             if(q.type === 'mcq' || q.type === 'truefalse') {
                 optionsArea.style.display = 'flex';
@@ -2641,8 +2781,13 @@
                     input.name = `q-${currentQuestionIndex}`;
                     input.value = opt;
                     // Check saved answer
-                    if(quizUserAnswers[currentQuestionIndex] === opt) input.checked = true;
+                    if(quizUserAnswers[currentQuestionIndex] === opt) {
+                        input.checked = true;
+                        div.classList.add('selected');
+                    }
                     input.onchange = () => {
+                        document.querySelectorAll('.option-item').forEach(el => el.classList.remove('selected'));
+                        div.classList.add('selected');
                         quizUserAnswers[currentQuestionIndex] = opt;
                     };
                     const label = document.createElement('label');
@@ -2658,14 +2803,6 @@
                     };
                     optionsArea.appendChild(div);
                 });
-            } else if(q.type === 'text') {
-                textArea.style.display = 'block';
-                if(quizUserAnswers[currentQuestionIndex]) {
-                    document.getElementById('textAnswerInput').value = quizUserAnswers[currentQuestionIndex];
-                }
-                document.getElementById('textAnswerInput').oninput = (e) => {
-                    quizUserAnswers[currentQuestionIndex] = e.target.value;
-                };
             }
 
             // Buttons
@@ -2695,18 +2832,24 @@
                 const questions = activeQuizData.questions || [];
                 let correctCount = 0;
                 let totalXp = 0;
+                quizCorrections = [];
 
                 questions.forEach((q, index) => {
                     const userAnswer = quizUserAnswers[index] || '';
                     let isCorrect = false;
                     if(q.type === 'mcq' || q.type === 'truefalse') {
                         isCorrect = userAnswer === q.correctAnswer;
-                    } else if(q.type === 'text') {
-                        isCorrect = userAnswer.trim().length > 0; 
                     }
                     if(isCorrect) {
                         correctCount++;
                         totalXp += parseInt(q.xpReward) || 0;
+                    } else {
+                        // Record error for correction display
+                        quizCorrections.push({
+                            questionText: currentLang === 'ar' ? q.questionAr : q.questionEn,
+                            userAnswer: userAnswer || 'لم يتم الإجابة',
+                            correctAnswer: q.correctAnswer
+                        });
                     }
                 });
 
@@ -2736,6 +2879,7 @@
                         });
                         showCustomAlert('تهانينا!', `لقد نجحت في الاختبار وحصلت على ${totalXp} نقاط خبرة!`);
                     }
+                    loadUserStats(currentUser.uid);
                 } else if (!passed) {
                     showCustomAlert('حاول مرة أخرى', `للأسف، لم تنجح في الاختبار. حصلت على ${Math.round(pct)}%. حاول مرة أخرى لتحصل على نقاط الخبرة.`);
                 }
@@ -2751,6 +2895,23 @@
                 
                 document.getElementById('resultTitle').textContent = passed ? 'أحسنت! لقد اجتزت الاختبار!' : 'حاول مرة أخرى!';
                 document.getElementById('resultDetails').textContent = `لقد أجبت بشكل صحيح على ${correctCount} من ${totalQuestions} سؤال.`;
+
+                // Render Corrections
+                const correctionsContainer = document.getElementById('resultCorrections');
+                correctionsContainer.innerHTML = '';
+                if(quizCorrections.length > 0 && !passed) {
+                    let html = '<h4>تصحيح الأخطاء:</h4>';
+                    quizCorrections.forEach(err => {
+                        html += `
+                            <div class="correction-item">
+                                <p><strong>السؤال:</strong> ${err.questionText}</p>
+                                <p><span class="wrong">إجابتك: ${err.userAnswer}</span></p>
+                                <p><span class="correct">الإجابة الصحيحة: ${err.correctAnswer}</span></p>
+                            </div>
+                        `;
+                    });
+                    correctionsContainer.innerHTML = html;
+                }
             });
         };
 
@@ -2793,8 +2954,6 @@
                     let correctAnswer = selectedRadio ? selectedRadio.value : '';
                     if(type === 'truefalse') {
                         correctAnswer = item.querySelector('input[name="correct-radio"]:checked') ? item.querySelector('input[name="correct-radio"]:checked').value : '';
-                    } else if(type === 'text') {
-                        correctAnswer = ''; // Text answers have no predefined correct answer
                     }
 
                     const xpReward = parseInt(item.querySelector('.q-xp').value) || 0;
@@ -2814,6 +2973,8 @@
                             if(val) options.push(val);
                         });
                         if(!selectedRadio) return showCustomAlert('خطأ', 'الرجاء تحديد الإجابة الصحيحة لسؤال الاختيار من متعدد.');
+                    } else if(type === 'truefalse') {
+                        // True/False options are handled internally
                     }
                     if(!qAr || !qEn) {
                         showCustomAlert('خطأ', 'الرجاء ملء نص السؤال بالعربية والإنجليزية لجميع الأسئلة.');
@@ -2850,18 +3011,32 @@
 
         async function loadQuizzesForLesson(courseId, lessonId) {
             const container = document.getElementById('activeLessonQuizzes');
-            container.innerHTML = '<h4 style="margin-bottom:10px;">الاختبارات المرتبطة بهذه الحصة</h4>';
+            // Remove previous quizzes list if exists
+            let existingList = container.querySelector('.lesson-quizzes-list');
+            if(existingList) existingList.remove();
+
+            const listContainer = document.createElement('div');
+            listContainer.className = 'lesson-quizzes-list';
+            listContainer.innerHTML = '<h4 style="margin-bottom:10px;">الاختبارات المرتبطة بهذه الحصة</h4>';
             try {
                 const snap = await db.collection('courses').doc(courseId).collection('quizzes').where('lessonId', '==', lessonId).get();
-                if(snap.empty) { container.innerHTML += `<p style="color:var(--text-muted);">لا توجد اختبارات مرتبطة.</p>`; return; }
+                if(snap.empty) { 
+                    listContainer.innerHTML += `<p style="color:var(--text-muted);">لا توجد اختبارات مرتبطة.</p>`; 
+                    container.appendChild(listContainer);
+                    return; 
+                }
                 snap.forEach(doc => {
                     const q = doc.data();
                     const div = document.createElement('div'); div.className = 'sidebar-quiz-item';
                     div.innerHTML = `<div class="q-title">${currentLang === 'ar' ? q.titleAr : q.titleEn}</div><div class="q-meta">${(q.questions || []).length} أسئلة</div>`;
                     div.onclick = () => openQuiz(courseId, doc.id);
-                    container.appendChild(div);
+                    listContainer.appendChild(div);
                 });
-            } catch(e) { container.innerHTML += `<p style="color:var(--text-muted);">خطأ.</p>`; }
+                container.appendChild(listContainer);
+            } catch(e) { 
+                listContainer.innerHTML += `<p style="color:var(--text-muted);">خطأ.</p>`;
+                container.appendChild(listContainer);
+            }
         }
 
         // تحديث زر إضافة الاختبار
@@ -2914,8 +3089,6 @@
                     let correctAnswer = selectedRadio ? selectedRadio.value : '';
                     if(type === 'truefalse') {
                         correctAnswer = item.querySelector('input[name="correct-radio"]:checked') ? item.querySelector('input[name="correct-radio"]:checked').value : '';
-                    } else if(type === 'text') {
-                        correctAnswer = '';
                     }
 
                     const xpReward = parseInt(item.querySelector('.q-xp').value) || 0;
@@ -2992,7 +3165,6 @@
                         <select class="q-type" onchange="toggleOptions(this)">
                             <option value="mcq" ${type==='mcq'?'selected':''}>اختيار من متعدد</option>
                             <option value="truefalse" ${type==='truefalse'?'selected':''}>صح/خطأ</option>
-                            <option value="text" ${type==='text'?'selected':''}>نص حر (مقالي)</option>
                         </select>
                     </div>
                     <div style="flex:1;">
@@ -3022,8 +3194,6 @@
                 <div style="display:flex; gap:5px; margin-bottom:5px; align-items:center;">
                     <input type="radio" name="correct-radio" value="${falseVal}" ${correct===falseVal?'checked':''}> <span>خطأ</span>
                 </div>`;
-            } else {
-                html += `<p style="color:var(--text-muted); font-size:0.9rem;">هذا النوع من الأسئلة لا يحتاج لخيارات محددة مسبقاً.</p>`;
             }
             html += `
                     </div>
@@ -3071,8 +3241,6 @@
                         </div>
                     </div>
                 `;
-            } else {
-                wrapper.innerHTML = `<p style="color:var(--text-muted); font-size:0.9rem;">هذا النوع من الأسئلة لا يحتاج لخيارات محددة مسبقاً.</p>`;
             }
         };
 
@@ -3088,11 +3256,11 @@
             list.appendChild(div);
         };
 
-        // === إدارة الواجبات ===
+        // === إدارة الواجبات (New Full System) ===
         async function loadAssignmentsForCourse(courseId) {
             const container = document.getElementById('assignmentsListContainer');
             const t = translations[currentLang] || translations['ar'] || {};
-            container.innerHTML = `<h4 style="margin-bottom:15px; font-weight:700;">الواجبات</h4>`;
+            container.innerHTML = `<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;"><h4 style="font-weight:700; margin:0;">الواجبات والتصاميم</h4></div>`;
             try {
                 const snap = await db.collection('courses').doc(courseId).collection('assignments').orderBy('createdAt', 'desc').get();
                 if(snap.empty) {
@@ -3103,114 +3271,176 @@
                     const a = doc.data();
                     const item = document.createElement('div'); 
                     item.className = 'sidebar-lesson-item';
-                    item.style.cursor = 'pointer';
+                    item.style.cursor = 'default';
+                    item.style.flexDirection = 'column';
+                    item.style.alignItems = 'flex-start';
                     item.innerHTML = `
-                        <div>
-                            <div class="l-title">${currentLang === 'ar' ? a.titleAr : a.titleEn}</div>
-                            <div class="l-dur">${a.descAr || a.descEn || ''}</div>
+                        <div style="width:100%; display:flex; justify-content:space-between; align-items:center;">
+                            <div>
+                                <div class="l-title">${currentLang === 'ar' ? a.titleAr : a.titleEn}</div>
+                                <div class="l-dur">${a.descAr || a.descEn || ''} | XP: ${a.xpReward || 0}</div>
+                            </div>
+                            ${isAdmin ? `
+                            <div class="admin-actions">
+                                <button onclick="event.stopPropagation(); deleteAssignment('${courseId}', '${doc.id}')" class="delete"><i class="fas fa-trash"></i></button>
+                            </div>` : ''}
                         </div>
-                        ${isAdmin ? `
-                        <div class="admin-actions">
-                            <button onclick="event.stopPropagation(); editAssignment('${courseId}', '${doc.id}')"><i class="fas fa-edit"></i></button>
-                            <button class="delete" onclick="event.stopPropagation(); deleteAssignment('${courseId}', '${doc.id}')"><i class="fas fa-trash"></i></button>
-                        </div>` : ''}
+                        <div style="width:100%; margin-top:10px; border-top:1px solid var(--border); padding-top:10px;">
+                            <p style="font-size:0.9rem; color:var(--text-muted); margin-bottom:10px;"><strong>التصميمات المرفوعة:</strong></p>
+                            <div class="submissions-grid" style="display:flex; flex-wrap:wrap; gap:10px;">
                     `;
-                    item.addEventListener('click', () => openAssignment(courseId, doc.id));
+                    
+                    // Render submissions if exist
+                    const submissions = a.submissions || [];
+                    if(submissions.length === 0) {
+                        item.innerHTML += `<p style="color:var(--text-muted); font-size:0.8rem;">لا توجد أعمال مرفوعة بعد.</p>`;
+                    } else {
+                        submissions.forEach(sub => {
+                            item.innerHTML += `
+                                <div style="background:var(--bg-secondary); padding:10px; border-radius:var(--radius); border:1px solid var(--border); width:120px; text-align:center;">
+                                    <div style="font-weight:600; font-size:0.8rem; margin-bottom:5px;">${sub.userName || 'طالب'}</div>
+                                    <a href="${sub.imageUrl}" target="_blank"><img src="${sub.imageUrl}" style="width:100%; height:auto; border-radius:8px; max-height:100px; object-fit:cover;"></a>
+                                    ${isAdmin ? `<button onclick="approveSubmission('${courseId}', '${doc.id}', '${sub.userId}')" class="btn" style="margin-top:5px; padding:4px 10px; font-size:0.7rem; background:#2ecc71; color:#fff; border:none; border-radius:10px; cursor:pointer;">موافقة</button>` : ''}
+                                </div>
+                            `;
+                        });
+                    }
+                    item.innerHTML += `
+                            </div>
+                            ${currentUser && !isAdmin ? `
+                            <div style="margin-top:10px; width:100%;">
+                                <input type="file" id="uploadDesign_${doc.id}" accept="image/*" style="display:none;">
+                                <button onclick="document.getElementById('uploadDesign_${doc.id}').click()" class="btn btn-outline" style="padding:5px 15px; font-size:0.8rem;">رفع تصميم</button>
+                                <span id="uploadStatus_${doc.id}" style="font-size:0.8rem; color:var(--text-muted); margin-right:10px;"></span>
+                            </div>` : ''}
+                        </div>
+                    `;
                     container.appendChild(item);
+
+                    // Handle file upload for student
+                    const fileInput = document.getElementById(`uploadDesign_${doc.id}`);
+                    if(fileInput) {
+                        fileInput.onchange = async (e) => {
+                            const file = e.target.files[0];
+                            if(!file) return;
+                            const statusEl = document.getElementById(`uploadStatus_${doc.id}`);
+                            statusEl.textContent = 'جاري الرفع...';
+                            const url = await uploadImage(file);
+                            if(url) {
+                                const assignmentRef = db.collection('courses').doc(courseId).collection('assignments').doc(doc.id);
+                                await assignmentRef.update({
+                                    submissions: firebase.firestore.FieldValue.arrayUnion({
+                                        userId: currentUser.uid,
+                                        userName: currentUser.displayName || 'زائر',
+                                        imageUrl: url,
+                                        approved: false
+                                    })
+                                });
+                                statusEl.textContent = 'تم الرفع بنجاح!';
+                                loadAssignmentsForCourse(courseId);
+                            } else {
+                                statusEl.textContent = 'فشل الرفع.';
+                            }
+                        };
+                    }
                 });
             } catch(e) { console.error(e); }
         }
 
-        window.openAssignment = async function(courseId, assignId) {
-            const doc = await db.collection('courses').doc(courseId).collection('assignments').doc(assignId).get();
-            if(!doc.exists) return showCustomAlert('خطأ', 'الواجب غير موجود');
-            const a = doc.data();
-            let details = `العنوان: ${currentLang === 'ar' ? a.titleAr : a.titleEn}\n`;
-            details += `الوصف: ${a.descAr || a.descEn || 'لا يوجد وصف'}\n`;
-            if(a.fileUrl) details += `ملف مرفق: ${a.fileUrl}\n`;
-            showCustomAlert('تفاصيل الواجب', details);
-        };
-
-        document.getElementById('addAssignmentBtn').addEventListener('click', () => {
-            if(!activeCourseId) return showCustomAlert('تنبيه', 'الرجاء فتح الدورة أولاً.');
-            document.getElementById('addAssignmentModalTitle').textContent = translations[currentLang]?.addAssignmentModalTitle || 'Add New Assignment';
-            document.getElementById('addAssignmentTitleAr').value = '';
-            document.getElementById('addAssignmentTitleEn').value = '';
-            document.getElementById('addAssignmentDescAr').value = '';
-            document.getElementById('addAssignmentDescEn').value = '';
-            document.getElementById('addAssignmentFile').value = '';
-            document.getElementById('addAssignmentModal').classList.add('active');
-        });
-
-        window.saveAssignment = async function() {
-            if(!activeCourseId) return;
-            const titleAr = safeGetValue('addAssignmentTitleAr');
-            const titleEn = safeGetValue('addAssignmentTitleEn');
-            const descAr = safeGetValue('addAssignmentDescAr');
-            const descEn = safeGetValue('addAssignmentDescEn');
-            const file = safeGetFile('addAssignmentFile');
-
-            if(!titleAr || !titleEn) return showCustomAlert('خطأ', 'الرجاء إدخال عناوين الواجب.');
-
-            let fileUrl = '';
-            if (file) {
-                fileUrl = await uploadImage(file);
-                if(!fileUrl) return;
-            }
-
-            try {
-                const assignData = { titleAr, titleEn, descAr, descEn, fileUrl: fileUrl || null, createdAt: firebase.firestore.FieldValue.serverTimestamp() };
-                await db.collection('courses').doc(activeCourseId).collection('assignments').add(assignData);
-                document.getElementById('addAssignmentModal').classList.remove('active');
-                loadAssignmentsForCourse(activeCourseId);
-                showCustomAlert('تم الحفظ', 'تم حفظ الواجب بنجاح!');
-            } catch (error) { showCustomAlert('خطأ', 'خطأ: ' + error.message); }
-        };
-
-        window.editAssignment = async function(courseId, assignId) {
-            const doc = await db.collection('courses').doc(courseId).collection('assignments').doc(assignId).get();
-            if(!doc.exists) return showCustomAlert('خطأ', 'الواجب غير موجود');
-            const a = doc.data();
-            document.getElementById('addAssignmentTitleAr').value = a.titleAr;
-            document.getElementById('addAssignmentTitleEn').value = a.titleEn;
-            document.getElementById('addAssignmentDescAr').value = a.descAr || '';
-            document.getElementById('addAssignmentDescEn').value = a.descEn || '';
-            
-            document.getElementById('addAssignmentModalTitle').textContent = 'تعديل الواجب';
-            const originalSave = window.saveAssignment;
-            window.saveAssignment = async function() {
-                const titleAr = safeGetValue('addAssignmentTitleAr');
-                const titleEn = safeGetValue('addAssignmentTitleEn');
-                const descAr = safeGetValue('addAssignmentDescAr');
-                const descEn = safeGetValue('addAssignmentDescEn');
-                const file = safeGetFile('addAssignmentFile');
-
-                if(!titleAr || !titleEn) return showCustomAlert('خطأ', 'الرجاء إدخال عناوين الواجب.');
-
-                let fileUrl = a.fileUrl || null;
-                if (file) {
-                    fileUrl = await uploadImage(file);
-                    if(!fileUrl) return;
+        window.approveSubmission = async function(courseId, assignId, userId) {
+            if(!isAdmin) return;
+            const assignmentRef = db.collection('courses').doc(courseId).collection('assignments').doc(assignId);
+            const doc = await assignmentRef.get();
+            if(!doc.exists) return;
+            const data = doc.data();
+            const submissions = data.submissions || [];
+            const newSubmissions = submissions.map(sub => {
+                if(sub.userId === userId) {
+                    return { ...sub, approved: true };
                 }
-
-                await db.collection('courses').doc(courseId).collection('assignments').doc(assignId).update({
-                    titleAr, titleEn, descAr, descEn, fileUrl
+                return sub;
+            });
+            await assignmentRef.update({ submissions: newSubmissions });
+            // Add XP to user
+            const userStatsRef = db.collection('userStats').doc(userId);
+            const currentStatsDoc = await userStatsRef.get();
+            if(currentStatsDoc.exists) {
+                userStatsRef.update({
+                    xp: firebase.firestore.FieldValue.increment(data.xpReward || 50),
+                    rank: firebase.firestore.FieldValue.increment(1)
                 });
-                document.getElementById('addAssignmentModal').classList.remove('active');
-                loadAssignmentsForCourse(courseId);
-                window.saveAssignment = originalSave;
-                showCustomAlert('تم التعديل', 'تم تعديل الواجب بنجاح!');
-            };
-            document.getElementById('addAssignmentModal').classList.add('active');
+            } else {
+                userStatsRef.set({
+                    xp: data.xpReward || 50,
+                    level: 1,
+                    rank: '#1',
+                    progress: 0,
+                    avgScore: '0%',
+                    awards: []
+                });
+            }
+            showCustomAlert('تهانينا!', `تمت الموافقة على التصميم ومنح الطالب ${data.xpReward || 50} نقطة خبرة.`);
+            loadAssignmentsForCourse(courseId);
         };
 
         window.deleteAssignment = async function(courseId, assignId) {
             showCustomConfirm('تأكيد الحذف', 'هل أنت متأكد من حذف هذا الواجب؟', async () => {
                 await db.collection('courses').doc(courseId).collection('assignments').doc(assignId).delete();
                 loadAssignmentsForCourse(courseId);
-                showCustomAlert('تم الحذف', 'تم حذف الواجب.');
             });
         };
+
+        document.getElementById('addAssignmentBtn').addEventListener('click', async () => {
+            if(!activeCourseId) return showCustomAlert('تنبيه', 'الرجاء فتح الدورة أولاً.');
+            
+            document.getElementById('addAssignmentModalTitle').textContent = translations[currentLang]?.addAssignmentModalTitle || 'Add New Assignment';
+            document.getElementById('addAssignmentTitleAr').value = '';
+            document.getElementById('addAssignmentTitleEn').value = '';
+            document.getElementById('addAssignmentDescAr').value = '';
+            document.getElementById('addAssignmentDescEn').value = '';
+            document.getElementById('addAssignmentXP').value = 50;
+            
+            // Populate Lessons Dropdown
+            const select = document.getElementById('addAssignmentLessonId');
+            select.innerHTML = '<option value="">بدون حصة</option>';
+            const snap = await db.collection('courses').doc(activeCourseId).collection('lessons').orderBy('order', 'asc').get();
+            snap.forEach(d => {
+                const l = d.data();
+                const opt = document.createElement('option');
+                opt.value = d.id;
+                opt.textContent = currentLang === 'ar' ? l.titleAr : l.titleEn;
+                select.appendChild(opt);
+            });
+            
+            document.getElementById('addAssignmentModal').classList.add('active');
+
+            const originalSave = window.saveAssignment;
+            window.saveAssignment = async function() {
+                const titleAr = safeGetValue('addAssignmentTitleAr');
+                const titleEn = safeGetValue('addAssignmentTitleEn');
+                const descAr = safeGetValue('addAssignmentDescAr');
+                const descEn = safeGetValue('addAssignmentDescEn');
+                const xpReward = parseInt(safeGetValue('addAssignmentXP')) || 50;
+                const lessonId = safeGetSelectVal('addAssignmentLessonId') || null;
+
+                if(!titleAr || !titleEn) return showCustomAlert('خطأ', 'الرجاء إدخال عناوين الواجب.');
+
+                try {
+                    const assignData = { 
+                        titleAr, titleEn, descAr, descEn, 
+                        xpReward: xpReward,
+                        lessonId: lessonId,
+                        submissions: [],
+                        createdAt: firebase.firestore.FieldValue.serverTimestamp()
+                    };
+                    await db.collection('courses').doc(activeCourseId).collection('assignments').add(assignData);
+                    document.getElementById('addAssignmentModal').classList.remove('active');
+                    loadAssignmentsForCourse(activeCourseId);
+                    window.saveAssignment = originalSave;
+                    showCustomAlert('تم الحفظ', 'تم حفظ الواجب بنجاح!');
+                } catch (error) { showCustomAlert('خطأ', 'خطأ: ' + error.message); }
+            };
+        });
 
         // === إدارة الأكواد ===
         document.getElementById('manageCodesBtn').addEventListener('click', () => {
@@ -3773,6 +4003,11 @@
             }
             await saveToFirestore(updates, null, 'editCoursePageTextsModal');
         };
+        
+        // Mock loadUserStats to avoid errors on stats page (since it's removed)
+        async function loadUserStats(uid) {}
+        function resetStatsToDefault() {}
+        function renderStatsPage() {}
     </script>
 </body>
 </html>
