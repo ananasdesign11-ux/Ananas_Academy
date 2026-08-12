@@ -1036,6 +1036,49 @@
             .mobile-bottom-nav{height:66px;}
             .chat-lock-form-grid{grid-template-columns:1fr;}
         }
+
+        /* ===== MOBILE SAFE AREA / RESPONSIVE NAV POLISH ===== */
+        @media(max-width:768px){
+            :root{--mobile-bottom-nav-content-height:66px;}
+            html{scroll-padding-bottom:calc(var(--mobile-bottom-nav-content-height) + env(safe-area-inset-bottom) + 18px);}
+            body{padding-bottom:calc(var(--mobile-bottom-nav-content-height) + env(safe-area-inset-bottom));}
+            .mobile-bottom-nav{
+                height:calc(var(--mobile-bottom-nav-content-height) + env(safe-area-inset-bottom)) !important;
+                padding-bottom:env(safe-area-inset-bottom) !important;
+                box-sizing:border-box !important;
+            }
+            #coursesPage, #courseLessonsPage, #courseQuizzesPage, #courseAssignmentsPage, #courseChatPage, #courseLessonPlayerPage, .assignment-detail-page{
+                padding-bottom:calc(var(--mobile-bottom-nav-content-height) + env(safe-area-inset-bottom) + 24px) !important;
+                min-height:calc(100vh - var(--nav-height-desktop));
+            }
+            #courseDetailView{height:auto !important;min-height:calc(100vh - var(--nav-height-desktop));padding-bottom:calc(var(--mobile-bottom-nav-content-height) + env(safe-area-inset-bottom) + 24px) !important;}
+            .footer{padding-bottom:calc(var(--mobile-bottom-nav-content-height) + env(safe-area-inset-bottom) + 30px) !important;}
+            .navbar{overflow:hidden;}
+            .nav-container{min-width:0;gap:8px;}
+            .logo{min-width:0;flex:1 1 auto;max-width:58%;}
+            .logo-text{font-size:clamp(.82rem,3.7vw,1.05rem) !important;overflow:visible;text-overflow:clip;white-space:nowrap;}
+            .logo-img{height:36px;flex:0 0 auto;}
+            .nav-actions-top{flex:0 0 auto;gap:5px;min-width:0;}
+            .nav-btn{width:36px;height:36px;font-size:1rem;}
+            .auth-btn{white-space:nowrap;min-width:0;padding:8px 11px;font-size:.78rem;}
+        }
+        @media(max-width:420px){
+            .logo{max-width:52%;gap:5px;}
+            .logo-text{font-size:.78rem !important;}
+            .logo-img{height:32px;}
+            .nav-actions-top{gap:3px;}
+            .auth-btn{width:38px;height:38px;padding:0 !important;border-radius:50%;justify-content:center;gap:0;}
+            .auth-btn span{display:none !important;}
+            .nav-btn{width:34px;height:34px;}
+        }
+        @media(max-width:350px){
+            .logo{max-width:48%;}
+            .logo-text{font-size:.7rem !important;}
+            .logo-img{height:29px;}
+            .nav-actions-top .nav-btn{width:31px;height:31px;font-size:.9rem;}
+            .auth-btn{width:34px;height:34px;}
+        }
+
         @media(min-width:769px){.mobile-bottom-nav{display:none !important;}}
 
     </style>
@@ -1741,23 +1784,24 @@
     <!-- Suspend a user's access to the current course -->
     <div class="edit-modal" id="courseAccessSuspendModal" style="max-width:620px;">
         <button onclick="document.getElementById('courseAccessSuspendModal').classList.remove('active');" style="position:static; float:left; font-size:1.5rem; background:none; border:none; color:var(--text-muted); cursor:pointer;">&times;</button>
-        <h3>إيقاف دخول الحساب إلى الدورة</h3>
+        <h3 id="courseSuspendTitle">إيقاف دخول الحساب إلى الدورة</h3>
         <div class="code-suspend-form">
             <div id="suspendUserLabel" style="font-weight:700;margin-bottom:10px;"></div>
-            <label>مدة الإيقاف</label>
+            <label id="courseSuspendDurationLabel">مدة الإيقاف</label>
             <select id="courseSuspendDuration">
-                <option value="1d">يوم واحد</option>
-                <option value="3d">3 أيام</option>
-                <option value="7d">7 أيام</option>
-                <option value="30d">30 يومًا</option>
-                <option value="custom">حتى تاريخ ووقت محدد</option>
-                <option value="permanent">حتى ألغي الإيقاف بنفسي</option>
+                <option value="1d" id="suspendOpt1d">يوم واحد</option>
+                <option value="3d" id="suspendOpt3d">3 أيام</option>
+                <option value="7d" id="suspendOpt7d">7 أيام</option>
+                <option value="30d" id="suspendOpt30d">30 يومًا</option>
+                <option value="custom" id="suspendOptCustom">حتى تاريخ ووقت محدد</option>
+                <option value="permanent" id="suspendOptPermanent">حتى ألغي الإيقاف بنفسي</option>
             </select>
             <div id="courseSuspendCustomWrap" style="display:none;">
-                <label>ينتهي الإيقاف في</label>
+                <label id="courseSuspendUntilLabel">ينتهي الإيقاف في</label>
                 <input type="datetime-local" id="courseSuspendUntil">
+                <div id="courseSuspendTimeNote" class="chat-lock-form-note">التاريخ والوقت حسب توقيت المملكة العربية السعودية.</div>
             </div>
-            <label>سبب الإيقاف (اختياري)</label>
+            <label id="courseSuspendReasonLabel">سبب الإيقاف (اختياري)</label>
             <textarea id="courseSuspendReason" rows="3" placeholder="اكتب سبب الإيقاف..."></textarea>
             <button id="confirmCourseSuspendBtn" class="code-action-btn danger" style="width:100%;padding:11px;font-weight:700;">إيقاف الدخول</button>
         </div>
@@ -1767,7 +1811,7 @@
 
     <!-- ===== MOBILE BOTTOM NAVIGATION ===== -->
     <nav id="mobileBottomNav" class="mobile-bottom-nav" aria-label="التنقل السريع">
-        <button class="mobile-nav-item" data-page="courses" onclick="mobileNavigate('courses')"><i class="fas fa-graduation-cap"></i><span>الدورات</span></button>
+        <button class="mobile-nav-item" data-page="courses" onclick="mobileNavigate('courses')"><i class="fas fa-graduation-cap"></i><span id="mobileCoursesLabel">الدورات</span></button>
     </nav>
 
     <footer class="footer">
@@ -1933,6 +1977,7 @@
                 addAssignmentModalTitle: 'إضافة واجب جديد', addAssignmentTitleArLbl: 'عنوان الواجب (عربي)', addAssignmentTitleEnLbl: 'عنوان الواجب (English)', addAssignmentDescArLbl: 'الوصف (عربي)', addAssignmentDescEnLbl: 'الوصف (English)', addAssignmentXPLbl: 'نقاط الخبرة عند الموافقة', addAssignmentLessonLbl: 'ربط الواجب بحصة (اختياري)', saveAssignmentBtn: 'حفظ الواجب',
                 addQuizModalTitle: 'إنشاء اختبار متقدم', addQuizTitleArLbl: 'عنوان الاختبار (عربي)', addQuizTitleEnLbl: 'عنوان الاختبار (English)', addQuizLessonLbl: 'ربط الاختبار بحصة (اختياري)', saveQuizBtn: 'حفظ الاختبار',
                 manageCodesTitle: 'إدارة أكواد الاشتراك', newCodeLabel: 'إنشاء كود جديد', codeStartLabel: 'وقت البداية', codeEndLabel: 'وقت النهاية', codeMaxUsesLabel: 'الحد الأقصى للاستخدامات', createCodeBtn: 'إنشاء الكود',
+                courseSuspendTitle: 'إيقاف دخول الحساب إلى الدورة', courseSuspendDurationLabel: 'مدة الإيقاف', suspend1d: 'يوم واحد', suspend3d: '3 أيام', suspend7d: '7 أيام', suspend30d: '30 يومًا', suspendCustom: 'حتى تاريخ ووقت محدد', suspendPermanent: 'حتى ألغي الإيقاف بنفسي', courseSuspendUntilLabel: 'ينتهي الإيقاف في', courseSuspendTimeNote: 'التاريخ والوقت حسب توقيت المملكة العربية السعودية.', courseSuspendReasonLabel: 'سبب الإيقاف (اختياري)', courseSuspendReasonPlaceholder: 'اكتب سبب الإيقاف...', confirmCourseSuspendLabel: 'إيقاف الدخول', mobileCoursesLabel: 'الدورات',
                 
                 editCoursePageTextsTitle: 'تعديل نصوص صفحة الدورات',
                 editCPTCoursesPageTitleAr: 'عنوان الصفحة (عربي)', editCPTCoursesPageTitleEn: 'عنوان الصفحة (English)',
@@ -1988,6 +2033,7 @@
                 addAssignmentModalTitle: 'Add New Assignment', addAssignmentTitleArLbl: 'Assignment Title (Arabic)', addAssignmentTitleEnLbl: 'Assignment Title (English)', addAssignmentDescArLbl: 'Description (Arabic)', addAssignmentDescEnLbl: 'Description (English)', addAssignmentXPLbl: 'XP Earned on Approval', addAssignmentLessonLbl: 'Link Assignment to Lesson (Optional)', saveAssignmentBtn: 'Save Assignment',
                 addQuizModalTitle: 'Create Advanced Quiz', addQuizTitleArLbl: 'Quiz Title (Arabic)', addQuizTitleEnLbl: 'Quiz Title (English)', addQuizLessonLbl: 'Link Quiz to Lesson (Optional)', saveQuizBtn: 'Save Quiz',
                 manageCodesTitle: 'Manage Enrollment Codes', newCodeLabel: 'Generate New Code', codeStartLabel: 'Start Time', codeEndLabel: 'End Time', codeMaxUsesLabel: 'Max Uses', createCodeBtn: 'Generate Code',
+                courseSuspendTitle: 'Suspend Course Access', courseSuspendDurationLabel: 'Suspension duration', suspend1d: '1 day', suspend3d: '3 days', suspend7d: '7 days', suspend30d: '30 days', suspendCustom: 'Until a specific date and time', suspendPermanent: 'Until I manually lift the suspension', courseSuspendUntilLabel: 'Suspension ends at', courseSuspendTimeNote: 'Date and time use Saudi Arabia time.', courseSuspendReasonLabel: 'Reason for suspension (optional)', courseSuspendReasonPlaceholder: 'Enter the suspension reason...', confirmCourseSuspendLabel: 'Suspend access', mobileCoursesLabel: 'Courses',
                 
                 editCoursePageTextsTitle: 'Edit Courses Page Texts',
                 editCPTCoursesPageTitleAr: 'Page Title (Arabic)', editCPTCoursesPageTitleEn: 'Page Title (English)',
@@ -2125,6 +2171,21 @@
             safeSetText('codeEndLabel', t.codeEndLabel || 'End Time');
             safeSetText('codeMaxUsesLabel', t.codeMaxUsesLabel || 'Max Uses');
             safeSetText('createCodeBtn', t.createCodeBtn || 'Generate Code');
+
+            safeSetText('courseSuspendTitle', t.courseSuspendTitle || 'Suspend Course Access');
+            safeSetText('courseSuspendDurationLabel', t.courseSuspendDurationLabel || 'Suspension duration');
+            safeSetText('suspendOpt1d', t.suspend1d || '1 day');
+            safeSetText('suspendOpt3d', t.suspend3d || '3 days');
+            safeSetText('suspendOpt7d', t.suspend7d || '7 days');
+            safeSetText('suspendOpt30d', t.suspend30d || '30 days');
+            safeSetText('suspendOptCustom', t.suspendCustom || 'Until a specific date and time');
+            safeSetText('suspendOptPermanent', t.suspendPermanent || 'Until I manually lift the suspension');
+            safeSetText('courseSuspendUntilLabel', t.courseSuspendUntilLabel || 'Suspension ends at');
+            safeSetText('courseSuspendTimeNote', t.courseSuspendTimeNote || 'Date and time use Saudi Arabia time.');
+            safeSetText('courseSuspendReasonLabel', t.courseSuspendReasonLabel || 'Reason for suspension (optional)');
+            safeSetPlaceholder('courseSuspendReason', t.courseSuspendReasonPlaceholder || 'Enter the suspension reason...');
+            safeSetText('confirmCourseSuspendBtn', t.confirmCourseSuspendLabel || 'Suspend access');
+            safeSetText('mobileCoursesLabel', t.mobileCoursesLabel || 'Courses');
 
             // Edit Courses Page Text Modal
             safeSetText('editCoursePageTextsTitle', t.editCoursePageTextsTitle || 'Edit Courses Page Texts');
@@ -4444,8 +4505,11 @@
             if (mode === 'custom') {
                 const raw = document.getElementById('courseSuspendUntil').value;
                 if (!raw) return showCustomAlert('تنبيه','حدد تاريخ ووقت انتهاء الإيقاف.');
-                until = new Date(raw);
-                if (isNaN(until.getTime()) || until.getTime() <= Date.now()) return showCustomAlert('تنبيه','وقت الانتهاء يجب أن يكون في المستقبل.');
+                // datetime-local is entered as Saudi Arabia local time. Convert it explicitly to UTC (+03:00).
+                const m = raw.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/);
+                if (!m) return showCustomAlert(currentLang==='ar'?'تنبيه':'Notice', currentLang==='ar'?'أدخل تاريخًا ووقتًا صحيحين.':'Enter a valid date and time.');
+                until = new Date(`${m[1]}-${m[2]}-${m[3]}T${m[4]}:${m[5]}:00+03:00`);
+                if (isNaN(until.getTime()) || until.getTime() <= Date.now()) return showCustomAlert(currentLang==='ar'?'تنبيه':'Notice', currentLang==='ar'?'وقت الانتهاء يجب أن يكون في المستقبل.':'The end time must be in the future.');
             } else if (mode !== 'permanent') {
                 const days = parseInt(mode,10) || 7;
                 until = new Date(Date.now() + days*24*60*60*1000);
