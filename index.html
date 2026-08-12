@@ -203,7 +203,10 @@
         #coursesPage { display: block; padding-top: var(--nav-height-desktop); min-height: 100vh; flex: 1; width: 100%; padding-bottom: calc(var(--nav-height-mobile) + 20px); }
         #coursesPage .page-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px; flex-wrap: wrap; gap: 15px; }
         #coursesPage .page-header h2 { font-size: 2rem; color: var(--accent1); }
-        .courses-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 20px; margin-bottom: 40px; }
+        .courses-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 20px; margin-bottom: 40px; contain: layout paint; }
+        .course-card { contain: layout paint; content-visibility: auto; contain-intrinsic-size: 360px 520px; }
+        .course-card img { content-visibility: auto; }
+
         .course-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; transition: var(--transition); box-shadow: var(--shadow); display: flex; flex-direction: column; position: relative; }
         .course-card:hover { transform: translateY(-5px); border-color: var(--accent1); }
         .course-card .course-img { width: 100%; height: 180px; background: var(--bg-secondary); display: flex; align-items: center; justify-content: center; font-size: 4rem; color: var(--accent1); overflow: hidden; }
@@ -2255,28 +2258,43 @@
         // ================================================================
         // 6. دوال إدارة الدورات (Logic for Admin + UI)
         // ================================================================
-        async function loadCourses() {
-            try {
+        let coursesLoadInFlight = null;
+        let coursesLastLoadedAt = 0;
+        let coursesLastLoadedUid = null;
+        async function loadCourses(force = false) {
+            const uid = currentUser?.uid || null;
+            if (!force && coursesLoadInFlight) return coursesLoadInFlight;
+            if (!force && coursesData?.length && coursesLastLoadedUid === uid && (Date.now() - coursesLastLoadedAt) < 15000) {
+                return renderCourses();
+            }
+            coursesLoadInFlight = (async () => { try {
                 const snapshot = await db.collection('courses').orderBy('createdAt', 'desc').get();
                 coursesData = [];
                 snapshot.forEach(doc => {
                     coursesData.push({ id: doc.id, ...doc.data() });
                 });
-                renderCourses();
+                coursesLastLoadedAt = Date.now();
+                coursesLastLoadedUid = uid;
+                await renderCourses();
             } catch (error) {
                 console.error("Error loading courses:", error);
-                // Fallback to local if error
-                renderCourses();
-            }
+                await renderCourses();
+            } finally { coursesLoadInFlight = null; } })();
+            return coursesLoadInFlight;
         }
 
         let userEnrollmentMap = {};
-        async function refreshUserEnrollmentMap() {
+        let enrollmentMapLoadedAt = 0;
+        let enrollmentMapLoadedUid = null;
+        async function refreshUserEnrollmentMap(force = false) {
+            const uid = currentUser?.uid || null;
+            if (!force && enrollmentMapLoadedUid === uid && (Date.now() - enrollmentMapLoadedAt) < 15000) return;
             userEnrollmentMap = {};
-            if (!currentUser) return;
+            if (!currentUser) { enrollmentMapLoadedUid = null; enrollmentMapLoadedAt = Date.now(); return; }
             try {
                 const snap = await db.collection('users').doc(currentUser.uid).collection('enrolledCourses').get();
                 snap.forEach(doc => { userEnrollmentMap[doc.id] = doc.data() || {}; });
+                enrollmentMapLoadedUid = uid; enrollmentMapLoadedAt = Date.now();
             } catch(e) { console.warn('تعذر تحميل اشتراكات المستخدم:', e); }
         }
 
@@ -2293,12 +2311,13 @@
                 return;
             }
 
+            const fragment = document.createDocumentFragment();
             coursesData.forEach(course => {
                 const card = document.createElement('div');
                 card.className = 'course-card';
                 let imgContent = `<i class="fas ${course.imgIcon || 'fa-graduation-cap'}"></i>`;
                 if (course.image) {
-                    imgContent = `<img src="${course.image}" alt="" style="width:100%; height:100%; object-fit:cover;">`;
+                    imgContent = `<img src="${course.image}" alt="" loading="lazy" decoding="async" style="width:100%; height:100%; object-fit:cover;">`;
                 }
                 card.innerHTML = `
                     <div class="course-img">${imgContent}</div>
@@ -2327,8 +2346,9 @@
                         </div>
                     </div>
                 `;
-                grid.appendChild(card);
+                fragment.appendChild(card);
             });
+            grid.appendChild(fragment);
         }
 
         function triggerAuth() {
@@ -2400,7 +2420,7 @@
                     showCustomAlert('تم الإضافة', 'تم إضافة الدورة بنجاح!');
                 }
                 document.getElementById('addCourseModal').classList.remove('active');
-                loadCourses(); // Refresh list
+                loadCourses(true); // Refresh list
             } catch (error) {
                 showCustomAlert('خطأ', 'حدث خطأ أثناء الحفظ: ' + error.message);
             }
@@ -2412,7 +2432,7 @@
                 try {
                     await db.collection('courses').doc(courseId).delete();
                     showCustomAlert('تم الحذف', 'تم حذف الدورة.');
-                    loadCourses();
+                    loadCourses(true);
                 } catch (error) {
                     showCustomAlert('خطأ', 'خطأ أثناء الحذف: ' + error.message);
                 }
@@ -2432,24 +2452,48 @@
             const course = coursesData.find(c => c.id === courseId);
             if (!course) return;
 
-            // ===== Course access suspension check =====
+            // ===== Course access suspension check (linked to the CODE used for this enrollment) =====
             const enrollmentRef = db.collection('users').doc(currentUser.uid).collection('enrolledCourses').doc(courseId);
             const existingEnrollment = await enrollmentRef.get();
-            if (existingEnrollment.exists && existingEnrollment.data().accessBlocked === true) {
-                const block = existingEnrollment.data();
-                const until = block.blockedUntil?.toDate ? block.blockedUntil.toDate() : (block.blockedUntil ? new Date(block.blockedUntil) : null);
-                const stillBlocked = !until || until.getTime() > Date.now();
-                if (stillBlocked) {
-                    const untilText = until ? until.toLocaleString('ar-SA') : 'حتى يتم إلغاء الإيقاف يدويًا';
-                    showCustomAlert('تم إيقاف الدخول', `لا يمكنك الدخول إلى هذه الدورة حاليًا.\nينتهي الإيقاف: ${untilText}${block.blockReason ? `\nالسبب: ${block.blockReason}` : ''}`);
-                    return;
-                }
-                // Expired block: clear it automatically.
-                await enrollmentRef.update({accessBlocked:false, blockedUntil:null, blockReason:null});
-            }
-
-            // Check existing enrollment
             let isEnrolled = existingEnrollment.exists;
+
+            if (isEnrolled) {
+                const enrollment = existingEnrollment.data() || {};
+                let codeId = enrollment.codeId || null;
+                // Backward compatibility: older enrollments only stored codeUsed.
+                // Resolve the original code once so its suspension applies to existing subscribers too.
+                if (!codeId && enrollment.codeUsed) {
+                    try {
+                        const legacyCodeSnap = await db.collection('courses').doc(courseId).collection('codes')
+                            .where('code', '==', enrollment.codeUsed).limit(1).get();
+                        if (!legacyCodeSnap.empty) {
+                            codeId = legacyCodeSnap.docs[0].id;
+                            try { await enrollmentRef.update({codeId}); } catch(e) {}
+                        }
+                    } catch(e) { console.warn('تعذر ربط الاشتراك القديم بالكود:', e); }
+                }
+                if (codeId) {
+                    const codeRef = db.collection('courses').doc(courseId).collection('codes').doc(codeId);
+                    const codeSnap = await codeRef.get();
+                    if (codeSnap.exists) {
+                        const codeData = codeSnap.data() || {};
+                        const until = codeData.suspendedUntil?.toDate ? codeData.suspendedUntil.toDate() : (codeData.suspendedUntil ? new Date(codeData.suspendedUntil) : null);
+                        const stillBlocked = !!codeData.disabled && (!until || until.getTime() > Date.now());
+                        if (stillBlocked) {
+                            const untilText = until ? until.toLocaleString('ar-SA', {timeZone:'Asia/Riyadh'}) : 'حتى يتم إلغاء الإيقاف يدويًا';
+                            const reasonText = codeData.suspensionReason ? `\nالسبب: ${codeData.suspensionReason}` : '';
+                            showCustomAlert('تم إيقاف اشتراكك', `اشتراكك في هذه الدورة موقوف حاليًا.\nينتهي الإيقاف: ${untilText}${reasonText}`);
+                            return;
+                        }
+                        // Expired suspension: automatically restore the code and access.
+                        if (codeData.disabled && until && until.getTime() <= Date.now()) {
+                            try {
+                                await codeRef.update({disabled:false, suspendedUntil:null, suspensionReason:null, suspensionUpdatedAt:firebase.firestore.FieldValue.serverTimestamp()});
+                            } catch(e) { console.warn('تعذر تنظيف إيقاف الكود المنتهي:', e); }
+                        }
+                    }
+                }
+            }
 
             // If not enrolled, we ask for code
             if (!isEnrolled) {
@@ -2531,13 +2575,15 @@
 
                             await db.collection('users').doc(currentUser.uid).collection('enrolledCourses').doc(courseId).set({
                                 enrolledAt: firebase.firestore.FieldValue.serverTimestamp(),
-                                codeUsed: enteredCode
+                                codeUsed: enteredCode,
+                                codeId: codeDoc.id
                             });
 
                             isEnrolled = true;
                             userEnrollmentMap[courseId] = { enrolledAt: new Date(), codeUsed: enteredCode };
                             cleanup();
-                            renderCourses();
+                            enrollmentMapLoadedAt = 0;
+                            await renderCourses();
                             showCustomAlert('تم الاشتراك', t.enrollSuccess || 'تم الاشتراك بنجاح! يمكنك الآن بدء التعلم.');
                             await openCourseContent(courseId);
                         } catch (error) {
@@ -3218,7 +3264,7 @@
                     
                     document.getElementById('addLessonModal').classList.remove('active');
                     loadLessonsForCourse(activeCourseId);
-                    loadCourses(); // Update list stats
+                    loadCourses(true); // Update list stats
                     window.saveLesson = originalSave;
                     showCustomAlert('تم الحفظ', 'تم حفظ الحصة بنجاح!');
                 } catch (error) { showCustomAlert('خطأ', 'خطأ: ' + error.message); }
@@ -4986,7 +5032,7 @@
                 if (chatLockUnsubscribe) { chatLockUnsubscribe(); chatLockUnsubscribe = null; }
                 if (typeof cancelReply === 'function') cancelReply();
                 try { localStorage.removeItem('ananas_last_course_route'); localStorage.removeItem('lastCourseRoute'); localStorage.removeItem('activeCourseRoute'); } catch(e) {}
-                loadCourses(); // العودة الفورية للصفحة الرئيسية للدورات
+                loadCourses(true); // العودة الفورية للصفحة الرئيسية للدورات
             }
         });
 
@@ -5055,7 +5101,6 @@
         // ================================================================
         (async function init() {
             await loadTranslations();
-            await loadCourses();
             
             // Hide Loading Screen with a smooth fade
             setTimeout(() => {
