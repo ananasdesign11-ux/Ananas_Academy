@@ -4626,6 +4626,16 @@
         async function openLessonPlayer(courseId, lessonId) {
             const lesson = lessonListCache.find(l => l.id === lessonId);
             if(!lesson) return;
+
+            /* Save the lesson we are leaving BEFORE changing activeLessonId or
+               destroying its player. This fixes the case where clicking another
+               lesson caused the previous position to be lost. */
+            if (lessonPlayer && lessonPlayerReady && activeLessonId &&
+                String(activeLessonId) !== String(lessonId)) {
+                try { await window.saveLessonProgressNow?.(); } catch(e) {}
+                try { await window.persistCourseState?.(); } catch(e) {}
+            }
+
             activeCourseId = courseId;
             activeLessonId = lessonId;
             currentCoursePage = 'lessonPlayer';
@@ -4758,15 +4768,24 @@
         }
         async function restoreLessonPlayerPosition(){
             let saved=Number(window.__lessonResumePosition||0);
+            if(currentUser&&activeCourseId&&activeLessonId){
+                saved=Math.max(saved,Number(readLocalLessonResume(activeCourseId,activeLessonId).position||0));
+            }
             try{
                 if(currentUser&&activeCourseId){
                     const snap=await db.collection('users').doc(currentUser.uid).collection('courseState').doc(activeCourseId).get();
                     const st=snap.exists?(snap.data()||{}):{};
                     if(String(st.lessonId||'')===String(activeLessonId||''))saved=Math.max(saved,Number(st.lessonTime||0));
                 }
+                const ref=lessonProgressRef(activeCourseId,activeLessonId);
+                const ps=await ref?.get();
+                if(ps?.exists)saved=Math.max(saved,Number(ps.data()?.lastPosition||0));
             }catch(e){}
             window.__lessonResumePosition=saved;
-            if(saved>0.5){try{lessonPlayer.seekTo(saved,true);}catch(e){try{await lessonPlayer.seekTo(saved);}catch(_){} }showLessonResumeIndicator(saved);}
+            if(saved>0.5){
+                try{await Promise.resolve(lessonPlayer.seekTo(saved,true));}catch(e){try{await Promise.resolve(lessonPlayer.seekTo(saved));}catch(_){} }
+                showLessonResumeIndicator(saved);
+            }
             return saved;
         }
         function handleLessonPlaybackPlaying(){
@@ -4958,7 +4977,7 @@
             const cached = lessonListCache.find(l => l.id === lessonId);
             if(cached) {
                 cached.readyToComplete = true;
-                cached.progressPercent = Math.max(90, Number(window.lessonProgressCache?.[lessonId]?.percent || 90));
+                cached.progressPercent = Math.max(80, Number(window.lessonProgressCache?.[lessonId]?.percent || 80));
             }
         }
 
@@ -4976,10 +4995,6 @@
             let progress = window.lessonProgressCache?.[lessonId] || {};
             let percent = Number(progress.percent || 0);
 
-            /*
-             * Re-check the actual player when this is the currently open lesson.
-             * Otherwise use the last Firestore/local in-memory progress.
-             */
             if(activeLessonId === lessonId && lessonPlayerReady && lessonPlayer) {
                 try {
                     const pos = Number(lessonPlayer.getCurrentTime()) || 0;
@@ -5006,9 +5021,14 @@
                     .collection('completedLessons')
                     .doc(lessonId);
 
+                /*
+                 * IMPORTANT: completion itself must not depend on userStats
+                 * permissions. Older Firestore rules may allow the lesson
+                 * completion document but reject a stats transaction, which
+                 * previously caused the whole completion flow to fail.
+                 */
                 const result = await db.runTransaction(async transaction => {
                     const completedSnap = await transaction.get(completedRef);
-
                     if(completedSnap.exists) {
                         return {
                             newlyCompleted: false,
@@ -5017,38 +5037,41 @@
                     }
 
                     const xpAmount = Number(lesson.xpReward) || 0;
-
                     transaction.set(completedRef, {
                         completedAt: firebase.firestore.FieldValue.serverTimestamp(),
                         xpEarned: xpAmount,
                         completionPercent: Math.round(percent * 100) / 100,
                         completionPosition: Number(progress.position || 0)
                     });
-
-                    const statsRef = db.collection('userStats').doc(currentUser.uid);
-                    const statsSnap = await transaction.get(statsRef);
-
-                    if(statsSnap.exists) {
-                        transaction.update(statsRef, {
-                            xp: firebase.firestore.FieldValue.increment(xpAmount),
-                            rank: firebase.firestore.FieldValue.increment(1)
-                        });
-                    } else {
-                        transaction.set(statsRef, {
-                            xp: xpAmount,
-                            level: 1,
-                            rank: '#1',
-                            progress: 0,
-                            avgScore: '0%',
-                            awards: []
-                        });
-                    }
-
-                    return {
-                        newlyCompleted: true,
-                        xp: xpAmount
-                    };
+                    return {newlyCompleted:true, xp:xpAmount};
                 });
+
+                /* Best-effort XP/stat update. Completion remains successful even
+                   if the current Firestore rules reject userStats writes. */
+                if(result.newlyCompleted) {
+                    try {
+                        const statsRef = db.collection('userStats').doc(currentUser.uid);
+                        const statsSnap = await statsRef.get();
+                        const xpAmount = Number(result.xp || 0);
+                        if(statsSnap.exists) {
+                            await statsRef.set({
+                                xp: firebase.firestore.FieldValue.increment(xpAmount),
+                                rank: firebase.firestore.FieldValue.increment(1)
+                            }, {merge:true});
+                        } else {
+                            await statsRef.set({
+                                xp: xpAmount,
+                                level: 1,
+                                rank: '#1',
+                                progress: 0,
+                                avgScore: '0%',
+                                awards: []
+                            }, {merge:true});
+                        }
+                    } catch(statsError) {
+                        console.warn('Lesson completed, but XP stats could not be updated:', statsError);
+                    }
+                }
 
                 lessonWatchState.granted = true;
 
@@ -5211,6 +5234,42 @@
         document.getElementById('lessonVolumeSlider')?.addEventListener('input',e=>{if(!lessonPlayerReady)return;const v=Number(e.target.value);lessonPlayer.unMute();lessonPlayer.setVolume(v);document.getElementById('lessonMuteBtn').innerHTML=v===0?'<i class="fas fa-volume-mute"></i>':'<i class="fas fa-volume-up"></i>';});
         document.addEventListener('keydown',e=>{if(currentCoursePage!=='lessonPlayer'||!lessonPlayerReady||!lessonPlayer)return;if(['INPUT','TEXTAREA','SELECT'].includes(document.activeElement?.tagName))return;if(e.key==='ArrowUp'){e.preventDefault();const sl=document.getElementById('lessonVolumeSlider');sl.value=Math.min(100,Number(sl.value)+5);sl.dispatchEvent(new Event('input'));}else if(e.key==='ArrowDown'){e.preventDefault();const sl=document.getElementById('lessonVolumeSlider');sl.value=Math.max(0,Number(sl.value)-5);sl.dispatchEvent(new Event('input'));}});
 
+        /* Desktop keyboard shortcuts: arrows control volume and seeking. */
+        document.addEventListener('keydown',e=>{
+            if(currentCoursePage!=='lessonPlayer'||!lessonPlayerReady||!lessonPlayer)return;
+            if(['INPUT','TEXTAREA','SELECT'].includes(document.activeElement?.tagName))return;
+            if(e.key==='ArrowLeft' || e.key==='ArrowRight'){
+                e.preventDefault();
+                seekLessonBy(e.key==='ArrowLeft'?-10:10);
+            }
+        });
+
+        /* Mobile double-tap: right side = forward, left side = rewind. */
+        (function bindMobileDoubleTap(){
+            const wrapper=document.getElementById('lessonVideoWrapper');
+            if(!wrapper || wrapper.dataset.doubleTapBound==='1') return;
+            wrapper.dataset.doubleTapBound='1';
+            let lastTap=0, lastSide='';
+            wrapper.addEventListener('touchend',function(e){
+                if(currentCoursePage!=='lessonPlayer'||!lessonPlayerReady||!lessonPlayer)return;
+                if(e.target.closest('.lesson-platform-controls,.lesson-video-center-play,button,input')) return;
+                const touch=e.changedTouches?.[0]; if(!touch)return;
+                const rect=wrapper.getBoundingClientRect();
+                const x=touch.clientX-rect.left;
+                const side=x < rect.width/2 ? 'left':'right';
+                const now=Date.now();
+                if(lastTap && now-lastTap<=320 && side===lastSide){
+                    e.preventDefault();
+                    seekLessonBy(side==='left'?-10:10);
+                    const ind=document.getElementById('lessonResumeIndicator');
+                    if(ind){ind.textContent=side==='left'?'↶ 10 ثوانٍ':'↷ 10 ثوانٍ';ind.classList.add('show');clearTimeout(ind.__hideTimer);ind.__hideTimer=setTimeout(()=>ind.classList.remove('show'),700);}
+                    lastTap=0; lastSide='';
+                }else{
+                    lastTap=now; lastSide=side;
+                }
+            },{passive:false});
+        })();
+
         document.getElementById('lessonProgressBarWrap')?.addEventListener('click',(e)=>{
             if(!lessonPlayerReady||!lessonPlayer)return;
             const rect=e.currentTarget.getBoundingClientRect(),ratio=Math.max(0,Math.min(1,(e.clientX-rect.left)/rect.width)),duration=Number(lessonPlayer.getDuration?.()||0);
@@ -5238,7 +5297,9 @@
             const el=document.getElementById('lessonVideoWrapper');
             if(!document.fullscreenElement) el.requestFullscreen?.(); else document.exitFullscreen?.();
         });
-        document.getElementById('backToLessonsBtn')?.addEventListener('click',()=>{
+        document.getElementById('backToLessonsBtn')?.addEventListener('click',async()=>{
+            try{await window.saveLessonProgressNow?.();}catch(e){}
+            try{await window.persistCourseState?.();}catch(e){}
             destroyLessonVideo();
             document.getElementById('courseLessonPlayerPage').classList.remove('active');
             document.getElementById('courseLessonsPage').classList.add('active');
@@ -7514,6 +7575,17 @@ function lessonProgressRef(courseId,lessonId){
   if(!currentUser||!courseId||!lessonId)return null;
   return db.collection('users').doc(currentUser.uid).collection('courseProgress').doc(courseId).collection('lessons').doc(lessonId);
 }
+function lessonResumeStorageKey(courseId,lessonId){
+  return `ananas.lessonResume.${currentUser?.uid||'guest'}.${courseId}.${lessonId}`;
+}
+function writeLocalLessonResume(courseId,lessonId,pos,duration){
+  try{
+    localStorage.setItem(lessonResumeStorageKey(courseId,lessonId),JSON.stringify({position:Number(pos)||0,duration:Number(duration)||0,updatedAt:Date.now()}));
+  }catch(e){}
+}
+function readLocalLessonResume(courseId,lessonId){
+  try{const raw=localStorage.getItem(lessonResumeStorageKey(courseId,lessonId));return raw?JSON.parse(raw)||{}:{};}catch(e){return {};}
+}
 async function saveLessonProgressNow(){
   if(!currentUser||!activeCourseId||!activeLessonId||!window.lessonPlayer)return;
   if(window.__lessonProgressWriteBusy)return;
@@ -7522,17 +7594,20 @@ async function saveLessonProgressNow(){
     const pos=Number(lessonPlayer.getCurrentTime?.()||0);
     const duration=Number(lessonPlayer.getDuration?.()||lessonWatchState.duration||0);
     if(!Number.isFinite(pos)||!Number.isFinite(duration)||duration<=0)return;
-    const ref=lessonProgressRef(activeCourseId,activeLessonId); if(!ref)return;
     const percent=Math.max(0,Math.min(100,(pos/duration)*100));
+    writeLocalLessonResume(activeCourseId,activeLessonId,pos,duration);
     window.lessonProgressCache=window.lessonProgressCache||{};
     window.lessonProgressCache[activeLessonId]={percent,position:pos,duration};
-    await ref.set({
-      lessonId:activeLessonId,courseId:activeCourseId,
-      lastPosition:pos,position:pos,
-      maxWatchedSeconds:Math.max(Number(lessonWatchState.watchedSeconds||0),pos),
-      duration,percent,progress:percent,
-      updatedAt:firebase.firestore.FieldValue.serverTimestamp()
-    },{merge:true});
+    const ref=lessonProgressRef(activeCourseId,activeLessonId);
+    if(ref){
+      await ref.set({
+        lessonId:activeLessonId,courseId:activeCourseId,
+        lastPosition:pos,position:pos,
+        maxWatchedSeconds:Math.max(Number(lessonWatchState.watchedSeconds||0),pos),
+        duration,percent,progress:percent,
+        updatedAt:firebase.firestore.FieldValue.serverTimestamp()
+      },{merge:true});
+    }
     if(typeof window.persistCourseState==='function') await window.persistCourseState();
   }catch(e){console.warn('تعذر حفظ تقدم الحصة:',e);}
   finally{window.__lessonProgressWriteBusy=false;}
@@ -7541,12 +7616,20 @@ window.saveLessonProgressNow=saveLessonProgressNow;
 window.prepareLessonResume=async function(courseId,lessonId){
   if(!currentUser)return;
   try{
+    let best=Number(readLocalLessonResume(courseId,lessonId).position||0);
     const ref=lessonProgressRef(courseId,lessonId);const snap=await ref?.get();
-    if(snap?.exists){const d=snap.data()||{};lessonWatchState.watchedSeconds=Math.max(0,Number(d.maxWatchedSeconds||0));window.__lessonResumePosition=Math.max(0,Number(d.lastPosition||0));}
-    else window.__lessonResumePosition=0;
+    if(snap?.exists){
+      const d=snap.data()||{};
+      lessonWatchState.watchedSeconds=Math.max(0,Number(d.maxWatchedSeconds||0));
+      best=Math.max(best,Number(d.lastPosition||0));
+    }
     const st=await db.collection('users').doc(currentUser.uid).collection('courseState').doc(courseId).get();
-    if(st.exists){const d=st.data()||{};if(String(d.lessonId)===String(lessonId))window.__lessonResumePosition=Math.max(Number(window.__lessonResumePosition||0),Number(d.lessonTime||0));}
-  }catch(e){window.__lessonResumePosition=0;}
+    if(st.exists){
+      const d=st.data()||{};
+      if(String(d.lessonId)===String(lessonId))best=Math.max(best,Number(d.lessonTime||0));
+    }
+    window.__lessonResumePosition=Math.max(0,best);
+  }catch(e){window.__lessonResumePosition=Math.max(0,Number(readLocalLessonResume(courseId,lessonId).position||0));}
 };
 const oldCreateYT=window.createLessonYTPlayer;
 /* The original createLessonYTPlayer is a lexical function; patch the saved-position field used by it. */
