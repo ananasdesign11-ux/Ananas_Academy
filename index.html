@@ -152,6 +152,22 @@
         .edit-modal label { display: block; margin-top: 12px; font-weight: 600; }
         .edit-modal input, .edit-modal textarea, .edit-modal select { width: 100%; padding: 10px; margin: 6px 0; border-radius: var(--radius); border: 1px solid var(--border); background: var(--bg-secondary); color: var(--text-primary); font-family: inherit; }
         .edit-modal hr { border: 0; border-top: 1px solid var(--border); margin: 20px 0; opacity: 0.3; }
+        /* ===== Enrollment Code Controls ===== */
+        .code-actions { display:flex; gap:6px; justify-content:center; flex-wrap:wrap; }
+        .code-action-btn { border:1px solid var(--border); background:var(--bg-secondary); color:var(--text-primary); border-radius:var(--btn-radius); padding:6px 10px; cursor:pointer; font-family:inherit; font-size:.82rem; transition:transform .18s ease, background .18s ease, color .18s ease, border-color .18s ease; }
+        .code-action-btn:hover { transform:translateY(-1px); border-color:var(--accent1); color:var(--accent1); }
+        .code-action-btn.danger:hover { color:#e74c3c; border-color:#e74c3c; }
+        .code-action-btn.success:hover { color:#16a085; border-color:#16a085; }
+        .code-user-row { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:12px; border:1px solid var(--border); border-radius:var(--radius); background:var(--bg-secondary); margin-bottom:8px; }
+        .code-user-meta { min-width:0; }
+        .code-user-meta strong { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+        .code-user-meta small { color:var(--text-muted); display:block; margin-top:3px; }
+        .code-user-status { font-size:.78rem; margin-top:4px; }
+        .code-user-status.blocked { color:#e74c3c; }
+        .code-user-status.active { color:#16a085; }
+        .code-suspend-form { background:var(--bg-secondary); border:1px solid var(--border); border-radius:var(--radius); padding:15px; margin-bottom:15px; }
+        .code-suspend-form .duration-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+        @media(max-width:600px){ .code-suspend-form .duration-grid{grid-template-columns:1fr;} .code-user-row{align-items:flex-start; flex-direction:column;} .code-actions{width:100%;} }
 
         /* ===== Custom Alert & Confirm Modals (Enhanced) ===== */
         .custom-alert-modal { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); z-index: 9998; display: none; justify-content: center; align-items: center; backdrop-filter: blur(4px); }
@@ -1709,9 +1725,41 @@
                 <button onclick="createNewCode()" style="width:100%; padding:12px; margin-top:10px; background:var(--accent1); color:#fff; border:none; border-radius:var(--btn-radius); font-weight:700; cursor:pointer;" id="createCodeBtn">إنشاء الكود</button>
             </div>
             <table class="admin-table" id="codesTable">
-                <thead><tr><th>الكود</th><th>بداية</th><th>نهاية</th><th>الاستخدامات</th><th>الحالة</th></tr></thead>
+                <thead><tr><th>الكود</th><th>بداية</th><th>نهاية</th><th>الاستخدامات</th><th>الحالة</th><th>الإجراءات</th></tr></thead>
                 <tbody id="codesTableBody"></tbody>
             </table>
+        </div>
+    </div>
+
+    <!-- Manage users who used an enrollment code / suspend course access -->
+    <div class="edit-modal" id="codeUsersModal" style="max-width:720px;">
+        <button onclick="document.getElementById('codeUsersModal').classList.remove('active');" style="position:static; float:left; font-size:1.5rem; background:none; border:none; color:var(--text-muted); cursor:pointer;">&times;</button>
+        <h3>المستخدمون الذين استخدموا الكود</h3>
+        <div id="codeUsersList"></div>
+    </div>
+
+    <!-- Suspend a user's access to the current course -->
+    <div class="edit-modal" id="courseAccessSuspendModal" style="max-width:620px;">
+        <button onclick="document.getElementById('courseAccessSuspendModal').classList.remove('active');" style="position:static; float:left; font-size:1.5rem; background:none; border:none; color:var(--text-muted); cursor:pointer;">&times;</button>
+        <h3>إيقاف دخول الحساب إلى الدورة</h3>
+        <div class="code-suspend-form">
+            <div id="suspendUserLabel" style="font-weight:700;margin-bottom:10px;"></div>
+            <label>مدة الإيقاف</label>
+            <select id="courseSuspendDuration">
+                <option value="1d">يوم واحد</option>
+                <option value="3d">3 أيام</option>
+                <option value="7d">7 أيام</option>
+                <option value="30d">30 يومًا</option>
+                <option value="custom">حتى تاريخ ووقت محدد</option>
+                <option value="permanent">حتى ألغي الإيقاف بنفسي</option>
+            </select>
+            <div id="courseSuspendCustomWrap" style="display:none;">
+                <label>ينتهي الإيقاف في</label>
+                <input type="datetime-local" id="courseSuspendUntil">
+            </div>
+            <label>سبب الإيقاف (اختياري)</label>
+            <textarea id="courseSuspendReason" rows="3" placeholder="اكتب سبب الإيقاف..."></textarea>
+            <button id="confirmCourseSuspendBtn" class="code-action-btn danger" style="width:100%;padding:11px;font-weight:700;">إيقاف الدخول</button>
         </div>
     </div>
 
@@ -2290,8 +2338,23 @@
             const course = coursesData.find(c => c.id === courseId);
             if (!course) return;
 
+            // ===== Course access suspension check =====
+            const enrollmentRef = db.collection('users').doc(currentUser.uid).collection('enrolledCourses').doc(courseId);
+            const existingEnrollment = await enrollmentRef.get();
+            if (existingEnrollment.exists && existingEnrollment.data().accessBlocked === true) {
+                const block = existingEnrollment.data();
+                const until = block.blockedUntil?.toDate ? block.blockedUntil.toDate() : (block.blockedUntil ? new Date(block.blockedUntil) : null);
+                const stillBlocked = !until || until.getTime() > Date.now();
+                if (stillBlocked) {
+                    const untilText = until ? until.toLocaleString('ar-SA') : 'حتى يتم إلغاء الإيقاف يدويًا';
+                    showCustomAlert('تم إيقاف الدخول', `لا يمكنك الدخول إلى هذه الدورة حاليًا.\nينتهي الإيقاف: ${untilText}${block.blockReason ? `\nالسبب: ${block.blockReason}` : ''}`);
+                    return;
+                }
+                // Expired block: clear it automatically.
+                await enrollmentRef.update({accessBlocked:false, blockedUntil:null, blockReason:null});
+            }
+
             // Check existing enrollment
-            const existingEnrollment = await db.collection('users').doc(currentUser.uid).collection('enrolledCourses').doc(courseId).get();
             let isEnrolled = existingEnrollment.exists;
 
             // If not enrolled, we ask for code
@@ -2340,7 +2403,7 @@
                                 const start = data.startTime ? data.startTime.toDate() : new Date(0);
                                 const end = data.endTime ? data.endTime.toDate() : new Date(8640000000000000);
 
-                                if (start <= now && end >= now && data.usedCount < data.maxUses) {
+                                if (!data.disabled && start <= now && end >= now && (data.usedCount || 0) < (data.maxUses || 1)) {
                                     validCodeFound = true;
                                     codeDoc = doc;
                                 }
@@ -2387,6 +2450,19 @@
         async function openCourseContent(courseId) {
             const course = coursesData.find(c => c.id === courseId);
             if (!course) return;
+            if (!isAdmin && currentUser) {
+                const accessRef = db.collection('users').doc(currentUser.uid).collection('enrolledCourses').doc(courseId);
+                const accessSnap = await accessRef.get();
+                if (accessSnap.exists && accessSnap.data().accessBlocked === true) {
+                    const b = accessSnap.data();
+                    const until = b.blockedUntil?.toDate ? b.blockedUntil.toDate() : (b.blockedUntil ? new Date(b.blockedUntil) : null);
+                    if (!until || until.getTime() > Date.now()) {
+                        showCustomAlert('تم إيقاف الدخول', `تم إيقاف دخولك إلى هذه الدورة${b.blockReason ? `\nالسبب: ${b.blockReason}` : ''}`);
+                        return;
+                    }
+                    await accessRef.update({accessBlocked:false, blockedUntil:null, blockReason:null});
+                }
+            }
 
             activeCourseId = courseId;
             document.getElementById('coursesGridContainer').style.display = 'none';
@@ -4255,24 +4331,160 @@
         });
 
         async function loadCodesForCourse(courseId) {
+            if (!isAdmin) return;
             const tbody = document.getElementById('codesTableBody');
             try {
                 const snap = await db.collection('courses').doc(courseId).collection('codes').orderBy('createdAt', 'desc').get();
                 if(snap.empty) {
-                    tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; color:var(--text-muted);">لا توجد أكواد بعد.</td></tr>';
+                    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; color:var(--text-muted);">لا توجد أكواد بعد.</td></tr>';
                     return;
                 }
                 let html = '';
                 snap.forEach(doc => {
-                    const c = doc.data();
-                    const start = c.startTime ? new Date(c.startTime.seconds*1000).toLocaleString() : '-';
-                    const end = c.endTime ? new Date(c.endTime.seconds*1000).toLocaleString() : '-';
-                    const status = (c.endTime && new Date() > new Date(c.endTime.seconds*1000)) ? 'منتهي' : 'نشط';
-                    html += `<tr><td>${c.code}</td><td>${start}</td><td>${end}</td><td>${c.usedCount || 0}/${c.maxUses || 1}</td><td>${status}</td></tr>`;
+                    const c = doc.data() || {};
+                    const start = c.startTime ? (c.startTime.toDate ? c.startTime.toDate() : new Date(c.startTime)).toLocaleString('ar-SA') : '-';
+                    const end = c.endTime ? (c.endTime.toDate ? c.endTime.toDate() : new Date(c.endTime)).toLocaleString('ar-SA') : '-';
+                    const expired = c.endTime && (c.endTime.toDate ? c.endTime.toDate() : new Date(c.endTime)).getTime() < Date.now();
+                    const disabled = !!c.disabled;
+                    const full = (c.usedCount || 0) >= (c.maxUses || 1);
+                    const status = disabled ? '<span style="color:#e74c3c;font-weight:700">موقوف</span>' : expired ? '<span style="color:#e67e22">منتهي</span>' : full ? '<span style="color:#e67e22">مكتمل الاستخدام</span>' : '<span style="color:#16a085">نشط</span>';
+                    const toggleLabel = disabled ? 'تفعيل' : 'إيقاف';
+                    const toggleClass = disabled ? 'success' : 'danger';
+                    html += `<tr data-code-row="${doc.id}">
+                        <td><strong>${String(c.code || '').replace(/</g,'&lt;')}</strong></td>
+                        <td>${start}</td><td>${end}</td>
+                        <td>${c.usedCount || 0}/${c.maxUses || 1}</td>
+                        <td>${status}</td>
+                        <td><div class="code-actions">
+                            <button class="code-action-btn ${toggleClass}" onclick="toggleEnrollmentCode('${doc.id}', ${disabled})">${toggleLabel}</button>
+                            ${(c.usedBy && c.usedBy.length) ? `<button class="code-action-btn" onclick="manageCodeUsers('${doc.id}')">المستخدمون (${c.usedBy.length})</button>` : ''}
+                            <button class="code-action-btn danger" onclick="deleteEnrollmentCode('${doc.id}')">حذف</button>
+                        </div></td>
+                    </tr>`;
                 });
                 tbody.innerHTML = html;
-            } catch(e) { console.error(e); }
+            } catch(e) { console.error(e); showCustomAlert('خطأ','تعذر تحميل الأكواد.'); }
         }
+
+        window.deleteEnrollmentCode = async function(codeId) {
+            if (!isAdmin || !activeCourseId) return showCustomAlert('غير مسموح','هذه العملية للمشرف فقط.');
+            showCustomConfirm('حذف الكود', 'هل أنت متأكد من حذف هذا الكود نهائيًا؟ لن يستطيع أي شخص استخدامه بعد الحذف.', async () => {
+                try {
+                    await db.collection('courses').doc(activeCourseId).collection('codes').doc(codeId).delete();
+                    const row = document.querySelector(`[data-code-row="${codeId}"]`);
+                    if (row) row.remove();
+                    const body = document.getElementById('codesTableBody');
+                    if (body && !body.querySelector('tr[data-code-row]')) body.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--text-muted);">لا توجد أكواد بعد.</td></tr>';
+                    showCustomAlert('تم الحذف','تم حذف الكود نهائيًا.');
+                } catch(e) { showCustomAlert('خطأ','تعذر حذف الكود: '+e.message); }
+            });
+        };
+
+        window.toggleEnrollmentCode = async function(codeId, currentlyDisabled) {
+            if (!isAdmin || !activeCourseId) return showCustomAlert('غير مسموح','هذه العملية للمشرف فقط.');
+            try {
+                await db.collection('courses').doc(activeCourseId).collection('codes').doc(codeId).update({disabled: !currentlyDisabled, disabledAt: !currentlyDisabled ? firebase.firestore.FieldValue.serverTimestamp() : null});
+                await loadCodesForCourse(activeCourseId);
+                showCustomAlert(currentlyDisabled ? 'تم التفعيل' : 'تم الإيقاف', currentlyDisabled ? 'تم تفعيل الكود ويمكن استخدامه ضمن شروطه.' : 'تم إيقاف الكود ولن يتمكن أي حساب من استخدامه.');
+            } catch(e) { showCustomAlert('خطأ','تعذر تغيير حالة الكود: '+e.message); }
+        };
+
+        window.manageCodeUsers = async function(codeId) {
+            if (!isAdmin || !activeCourseId) return showCustomAlert('غير مسموح','هذه العملية للمشرف فقط.');
+            const modal = document.getElementById('codeUsersModal');
+            const list = document.getElementById('codeUsersList');
+            list.innerHTML = '<div style="text-align:center;padding:20px;color:var(--text-muted)">جاري تحميل المستخدمين...</div>';
+            modal.classList.add('active');
+            try {
+                const codeSnap = await db.collection('courses').doc(activeCourseId).collection('codes').doc(codeId).get();
+                if (!codeSnap.exists) return showCustomAlert('خطأ','الكود غير موجود.');
+                const code = codeSnap.data() || {};
+                const users = Array.isArray(code.usedBy) ? code.usedBy : [];
+                if (!users.length) { list.innerHTML='<div style="text-align:center;padding:20px;color:var(--text-muted)">لم يستخدم أحد هذا الكود حتى الآن.</div>'; return; }
+                const rows = await Promise.all(users.map(async uid => {
+                    const [userSnap, enrollSnap] = await Promise.all([
+                        db.collection('users').doc(uid).get(),
+                        db.collection('users').doc(uid).collection('enrolledCourses').doc(activeCourseId).get()
+                    ]);
+                    const u = userSnap.exists ? (userSnap.data() || {}) : {};
+                    const e = enrollSnap.exists ? (enrollSnap.data() || {}) : {};
+                    const until = e.blockedUntil?.toDate ? e.blockedUntil.toDate() : (e.blockedUntil ? new Date(e.blockedUntil) : null);
+                    const blocked = e.accessBlocked === true && (!until || until.getTime() > Date.now());
+                    const status = blocked ? `<div class="code-user-status blocked">موقوف${until ? ' حتى '+until.toLocaleString('ar-SA') : ' حتى إلغاء الإيقاف'}</div>` : '<div class="code-user-status active">مسموح بالدخول</div>';
+                    return `<div class="code-user-row" data-code-user="${uid}">
+                        <div class="code-user-meta"><strong>${String(u.displayName || 'مستخدم').replace(/</g,'&lt;')}</strong><small>${String(u.email || uid).replace(/</g,'&lt;')}</small>${status}</div>
+                        <div class="code-actions">${blocked ? `<button class="code-action-btn success" onclick="clearCourseAccessBlock('${uid}')">إلغاء الإيقاف</button>` : `<button class="code-action-btn danger" onclick="openCourseSuspendModal('${uid}', ${JSON.stringify(u.displayName || u.email || uid)})">إيقاف الدخول</button>`}</div>
+                    </div>`;
+                }));
+                list.innerHTML = rows.join('');
+            } catch(e) { console.error(e); list.innerHTML='<div style="color:#e74c3c;text-align:center;padding:20px">تعذر تحميل المستخدمين.</div>'; }
+        };
+
+        let courseSuspendTargetUid = null;
+        window.openCourseSuspendModal = function(uid, name) {
+            if (!isAdmin || !activeCourseId) return;
+            courseSuspendTargetUid = uid;
+            document.getElementById('suspendUserLabel').textContent = `الحساب: ${name}`;
+            document.getElementById('courseSuspendDuration').value = '7d';
+            document.getElementById('courseSuspendUntil').value = '';
+            document.getElementById('courseSuspendReason').value = '';
+            document.getElementById('courseSuspendCustomWrap').style.display = 'none';
+            document.getElementById('courseAccessSuspendModal').classList.add('active');
+        };
+
+        document.getElementById('courseSuspendDuration').addEventListener('change', function(){
+            document.getElementById('courseSuspendCustomWrap').style.display = this.value === 'custom' ? 'block' : 'none';
+        });
+
+        document.getElementById('confirmCourseSuspendBtn').addEventListener('click', async function(){
+            if (!isAdmin || !activeCourseId || !courseSuspendTargetUid) return;
+            const mode = document.getElementById('courseSuspendDuration').value;
+            const reason = document.getElementById('courseSuspendReason').value.trim();
+            let until = null;
+            if (mode === 'custom') {
+                const raw = document.getElementById('courseSuspendUntil').value;
+                if (!raw) return showCustomAlert('تنبيه','حدد تاريخ ووقت انتهاء الإيقاف.');
+                until = new Date(raw);
+                if (isNaN(until.getTime()) || until.getTime() <= Date.now()) return showCustomAlert('تنبيه','وقت الانتهاء يجب أن يكون في المستقبل.');
+            } else if (mode !== 'permanent') {
+                const days = parseInt(mode,10) || 7;
+                until = new Date(Date.now() + days*24*60*60*1000);
+            }
+            try {
+                await db.collection('users').doc(courseSuspendTargetUid).collection('enrolledCourses').doc(activeCourseId).set({
+                    accessBlocked:true,
+                    blockedUntil: until ? firebase.firestore.Timestamp.fromDate(until) : null,
+                    blockReason: reason || null,
+                    blockedAt: firebase.firestore.FieldValue.serverTimestamp(),
+                    blockedBy: currentUser.uid
+                }, {merge:true});
+                document.getElementById('courseAccessSuspendModal').classList.remove('active');
+                const codeUsersModal = document.getElementById('codeUsersModal');
+                if (codeUsersModal.classList.contains('active')) {
+                    // Refresh only the user list; do not rebuild the codes table.
+                    const text = document.querySelector('#codeUsersModal h3')?.textContent || '';
+                    // Find the code whose usedBy contains the target UID.
+                    const snap = await db.collection('courses').doc(activeCourseId).collection('codes').get();
+                    let found = null; snap.forEach(d=>{ if ((d.data().usedBy||[]).includes(courseSuspendTargetUid)) found=d.id; });
+                    if (found) await manageCodeUsers(found);
+                }
+                showCustomAlert('تم الإيقاف','تم إيقاف دخول الحساب إلى هذه الدورة.');
+            } catch(e) { showCustomAlert('خطأ','تعذر إيقاف الحساب: '+e.message); }
+        });
+
+        window.clearCourseAccessBlock = async function(uid) {
+            if (!isAdmin || !activeCourseId) return;
+            try {
+                await db.collection('users').doc(uid).collection('enrolledCourses').doc(activeCourseId).set({accessBlocked:false, blockedUntil:null, blockReason:null, unblockedAt:firebase.firestore.FieldValue.serverTimestamp(), unblockedBy:currentUser.uid},{merge:true});
+                const rows = document.querySelectorAll('[data-code-user]');
+                rows.forEach(r=>{ if(r.getAttribute('data-code-user')===uid) r.remove(); });
+                showCustomAlert('تم الإلغاء','تم إلغاء إيقاف الحساب عن هذه الدورة.');
+                // Reopen the relevant user list to reflect the active state.
+                const snap = await db.collection('courses').doc(activeCourseId).collection('codes').get(); let found=null;
+                snap.forEach(d=>{if((d.data().usedBy||[]).includes(uid)) found=d.id;});
+                if(found) await manageCodeUsers(found);
+            } catch(e) { showCustomAlert('خطأ','تعذر إلغاء الإيقاف: '+e.message); }
+        };
 
         window.createNewCode = async function() {
             if(!activeCourseId) return;
@@ -4300,6 +4512,7 @@
                     maxUses: maxUses,
                     usedCount: 0,
                     usedBy: [],
+                    disabled: false,
                     createdAt: firebase.firestore.FieldValue.serverTimestamp()
                 });
                 showCustomAlert('تم الإنشاء', 'تم إنشاء الكود بنجاح!');
