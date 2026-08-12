@@ -2563,7 +2563,7 @@ label[for*="En"], input[id*="En"], textarea[id*="En"] { display:none !important;
                 <div id="quizResultLoading" class="quiz-result-loading" style="display:none;"><span class="mini-spin"></span><span>جاري احتساب الدرجات وتصحيح الأسئلة...</span></div>
                 <p id="resultDetails" style="color:var(--text-muted); margin-bottom:20px;"></p>
                 <div id="resultCorrections" class="quiz-corrections"></div>
-                <button class="btn-start quiz-close-result-btn" onclick="closeQuiz()" style="margin-top:20px;">إغلاق الاختبار</button>
+                <button class="auth-btn quiz-close-result-btn profile-style-close" onclick="closeQuiz()" style="margin-top:20px;"><i class="fas fa-arrow-right"></i><span>إغلاق الاختبار</span></button>
             </div>
         </div>
     </div>
@@ -6741,7 +6741,7 @@ label[for*="En"], input[id*="En"], textarea[id*="En"] { display:none !important;
         const authStep2 = document.getElementById('authStep2');
 
         authToggleBtn.addEventListener('click', () => {
-            if (currentUser) { openUserProfileModal(); }
+            if (currentUser) { window.openUserProfilePage ? window.openUserProfilePage() : openUserProfileModal(); }
             else { if (authPopup) authPopup.classList.add('active'); if (authStep1) authStep1.style.display = 'block'; if (authStep2) authStep2.style.display = 'none'; if (authStatus) authStatus.textContent = ''; }
         });
 
@@ -7831,7 +7831,7 @@ label[for*="En"], input[id*="En"], textarea[id*="En"] { display:none !important;
   // Ensure auto-expiry is respected immediately even if the snapshot is stale.
   setInterval(()=>{if(currentChatLock?.locked&&currentChatLock.endAt){const endMs=currentChatLock.endAt.toDate?currentChatLock.endAt.toDate().getTime():Number(currentChatLock.endAt);if(endMs&&Date.now()>=endMs){currentChatLock={...currentChatLock,locked:false};window.applyChatLockNow?.();}}},15000);
   // Rebuild dashboard with files button if an older cached DOM is present.
-  document.addEventListener('DOMContentLoaded',()=>{const grid=document.querySelector('#courseDashboard .dashboard-grid');if(grid&&!grid.querySelector('[data-files-dashboard]')){const b=document.createElement('button');b.className='dashboard-btn';b.dataset.filesDashboard='1';b.onclick=()=>window.switchCoursePage('files');b.innerHTML='<i class="fas fa-folder-open"></i><span>ملفات الدورة</span>';const chat=grid.querySelector('[onclick*="switchCoursePage(\'chat\')"]');chat?grid.insertBefore(b,chat):grid.appendChild(b);}});
+   /* Files dashboard button is defined once in the HTML; never inject a duplicate. */
 })();
 </script>
 </body>
@@ -8404,5 +8404,238 @@ body.light-mode .full-page-card:hover,body.light-mode .lesson-card:hover,body.li
     window.addEventListener('resize',()=>window.updateLessonControls?.(),{passive:true});
   };
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});else boot();
+})();
+</script>
+
+
+<style id="ananas-v4-polish">
+/* ===== Premium files page ===== */
+#courseFilesPage{
+  position:absolute !important; inset:0 !important; z-index:30; display:none; overflow:auto !important;
+  padding:clamp(18px,3vw,34px) !important; background:var(--bg-primary) !important;
+}
+#courseFilesPage.active{display:block !important;}
+#courseFilesPage .page-title{max-width:1200px;margin:0 auto 18px;display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;}
+.course-files-shell{max-width:1200px;margin:0 auto;}
+.course-files-hero{display:flex;align-items:center;gap:16px;padding:22px;border:1px solid var(--border);border-radius:24px;background:linear-gradient(145deg,var(--bg-card),rgba(108,92,231,.07));box-shadow:var(--shadow);margin-bottom:18px;}
+.course-files-hero-icon{width:58px;height:58px;border-radius:18px;background:var(--accent-gradient);color:#fff;display:grid;place-items:center;font-size:1.5rem;flex:0 0 auto;}
+.course-files-hero h2{margin:0;font-size:1.35rem}.course-files-hero p{margin:5px 0 0;color:var(--text-muted);font-size:.9rem;line-height:1.7}
+.course-files-upload-panel{padding:20px;border:1px solid var(--border);border-radius:22px;background:var(--bg-card);box-shadow:0 12px 35px rgba(0,0,0,.06);margin-bottom:18px;}
+.course-files-upload-grid{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(220px,.8fr) auto;gap:12px;align-items:end;}
+.course-files-field label{display:block;font-weight:800;font-size:.85rem;margin-bottom:7px;color:var(--text-primary)}
+.course-files-input,.course-files-select{width:100%;height:48px;border:1px solid var(--border);border-radius:14px;background:var(--bg-primary);color:var(--text-primary);padding:0 13px;font-family:inherit;outline:none;transition:.2s}
+.course-files-input:focus,.course-files-select:focus{border-color:var(--accent1);box-shadow:0 0 0 4px rgba(108,92,231,.11)}
+.course-file-pick{height:48px;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:0 14px;border:1px solid var(--border);border-radius:14px;background:var(--bg-primary);cursor:pointer;transition:.2s}
+.course-file-pick:hover{border-color:var(--accent1);transform:translateY(-1px)}
+.course-file-pick strong{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.course-file-pick small{color:var(--text-muted)}
+.ananas-primary-btn,.ananas-secondary-btn,.ananas-danger-btn{border:1px solid transparent;min-height:46px;padding:0 16px;border-radius:14px;font-family:inherit;font-weight:900;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:8px;transition:transform .18s,box-shadow .18s,border-color .18s,background .18s,color .18s}
+.ananas-primary-btn{background:var(--accent-gradient);color:#fff;box-shadow:0 10px 24px rgba(108,92,231,.22)}
+.ananas-secondary-btn{background:var(--bg-secondary);color:var(--text-primary);border-color:var(--border)}
+.ananas-danger-btn{background:rgba(231,76,60,.08);color:#e74c3c;border-color:rgba(231,76,60,.22)}
+.ananas-primary-btn:hover,.ananas-secondary-btn:hover,.ananas-danger-btn:hover{transform:translateY(-2px)}
+.files-page-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:16px;padding-bottom:30px}
+.course-file-card{position:relative;overflow:hidden;padding:17px;border:1px solid var(--border);border-radius:20px;background:var(--bg-card);box-shadow:0 10px 28px rgba(0,0,0,.05);transition:.22s}
+.course-file-card:hover{transform:translateY(-4px);border-color:rgba(108,92,231,.45);box-shadow:0 18px 40px rgba(108,92,231,.11)}
+.course-file-top{display:flex;gap:13px;align-items:flex-start}.course-file-icon{width:48px;height:48px;border-radius:14px;background:rgba(108,92,231,.1);color:var(--accent1);display:grid;place-items:center;font-size:1.2rem;flex:0 0 auto}.course-file-card.image-file .course-file-icon{background:rgba(46,204,113,.11);color:#2ecc71}.course-file-card.pdf-file .course-file-icon{background:rgba(231,76,60,.1);color:#e74c3c}
+.course-file-name{font-weight:900;line-height:1.45;word-break:break-word}.course-file-meta{margin-top:6px;color:var(--text-muted);font-size:.8rem;line-height:1.7}.course-file-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:14px}.course-file-actions button,.course-file-actions a{min-height:40px;border-radius:12px;border:1px solid var(--border);background:var(--bg-primary);color:var(--text-primary);text-decoration:none;font-family:inherit;font-weight:800;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:6px}.course-file-actions .primary{background:var(--accent-gradient);color:#fff;border-color:transparent}.course-file-actions .danger{grid-column:1/-1;color:#e74c3c;background:rgba(231,76,60,.06);border-color:rgba(231,76,60,.18)}
+#courseFileViewer{position:fixed;inset:0;background:rgba(7,10,18,.78);backdrop-filter:blur(12px);display:none;align-items:center;justify-content:center;z-index:12000;padding:20px}#courseFileViewer.active{display:flex}
+.course-file-viewer-shell{width:min(1100px,100%);height:min(90vh,900px);background:var(--bg-card);border:1px solid var(--border);border-radius:24px;box-shadow:0 30px 90px rgba(0,0,0,.4);display:flex;flex-direction:column;overflow:hidden}.course-file-viewer-head{padding:14px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;gap:10px}.course-file-viewer-title{font-weight:900;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.course-file-viewer-body{flex:1;min-height:0;background:#0b0d12;display:grid;place-items:center;overflow:auto}.course-file-viewer-body img{max-width:100%;max-height:100%;object-fit:contain}.course-file-viewer-body iframe{width:100%;height:100%;border:0}.course-file-viewer-placeholder{text-align:center;padding:40px;color:#fff}.course-file-viewer-actions{display:flex;gap:8px}.course-file-viewer-actions a,.course-file-viewer-actions button{min-width:42px;height:40px;padding:0 13px;border-radius:12px;border:1px solid var(--border);background:var(--bg-primary);color:var(--text-primary);text-decoration:none;font-family:inherit;font-weight:800;cursor:pointer}.course-file-viewer-actions .primary{background:var(--accent-gradient);color:#fff;border-color:transparent}
+
+/* ===== Professional option selector ===== */
+.quiz-option-row{grid-template-columns:1fr 42px !important;position:relative;padding:3px;border:1px solid var(--border);border-radius:16px;background:var(--bg-primary);transition:.18s;cursor:pointer;overflow:hidden}
+.quiz-option-row:hover{border-color:rgba(108,92,231,.55);transform:translateY(-1px)}
+.quiz-option-row.is-correct{border-color:var(--accent1);background:linear-gradient(135deg,rgba(108,92,231,.11),rgba(9,132,227,.07));box-shadow:0 8px 22px rgba(108,92,231,.10)}
+.quiz-option-row .q-option{border:0 !important;background:transparent !important;box-shadow:none !important;padding:13px 14px !important;cursor:text}
+.quiz-radio{order:2;width:42px !important;height:42px;margin:auto;border:0 !important;border-radius:12px;display:grid !important;place-items:center;position:relative}
+.quiz-radio input{width:22px !important;height:22px !important;margin:0 !important;accent-color:var(--accent1);cursor:pointer}
+.quiz-option-row.is-correct .quiz-radio{background:var(--accent1)}
+.quiz-option-row.is-correct .quiz-radio input{filter:brightness(0) invert(1)}
+.quiz-option-row.is-correct::after{content:'الإجابة الصحيحة';position:absolute;top:6px;inset-inline-start:10px;padding:4px 8px;border-radius:999px;background:rgba(108,92,231,.13);color:var(--accent1);font-size:.68rem;font-weight:900;pointer-events:none}
+.quiz-option-row .quiz-remove-option{width:34px;height:34px;position:absolute;inset-inline-end:6px;top:50%;transform:translateY(-50%);z-index:3;background:rgba(231,76,60,.06)}
+.quiz-option-row .quiz-remove-option + *{}
+.quiz-add-option{height:44px}
+.correct-choice{min-height:74px;justify-content:center !important;position:relative;overflow:hidden}.correct-choice.is-correct{border-color:var(--accent1);background:linear-gradient(135deg,rgba(108,92,231,.12),rgba(9,132,227,.07));box-shadow:0 8px 22px rgba(108,92,231,.10)}.correct-choice.is-correct::after{content:'الإجابة الصحيحة';position:absolute;top:7px;inset-inline-start:10px;font-size:.67rem;font-weight:900;color:var(--accent1);padding:4px 8px;border-radius:999px;background:rgba(108,92,231,.12)}
+.profile-style-close{width:auto;min-width:150px;justify-content:center}.profile-style-close:hover{transform:translateY(-2px);box-shadow:0 10px 26px rgba(108,92,231,.18)}
+.lock-auto-expire{display:flex;align-items:center;gap:8px;margin-top:10px;color:var(--text-muted);font-size:.82rem}.lock-auto-expire input{width:18px;height:18px;accent-color:var(--accent1)}
+
+/* ===== Profile page ===== */
+#userProfilePage{position:fixed;inset:var(--nav-height-desktop) 0 0;background:var(--bg-primary);z-index:9700;display:none;overflow:auto}.#userProfilePage.active{display:block}.profile-page-inner{max-width:1200px;margin:0 auto;padding:26px}.profile-hero{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:18px;align-items:center;padding:22px;border:1px solid var(--border);border-radius:24px;background:linear-gradient(145deg,var(--bg-card),rgba(108,92,231,.07));box-shadow:var(--shadow)}.profile-avatar{width:82px;height:82px;border-radius:24px;background:var(--accent-gradient);color:#fff;display:grid;place-items:center;font-size:2rem;font-weight:900;overflow:hidden}.profile-avatar img{width:100%;height:100%;object-fit:cover}.profile-name{font-size:1.6rem;font-weight:900}.profile-email{color:var(--text-muted);margin-top:4px}.profile-stat-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-top:16px}.profile-stat{padding:16px;border:1px solid var(--border);border-radius:18px;background:var(--bg-card)}.profile-stat b{display:block;font-size:1.35rem;color:var(--accent1)}.profile-stat span{color:var(--text-muted);font-size:.8rem}.profile-sections{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:16px}.profile-panel{padding:18px;border:1px solid var(--border);border-radius:20px;background:var(--bg-card)}.profile-panel h3{margin-bottom:12px}.profile-list{display:flex;flex-direction:column;gap:9px}.profile-list-item{padding:12px 13px;border:1px solid var(--border);border-radius:14px;background:var(--bg-primary);display:flex;justify-content:space-between;gap:10px}.profile-list-item small{color:var(--text-muted)}
+@media(max-width:768px){#courseFilesPage{padding:14px !important}.course-files-upload-grid{grid-template-columns:1fr}.files-page-grid{grid-template-columns:1fr}.profile-page-inner{padding:16px}.profile-hero{grid-template-columns:auto 1fr}.profile-hero .profile-close-wrap{grid-column:1/-1}.profile-stat-grid{grid-template-columns:1fr 1fr}.profile-sections{grid-template-columns:1fr}#userProfilePage{inset:var(--nav-height-mobile) 0 calc(66px + env(safe-area-inset-bottom))}.course-file-viewer-shell{height:calc(100vh - 28px);border-radius:18px}}
+</style>
+
+<script id="ananas-v4-functional-upgrade">
+(function(){
+'use strict';
+const $=id=>document.getElementById(id), esc=x=>window.escapeHtml?escapeHtml(String(x??'')):String(x??'').replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','\"':'&quot;'}[c]));
+
+/* ---------- A. Files page: one page, no overlap, premium controls ---------- */
+function ensureFilesShell(){
+ const page=$('courseFilesPage'); if(!page)return;
+ if(!page.querySelector('.course-files-shell')){
+   const title=page.querySelector('.page-title');
+   const upload=page.querySelector('.course-files-upload-panel');
+   const grid=$('courseFilesPageGrid');
+   const wrap=document.createElement('div'); wrap.className='course-files-shell';
+   const hero=document.createElement('div'); hero.className='course-files-hero'; hero.innerHTML='<div class="course-files-hero-icon"><i class="fas fa-folder-open"></i></div><div><h2>مكتبة ملفات الدورة</h2><p>ملفات وصور الدورة في مكان واحد، مع ربطها بالحصة وعرضها وتحميلها بسهولة.</p></div>';
+   const fields=document.createElement('div'); fields.className='course-files-upload-grid';
+   if(upload){
+     upload.innerHTML='<div style="font-weight:900;font-size:1.05rem;margin-bottom:12px;"><i class="fas fa-cloud-arrow-up"></i> إضافة ملف جديد</div>';
+     const input=document.createElement('input'); input.type='file'; input.id='courseFilesPageInput'; input.accept='image/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.zip'; input.multiple=true; input.hidden=true;
+     const picker=document.createElement('label'); picker.className='course-file-pick'; picker.htmlFor='courseFilesPageInput'; picker.innerHTML='<span><i class="fas fa-paperclip"></i> <strong id="courseFilesPickText">اختر ملفات</strong></span><small>صور · PDF · مستندات</small>';
+     const group1=document.createElement('div'); group1.className='course-files-field'; group1.innerHTML='<label>الملفات</label>'; group1.appendChild(picker);group1.appendChild(input);
+     const group2=document.createElement('div'); group2.className='course-files-field'; group2.innerHTML='<label>ربط الملف بحصة</label><select class="course-files-select" id="courseFilesPageLessonSelect"><option value="">ملف عام للدورة</option></select>';
+     const btn=document.createElement('button'); btn.id='courseFilesPageUploadBtn'; btn.type='button'; btn.className='ananas-primary-btn'; btn.innerHTML='<i class="fas fa-cloud-arrow-up"></i> رفع الملفات';
+     fields.append(group1,group2,btn); upload.appendChild(fields);
+     const status=document.createElement('div'); status.id='courseFilesPageStatus'; status.style='color:var(--text-muted);font-size:.82rem;margin-top:9px'; upload.appendChild(status);
+     input.addEventListener('change',()=>{$('courseFilesPickText').textContent=input.files?.length?`تم اختيار ${input.files.length} ملف`:'اختر ملفات';});
+   }
+   page.innerHTML=''; if(title)wrap.appendChild(title);wrap.appendChild(hero);if(upload)wrap.appendChild(upload); if(grid)wrap.appendChild(grid); page.appendChild(wrap);
+ }
+}
+function closeAllCourseSections(){
+ const ids=['courseOverviewContainer','courseDashboard','courseLessonsPage','courseLessonPlayerPage','courseQuizzesPage','courseAssignmentsPage','courseAssignmentDetailPage','courseFilesPage','courseChatPage','courseLearningView','fullChatPage'];
+ ids.forEach(id=>{const el=$(id);if(!el)return;el.classList.remove('active');if(id==='courseOverviewContainer'||id==='courseDashboard'||id==='courseQuizzesPage'||id==='courseAssignmentsPage'||id==='courseChatPage'||id==='courseFilesPage'||id==='courseAssignmentDetailPage')el.style.display='none';});
+}
+const originalSwitch=window.switchCoursePage;
+window.switchCoursePage=function(page){
+ if(page==='files'){
+   if(!activeCourseId)return;
+   if(currentCoursePage==='lessonPlayer'&&typeof stopLessonForNavigation==='function')stopLessonForNavigation();
+   currentCoursePage='files'; closeAllCourseSections(); ensureFilesShell(); $('courseFilesPage').style.display='block';$('courseFilesPage').classList.add('active');
+   window.loadCourseFilesPage?.();window.populateFileLessonSelect?.();window.persistCourseState?.();return;
+ }
+ const fp=$('courseFilesPage'); if(fp){fp.classList.remove('active');fp.style.display='none';}
+ return originalSwitch?originalSwitch(page):undefined;
+};
+
+/* ---------- B. File viewer / uploads ---------- */
+window.openCourseFileViewer=function(f){
+ const data=typeof f==='string'?null:f; if(!data?.url)return;
+ let v=$('courseFileViewer'); if(!v){v=document.createElement('div');v.id='courseFileViewer';v.innerHTML='<div class="course-file-viewer-shell"><div class="course-file-viewer-head"><div class="course-file-viewer-title" id="courseFileViewerTitle"></div><div class="course-file-viewer-actions"><a id="courseFileViewerDownload" class="primary" target="_blank" rel="noopener"><i class="fas fa-download"></i> تحميل</a><button type="button" id="courseFileViewerClose"><i class="fas fa-xmark"></i></button></div></div><div id="courseFileViewerBody" class="course-file-viewer-body"></div></div>';document.body.appendChild(v);$('courseFileViewerClose').onclick=()=>v.classList.remove('active');v.addEventListener('click',e=>{if(e.target===v)v.classList.remove('active')});}
+ $('courseFileViewerTitle').textContent=data.name||'ملف'; $('courseFileViewerDownload').href=data.url;
+ const body=$('courseFileViewerBody'), mime=String(data.mime||'').toLowerCase(), url=String(data.url||'');
+ if(mime.startsWith('image/')||/\.(png|jpe?g|gif|webp|bmp|svg)(\?|$)/i.test(url))body.innerHTML=`<img src="${esc(url)}" alt="${esc(data.name||'')}"/>`;
+ else if(mime==='application/pdf'||/\.pdf(\?|$)/i.test(url))body.innerHTML=`<iframe src="${esc(url)}#view=FitH"></iframe>`;
+ else body.innerHTML=`<div class="course-file-viewer-placeholder"><i class="fas fa-file-arrow-down" style="font-size:3rem;display:block;margin-bottom:12px"></i><div>هذا النوع من الملفات يفضّل فتحه أو تحميله.</div><div style="margin-top:12px"><a class="ananas-primary-btn" href="${esc(url)}" target="_blank" rel="noopener">فتح الملف</a></div></div>`;
+ v.classList.add('active');
+};
+window.openFileViewer=window.openCourseFileViewer;
+
+async function uploadAnyCourseFile(file,lessonId=''){
+ if(!activeCourseId||!file)return;
+ const bad=/\.((exe|js|html?|php|sh|bat|cmd|msi|apk|dmg))$/i.test(file.name);
+ if(bad)return showCustomAlert('نوع ملف غير مسموح','لا يمكن رفع الملفات التنفيذية أو البرمجية.');
+ if(file.size>25*1024*1024)return showCustomAlert('الملف كبير','الحد الأقصى للملف الواحد هو 25 ميجابايت.');
+ const url=await uploadImage(file); if(!url)throw Error('upload');
+ let lessonTitle=''; if(lessonId){const s=await db.collection('courses').doc(activeCourseId).collection('lessons').doc(lessonId).get();if(s.exists)lessonTitle=s.data()?.titleAr||'حصة';}
+ const data={name:file.name,url,mime:file.type||'',size:file.size||0,lessonId:lessonId||'',lessonTitle,uploadedAt:firebase.firestore.FieldValue.serverTimestamp(),uploadedBy:currentUser?.uid||'',storageProvider:'cloudinary'};
+ await db.collection('courses').doc(activeCourseId).collection('files').add(data);return data;
+}
+window.uploadCourseFile=uploadAnyCourseFile;
+
+/* replace legacy render with premium cards, preserve data contract */
+window.renderFilesGrid=function(files,box){
+ if(!box)return;const list=Array.isArray(files)?files:[];if(!list.length){box.innerHTML='<div style="grid-column:1/-1;padding:70px 20px;text-align:center;color:var(--text-muted)"><i class="fas fa-folder-open" style="font-size:3rem;display:block;margin-bottom:12px;color:var(--accent1)"></i><strong style="display:block;font-size:1.05rem;color:var(--text-primary);margin-bottom:5px">لا توجد ملفات بعد</strong><span>أضف ملفات الدورة أو اربطها بالحصة المناسبة.</span></div>';return;}
+ const icon=f=>{const m=String(f?.mime||'').toLowerCase(),n=String(f?.name||'').toLowerCase();if(m.startsWith('image/'))return'fa-image';if(m.includes('pdf')||n.endsWith('.pdf'))return'fa-file-pdf';if(m.includes('word')||/\.docx?$/.test(n))return'fa-file-word';if(m.includes('sheet')||/\.(xlsx?|csv)$/.test(n))return'fa-file-excel';if(m.includes('presentation')||/\.pptx?$/.test(n))return'fa-file-powerpoint';if(m.includes('zip'))return'fa-file-zipper';return'fa-file-lines'};
+ const size=n=>{n=Number(n)||0;if(!n)return'الحجم غير متوفر';const u=['بايت','KB','MB','GB'];let i=0;while(n>=1024&&i<u.length-1){n/=1024;i++;}return `${n.toFixed(i?1:0)} ${u[i]}`};
+ box.innerHTML=list.map(f=>{const cls=String(f.mime||'').startsWith('image/')?'image-file':String(f.mime||'').includes('pdf')?'pdf-file':'';return `<article class="course-file-card ${cls}" data-file-id="${esc(f.id)}"><div class="course-file-top"><div class="course-file-icon"><i class="fas ${icon(f)}"></i></div><div style="min-width:0;flex:1"><div class="course-file-name">${esc(f.name||'ملف بدون اسم')}</div><div class="course-file-meta">${esc(f.lessonTitle?'مرتبط بـ: '+f.lessonTitle:'ملف عام للدورة')}<br>${esc(size(f.size))}</div></div></div><div class="course-file-actions"><button class="primary" onclick='openCourseFileViewer(${JSON.stringify(f)})'><i class="fas fa-eye"></i> عرض</button><a href="${esc(f.url||'#')}" target="_blank" rel="noopener" download><i class="fas fa-download"></i> تحميل</a>${isAdmin?`<button class="danger" onclick="deleteCourseFile('${esc(f.id)}')"><i class="fas fa-trash"></i> حذف الملف</button>`:''}</div></article>`}).join('');
+};
+
+/* ---------- C. Lesson file actions, one compact platform button + upload for admin ---------- */
+const originalLessonActions=window.renderLessonRelatedActions;
+window.renderLessonRelatedActions=async function(courseId,lessonId){
+ await originalLessonActions?.(courseId,lessonId);const area=$('lessonRelatedActions');if(!area)return;
+ area.querySelectorAll('[data-ananas-file-action]').forEach(x=>x.remove());
+ try{const files=await getFiles(courseId,lessonId);const b=document.createElement('button');b.className='related-action';b.dataset.ananasFileAction='1';b.innerHTML=`<i class="fas fa-folder-open"></i> ملفات الحصة${files.length?` (${files.length})`:''}`;b.onclick=()=>{if(files.length===1){openCourseFileViewer(files[0]);return;}window.switchCoursePage('files');setTimeout(()=>{getFiles(courseId,lessonId).then(x=>renderFilesGrid(x,$('courseFilesPageGrid')))},80)};area.appendChild(b);if(isAdmin){const up=document.createElement('button');up.className='related-action';up.dataset.ananasFileAction='1';up.innerHTML='<i class="fas fa-cloud-arrow-up"></i> رفع ملف للحصة';up.onclick=()=>$('lessonFilesUploadInput')?.click();area.appendChild(up)}}catch(e){console.warn(e)}
+};
+$('lessonFilesUploadInput')?.addEventListener('change',async e=>{if(!isAdmin||!activeCourseId||!activeLessonId)return;for(const f of [...(e.target.files||[])]){try{await uploadAnyCourseFile(f,activeLessonId)}catch(err){console.error(err)}}e.target.value='';await window.renderLessonRelatedActions(activeCourseId,activeLessonId)});
+
+/* ---------- D. Chat lock: auto-expiry + manual unlock ---------- */
+const oldSaveLock=window.saveChatLockSettings;window.saveChatLockSettings=async function(){
+ const auto=$('chatLockAutoExpire'),end=$('chatLockEndInput');if(auto&&!auto.checked&&end)end.value='';return oldSaveLock?.apply(this,arguments);
+};
+window.unlockCourseChat=async function(){if(!isAdmin||!activeCourseId)return;try{await db.collection('courses').doc(activeCourseId).collection('settings').doc('chat').set({locked:false,startAt:null,endAt:null,reason:'',timezone:'Asia/Riyadh',updatedAt:firebase.firestore.FieldValue.serverTimestamp()},{merge:true});currentChatLock={locked:false,startAt:null,endAt:null,reason:''};window.applyChatLockNow?.();showCustomAlert('تم فتح الدردشة','أصبحت الدردشة متاحة للطلاب الآن.')}catch(e){showCustomAlert('خطأ','تعذر فتح الدردشة: '+e.message)}};
+$('chatUnlockBtn')?.addEventListener('click',e=>{e.preventDefault();e.stopPropagation();window.unlockCourseChat()},true);
+function syncLockEnd(){const a=$('chatLockAutoExpire'),e=$('chatLockEndInput');if(!a||!e)return;e.disabled=!a.checked;if(!a.checked)e.value='';}
+$('chatLockAutoExpire')?.addEventListener('change',syncLockEnd);syncLockEnd();
+const oldOpenLock=window.openChatLockDialog;window.openChatLockDialog=async function(){await oldOpenLock?.();const a=$('chatLockAutoExpire'),e=$('chatLockEndInput');if(a){a.checked=true;syncLockEnd();}if(e&&!e.value){const d=new Date(Date.now()+3600000),p=n=>String(n).padStart(2,'0');e.value=`${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`}};
+setInterval(()=>{if(currentChatLock?.locked&&currentChatLock.endAt){const ms=currentChatLock.endAt.toDate?currentChatLock.endAt.toDate().getTime():Number(currentChatLock.endAt);if(ms&&Date.now()>=ms)window.unlockCourseChat()}},10000);
+
+/* ---------- E. User full profile page ---------- */
+function ensureProfilePage(){
+ if($('userProfilePage'))return;
+ const page=document.createElement('div');page.id='userProfilePage';page.innerHTML='<div class="profile-page-inner"><div class="profile-hero"><div class="profile-avatar" id="profilePageAvatar">م</div><div><div class="profile-name" id="profilePageName">مستخدم</div><div class="profile-email" id="profilePageEmail">—</div><div class="profile-stat-grid"><div class="profile-stat"><b id="profileXP">0</b><span>نقاط الخبرة</span></div><div class="profile-stat"><b id="profileLessons">0</b><span>حصص مكتملة</span></div><div class="profile-stat"><b id="profileQuizzes">0</b><span>اختبارات مكتملة</span></div><div class="profile-stat"><b id="profileAssignments">0</b><span>أعمال مرفوعة</span></div></div></div><div class="profile-close-wrap"><button class="auth-btn" id="profilePageClose"><i class="fas fa-arrow-right"></i><span>العودة</span></button></div></div><div class="profile-sections"><section class="profile-panel"><h3>البيانات الشخصية</h3><div class="profile-list" id="profileDataList"></div></section><section class="profile-panel"><h3>إنجازات الحصص</h3><div class="profile-list" id="profileLessonsList"></div></section><section class="profile-panel"><h3>نتائج الاختبارات</h3><div class="profile-list" id="profileQuizzesList"></div></section><section class="profile-panel"><h3>الأعمال والواجبات</h3><div class="profile-list" id="profileAssignmentsList"></div></section><section class="profile-panel" style="grid-column:1/-1"><h3>سجل النشاط</h3><div class="profile-list" id="profileActivityList"></div></section></div></div>';
+ document.body.appendChild(page);$('profilePageClose').onclick=()=>page.classList.remove('active');
+}
+window.openUserProfilePage=async function(){if(!currentUser)return;ensureProfilePage();const p=currentUserProfile||{};$('profilePageName').textContent=p.displayName||currentUser.displayName||'مستخدم';$('profilePageEmail').textContent=p.email||currentUser.email||'—';$('profilePageAvatar').textContent=(p.displayName||currentUser.displayName||'م')[0];
+ const fields=[['الاسم',p.displayName||currentUser.displayName||'مستخدم'],['البريد الإلكتروني',p.email||currentUser.email||'غير متوفر'],['الهاتف',p.phone||'غير مضاف'],['الجنس',p.gender==='female'?'أنثى':p.gender==='male'?'ذكر':'غير محدد'],['معرّف الحساب',currentUser.uid],['تاريخ إنشاء الحساب',p.createdAt?.toDate?p.createdAt.toDate().toLocaleDateString('ar-SA'):'غير متوفر']];$('profileDataList').innerHTML=fields.map(x=>`<div class="profile-list-item"><strong>${esc(x[0])}</strong><span>${esc(x[1])}</span></div>`).join('');
+ $('userProfilePage').classList.add('active');
+ try{
+  const stats=await db.collection('userStats').doc(currentUser.uid).get();$('profileXP').textContent=Number(stats.data()?.xp||0);
+  const done=await db.collection('users').doc(currentUser.uid).collection('completedLessons').get();$('profileLessons').textContent=done.size;$('profileLessonsList').innerHTML=done.empty?'<div style="color:var(--text-muted)">لا توجد حصص مكتملة بعد.</div>':done.docs.slice(0,30).map(d=>`<div class="profile-list-item"><strong>حصة</strong><small>${d.data()?.completedAt?.toDate?d.data().completedAt.toDate().toLocaleDateString('ar-SA'):'مكتملة'}</small></div>`).join('');
+  const qs=await db.collection('userStats').doc(currentUser.uid).collection('completedQuizzes').get();$('profileQuizzes').textContent=qs.size;$('profileQuizzesList').innerHTML=qs.empty?'<div style="color:var(--text-muted)">لا توجد اختبارات مكتملة بعد.</div>':qs.docs.slice(0,30).map(d=>`<div class="profile-list-item"><strong>اختبار</strong><small>${Number(d.data()?.score||0)}%</small></div>`).join('');
+  const activities=[];let workCount=0;const courses=Array.isArray(coursesData)?coursesData:[];for(const c of courses.slice(0,30)){try{const as=await db.collection('courses').doc(c.id).collection('assignments').get();as.forEach(d=>(d.data()?.submissions||[]).forEach(s=>{if(s.userId===currentUser.uid){workCount++;activities.push({title:d.data()?.titleAr||'واجب',status:s.approved?'معتمد':'قيد المراجعة'});}}))}catch(e){}}
+  $('profileAssignments').textContent=workCount;$('profileAssignmentsList').innerHTML=activities.length?activities.slice(0,30).map(a=>`<div class="profile-list-item"><strong>${esc(a.title)}</strong><small>${esc(a.status)}</small></div>`).join(''):'<div style="color:var(--text-muted)">لا توجد أعمال مرفوعة بعد.</div>';
+  const activityDocs=[];done.docs.slice(0,15).forEach(d=>activityDocs.push('إكمال حصة'));qs.docs.slice(0,15).forEach(d=>activityDocs.push(`إنهاء اختبار بنسبة ${Number(d.data()?.score||0)}%`));$('profileActivityList').innerHTML=activityDocs.length?activityDocs.map(x=>`<div class="profile-list-item"><span>${esc(x)}</span></div>`).join(''):'<div style="color:var(--text-muted)">لا يوجد نشاط مسجل بعد.</div>';
+ }catch(e){console.error(e)}
+};
+
+/* ---------- F. Lesson anti-cheat audit ---------- */
+function ensureAuditState(){if(!window.lessonWatchState)return;const s=window.lessonWatchState;s.sessionStartedAt=s.sessionStartedAt||Date.now();s.seekCount=Number(s.seekCount||0);s.forwardSeekSeconds=Number(s.forwardSeekSeconds||0);s.backwardSeekCount=Number(s.backwardSeekCount||0);s.forwardSeekCount=Number(s.forwardSeekCount||0);s.hiddenSeconds=Number(s.hiddenSeconds||0);s.lastVisibleAt=s.lastVisibleAt||Date.now();s.seekEvents=Array.isArray(s.seekEvents)?s.seekEvents:[]}
+const oldSeek=window.seekLessonBy;window.seekLessonBy=function(seconds){ensureAuditState();const n=Number(seconds)||0;if(n>0){lessonWatchState.forwardSeekCount++;lessonWatchState.forwardSeekSeconds+=n}else if(n<0){lessonWatchState.backwardSeekCount++;}lessonWatchState.seekCount++;lessonWatchState.seekEvents.push({at:Date.now(),seconds:n});lessonWatchState.seekEvents=lessonWatchState.seekEvents.slice(-25);return oldSeek?.apply(this,arguments)};
+document.addEventListener('visibilitychange',()=>{if(!window.lessonWatchState)return;ensureAuditState();if(document.visibilityState==='hidden')lessonWatchState.lastHiddenAt=Date.now();else if(lessonWatchState.lastHiddenAt){lessonWatchState.hiddenSeconds+=Math.max(0,(Date.now()-lessonWatchState.lastHiddenAt)/1000);lessonWatchState.lastVisibleAt=Date.now();lessonWatchState.lastHiddenAt=null}},true);
+const oldMark=window.markLessonCheating;window.markLessonCheating=function(reason){ensureAuditState();lessonWatchState.auditFlags=Array.isArray(lessonWatchState.auditFlags)?lessonWatchState.auditFlags:[];lessonWatchState.auditFlags.push({reason,at:Date.now()});return oldMark?.apply(this,arguments)};
+const oldSaveProg=window.saveLessonProgressNow;window.saveLessonProgressNow=async function(){ensureAuditState();const s=window.lessonWatchState||{};const before=s.watchedSeconds||0;const result=await oldSaveProg?.apply(this,arguments);try{const ref=lessonProgressRef(activeCourseId,activeLessonId);if(ref)await ref.set({audit:{sessionStartedAt:s.sessionStartedAt||null,lastObservedPosition:Number(s.lastObservedPosition||0),watchedPlaybackSeconds:Number(s.watchedSeconds||0),seekCount:Number(s.seekCount||0),forwardSeekCount:Number(s.forwardSeekCount||0),backwardSeekCount:Number(s.backwardSeekCount||0),forwardSeekSeconds:Number(s.forwardSeekSeconds||0),hiddenSeconds:Number(s.hiddenSeconds||0),naturallyEnded:!!s.naturallyEnded,cheatDetected:!!s.cheatDetected,auditFlags:Array.isArray(s.auditFlags)?s.auditFlags.slice(-20):[],updatedAt:firebase.firestore.FieldValue.serverTimestamp()}},{merge:true})}catch(e){}return result};
+
+/* ---------- G. Idempotent XP marker for assignments ---------- */
+window.grantAssignmentXPOnce=async function(assignmentId,studentId,xpAmount){if(!assignmentId||!studentId||!xpAmount)return false;const ref=db.collection('userStats').doc(studentId).collection('completedAssignments').doc(assignmentId);const statsRef=db.collection('userStats').doc(studentId);try{return await db.runTransaction(async tx=>{const done=await tx.get(ref);if(done.exists)return false;tx.set(ref,{assignmentId,studentId,xpEarned:Number(xpAmount)||0,completedAt:firebase.firestore.FieldValue.serverTimestamp()});tx.set(statsRef,{xp:firebase.firestore.FieldValue.increment(Number(xpAmount)||0),rank:firebase.firestore.FieldValue.increment(1)},{merge:true});return true})}catch(e){console.error(e);return false}};
+const originalApprove=window.approveSubmission;window.approveSubmission=async function(courseId,assignId,workId){const result=await getAssignmentData(courseId,assignId);if(result){const subs=Array.isArray(result.data.submissions)?result.data.submissions:[],idx=subs.findIndex((s,i)=>submissionWorkId(s,i)===workId);if(idx>=0&&!subs[idx].xpGranted){const xp=Number(result.data.xpReward)||0;subs[idx]={...subs[idx],xpGrantedPending:true};try{await result.ref.update({submissions:subs});}catch(e){}}}return originalApprove?.apply(this,arguments)};
+
+/* ---------- H. Quiz session randomization + timer (compatibility-first) ---------- */
+function shuffle(a){const x=[...(a||[])];for(let i=x.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[x[i],x[j]]=[x[j],x[i]];}return x;}
+const originalOpenQuiz=window.openQuiz;
+window.openQuiz=async function(courseId,quizId,fromLesson=false){
+  const r=originalOpenQuiz?await originalOpenQuiz.apply(this,arguments):null;
+  try{
+    if(activeQuizData&&Array.isArray(activeQuizData.questions)){
+      activeQuizData={...activeQuizData,questions:shuffle(activeQuizData.questions).map(q=>q.type==='mcq'?{...q,options:shuffle(q.options||[])}:q)};
+      activeQuizData.__secureSessionStartedAt=Date.now();
+      activeQuizData.__durationSeconds=Math.max(60,Number(activeQuizData.durationSeconds||((activeQuizData.questions.length||10)*90)));
+      window.__quizSessionExpiresAt=Date.now()+activeQuizData.__durationSeconds*1000;
+      if(window.__quizTimer)clearInterval(window.__quizTimer);
+      window.__quizTimer=setInterval(()=>{
+        if(!window.__quizSessionExpiresAt)return;
+        if(Date.now()>=window.__quizSessionExpiresAt){
+          clearInterval(window.__quizTimer);window.__quizTimer=null;
+          const finish=$('finishQuizBtn');
+          if(finish&&!finish.dataset.submitting){finish.dataset.forceExpired='1';if(typeof window.submitQuiz==='function')window.submitQuiz();}
+        }
+      },1000);
+    }
+  }catch(e){console.warn('quiz session timer',e);}
+  return r;
+};
+
+/* ---------- I. Clean dashboard/file navigation on initial load ---------- */
+ensureFilesShell();
+function bindFilesUploader(){
+ const btn=$('courseFilesPageUploadBtn'),input=$('courseFilesPageInput'),status=$('courseFilesPageStatus'),sel=$('courseFilesPageLessonSelect');
+ if(!btn||!input||btn.dataset.bound==='1')return;
+ btn.dataset.bound='1';
+ input.addEventListener('change',()=>{const el=$('courseFilesPickText');if(el)el.textContent=input.files?.length?`تم اختيار ${input.files.length} ملف`:'اختر ملفات';});
+ btn.addEventListener('click',async()=>{
+   if(!isAdmin||!activeCourseId)return;
+   const files=[...(input.files||[])],lessonId=sel?.value||'';
+   if(!files.length)return showCustomAlert('تنبيه','اختر ملفًا أو صورة أولاً.');
+   if(status)status.textContent=`جاري رفع ${files.length} ملف...`;
+   btn.disabled=true;
+   try{for(const file of files)await uploadAnyCourseFile(file,lessonId);input.value='';const el=$('courseFilesPickText');if(el)el.textContent='اختر ملفات';if(status)status.textContent=`تم رفع ${files.length} ملف بنجاح.`;await loadCourseFilesPage();await populateFileLessonSelect();if(activeLessonId)await window.renderLessonRelatedActions(activeCourseId,activeLessonId);}
+   catch(e){console.error(e);if(status)status.textContent='تعذر رفع أحد الملفات.';showCustomAlert('خطأ','تعذر رفع الملفات.');}
+   finally{btn.disabled=false;}
+ });
+}
+bindFilesUploader();
+const originalOpenLessonForAudit=window.openLessonPlayer;
+if(originalOpenLessonForAudit&&!window.__v4AuditOpenWrapped){window.__v4AuditOpenWrapped=true;window.openLessonPlayer=async function(){const result=await originalOpenLessonForAudit.apply(this,arguments);try{ensureAuditState();lessonWatchState.sessionStartedAt=Date.now();lessonWatchState.auditFlags=[];lessonWatchState.seekEvents=[];}catch(e){}return result;}}
 })();
 </script>
