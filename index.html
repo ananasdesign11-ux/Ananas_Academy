@@ -5388,16 +5388,33 @@
         // 9. التهيئة النهائية واخفاء شاشة التحميل
         // ================================================================
         (async function init() {
-            await loadTranslations();
-            
-            // Hide Loading Screen with a smooth fade
-            setTimeout(() => {
-                const loadingScreen = document.getElementById('loadingScreen');
+            // Load the courses immediately and independently from remote text settings.
+            // This prevents the courses page from staying empty until another action
+            // (such as creating a new course) triggers loadCourses().
+            const coursesPromise = loadCourses(false).catch(error => {
+                console.error('Initial courses load failed:', error);
+            });
+
+            // Translations are loaded in parallel so a slow/failed texts document
+            // can never block the first courses render.
+            const translationsPromise = loadTranslations().catch(error => {
+                console.error('Initial translations load failed:', error);
+            });
+
+            await Promise.allSettled([coursesPromise, translationsPromise]);
+
+            // Re-render once after translations are ready, without another Firebase read.
+            renderCourses();
+            updateCourseActionButtons();
+
+            // Hide Loading Screen with a smooth fade, without delaying the interactive UI.
+            const loadingScreen = document.getElementById('loadingScreen');
+            if (loadingScreen) {
                 loadingScreen.classList.add('fade-out');
                 setTimeout(() => {
                     loadingScreen.style.display = 'none';
-                }, 600);
-            }, 500);
+                }, 350);
+            }
         })();
 
         // ================================================================
