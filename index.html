@@ -1491,6 +1491,19 @@
         </div>
     </div>
 
+    <!-- ===== User Profile Modal ===== -->
+    <div class="custom-alert-modal" id="userProfileModal">
+        <div class="custom-alert-box" style="max-width:520px;text-align:right;">
+            <button class="close-lightbox" id="closeUserProfileBtn" style="float:left;">&times;</button>
+            <div style="display:flex;align-items:center;gap:14px;margin-bottom:18px;">
+                <div style="width:58px;height:58px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:var(--accent-gradient);color:#fff;font-size:1.5rem;"><i class="fas fa-user"></i></div>
+                <div><h3 id="userProfileTitle" style="margin:0;">بيانات الحساب</h3><p id="userProfileSubtitle" style="margin:4px 0 0;color:var(--text-muted);">معلومات حسابك</p></div>
+            </div>
+            <div id="userProfileFields" style="display:grid;gap:10px;"></div>
+            <button id="userProfileLogoutBtn" class="btn btn-danger" style="width:100%;margin-top:20px;">تسجيل الخروج</button>
+        </div>
+    </div>
+
     <!-- ===== Auth Popup ===== -->
     <div class="auth-popup" id="authPopup">
         <button class="close-lightbox" id="authCloseBtn" style="position:static; float:left; font-size:1.5rem; background:none; border:none; color:var(--text-muted); cursor:pointer;">&times;</button>
@@ -1978,6 +1991,7 @@
         // 3. متغيرات الحالة والنصوص الافتراضية
         // ================================================================
         let currentUser = null;
+        let currentUserProfile = {};
         let isAdmin = false;
         let currentLang = 'ar';
         let translations = {};
@@ -2330,31 +2344,48 @@
             const now = Date.now();
             if (!force && coursesLoadInFlight) return coursesLoadInFlight;
 
-            // Cached courses: render from memory immediately. No Firestore wait on navigation.
+            // First paint: use a short-lived session cache when available, then refresh silently.
+            if (!force && !coursesData?.length) {
+                try {
+                    const cached = JSON.parse(sessionStorage.getItem('ananas_courses_cache') || 'null');
+                    if (cached && Array.isArray(cached.data) && (now - Number(cached.at || 0)) < 120000) {
+                        coursesData = cached.data;
+                        coursesLastLoadedAt = Number(cached.at || now);
+                        coursesLastLoadedUid = uid;
+                        renderCourses();
+                    }
+                } catch(e) { /* ignore cache errors */ }
+            }
+
             if (!force && coursesData?.length && coursesLastLoadedUid === uid && (now - coursesLastLoadedAt) < 30000) {
                 renderCourses();
-                // Refresh enrollment in the background without blocking the UI.
                 if (currentUser) refreshUserEnrollmentMap(false).then(() => updateCourseActionButtons()).catch(()=>{});
+                // Do not block navigation on a refresh; only refresh in the background when stale.
                 return;
             }
 
-            // If we already have course cards, keep them visible while refreshing in the background.
-            if (force && coursesData?.length) {
-                renderCourses();
-            }
+            if (force && coursesData?.length) renderCourses();
 
             coursesLoadInFlight = (async () => {
                 try {
-                    const snapshot = await db.collection('courses').orderBy('createdAt', 'desc').get();
+                    // Do NOT depend on createdAt/orderBy. Older courses may not have that field.
+                    // Fetch the complete collection once, then sort safely in memory.
+                    const snapshot = await db.collection('courses').get();
                     const nextCourses = [];
                     snapshot.forEach(doc => nextCourses.push({ id: doc.id, ...doc.data() }));
+                    nextCourses.sort((a,b) => {
+                        const av = a.createdAt?.seconds ? a.createdAt.seconds : (Date.parse(a.createdAt || '') || 0);
+                        const bv = b.createdAt?.seconds ? b.createdAt.seconds : (Date.parse(b.createdAt || '') || 0);
+                        return bv - av;
+                    });
                     coursesData = nextCourses;
                     coursesLastLoadedAt = Date.now();
                     coursesLastLoadedUid = uid;
+                    try { sessionStorage.setItem('ananas_courses_cache', JSON.stringify({at:coursesLastLoadedAt,data:coursesData})); } catch(e) {}
                     renderCourses();
                 } catch (error) {
                     console.error('Error loading courses:', error);
-                    // Never blank an already-rendered page because of a transient network error.
+                    // Keep cached/visible cards intact on transient Firebase failures.
                     if (!coursesData?.length) renderCourses();
                 } finally {
                     coursesLoadInFlight = null;
@@ -2511,9 +2542,11 @@
             try {
                 if(editingCourseId) {
                     await db.collection('courses').doc(editingCourseId).update(courseData);
+                    try { sessionStorage.removeItem('ananas_courses_cache'); } catch(e) {}
                     showCustomAlert('تم التعديل', 'تم تعديل الدورة بنجاح!');
                 } else {
                     await db.collection('courses').add(courseData);
+                    try { sessionStorage.removeItem('ananas_courses_cache'); } catch(e) {}
                     showCustomAlert('تم الإضافة', 'تم إضافة الدورة بنجاح!');
                 }
                 document.getElementById('addCourseModal').classList.remove('active');
@@ -5160,9 +5193,28 @@
         const authStep2 = document.getElementById('authStep2');
 
         authToggleBtn.addEventListener('click', () => {
-            if (currentUser) { auth.signOut(); } 
+            if (currentUser) { openUserProfileModal(); }
             else { if (authPopup) authPopup.classList.add('active'); if (authStep1) authStep1.style.display = 'block'; if (authStep2) authStep2.style.display = 'none'; if (authStatus) authStatus.textContent = ''; }
         });
+
+        function openUserProfileModal() {
+            if (!currentUser) return;
+            const p = currentUserProfile || {};
+            const name = p.displayName || currentUser.displayName || 'مستخدم';
+            const email = p.email || currentUser.email || 'غير متوفر';
+            const uid = currentUser.uid || 'غير متوفر';
+            const phone = p.phone || 'غير مضاف';
+            const gender = p.gender === 'female' ? 'أنثى' : (p.gender === 'male' ? 'ذكر' : 'غير محدد');
+            const created = p.createdAt?.toDate ? p.createdAt.toDate().toLocaleDateString('ar-SA') : (p.createdAt ? new Date(p.createdAt).toLocaleDateString('ar-SA') : 'غير متوفر');
+            const fields = [
+                ['الاسم', name], ['البريد الإلكتروني', email], ['رقم الهاتف', phone], ['الجنس', gender], ['معرّف الحساب', uid], ['تاريخ إنشاء الحساب', created]
+            ];
+            const box = document.getElementById('userProfileFields');
+            if (box) box.innerHTML = fields.map(([label,value]) => `<div style="padding:12px 14px;border:1px solid var(--border);border-radius:14px;background:var(--bg-secondary);display:flex;justify-content:space-between;gap:12px;align-items:center;"><strong>${escapeHtml(label)}</strong><span style="color:var(--text-muted);word-break:break-word;text-align:left;">${escapeHtml(String(value))}</span></div>`).join('');
+            document.getElementById('userProfileModal')?.classList.add('active');
+        }
+        document.getElementById('closeUserProfileBtn')?.addEventListener('click', () => document.getElementById('userProfileModal')?.classList.remove('active'));
+        document.getElementById('userProfileLogoutBtn')?.addEventListener('click', () => { document.getElementById('userProfileModal')?.classList.remove('active'); auth.signOut(); });
         if (authCloseBtn) authCloseBtn.addEventListener('click', () => { if (authPopup) authPopup.classList.remove('active'); });
 
         if (document.getElementById('googleSignInBtn')) document.getElementById('googleSignInBtn').addEventListener('click', () => {
@@ -5197,7 +5249,7 @@
         auth.onAuthStateChanged(async (user) => {
             if (user) {
                 currentUser = user;
-                const name = user.displayName || (translations[currentLang]?.authLabel || 'My Account');
+                const name = user.displayName || (currentUserProfile?.displayName) || (translations[currentLang]?.authLabel || 'My Account');
                 if (authToggleBtn) authToggleBtn.innerHTML = `<i class="fas fa-user-circle"></i> <span id="authLabel">${name}</span>`;
                 
                 try {
@@ -5214,8 +5266,12 @@
                 try {
                     const userDoc = await db.collection('users').doc(user.uid).get();
                     if (userDoc.exists) {
+                        currentUserProfile = userDoc.data() || {};
+                        const profileDisplayName = currentUserProfile.displayName || currentUserProfile.name || user.displayName || '';
+                        if (profileDisplayName && authToggleBtn) authToggleBtn.innerHTML = `<i class="fas fa-user-circle"></i> <span id="authLabel">${escapeHtml(profileDisplayName)}</span>`;
                         if (authPopup) authPopup.classList.remove('active');
                     } else {
+                        currentUserProfile = { uid:user.uid, email:user.email || '', displayName:user.displayName || '' };
                         if (authPopup) authPopup.classList.add('active');
                         if (authStep1) authStep1.style.display = 'none'; if (authStep2) authStep2.style.display = 'block';
                         const emailInput = document.getElementById('emailInput'); if (emailInput) emailInput.value = '';
@@ -5235,7 +5291,7 @@
                 setTimeout(restoreLastCourseRoute, 350);
             } else {
                 // ===== LOGOUT LOGIC =====
-                currentUser = null; isAdmin = false;
+                currentUser = null; currentUserProfile = {}; isAdmin = false;
                 document.querySelectorAll('.admin-only').forEach(el => el.classList.remove('show'));
                 const t = translations[currentLang] || translations['ar'] || {};
                 if (authToggleBtn) authToggleBtn.innerHTML = `<i class="fas fa-user"></i> <span id="authLabel">${t.authLabel || 'Sign In'}</span>`;
