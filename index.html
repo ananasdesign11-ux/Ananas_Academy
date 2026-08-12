@@ -9,12 +9,548 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
     
     <!-- Firebase & Cloudinary -->
-    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js">
+
+/* ===== FINAL PATCH: persistent course route + direct linked quiz/assignment + soft-deleted chat ===== */
+(function(){
+  function routeState(){
+    return {uid:currentUser?.uid||'guest',courseId:activeCourseId,lessonId:activeLessonId||null,page:currentCoursePage,quizId:activeQuizId||null,assignmentId:window.activeAssignmentDetailId||null,lang:'ar',theme:document.body.classList.contains('light-mode')?'light':'dark'};
+  }
+  window.persistCourseState=function(){try{localStorage.setItem('ananas.lastCourseState',JSON.stringify(routeState()));}catch(e){}}
+
+  /* Remember the exact page/item, including a quiz or assignment detail. */
+  const __origSwitchCoursePage=window.switchCoursePage||switchCoursePage;
+  window.switchCoursePage=function(page){
+    if(currentCoursePage==='lessonPlayer' && page!=='lessonPlayer') { try{stopLessonForNavigation();}catch(e){} }
+    return __origSwitchCoursePage(page);
+  };
+
+  /* Re-open the last route after a temporary suspension expires or is cancelled. */
+  const __origOpenCourseContent=window.openCourseContent||openCourseContent;
+  window.openCourseContent=async function(courseId){
+    await __origOpenCourseContent(courseId);
+    if(window.__restoringCourseRoute) return;
+    const raw=localStorage.getItem('ananas.lastCourseState'); if(!raw||!currentUser)return;
+    let st; try{st=JSON.parse(raw);}catch(e){return;}
+    if(st.uid!==currentUser.uid || st.courseId!==courseId || !st.page || st.page==='overview') return;
+    window.__restoringCourseRoute=true;
+    try{
+      if(st.page==='dashboard') return;
+      if(st.page==='learning'){__origSwitchCoursePage('learning');return;}
+      if(st.page==='lessonPlayer'&&st.lessonId){
+        __origSwitchCoursePage('learning');
+        const wait=()=>{if(lessonListCache.some(l=>l.id===st.lessonId)){openLessonPlayer(courseId,st.lessonId);}else setTimeout(wait,120);}; wait(); return;
+      }
+      if(st.page==='quizzes'){
+        __origSwitchCoursePage('quizzes');
+        if(st.quizId){setTimeout(()=>window.openQuiz(courseId,st.quizId,true),100);} return;
+      }
+      if(st.page==='assignments'){
+        __origSwitchCoursePage('assignments');
+        if(st.assignmentId)setTimeout(()=>window.openAssignmentDetail(courseId,st.assignmentId,true),100); return;
+      }
+      if(st.page==='chat'){__origSwitchCoursePage('chat');return;}
+    }finally{setTimeout(()=>window.__restoringCourseRoute=false,150);}
+  };
+
+  /* Save quiz/assignment identity whenever it is opened. */
+  const __oldOpenQuiz=window.openQuiz;
+  window.openQuiz=async function(courseId,quizId,fromLesson=false){
+    if(!fromLesson){
+      persistCourseState();
+    }
+    if(!currentUser){triggerAuth();return;}
+    const proceed=async()=>{
+      const doc=await db.collection('courses').doc(courseId).collection('quizzes').doc(quizId).get();
+      if(!doc.exists)return showCustomAlert('خطأ','الاختبار غير موجود');
+      const q=doc.data()||{};
+      activeQuizId=quizId;activeQuizData=q;currentQuestionIndex=0;quizUserAnswers={};totalXPGained=0;quizCorrections=[];
+      currentCoursePage='quizzes';
+      document.getElementById('quizStartScreen').style.display='block';
+      document.getElementById('quizActiveScreen').style.display='none';
+      document.getElementById('quizResultScreen').style.display='none';
+      const rl=document.getElementById('quizResultLoading');if(rl)rl.style.display='none';
+      document.getElementById('quizStartTitle').textContent=q.titleAr||'اختبار';
+      document.getElementById('quizStartDesc').textContent=`يتكون هذا الاختبار من ${(q.questions||[]).length} سؤال.`;
+      document.getElementById('quizHeaderTitle').textContent=q.titleAr||'اختبار';
+      addQuizRouteButtons(fromLesson);
+      document.getElementById('quizOverlay').classList.add('active');
+      persistCourseState();
+    };
+    if(fromLesson) return proceed();
+    showCustomConfirm('تأكيد الدخول','هل أنت متأكد من بدء هذا الاختبار؟',proceed,()=>{});
+  };
+
+  function addQuizRouteButtons(fromLesson){
+    const c=document.getElementById('quizContainer'); if(!c)return;
+    let nav=document.getElementById('quizRouteNav');
+    if(!nav){nav=document.createElement('div');nav.id='quizRouteNav';nav.style.cssText='display:flex;gap:8px;justify-content:flex-start;align-items:center;flex-wrap:wrap;margin:0 0 18px;';c.insertBefore(nav,c.firstChild);}
+    nav.innerHTML=`<button type="button" class="full-page-back-btn" title="العودة للحصة" onclick="returnToQuizLesson()"><i class="fas fa-video"></i></button><button type="button" class="full-page-back-btn" title="الاختبارات" onclick="returnToQuizList()"><i class="fas fa-clipboard-question"></i></button>`;
+    nav.dataset.fromLesson=fromLesson?'1':'0';
+  }
+  window.returnToQuizLesson=function(){
+    const lid=activeLessonId||(()=>{try{return JSON.parse(localStorage.getItem('ananas.lastCourseState')||'{}').lessonId}catch(e){return null}})();
+    document.getElementById('quizOverlay')?.classList.remove('active');activeQuizId=null;activeQuizData=null;
+    if(activeCourseId&&lid){__origSwitchCoursePage('learning');setTimeout(()=>openLessonPlayer(activeCourseId,lid),50);}else if(activeCourseId)__origSwitchCoursePage('learning');
+    persistCourseState();
+  };
+  window.returnToQuizList=function(){document.getElementById('quizOverlay')?.classList.remove('active');activeQuizId=null;activeQuizData=null;if(activeCourseId)__origSwitchCoursePage('quizzes');persistCourseState();};
+
+  const __oldOpenAssignment=window.openAssignmentDetail;
+  window.openAssignmentDetail=async function(courseId,assignmentId,fromLesson=false){
+    window.activeAssignmentDetailId=assignmentId;currentCoursePage='assignments';persistCourseState();
+    await __oldOpenAssignment(courseId,assignmentId);
+    const page=document.getElementById('courseAssignmentDetailPage');if(!page)return;
+    let nav=document.getElementById('assignmentRouteNav');
+    if(!nav){nav=document.createElement('div');nav.id='assignmentRouteNav';nav.style.cssText='display:flex;gap:8px;align-items:center;margin-bottom:14px;';page.querySelector('.page-title')?.prepend(nav);}
+    nav.innerHTML=`<button type="button" class="full-page-back-btn" title="العودة للحصة" onclick="returnToAssignmentLesson()"><i class="fas fa-video"></i></button><button type="button" class="full-page-back-btn" title="الواجبات" onclick="returnToAssignmentList()"><i class="fas fa-clipboard-list"></i></button>`;
+  };
+  window.returnToAssignmentLesson=function(){const lid=activeLessonId||(()=>{try{return JSON.parse(localStorage.getItem('ananas.lastCourseState')||'{}').lessonId}catch(e){return null}})();document.getElementById('courseAssignmentDetailPage')?.classList.remove('active');if(activeCourseId&&lid){__origSwitchCoursePage('learning');setTimeout(()=>openLessonPlayer(activeCourseId,lid),50);}else if(activeCourseId)__origSwitchCoursePage('learning');persistCourseState();};
+  window.returnToAssignmentList=function(){window.activeAssignmentDetailId=null;document.getElementById('courseAssignmentDetailPage')?.classList.remove('active');if(activeCourseId)__origSwitchCoursePage('assignments');persistCourseState();};
+
+  /* Clicking the buttons under a lesson opens the actual linked item, not its list. */
+  window.renderLessonRelatedActions=async function(courseId,lessonId){
+    const area=document.getElementById('lessonRelatedActions');if(!area)return;area.innerHTML='';
+    try{
+      const qs=await db.collection('courses').doc(courseId).collection('quizzes').where('lessonId','==',lessonId).get();
+      qs.forEach(doc=>{const b=document.createElement('button');b.className='related-action';b.innerHTML='<i class="fas fa-clipboard-question"></i> اختبار الحصة';b.onclick=()=>window.openQuiz(courseId,doc.id,true);area.appendChild(b);});
+      const as=await db.collection('courses').doc(courseId).collection('assignments').where('lessonId','==',lessonId).get();
+      as.forEach(doc=>{const b=document.createElement('button');b.className='related-action';b.innerHTML='<i class="fas fa-clipboard-list"></i> واجب الحصة';b.onclick=()=>window.openAssignmentDetail(courseId,doc.id,true);area.appendChild(b);});
+    }catch(e){console.error('related actions',e);}
+  };
+
+  /* Soft-delete chat messages: admins see the deleted message marked as deleted; students see a placeholder. */
+  window.deleteChatMessage=async function(courseId,msgId){
+    if(!currentUser)return triggerAuth();
+    const ref=db.collection('courses').doc(courseId).collection('chat').doc(msgId),snap=await ref.get();if(!snap.exists)return;
+    const m=snap.data()||{};if(m.userId!==currentUser.uid&&!isAdmin)return showCustomAlert('غير مسموح','لا يمكنك حذف هذه الرسالة.');
+    showCustomConfirm('حذف الرسالة','هل تريد حذف هذه الرسالة؟',async()=>{await ref.update({deleted:true,deletedAt:firebase.firestore.FieldValue.serverTimestamp(),deletedBy:currentUser.uid});},()=>{});
+  };
+  window.loadChatPage=function(courseId){
+    const container=document.getElementById('chatPageMessagesList');if(!container)return;
+    if(chatUnsubscribe){chatUnsubscribe();chatUnsubscribe=null;}
+    container.innerHTML='<p style="color:var(--text-muted);text-align:center;padding:30px;">جاري تحميل الرسائل...</p>';
+    chatUnsubscribe=db.collection('courses').doc(courseId).collection('chat').orderBy('createdAt','asc').onSnapshot(snapshot=>{
+      if(snapshot.empty){container.innerHTML='<p style="color:var(--text-muted);text-align:center;padding:30px;">لا توجد رسائل.</p>';return;}
+      let html='',lastDate='';const uid=currentUser?.uid||null;
+      snapshot.forEach(doc=>{const m=doc.data()||{};const date=m.createdAt?.toDate?m.createdAt.toDate():(m.createdAt?.seconds?new Date(m.createdAt.seconds*1000):new Date());const dateKey=date.toLocaleDateString('ar-SA',{year:'numeric',month:'long',day:'numeric'});if(dateKey!==lastDate){html+=`<div style="text-align:center;margin:15px 0;font-size:.8rem;color:var(--text-muted);"><span style="background:var(--bg-card);padding:5px 15px;border-radius:20px;">${escapeHtml(dateKey)}</span></div>`;lastDate=dateKey;}const mine=m.userId===uid,images=Array.isArray(m.imageUrls)?m.imageUrls:(m.imageUrl?[m.imageUrl]:[]),time=date.toLocaleTimeString('ar-SA',{hour:'2-digit',minute:'2-digit'});const deleted=!!m.deleted;const reply=m.replyToText?`<div class="reply-block"><div class="ru">${escapeHtml(m.replyToName||'زائر')}</div><div class="rt">${escapeHtml(m.replyToText)}</div></div>`:'';const gallery=(!deleted&&images.length)?`<div class="message-gallery">${images.map(u=>`<img src="${escapeHtml(u)}" alt="صورة" onclick="openChatMessageGallery('${courseId}','${doc.id}')">`).join('')}</div>`:'';let body='';if(deleted&&!isAdmin){body='<div class="t" style="color:var(--text-muted);font-style:italic;"><i class="fas fa-ban"></i> هذه الرسالة محذوفة</div>';}else{body=`${deleted?'<div style="color:#e74c3c;font-size:.78rem;font-weight:800;margin-bottom:5px;"><i class="fas fa-trash"></i> تم حذف هذه الرسالة</div>':''}<div class="t">${escapeHtml(m.message||'')}${m.edited?'<span class="edited-label">(معدلة)</span>':''}</div>${gallery}`;}const actions=deleted?'':`<div class="msg-actions"><button onclick='replyTo(${JSON.stringify(doc.id)},${JSON.stringify(m.userName||'زائر')},${JSON.stringify((m.message||'').slice(0,120))})' title="رد"><i class="fas fa-reply"></i></button>${mine?`<button onclick="editChatMessage('${courseId}','${doc.id}')" title="تعديل"><i class="fas fa-edit"></i></button>`:''}${(mine||isAdmin)?`<button onclick="deleteChatMessage('${courseId}','${doc.id}')" title="حذف"><i class="fas fa-trash"></i></button>`:''}</div>`;html+=`<div class="chat-msg ${mine?'sent':'received'} ${deleted?'deleted-message':''}" data-message-id="${doc.id}">${!mine?`<div class="msg-header"><span class="u">${escapeHtml(m.userName||'زائر')}</span></div>`:''}${reply}${body}<div class="msg-time">${time}</div>${actions}</div>`;});
+      container.innerHTML=html;container.scrollTop=container.scrollHeight;
+    },err=>{console.error(err);container.innerHTML='<p style="color:#e74c3c;text-align:center;padding:30px;">حدث خطأ في تحميل الدردشة.</p>';});
+  };
+
+  /* Ensure the enrollment agreement is explicit and cannot be bypassed. */
+  const agree=document.getElementById('enrollTermsAgree'),continueBtn=document.getElementById('enrollTermsContinueBtn');
+  if(agree&&continueBtn){const sync=()=>{continueBtn.disabled=!agree.checked;continueBtn.style.opacity=agree.checked?'1':'.5';continueBtn.style.cursor=agree.checked?'pointer':'not-allowed';};agree.addEventListener('change',sync);sync();}
+})();
+
+</script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js">
+
+/* ===== FINAL PATCH: persistent course route + direct linked quiz/assignment + soft-deleted chat ===== */
+(function(){
+  function routeState(){
+    return {uid:currentUser?.uid||'guest',courseId:activeCourseId,lessonId:activeLessonId||null,page:currentCoursePage,quizId:activeQuizId||null,assignmentId:window.activeAssignmentDetailId||null,lang:'ar',theme:document.body.classList.contains('light-mode')?'light':'dark'};
+  }
+  window.persistCourseState=function(){try{localStorage.setItem('ananas.lastCourseState',JSON.stringify(routeState()));}catch(e){}}
+
+  /* Remember the exact page/item, including a quiz or assignment detail. */
+  const __origSwitchCoursePage=window.switchCoursePage||switchCoursePage;
+  window.switchCoursePage=function(page){
+    if(currentCoursePage==='lessonPlayer' && page!=='lessonPlayer') { try{stopLessonForNavigation();}catch(e){} }
+    return __origSwitchCoursePage(page);
+  };
+
+  /* Re-open the last route after a temporary suspension expires or is cancelled. */
+  const __origOpenCourseContent=window.openCourseContent||openCourseContent;
+  window.openCourseContent=async function(courseId){
+    await __origOpenCourseContent(courseId);
+    if(window.__restoringCourseRoute) return;
+    const raw=localStorage.getItem('ananas.lastCourseState'); if(!raw||!currentUser)return;
+    let st; try{st=JSON.parse(raw);}catch(e){return;}
+    if(st.uid!==currentUser.uid || st.courseId!==courseId || !st.page || st.page==='overview') return;
+    window.__restoringCourseRoute=true;
+    try{
+      if(st.page==='dashboard') return;
+      if(st.page==='learning'){__origSwitchCoursePage('learning');return;}
+      if(st.page==='lessonPlayer'&&st.lessonId){
+        __origSwitchCoursePage('learning');
+        const wait=()=>{if(lessonListCache.some(l=>l.id===st.lessonId)){openLessonPlayer(courseId,st.lessonId);}else setTimeout(wait,120);}; wait(); return;
+      }
+      if(st.page==='quizzes'){
+        __origSwitchCoursePage('quizzes');
+        if(st.quizId){setTimeout(()=>window.openQuiz(courseId,st.quizId,true),100);} return;
+      }
+      if(st.page==='assignments'){
+        __origSwitchCoursePage('assignments');
+        if(st.assignmentId)setTimeout(()=>window.openAssignmentDetail(courseId,st.assignmentId,true),100); return;
+      }
+      if(st.page==='chat'){__origSwitchCoursePage('chat');return;}
+    }finally{setTimeout(()=>window.__restoringCourseRoute=false,150);}
+  };
+
+  /* Save quiz/assignment identity whenever it is opened. */
+  const __oldOpenQuiz=window.openQuiz;
+  window.openQuiz=async function(courseId,quizId,fromLesson=false){
+    if(!fromLesson){
+      persistCourseState();
+    }
+    if(!currentUser){triggerAuth();return;}
+    const proceed=async()=>{
+      const doc=await db.collection('courses').doc(courseId).collection('quizzes').doc(quizId).get();
+      if(!doc.exists)return showCustomAlert('خطأ','الاختبار غير موجود');
+      const q=doc.data()||{};
+      activeQuizId=quizId;activeQuizData=q;currentQuestionIndex=0;quizUserAnswers={};totalXPGained=0;quizCorrections=[];
+      currentCoursePage='quizzes';
+      document.getElementById('quizStartScreen').style.display='block';
+      document.getElementById('quizActiveScreen').style.display='none';
+      document.getElementById('quizResultScreen').style.display='none';
+      const rl=document.getElementById('quizResultLoading');if(rl)rl.style.display='none';
+      document.getElementById('quizStartTitle').textContent=q.titleAr||'اختبار';
+      document.getElementById('quizStartDesc').textContent=`يتكون هذا الاختبار من ${(q.questions||[]).length} سؤال.`;
+      document.getElementById('quizHeaderTitle').textContent=q.titleAr||'اختبار';
+      addQuizRouteButtons(fromLesson);
+      document.getElementById('quizOverlay').classList.add('active');
+      persistCourseState();
+    };
+    if(fromLesson) return proceed();
+    showCustomConfirm('تأكيد الدخول','هل أنت متأكد من بدء هذا الاختبار؟',proceed,()=>{});
+  };
+
+  function addQuizRouteButtons(fromLesson){
+    const c=document.getElementById('quizContainer'); if(!c)return;
+    let nav=document.getElementById('quizRouteNav');
+    if(!nav){nav=document.createElement('div');nav.id='quizRouteNav';nav.style.cssText='display:flex;gap:8px;justify-content:flex-start;align-items:center;flex-wrap:wrap;margin:0 0 18px;';c.insertBefore(nav,c.firstChild);}
+    nav.innerHTML=`<button type="button" class="full-page-back-btn" title="العودة للحصة" onclick="returnToQuizLesson()"><i class="fas fa-video"></i></button><button type="button" class="full-page-back-btn" title="الاختبارات" onclick="returnToQuizList()"><i class="fas fa-clipboard-question"></i></button>`;
+    nav.dataset.fromLesson=fromLesson?'1':'0';
+  }
+  window.returnToQuizLesson=function(){
+    const lid=activeLessonId||(()=>{try{return JSON.parse(localStorage.getItem('ananas.lastCourseState')||'{}').lessonId}catch(e){return null}})();
+    document.getElementById('quizOverlay')?.classList.remove('active');activeQuizId=null;activeQuizData=null;
+    if(activeCourseId&&lid){__origSwitchCoursePage('learning');setTimeout(()=>openLessonPlayer(activeCourseId,lid),50);}else if(activeCourseId)__origSwitchCoursePage('learning');
+    persistCourseState();
+  };
+  window.returnToQuizList=function(){document.getElementById('quizOverlay')?.classList.remove('active');activeQuizId=null;activeQuizData=null;if(activeCourseId)__origSwitchCoursePage('quizzes');persistCourseState();};
+
+  const __oldOpenAssignment=window.openAssignmentDetail;
+  window.openAssignmentDetail=async function(courseId,assignmentId,fromLesson=false){
+    window.activeAssignmentDetailId=assignmentId;currentCoursePage='assignments';persistCourseState();
+    await __oldOpenAssignment(courseId,assignmentId);
+    const page=document.getElementById('courseAssignmentDetailPage');if(!page)return;
+    let nav=document.getElementById('assignmentRouteNav');
+    if(!nav){nav=document.createElement('div');nav.id='assignmentRouteNav';nav.style.cssText='display:flex;gap:8px;align-items:center;margin-bottom:14px;';page.querySelector('.page-title')?.prepend(nav);}
+    nav.innerHTML=`<button type="button" class="full-page-back-btn" title="العودة للحصة" onclick="returnToAssignmentLesson()"><i class="fas fa-video"></i></button><button type="button" class="full-page-back-btn" title="الواجبات" onclick="returnToAssignmentList()"><i class="fas fa-clipboard-list"></i></button>`;
+  };
+  window.returnToAssignmentLesson=function(){const lid=activeLessonId||(()=>{try{return JSON.parse(localStorage.getItem('ananas.lastCourseState')||'{}').lessonId}catch(e){return null}})();document.getElementById('courseAssignmentDetailPage')?.classList.remove('active');if(activeCourseId&&lid){__origSwitchCoursePage('learning');setTimeout(()=>openLessonPlayer(activeCourseId,lid),50);}else if(activeCourseId)__origSwitchCoursePage('learning');persistCourseState();};
+  window.returnToAssignmentList=function(){window.activeAssignmentDetailId=null;document.getElementById('courseAssignmentDetailPage')?.classList.remove('active');if(activeCourseId)__origSwitchCoursePage('assignments');persistCourseState();};
+
+  /* Clicking the buttons under a lesson opens the actual linked item, not its list. */
+  window.renderLessonRelatedActions=async function(courseId,lessonId){
+    const area=document.getElementById('lessonRelatedActions');if(!area)return;area.innerHTML='';
+    try{
+      const qs=await db.collection('courses').doc(courseId).collection('quizzes').where('lessonId','==',lessonId).get();
+      qs.forEach(doc=>{const b=document.createElement('button');b.className='related-action';b.innerHTML='<i class="fas fa-clipboard-question"></i> اختبار الحصة';b.onclick=()=>window.openQuiz(courseId,doc.id,true);area.appendChild(b);});
+      const as=await db.collection('courses').doc(courseId).collection('assignments').where('lessonId','==',lessonId).get();
+      as.forEach(doc=>{const b=document.createElement('button');b.className='related-action';b.innerHTML='<i class="fas fa-clipboard-list"></i> واجب الحصة';b.onclick=()=>window.openAssignmentDetail(courseId,doc.id,true);area.appendChild(b);});
+    }catch(e){console.error('related actions',e);}
+  };
+
+  /* Soft-delete chat messages: admins see the deleted message marked as deleted; students see a placeholder. */
+  window.deleteChatMessage=async function(courseId,msgId){
+    if(!currentUser)return triggerAuth();
+    const ref=db.collection('courses').doc(courseId).collection('chat').doc(msgId),snap=await ref.get();if(!snap.exists)return;
+    const m=snap.data()||{};if(m.userId!==currentUser.uid&&!isAdmin)return showCustomAlert('غير مسموح','لا يمكنك حذف هذه الرسالة.');
+    showCustomConfirm('حذف الرسالة','هل تريد حذف هذه الرسالة؟',async()=>{await ref.update({deleted:true,deletedAt:firebase.firestore.FieldValue.serverTimestamp(),deletedBy:currentUser.uid});},()=>{});
+  };
+  window.loadChatPage=function(courseId){
+    const container=document.getElementById('chatPageMessagesList');if(!container)return;
+    if(chatUnsubscribe){chatUnsubscribe();chatUnsubscribe=null;}
+    container.innerHTML='<p style="color:var(--text-muted);text-align:center;padding:30px;">جاري تحميل الرسائل...</p>';
+    chatUnsubscribe=db.collection('courses').doc(courseId).collection('chat').orderBy('createdAt','asc').onSnapshot(snapshot=>{
+      if(snapshot.empty){container.innerHTML='<p style="color:var(--text-muted);text-align:center;padding:30px;">لا توجد رسائل.</p>';return;}
+      let html='',lastDate='';const uid=currentUser?.uid||null;
+      snapshot.forEach(doc=>{const m=doc.data()||{};const date=m.createdAt?.toDate?m.createdAt.toDate():(m.createdAt?.seconds?new Date(m.createdAt.seconds*1000):new Date());const dateKey=date.toLocaleDateString('ar-SA',{year:'numeric',month:'long',day:'numeric'});if(dateKey!==lastDate){html+=`<div style="text-align:center;margin:15px 0;font-size:.8rem;color:var(--text-muted);"><span style="background:var(--bg-card);padding:5px 15px;border-radius:20px;">${escapeHtml(dateKey)}</span></div>`;lastDate=dateKey;}const mine=m.userId===uid,images=Array.isArray(m.imageUrls)?m.imageUrls:(m.imageUrl?[m.imageUrl]:[]),time=date.toLocaleTimeString('ar-SA',{hour:'2-digit',minute:'2-digit'});const deleted=!!m.deleted;const reply=m.replyToText?`<div class="reply-block"><div class="ru">${escapeHtml(m.replyToName||'زائر')}</div><div class="rt">${escapeHtml(m.replyToText)}</div></div>`:'';const gallery=(!deleted&&images.length)?`<div class="message-gallery">${images.map(u=>`<img src="${escapeHtml(u)}" alt="صورة" onclick="openChatMessageGallery('${courseId}','${doc.id}')">`).join('')}</div>`:'';let body='';if(deleted&&!isAdmin){body='<div class="t" style="color:var(--text-muted);font-style:italic;"><i class="fas fa-ban"></i> هذه الرسالة محذوفة</div>';}else{body=`${deleted?'<div style="color:#e74c3c;font-size:.78rem;font-weight:800;margin-bottom:5px;"><i class="fas fa-trash"></i> تم حذف هذه الرسالة</div>':''}<div class="t">${escapeHtml(m.message||'')}${m.edited?'<span class="edited-label">(معدلة)</span>':''}</div>${gallery}`;}const actions=deleted?'':`<div class="msg-actions"><button onclick='replyTo(${JSON.stringify(doc.id)},${JSON.stringify(m.userName||'زائر')},${JSON.stringify((m.message||'').slice(0,120))})' title="رد"><i class="fas fa-reply"></i></button>${mine?`<button onclick="editChatMessage('${courseId}','${doc.id}')" title="تعديل"><i class="fas fa-edit"></i></button>`:''}${(mine||isAdmin)?`<button onclick="deleteChatMessage('${courseId}','${doc.id}')" title="حذف"><i class="fas fa-trash"></i></button>`:''}</div>`;html+=`<div class="chat-msg ${mine?'sent':'received'} ${deleted?'deleted-message':''}" data-message-id="${doc.id}">${!mine?`<div class="msg-header"><span class="u">${escapeHtml(m.userName||'زائر')}</span></div>`:''}${reply}${body}<div class="msg-time">${time}</div>${actions}</div>`;});
+      container.innerHTML=html;container.scrollTop=container.scrollHeight;
+    },err=>{console.error(err);container.innerHTML='<p style="color:#e74c3c;text-align:center;padding:30px;">حدث خطأ في تحميل الدردشة.</p>';});
+  };
+
+  /* Ensure the enrollment agreement is explicit and cannot be bypassed. */
+  const agree=document.getElementById('enrollTermsAgree'),continueBtn=document.getElementById('enrollTermsContinueBtn');
+  if(agree&&continueBtn){const sync=()=>{continueBtn.disabled=!agree.checked;continueBtn.style.opacity=agree.checked?'1':'.5';continueBtn.style.cursor=agree.checked?'pointer':'not-allowed';};agree.addEventListener('change',sync);sync();}
+})();
+
+</script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js">
+
+/* ===== FINAL PATCH: persistent course route + direct linked quiz/assignment + soft-deleted chat ===== */
+(function(){
+  function routeState(){
+    return {uid:currentUser?.uid||'guest',courseId:activeCourseId,lessonId:activeLessonId||null,page:currentCoursePage,quizId:activeQuizId||null,assignmentId:window.activeAssignmentDetailId||null,lang:'ar',theme:document.body.classList.contains('light-mode')?'light':'dark'};
+  }
+  window.persistCourseState=function(){try{localStorage.setItem('ananas.lastCourseState',JSON.stringify(routeState()));}catch(e){}}
+
+  /* Remember the exact page/item, including a quiz or assignment detail. */
+  const __origSwitchCoursePage=window.switchCoursePage||switchCoursePage;
+  window.switchCoursePage=function(page){
+    if(currentCoursePage==='lessonPlayer' && page!=='lessonPlayer') { try{stopLessonForNavigation();}catch(e){} }
+    return __origSwitchCoursePage(page);
+  };
+
+  /* Re-open the last route after a temporary suspension expires or is cancelled. */
+  const __origOpenCourseContent=window.openCourseContent||openCourseContent;
+  window.openCourseContent=async function(courseId){
+    await __origOpenCourseContent(courseId);
+    if(window.__restoringCourseRoute) return;
+    const raw=localStorage.getItem('ananas.lastCourseState'); if(!raw||!currentUser)return;
+    let st; try{st=JSON.parse(raw);}catch(e){return;}
+    if(st.uid!==currentUser.uid || st.courseId!==courseId || !st.page || st.page==='overview') return;
+    window.__restoringCourseRoute=true;
+    try{
+      if(st.page==='dashboard') return;
+      if(st.page==='learning'){__origSwitchCoursePage('learning');return;}
+      if(st.page==='lessonPlayer'&&st.lessonId){
+        __origSwitchCoursePage('learning');
+        const wait=()=>{if(lessonListCache.some(l=>l.id===st.lessonId)){openLessonPlayer(courseId,st.lessonId);}else setTimeout(wait,120);}; wait(); return;
+      }
+      if(st.page==='quizzes'){
+        __origSwitchCoursePage('quizzes');
+        if(st.quizId){setTimeout(()=>window.openQuiz(courseId,st.quizId,true),100);} return;
+      }
+      if(st.page==='assignments'){
+        __origSwitchCoursePage('assignments');
+        if(st.assignmentId)setTimeout(()=>window.openAssignmentDetail(courseId,st.assignmentId,true),100); return;
+      }
+      if(st.page==='chat'){__origSwitchCoursePage('chat');return;}
+    }finally{setTimeout(()=>window.__restoringCourseRoute=false,150);}
+  };
+
+  /* Save quiz/assignment identity whenever it is opened. */
+  const __oldOpenQuiz=window.openQuiz;
+  window.openQuiz=async function(courseId,quizId,fromLesson=false){
+    if(!fromLesson){
+      persistCourseState();
+    }
+    if(!currentUser){triggerAuth();return;}
+    const proceed=async()=>{
+      const doc=await db.collection('courses').doc(courseId).collection('quizzes').doc(quizId).get();
+      if(!doc.exists)return showCustomAlert('خطأ','الاختبار غير موجود');
+      const q=doc.data()||{};
+      activeQuizId=quizId;activeQuizData=q;currentQuestionIndex=0;quizUserAnswers={};totalXPGained=0;quizCorrections=[];
+      currentCoursePage='quizzes';
+      document.getElementById('quizStartScreen').style.display='block';
+      document.getElementById('quizActiveScreen').style.display='none';
+      document.getElementById('quizResultScreen').style.display='none';
+      const rl=document.getElementById('quizResultLoading');if(rl)rl.style.display='none';
+      document.getElementById('quizStartTitle').textContent=q.titleAr||'اختبار';
+      document.getElementById('quizStartDesc').textContent=`يتكون هذا الاختبار من ${(q.questions||[]).length} سؤال.`;
+      document.getElementById('quizHeaderTitle').textContent=q.titleAr||'اختبار';
+      addQuizRouteButtons(fromLesson);
+      document.getElementById('quizOverlay').classList.add('active');
+      persistCourseState();
+    };
+    if(fromLesson) return proceed();
+    showCustomConfirm('تأكيد الدخول','هل أنت متأكد من بدء هذا الاختبار؟',proceed,()=>{});
+  };
+
+  function addQuizRouteButtons(fromLesson){
+    const c=document.getElementById('quizContainer'); if(!c)return;
+    let nav=document.getElementById('quizRouteNav');
+    if(!nav){nav=document.createElement('div');nav.id='quizRouteNav';nav.style.cssText='display:flex;gap:8px;justify-content:flex-start;align-items:center;flex-wrap:wrap;margin:0 0 18px;';c.insertBefore(nav,c.firstChild);}
+    nav.innerHTML=`<button type="button" class="full-page-back-btn" title="العودة للحصة" onclick="returnToQuizLesson()"><i class="fas fa-video"></i></button><button type="button" class="full-page-back-btn" title="الاختبارات" onclick="returnToQuizList()"><i class="fas fa-clipboard-question"></i></button>`;
+    nav.dataset.fromLesson=fromLesson?'1':'0';
+  }
+  window.returnToQuizLesson=function(){
+    const lid=activeLessonId||(()=>{try{return JSON.parse(localStorage.getItem('ananas.lastCourseState')||'{}').lessonId}catch(e){return null}})();
+    document.getElementById('quizOverlay')?.classList.remove('active');activeQuizId=null;activeQuizData=null;
+    if(activeCourseId&&lid){__origSwitchCoursePage('learning');setTimeout(()=>openLessonPlayer(activeCourseId,lid),50);}else if(activeCourseId)__origSwitchCoursePage('learning');
+    persistCourseState();
+  };
+  window.returnToQuizList=function(){document.getElementById('quizOverlay')?.classList.remove('active');activeQuizId=null;activeQuizData=null;if(activeCourseId)__origSwitchCoursePage('quizzes');persistCourseState();};
+
+  const __oldOpenAssignment=window.openAssignmentDetail;
+  window.openAssignmentDetail=async function(courseId,assignmentId,fromLesson=false){
+    window.activeAssignmentDetailId=assignmentId;currentCoursePage='assignments';persistCourseState();
+    await __oldOpenAssignment(courseId,assignmentId);
+    const page=document.getElementById('courseAssignmentDetailPage');if(!page)return;
+    let nav=document.getElementById('assignmentRouteNav');
+    if(!nav){nav=document.createElement('div');nav.id='assignmentRouteNav';nav.style.cssText='display:flex;gap:8px;align-items:center;margin-bottom:14px;';page.querySelector('.page-title')?.prepend(nav);}
+    nav.innerHTML=`<button type="button" class="full-page-back-btn" title="العودة للحصة" onclick="returnToAssignmentLesson()"><i class="fas fa-video"></i></button><button type="button" class="full-page-back-btn" title="الواجبات" onclick="returnToAssignmentList()"><i class="fas fa-clipboard-list"></i></button>`;
+  };
+  window.returnToAssignmentLesson=function(){const lid=activeLessonId||(()=>{try{return JSON.parse(localStorage.getItem('ananas.lastCourseState')||'{}').lessonId}catch(e){return null}})();document.getElementById('courseAssignmentDetailPage')?.classList.remove('active');if(activeCourseId&&lid){__origSwitchCoursePage('learning');setTimeout(()=>openLessonPlayer(activeCourseId,lid),50);}else if(activeCourseId)__origSwitchCoursePage('learning');persistCourseState();};
+  window.returnToAssignmentList=function(){window.activeAssignmentDetailId=null;document.getElementById('courseAssignmentDetailPage')?.classList.remove('active');if(activeCourseId)__origSwitchCoursePage('assignments');persistCourseState();};
+
+  /* Clicking the buttons under a lesson opens the actual linked item, not its list. */
+  window.renderLessonRelatedActions=async function(courseId,lessonId){
+    const area=document.getElementById('lessonRelatedActions');if(!area)return;area.innerHTML='';
+    try{
+      const qs=await db.collection('courses').doc(courseId).collection('quizzes').where('lessonId','==',lessonId).get();
+      qs.forEach(doc=>{const b=document.createElement('button');b.className='related-action';b.innerHTML='<i class="fas fa-clipboard-question"></i> اختبار الحصة';b.onclick=()=>window.openQuiz(courseId,doc.id,true);area.appendChild(b);});
+      const as=await db.collection('courses').doc(courseId).collection('assignments').where('lessonId','==',lessonId).get();
+      as.forEach(doc=>{const b=document.createElement('button');b.className='related-action';b.innerHTML='<i class="fas fa-clipboard-list"></i> واجب الحصة';b.onclick=()=>window.openAssignmentDetail(courseId,doc.id,true);area.appendChild(b);});
+    }catch(e){console.error('related actions',e);}
+  };
+
+  /* Soft-delete chat messages: admins see the deleted message marked as deleted; students see a placeholder. */
+  window.deleteChatMessage=async function(courseId,msgId){
+    if(!currentUser)return triggerAuth();
+    const ref=db.collection('courses').doc(courseId).collection('chat').doc(msgId),snap=await ref.get();if(!snap.exists)return;
+    const m=snap.data()||{};if(m.userId!==currentUser.uid&&!isAdmin)return showCustomAlert('غير مسموح','لا يمكنك حذف هذه الرسالة.');
+    showCustomConfirm('حذف الرسالة','هل تريد حذف هذه الرسالة؟',async()=>{await ref.update({deleted:true,deletedAt:firebase.firestore.FieldValue.serverTimestamp(),deletedBy:currentUser.uid});},()=>{});
+  };
+  window.loadChatPage=function(courseId){
+    const container=document.getElementById('chatPageMessagesList');if(!container)return;
+    if(chatUnsubscribe){chatUnsubscribe();chatUnsubscribe=null;}
+    container.innerHTML='<p style="color:var(--text-muted);text-align:center;padding:30px;">جاري تحميل الرسائل...</p>';
+    chatUnsubscribe=db.collection('courses').doc(courseId).collection('chat').orderBy('createdAt','asc').onSnapshot(snapshot=>{
+      if(snapshot.empty){container.innerHTML='<p style="color:var(--text-muted);text-align:center;padding:30px;">لا توجد رسائل.</p>';return;}
+      let html='',lastDate='';const uid=currentUser?.uid||null;
+      snapshot.forEach(doc=>{const m=doc.data()||{};const date=m.createdAt?.toDate?m.createdAt.toDate():(m.createdAt?.seconds?new Date(m.createdAt.seconds*1000):new Date());const dateKey=date.toLocaleDateString('ar-SA',{year:'numeric',month:'long',day:'numeric'});if(dateKey!==lastDate){html+=`<div style="text-align:center;margin:15px 0;font-size:.8rem;color:var(--text-muted);"><span style="background:var(--bg-card);padding:5px 15px;border-radius:20px;">${escapeHtml(dateKey)}</span></div>`;lastDate=dateKey;}const mine=m.userId===uid,images=Array.isArray(m.imageUrls)?m.imageUrls:(m.imageUrl?[m.imageUrl]:[]),time=date.toLocaleTimeString('ar-SA',{hour:'2-digit',minute:'2-digit'});const deleted=!!m.deleted;const reply=m.replyToText?`<div class="reply-block"><div class="ru">${escapeHtml(m.replyToName||'زائر')}</div><div class="rt">${escapeHtml(m.replyToText)}</div></div>`:'';const gallery=(!deleted&&images.length)?`<div class="message-gallery">${images.map(u=>`<img src="${escapeHtml(u)}" alt="صورة" onclick="openChatMessageGallery('${courseId}','${doc.id}')">`).join('')}</div>`:'';let body='';if(deleted&&!isAdmin){body='<div class="t" style="color:var(--text-muted);font-style:italic;"><i class="fas fa-ban"></i> هذه الرسالة محذوفة</div>';}else{body=`${deleted?'<div style="color:#e74c3c;font-size:.78rem;font-weight:800;margin-bottom:5px;"><i class="fas fa-trash"></i> تم حذف هذه الرسالة</div>':''}<div class="t">${escapeHtml(m.message||'')}${m.edited?'<span class="edited-label">(معدلة)</span>':''}</div>${gallery}`;}const actions=deleted?'':`<div class="msg-actions"><button onclick='replyTo(${JSON.stringify(doc.id)},${JSON.stringify(m.userName||'زائر')},${JSON.stringify((m.message||'').slice(0,120))})' title="رد"><i class="fas fa-reply"></i></button>${mine?`<button onclick="editChatMessage('${courseId}','${doc.id}')" title="تعديل"><i class="fas fa-edit"></i></button>`:''}${(mine||isAdmin)?`<button onclick="deleteChatMessage('${courseId}','${doc.id}')" title="حذف"><i class="fas fa-trash"></i></button>`:''}</div>`;html+=`<div class="chat-msg ${mine?'sent':'received'} ${deleted?'deleted-message':''}" data-message-id="${doc.id}">${!mine?`<div class="msg-header"><span class="u">${escapeHtml(m.userName||'زائر')}</span></div>`:''}${reply}${body}<div class="msg-time">${time}</div>${actions}</div>`;});
+      container.innerHTML=html;container.scrollTop=container.scrollHeight;
+    },err=>{console.error(err);container.innerHTML='<p style="color:#e74c3c;text-align:center;padding:30px;">حدث خطأ في تحميل الدردشة.</p>';});
+  };
+
+  /* Ensure the enrollment agreement is explicit and cannot be bypassed. */
+  const agree=document.getElementById('enrollTermsAgree'),continueBtn=document.getElementById('enrollTermsContinueBtn');
+  if(agree&&continueBtn){const sync=()=>{continueBtn.disabled=!agree.checked;continueBtn.style.opacity=agree.checked?'1':'.5';continueBtn.style.cursor=agree.checked?'pointer':'not-allowed';};agree.addEventListener('change',sync);sync();}
+})();
+
+</script>
 
     <!-- ===== YouTube IFrame API ===== -->
-    <script src="https://www.youtube.com/iframe_api"></script>
+    <script src="https://www.youtube.com/iframe_api">
+
+/* ===== FINAL PATCH: persistent course route + direct linked quiz/assignment + soft-deleted chat ===== */
+(function(){
+  function routeState(){
+    return {uid:currentUser?.uid||'guest',courseId:activeCourseId,lessonId:activeLessonId||null,page:currentCoursePage,quizId:activeQuizId||null,assignmentId:window.activeAssignmentDetailId||null,lang:'ar',theme:document.body.classList.contains('light-mode')?'light':'dark'};
+  }
+  window.persistCourseState=function(){try{localStorage.setItem('ananas.lastCourseState',JSON.stringify(routeState()));}catch(e){}}
+
+  /* Remember the exact page/item, including a quiz or assignment detail. */
+  const __origSwitchCoursePage=window.switchCoursePage||switchCoursePage;
+  window.switchCoursePage=function(page){
+    if(currentCoursePage==='lessonPlayer' && page!=='lessonPlayer') { try{stopLessonForNavigation();}catch(e){} }
+    return __origSwitchCoursePage(page);
+  };
+
+  /* Re-open the last route after a temporary suspension expires or is cancelled. */
+  const __origOpenCourseContent=window.openCourseContent||openCourseContent;
+  window.openCourseContent=async function(courseId){
+    await __origOpenCourseContent(courseId);
+    if(window.__restoringCourseRoute) return;
+    const raw=localStorage.getItem('ananas.lastCourseState'); if(!raw||!currentUser)return;
+    let st; try{st=JSON.parse(raw);}catch(e){return;}
+    if(st.uid!==currentUser.uid || st.courseId!==courseId || !st.page || st.page==='overview') return;
+    window.__restoringCourseRoute=true;
+    try{
+      if(st.page==='dashboard') return;
+      if(st.page==='learning'){__origSwitchCoursePage('learning');return;}
+      if(st.page==='lessonPlayer'&&st.lessonId){
+        __origSwitchCoursePage('learning');
+        const wait=()=>{if(lessonListCache.some(l=>l.id===st.lessonId)){openLessonPlayer(courseId,st.lessonId);}else setTimeout(wait,120);}; wait(); return;
+      }
+      if(st.page==='quizzes'){
+        __origSwitchCoursePage('quizzes');
+        if(st.quizId){setTimeout(()=>window.openQuiz(courseId,st.quizId,true),100);} return;
+      }
+      if(st.page==='assignments'){
+        __origSwitchCoursePage('assignments');
+        if(st.assignmentId)setTimeout(()=>window.openAssignmentDetail(courseId,st.assignmentId,true),100); return;
+      }
+      if(st.page==='chat'){__origSwitchCoursePage('chat');return;}
+    }finally{setTimeout(()=>window.__restoringCourseRoute=false,150);}
+  };
+
+  /* Save quiz/assignment identity whenever it is opened. */
+  const __oldOpenQuiz=window.openQuiz;
+  window.openQuiz=async function(courseId,quizId,fromLesson=false){
+    if(!fromLesson){
+      persistCourseState();
+    }
+    if(!currentUser){triggerAuth();return;}
+    const proceed=async()=>{
+      const doc=await db.collection('courses').doc(courseId).collection('quizzes').doc(quizId).get();
+      if(!doc.exists)return showCustomAlert('خطأ','الاختبار غير موجود');
+      const q=doc.data()||{};
+      activeQuizId=quizId;activeQuizData=q;currentQuestionIndex=0;quizUserAnswers={};totalXPGained=0;quizCorrections=[];
+      currentCoursePage='quizzes';
+      document.getElementById('quizStartScreen').style.display='block';
+      document.getElementById('quizActiveScreen').style.display='none';
+      document.getElementById('quizResultScreen').style.display='none';
+      const rl=document.getElementById('quizResultLoading');if(rl)rl.style.display='none';
+      document.getElementById('quizStartTitle').textContent=q.titleAr||'اختبار';
+      document.getElementById('quizStartDesc').textContent=`يتكون هذا الاختبار من ${(q.questions||[]).length} سؤال.`;
+      document.getElementById('quizHeaderTitle').textContent=q.titleAr||'اختبار';
+      addQuizRouteButtons(fromLesson);
+      document.getElementById('quizOverlay').classList.add('active');
+      persistCourseState();
+    };
+    if(fromLesson) return proceed();
+    showCustomConfirm('تأكيد الدخول','هل أنت متأكد من بدء هذا الاختبار؟',proceed,()=>{});
+  };
+
+  function addQuizRouteButtons(fromLesson){
+    const c=document.getElementById('quizContainer'); if(!c)return;
+    let nav=document.getElementById('quizRouteNav');
+    if(!nav){nav=document.createElement('div');nav.id='quizRouteNav';nav.style.cssText='display:flex;gap:8px;justify-content:flex-start;align-items:center;flex-wrap:wrap;margin:0 0 18px;';c.insertBefore(nav,c.firstChild);}
+    nav.innerHTML=`<button type="button" class="full-page-back-btn" title="العودة للحصة" onclick="returnToQuizLesson()"><i class="fas fa-video"></i></button><button type="button" class="full-page-back-btn" title="الاختبارات" onclick="returnToQuizList()"><i class="fas fa-clipboard-question"></i></button>`;
+    nav.dataset.fromLesson=fromLesson?'1':'0';
+  }
+  window.returnToQuizLesson=function(){
+    const lid=activeLessonId||(()=>{try{return JSON.parse(localStorage.getItem('ananas.lastCourseState')||'{}').lessonId}catch(e){return null}})();
+    document.getElementById('quizOverlay')?.classList.remove('active');activeQuizId=null;activeQuizData=null;
+    if(activeCourseId&&lid){__origSwitchCoursePage('learning');setTimeout(()=>openLessonPlayer(activeCourseId,lid),50);}else if(activeCourseId)__origSwitchCoursePage('learning');
+    persistCourseState();
+  };
+  window.returnToQuizList=function(){document.getElementById('quizOverlay')?.classList.remove('active');activeQuizId=null;activeQuizData=null;if(activeCourseId)__origSwitchCoursePage('quizzes');persistCourseState();};
+
+  const __oldOpenAssignment=window.openAssignmentDetail;
+  window.openAssignmentDetail=async function(courseId,assignmentId,fromLesson=false){
+    window.activeAssignmentDetailId=assignmentId;currentCoursePage='assignments';persistCourseState();
+    await __oldOpenAssignment(courseId,assignmentId);
+    const page=document.getElementById('courseAssignmentDetailPage');if(!page)return;
+    let nav=document.getElementById('assignmentRouteNav');
+    if(!nav){nav=document.createElement('div');nav.id='assignmentRouteNav';nav.style.cssText='display:flex;gap:8px;align-items:center;margin-bottom:14px;';page.querySelector('.page-title')?.prepend(nav);}
+    nav.innerHTML=`<button type="button" class="full-page-back-btn" title="العودة للحصة" onclick="returnToAssignmentLesson()"><i class="fas fa-video"></i></button><button type="button" class="full-page-back-btn" title="الواجبات" onclick="returnToAssignmentList()"><i class="fas fa-clipboard-list"></i></button>`;
+  };
+  window.returnToAssignmentLesson=function(){const lid=activeLessonId||(()=>{try{return JSON.parse(localStorage.getItem('ananas.lastCourseState')||'{}').lessonId}catch(e){return null}})();document.getElementById('courseAssignmentDetailPage')?.classList.remove('active');if(activeCourseId&&lid){__origSwitchCoursePage('learning');setTimeout(()=>openLessonPlayer(activeCourseId,lid),50);}else if(activeCourseId)__origSwitchCoursePage('learning');persistCourseState();};
+  window.returnToAssignmentList=function(){window.activeAssignmentDetailId=null;document.getElementById('courseAssignmentDetailPage')?.classList.remove('active');if(activeCourseId)__origSwitchCoursePage('assignments');persistCourseState();};
+
+  /* Clicking the buttons under a lesson opens the actual linked item, not its list. */
+  window.renderLessonRelatedActions=async function(courseId,lessonId){
+    const area=document.getElementById('lessonRelatedActions');if(!area)return;area.innerHTML='';
+    try{
+      const qs=await db.collection('courses').doc(courseId).collection('quizzes').where('lessonId','==',lessonId).get();
+      qs.forEach(doc=>{const b=document.createElement('button');b.className='related-action';b.innerHTML='<i class="fas fa-clipboard-question"></i> اختبار الحصة';b.onclick=()=>window.openQuiz(courseId,doc.id,true);area.appendChild(b);});
+      const as=await db.collection('courses').doc(courseId).collection('assignments').where('lessonId','==',lessonId).get();
+      as.forEach(doc=>{const b=document.createElement('button');b.className='related-action';b.innerHTML='<i class="fas fa-clipboard-list"></i> واجب الحصة';b.onclick=()=>window.openAssignmentDetail(courseId,doc.id,true);area.appendChild(b);});
+    }catch(e){console.error('related actions',e);}
+  };
+
+  /* Soft-delete chat messages: admins see the deleted message marked as deleted; students see a placeholder. */
+  window.deleteChatMessage=async function(courseId,msgId){
+    if(!currentUser)return triggerAuth();
+    const ref=db.collection('courses').doc(courseId).collection('chat').doc(msgId),snap=await ref.get();if(!snap.exists)return;
+    const m=snap.data()||{};if(m.userId!==currentUser.uid&&!isAdmin)return showCustomAlert('غير مسموح','لا يمكنك حذف هذه الرسالة.');
+    showCustomConfirm('حذف الرسالة','هل تريد حذف هذه الرسالة؟',async()=>{await ref.update({deleted:true,deletedAt:firebase.firestore.FieldValue.serverTimestamp(),deletedBy:currentUser.uid});},()=>{});
+  };
+  window.loadChatPage=function(courseId){
+    const container=document.getElementById('chatPageMessagesList');if(!container)return;
+    if(chatUnsubscribe){chatUnsubscribe();chatUnsubscribe=null;}
+    container.innerHTML='<p style="color:var(--text-muted);text-align:center;padding:30px;">جاري تحميل الرسائل...</p>';
+    chatUnsubscribe=db.collection('courses').doc(courseId).collection('chat').orderBy('createdAt','asc').onSnapshot(snapshot=>{
+      if(snapshot.empty){container.innerHTML='<p style="color:var(--text-muted);text-align:center;padding:30px;">لا توجد رسائل.</p>';return;}
+      let html='',lastDate='';const uid=currentUser?.uid||null;
+      snapshot.forEach(doc=>{const m=doc.data()||{};const date=m.createdAt?.toDate?m.createdAt.toDate():(m.createdAt?.seconds?new Date(m.createdAt.seconds*1000):new Date());const dateKey=date.toLocaleDateString('ar-SA',{year:'numeric',month:'long',day:'numeric'});if(dateKey!==lastDate){html+=`<div style="text-align:center;margin:15px 0;font-size:.8rem;color:var(--text-muted);"><span style="background:var(--bg-card);padding:5px 15px;border-radius:20px;">${escapeHtml(dateKey)}</span></div>`;lastDate=dateKey;}const mine=m.userId===uid,images=Array.isArray(m.imageUrls)?m.imageUrls:(m.imageUrl?[m.imageUrl]:[]),time=date.toLocaleTimeString('ar-SA',{hour:'2-digit',minute:'2-digit'});const deleted=!!m.deleted;const reply=m.replyToText?`<div class="reply-block"><div class="ru">${escapeHtml(m.replyToName||'زائر')}</div><div class="rt">${escapeHtml(m.replyToText)}</div></div>`:'';const gallery=(!deleted&&images.length)?`<div class="message-gallery">${images.map(u=>`<img src="${escapeHtml(u)}" alt="صورة" onclick="openChatMessageGallery('${courseId}','${doc.id}')">`).join('')}</div>`:'';let body='';if(deleted&&!isAdmin){body='<div class="t" style="color:var(--text-muted);font-style:italic;"><i class="fas fa-ban"></i> هذه الرسالة محذوفة</div>';}else{body=`${deleted?'<div style="color:#e74c3c;font-size:.78rem;font-weight:800;margin-bottom:5px;"><i class="fas fa-trash"></i> تم حذف هذه الرسالة</div>':''}<div class="t">${escapeHtml(m.message||'')}${m.edited?'<span class="edited-label">(معدلة)</span>':''}</div>${gallery}`;}const actions=deleted?'':`<div class="msg-actions"><button onclick='replyTo(${JSON.stringify(doc.id)},${JSON.stringify(m.userName||'زائر')},${JSON.stringify((m.message||'').slice(0,120))})' title="رد"><i class="fas fa-reply"></i></button>${mine?`<button onclick="editChatMessage('${courseId}','${doc.id}')" title="تعديل"><i class="fas fa-edit"></i></button>`:''}${(mine||isAdmin)?`<button onclick="deleteChatMessage('${courseId}','${doc.id}')" title="حذف"><i class="fas fa-trash"></i></button>`:''}</div>`;html+=`<div class="chat-msg ${mine?'sent':'received'} ${deleted?'deleted-message':''}" data-message-id="${doc.id}">${!mine?`<div class="msg-header"><span class="u">${escapeHtml(m.userName||'زائر')}</span></div>`:''}${reply}${body}<div class="msg-time">${time}</div>${actions}</div>`;});
+      container.innerHTML=html;container.scrollTop=container.scrollHeight;
+    },err=>{console.error(err);container.innerHTML='<p style="color:#e74c3c;text-align:center;padding:30px;">حدث خطأ في تحميل الدردشة.</p>';});
+  };
+
+  /* Ensure the enrollment agreement is explicit and cannot be bypassed. */
+  const agree=document.getElementById('enrollTermsAgree'),continueBtn=document.getElementById('enrollTermsContinueBtn');
+  if(agree&&continueBtn){const sync=()=>{continueBtn.disabled=!agree.checked;continueBtn.style.opacity=agree.checked?'1':'.5';continueBtn.style.cursor=agree.checked?'pointer':'not-allowed';};agree.addEventListener('change',sync);sync();}
+})();
+
+</script>
     
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;600;700;900&display=swap');
@@ -1910,7 +2446,141 @@
         </div>
     </footer>
 
-    <script src="https://unpkg.com/aos@2.3.1/dist/aos.js"></script>
+    <script src="https://unpkg.com/aos@2.3.1/dist/aos.js">
+
+/* ===== FINAL PATCH: persistent course route + direct linked quiz/assignment + soft-deleted chat ===== */
+(function(){
+  function routeState(){
+    return {uid:currentUser?.uid||'guest',courseId:activeCourseId,lessonId:activeLessonId||null,page:currentCoursePage,quizId:activeQuizId||null,assignmentId:window.activeAssignmentDetailId||null,lang:'ar',theme:document.body.classList.contains('light-mode')?'light':'dark'};
+  }
+  window.persistCourseState=function(){try{localStorage.setItem('ananas.lastCourseState',JSON.stringify(routeState()));}catch(e){}}
+
+  /* Remember the exact page/item, including a quiz or assignment detail. */
+  const __origSwitchCoursePage=window.switchCoursePage||switchCoursePage;
+  window.switchCoursePage=function(page){
+    if(currentCoursePage==='lessonPlayer' && page!=='lessonPlayer') { try{stopLessonForNavigation();}catch(e){} }
+    return __origSwitchCoursePage(page);
+  };
+
+  /* Re-open the last route after a temporary suspension expires or is cancelled. */
+  const __origOpenCourseContent=window.openCourseContent||openCourseContent;
+  window.openCourseContent=async function(courseId){
+    await __origOpenCourseContent(courseId);
+    if(window.__restoringCourseRoute) return;
+    const raw=localStorage.getItem('ananas.lastCourseState'); if(!raw||!currentUser)return;
+    let st; try{st=JSON.parse(raw);}catch(e){return;}
+    if(st.uid!==currentUser.uid || st.courseId!==courseId || !st.page || st.page==='overview') return;
+    window.__restoringCourseRoute=true;
+    try{
+      if(st.page==='dashboard') return;
+      if(st.page==='learning'){__origSwitchCoursePage('learning');return;}
+      if(st.page==='lessonPlayer'&&st.lessonId){
+        __origSwitchCoursePage('learning');
+        const wait=()=>{if(lessonListCache.some(l=>l.id===st.lessonId)){openLessonPlayer(courseId,st.lessonId);}else setTimeout(wait,120);}; wait(); return;
+      }
+      if(st.page==='quizzes'){
+        __origSwitchCoursePage('quizzes');
+        if(st.quizId){setTimeout(()=>window.openQuiz(courseId,st.quizId,true),100);} return;
+      }
+      if(st.page==='assignments'){
+        __origSwitchCoursePage('assignments');
+        if(st.assignmentId)setTimeout(()=>window.openAssignmentDetail(courseId,st.assignmentId,true),100); return;
+      }
+      if(st.page==='chat'){__origSwitchCoursePage('chat');return;}
+    }finally{setTimeout(()=>window.__restoringCourseRoute=false,150);}
+  };
+
+  /* Save quiz/assignment identity whenever it is opened. */
+  const __oldOpenQuiz=window.openQuiz;
+  window.openQuiz=async function(courseId,quizId,fromLesson=false){
+    if(!fromLesson){
+      persistCourseState();
+    }
+    if(!currentUser){triggerAuth();return;}
+    const proceed=async()=>{
+      const doc=await db.collection('courses').doc(courseId).collection('quizzes').doc(quizId).get();
+      if(!doc.exists)return showCustomAlert('خطأ','الاختبار غير موجود');
+      const q=doc.data()||{};
+      activeQuizId=quizId;activeQuizData=q;currentQuestionIndex=0;quizUserAnswers={};totalXPGained=0;quizCorrections=[];
+      currentCoursePage='quizzes';
+      document.getElementById('quizStartScreen').style.display='block';
+      document.getElementById('quizActiveScreen').style.display='none';
+      document.getElementById('quizResultScreen').style.display='none';
+      const rl=document.getElementById('quizResultLoading');if(rl)rl.style.display='none';
+      document.getElementById('quizStartTitle').textContent=q.titleAr||'اختبار';
+      document.getElementById('quizStartDesc').textContent=`يتكون هذا الاختبار من ${(q.questions||[]).length} سؤال.`;
+      document.getElementById('quizHeaderTitle').textContent=q.titleAr||'اختبار';
+      addQuizRouteButtons(fromLesson);
+      document.getElementById('quizOverlay').classList.add('active');
+      persistCourseState();
+    };
+    if(fromLesson) return proceed();
+    showCustomConfirm('تأكيد الدخول','هل أنت متأكد من بدء هذا الاختبار؟',proceed,()=>{});
+  };
+
+  function addQuizRouteButtons(fromLesson){
+    const c=document.getElementById('quizContainer'); if(!c)return;
+    let nav=document.getElementById('quizRouteNav');
+    if(!nav){nav=document.createElement('div');nav.id='quizRouteNav';nav.style.cssText='display:flex;gap:8px;justify-content:flex-start;align-items:center;flex-wrap:wrap;margin:0 0 18px;';c.insertBefore(nav,c.firstChild);}
+    nav.innerHTML=`<button type="button" class="full-page-back-btn" title="العودة للحصة" onclick="returnToQuizLesson()"><i class="fas fa-video"></i></button><button type="button" class="full-page-back-btn" title="الاختبارات" onclick="returnToQuizList()"><i class="fas fa-clipboard-question"></i></button>`;
+    nav.dataset.fromLesson=fromLesson?'1':'0';
+  }
+  window.returnToQuizLesson=function(){
+    const lid=activeLessonId||(()=>{try{return JSON.parse(localStorage.getItem('ananas.lastCourseState')||'{}').lessonId}catch(e){return null}})();
+    document.getElementById('quizOverlay')?.classList.remove('active');activeQuizId=null;activeQuizData=null;
+    if(activeCourseId&&lid){__origSwitchCoursePage('learning');setTimeout(()=>openLessonPlayer(activeCourseId,lid),50);}else if(activeCourseId)__origSwitchCoursePage('learning');
+    persistCourseState();
+  };
+  window.returnToQuizList=function(){document.getElementById('quizOverlay')?.classList.remove('active');activeQuizId=null;activeQuizData=null;if(activeCourseId)__origSwitchCoursePage('quizzes');persistCourseState();};
+
+  const __oldOpenAssignment=window.openAssignmentDetail;
+  window.openAssignmentDetail=async function(courseId,assignmentId,fromLesson=false){
+    window.activeAssignmentDetailId=assignmentId;currentCoursePage='assignments';persistCourseState();
+    await __oldOpenAssignment(courseId,assignmentId);
+    const page=document.getElementById('courseAssignmentDetailPage');if(!page)return;
+    let nav=document.getElementById('assignmentRouteNav');
+    if(!nav){nav=document.createElement('div');nav.id='assignmentRouteNav';nav.style.cssText='display:flex;gap:8px;align-items:center;margin-bottom:14px;';page.querySelector('.page-title')?.prepend(nav);}
+    nav.innerHTML=`<button type="button" class="full-page-back-btn" title="العودة للحصة" onclick="returnToAssignmentLesson()"><i class="fas fa-video"></i></button><button type="button" class="full-page-back-btn" title="الواجبات" onclick="returnToAssignmentList()"><i class="fas fa-clipboard-list"></i></button>`;
+  };
+  window.returnToAssignmentLesson=function(){const lid=activeLessonId||(()=>{try{return JSON.parse(localStorage.getItem('ananas.lastCourseState')||'{}').lessonId}catch(e){return null}})();document.getElementById('courseAssignmentDetailPage')?.classList.remove('active');if(activeCourseId&&lid){__origSwitchCoursePage('learning');setTimeout(()=>openLessonPlayer(activeCourseId,lid),50);}else if(activeCourseId)__origSwitchCoursePage('learning');persistCourseState();};
+  window.returnToAssignmentList=function(){window.activeAssignmentDetailId=null;document.getElementById('courseAssignmentDetailPage')?.classList.remove('active');if(activeCourseId)__origSwitchCoursePage('assignments');persistCourseState();};
+
+  /* Clicking the buttons under a lesson opens the actual linked item, not its list. */
+  window.renderLessonRelatedActions=async function(courseId,lessonId){
+    const area=document.getElementById('lessonRelatedActions');if(!area)return;area.innerHTML='';
+    try{
+      const qs=await db.collection('courses').doc(courseId).collection('quizzes').where('lessonId','==',lessonId).get();
+      qs.forEach(doc=>{const b=document.createElement('button');b.className='related-action';b.innerHTML='<i class="fas fa-clipboard-question"></i> اختبار الحصة';b.onclick=()=>window.openQuiz(courseId,doc.id,true);area.appendChild(b);});
+      const as=await db.collection('courses').doc(courseId).collection('assignments').where('lessonId','==',lessonId).get();
+      as.forEach(doc=>{const b=document.createElement('button');b.className='related-action';b.innerHTML='<i class="fas fa-clipboard-list"></i> واجب الحصة';b.onclick=()=>window.openAssignmentDetail(courseId,doc.id,true);area.appendChild(b);});
+    }catch(e){console.error('related actions',e);}
+  };
+
+  /* Soft-delete chat messages: admins see the deleted message marked as deleted; students see a placeholder. */
+  window.deleteChatMessage=async function(courseId,msgId){
+    if(!currentUser)return triggerAuth();
+    const ref=db.collection('courses').doc(courseId).collection('chat').doc(msgId),snap=await ref.get();if(!snap.exists)return;
+    const m=snap.data()||{};if(m.userId!==currentUser.uid&&!isAdmin)return showCustomAlert('غير مسموح','لا يمكنك حذف هذه الرسالة.');
+    showCustomConfirm('حذف الرسالة','هل تريد حذف هذه الرسالة؟',async()=>{await ref.update({deleted:true,deletedAt:firebase.firestore.FieldValue.serverTimestamp(),deletedBy:currentUser.uid});},()=>{});
+  };
+  window.loadChatPage=function(courseId){
+    const container=document.getElementById('chatPageMessagesList');if(!container)return;
+    if(chatUnsubscribe){chatUnsubscribe();chatUnsubscribe=null;}
+    container.innerHTML='<p style="color:var(--text-muted);text-align:center;padding:30px;">جاري تحميل الرسائل...</p>';
+    chatUnsubscribe=db.collection('courses').doc(courseId).collection('chat').orderBy('createdAt','asc').onSnapshot(snapshot=>{
+      if(snapshot.empty){container.innerHTML='<p style="color:var(--text-muted);text-align:center;padding:30px;">لا توجد رسائل.</p>';return;}
+      let html='',lastDate='';const uid=currentUser?.uid||null;
+      snapshot.forEach(doc=>{const m=doc.data()||{};const date=m.createdAt?.toDate?m.createdAt.toDate():(m.createdAt?.seconds?new Date(m.createdAt.seconds*1000):new Date());const dateKey=date.toLocaleDateString('ar-SA',{year:'numeric',month:'long',day:'numeric'});if(dateKey!==lastDate){html+=`<div style="text-align:center;margin:15px 0;font-size:.8rem;color:var(--text-muted);"><span style="background:var(--bg-card);padding:5px 15px;border-radius:20px;">${escapeHtml(dateKey)}</span></div>`;lastDate=dateKey;}const mine=m.userId===uid,images=Array.isArray(m.imageUrls)?m.imageUrls:(m.imageUrl?[m.imageUrl]:[]),time=date.toLocaleTimeString('ar-SA',{hour:'2-digit',minute:'2-digit'});const deleted=!!m.deleted;const reply=m.replyToText?`<div class="reply-block"><div class="ru">${escapeHtml(m.replyToName||'زائر')}</div><div class="rt">${escapeHtml(m.replyToText)}</div></div>`:'';const gallery=(!deleted&&images.length)?`<div class="message-gallery">${images.map(u=>`<img src="${escapeHtml(u)}" alt="صورة" onclick="openChatMessageGallery('${courseId}','${doc.id}')">`).join('')}</div>`:'';let body='';if(deleted&&!isAdmin){body='<div class="t" style="color:var(--text-muted);font-style:italic;"><i class="fas fa-ban"></i> هذه الرسالة محذوفة</div>';}else{body=`${deleted?'<div style="color:#e74c3c;font-size:.78rem;font-weight:800;margin-bottom:5px;"><i class="fas fa-trash"></i> تم حذف هذه الرسالة</div>':''}<div class="t">${escapeHtml(m.message||'')}${m.edited?'<span class="edited-label">(معدلة)</span>':''}</div>${gallery}`;}const actions=deleted?'':`<div class="msg-actions"><button onclick='replyTo(${JSON.stringify(doc.id)},${JSON.stringify(m.userName||'زائر')},${JSON.stringify((m.message||'').slice(0,120))})' title="رد"><i class="fas fa-reply"></i></button>${mine?`<button onclick="editChatMessage('${courseId}','${doc.id}')" title="تعديل"><i class="fas fa-edit"></i></button>`:''}${(mine||isAdmin)?`<button onclick="deleteChatMessage('${courseId}','${doc.id}')" title="حذف"><i class="fas fa-trash"></i></button>`:''}</div>`;html+=`<div class="chat-msg ${mine?'sent':'received'} ${deleted?'deleted-message':''}" data-message-id="${doc.id}">${!mine?`<div class="msg-header"><span class="u">${escapeHtml(m.userName||'زائر')}</span></div>`:''}${reply}${body}<div class="msg-time">${time}</div>${actions}</div>`;});
+      container.innerHTML=html;container.scrollTop=container.scrollHeight;
+    },err=>{console.error(err);container.innerHTML='<p style="color:#e74c3c;text-align:center;padding:30px;">حدث خطأ في تحميل الدردشة.</p>';});
+  };
+
+  /* Ensure the enrollment agreement is explicit and cannot be bypassed. */
+  const agree=document.getElementById('enrollTermsAgree'),continueBtn=document.getElementById('enrollTermsContinueBtn');
+  if(agree&&continueBtn){const sync=()=>{continueBtn.disabled=!agree.checked;continueBtn.style.opacity=agree.checked?'1':'.5';continueBtn.style.cursor=agree.checked?'pointer':'not-allowed';};agree.addEventListener('change',sync);sync();}
+})();
+
+</script>
     <script>
         // ================================================================
         // 1. إعداد Firebase & Cloudinary
@@ -5577,6 +6247,140 @@
         });
         adminGuardObserver.observe(document.body,{subtree:true,childList:true});
 
-    </script>
+    
+
+/* ===== FINAL PATCH: persistent course route + direct linked quiz/assignment + soft-deleted chat ===== */
+(function(){
+  function routeState(){
+    return {uid:currentUser?.uid||'guest',courseId:activeCourseId,lessonId:activeLessonId||null,page:currentCoursePage,quizId:activeQuizId||null,assignmentId:window.activeAssignmentDetailId||null,lang:'ar',theme:document.body.classList.contains('light-mode')?'light':'dark'};
+  }
+  window.persistCourseState=function(){try{localStorage.setItem('ananas.lastCourseState',JSON.stringify(routeState()));}catch(e){}}
+
+  /* Remember the exact page/item, including a quiz or assignment detail. */
+  const __origSwitchCoursePage=window.switchCoursePage||switchCoursePage;
+  window.switchCoursePage=function(page){
+    if(currentCoursePage==='lessonPlayer' && page!=='lessonPlayer') { try{stopLessonForNavigation();}catch(e){} }
+    return __origSwitchCoursePage(page);
+  };
+
+  /* Re-open the last route after a temporary suspension expires or is cancelled. */
+  const __origOpenCourseContent=window.openCourseContent||openCourseContent;
+  window.openCourseContent=async function(courseId){
+    await __origOpenCourseContent(courseId);
+    if(window.__restoringCourseRoute) return;
+    const raw=localStorage.getItem('ananas.lastCourseState'); if(!raw||!currentUser)return;
+    let st; try{st=JSON.parse(raw);}catch(e){return;}
+    if(st.uid!==currentUser.uid || st.courseId!==courseId || !st.page || st.page==='overview') return;
+    window.__restoringCourseRoute=true;
+    try{
+      if(st.page==='dashboard') return;
+      if(st.page==='learning'){__origSwitchCoursePage('learning');return;}
+      if(st.page==='lessonPlayer'&&st.lessonId){
+        __origSwitchCoursePage('learning');
+        const wait=()=>{if(lessonListCache.some(l=>l.id===st.lessonId)){openLessonPlayer(courseId,st.lessonId);}else setTimeout(wait,120);}; wait(); return;
+      }
+      if(st.page==='quizzes'){
+        __origSwitchCoursePage('quizzes');
+        if(st.quizId){setTimeout(()=>window.openQuiz(courseId,st.quizId,true),100);} return;
+      }
+      if(st.page==='assignments'){
+        __origSwitchCoursePage('assignments');
+        if(st.assignmentId)setTimeout(()=>window.openAssignmentDetail(courseId,st.assignmentId,true),100); return;
+      }
+      if(st.page==='chat'){__origSwitchCoursePage('chat');return;}
+    }finally{setTimeout(()=>window.__restoringCourseRoute=false,150);}
+  };
+
+  /* Save quiz/assignment identity whenever it is opened. */
+  const __oldOpenQuiz=window.openQuiz;
+  window.openQuiz=async function(courseId,quizId,fromLesson=false){
+    if(!fromLesson){
+      persistCourseState();
+    }
+    if(!currentUser){triggerAuth();return;}
+    const proceed=async()=>{
+      const doc=await db.collection('courses').doc(courseId).collection('quizzes').doc(quizId).get();
+      if(!doc.exists)return showCustomAlert('خطأ','الاختبار غير موجود');
+      const q=doc.data()||{};
+      activeQuizId=quizId;activeQuizData=q;currentQuestionIndex=0;quizUserAnswers={};totalXPGained=0;quizCorrections=[];
+      currentCoursePage='quizzes';
+      document.getElementById('quizStartScreen').style.display='block';
+      document.getElementById('quizActiveScreen').style.display='none';
+      document.getElementById('quizResultScreen').style.display='none';
+      const rl=document.getElementById('quizResultLoading');if(rl)rl.style.display='none';
+      document.getElementById('quizStartTitle').textContent=q.titleAr||'اختبار';
+      document.getElementById('quizStartDesc').textContent=`يتكون هذا الاختبار من ${(q.questions||[]).length} سؤال.`;
+      document.getElementById('quizHeaderTitle').textContent=q.titleAr||'اختبار';
+      addQuizRouteButtons(fromLesson);
+      document.getElementById('quizOverlay').classList.add('active');
+      persistCourseState();
+    };
+    if(fromLesson) return proceed();
+    showCustomConfirm('تأكيد الدخول','هل أنت متأكد من بدء هذا الاختبار؟',proceed,()=>{});
+  };
+
+  function addQuizRouteButtons(fromLesson){
+    const c=document.getElementById('quizContainer'); if(!c)return;
+    let nav=document.getElementById('quizRouteNav');
+    if(!nav){nav=document.createElement('div');nav.id='quizRouteNav';nav.style.cssText='display:flex;gap:8px;justify-content:flex-start;align-items:center;flex-wrap:wrap;margin:0 0 18px;';c.insertBefore(nav,c.firstChild);}
+    nav.innerHTML=`<button type="button" class="full-page-back-btn" title="العودة للحصة" onclick="returnToQuizLesson()"><i class="fas fa-video"></i></button><button type="button" class="full-page-back-btn" title="الاختبارات" onclick="returnToQuizList()"><i class="fas fa-clipboard-question"></i></button>`;
+    nav.dataset.fromLesson=fromLesson?'1':'0';
+  }
+  window.returnToQuizLesson=function(){
+    const lid=activeLessonId||(()=>{try{return JSON.parse(localStorage.getItem('ananas.lastCourseState')||'{}').lessonId}catch(e){return null}})();
+    document.getElementById('quizOverlay')?.classList.remove('active');activeQuizId=null;activeQuizData=null;
+    if(activeCourseId&&lid){__origSwitchCoursePage('learning');setTimeout(()=>openLessonPlayer(activeCourseId,lid),50);}else if(activeCourseId)__origSwitchCoursePage('learning');
+    persistCourseState();
+  };
+  window.returnToQuizList=function(){document.getElementById('quizOverlay')?.classList.remove('active');activeQuizId=null;activeQuizData=null;if(activeCourseId)__origSwitchCoursePage('quizzes');persistCourseState();};
+
+  const __oldOpenAssignment=window.openAssignmentDetail;
+  window.openAssignmentDetail=async function(courseId,assignmentId,fromLesson=false){
+    window.activeAssignmentDetailId=assignmentId;currentCoursePage='assignments';persistCourseState();
+    await __oldOpenAssignment(courseId,assignmentId);
+    const page=document.getElementById('courseAssignmentDetailPage');if(!page)return;
+    let nav=document.getElementById('assignmentRouteNav');
+    if(!nav){nav=document.createElement('div');nav.id='assignmentRouteNav';nav.style.cssText='display:flex;gap:8px;align-items:center;margin-bottom:14px;';page.querySelector('.page-title')?.prepend(nav);}
+    nav.innerHTML=`<button type="button" class="full-page-back-btn" title="العودة للحصة" onclick="returnToAssignmentLesson()"><i class="fas fa-video"></i></button><button type="button" class="full-page-back-btn" title="الواجبات" onclick="returnToAssignmentList()"><i class="fas fa-clipboard-list"></i></button>`;
+  };
+  window.returnToAssignmentLesson=function(){const lid=activeLessonId||(()=>{try{return JSON.parse(localStorage.getItem('ananas.lastCourseState')||'{}').lessonId}catch(e){return null}})();document.getElementById('courseAssignmentDetailPage')?.classList.remove('active');if(activeCourseId&&lid){__origSwitchCoursePage('learning');setTimeout(()=>openLessonPlayer(activeCourseId,lid),50);}else if(activeCourseId)__origSwitchCoursePage('learning');persistCourseState();};
+  window.returnToAssignmentList=function(){window.activeAssignmentDetailId=null;document.getElementById('courseAssignmentDetailPage')?.classList.remove('active');if(activeCourseId)__origSwitchCoursePage('assignments');persistCourseState();};
+
+  /* Clicking the buttons under a lesson opens the actual linked item, not its list. */
+  window.renderLessonRelatedActions=async function(courseId,lessonId){
+    const area=document.getElementById('lessonRelatedActions');if(!area)return;area.innerHTML='';
+    try{
+      const qs=await db.collection('courses').doc(courseId).collection('quizzes').where('lessonId','==',lessonId).get();
+      qs.forEach(doc=>{const b=document.createElement('button');b.className='related-action';b.innerHTML='<i class="fas fa-clipboard-question"></i> اختبار الحصة';b.onclick=()=>window.openQuiz(courseId,doc.id,true);area.appendChild(b);});
+      const as=await db.collection('courses').doc(courseId).collection('assignments').where('lessonId','==',lessonId).get();
+      as.forEach(doc=>{const b=document.createElement('button');b.className='related-action';b.innerHTML='<i class="fas fa-clipboard-list"></i> واجب الحصة';b.onclick=()=>window.openAssignmentDetail(courseId,doc.id,true);area.appendChild(b);});
+    }catch(e){console.error('related actions',e);}
+  };
+
+  /* Soft-delete chat messages: admins see the deleted message marked as deleted; students see a placeholder. */
+  window.deleteChatMessage=async function(courseId,msgId){
+    if(!currentUser)return triggerAuth();
+    const ref=db.collection('courses').doc(courseId).collection('chat').doc(msgId),snap=await ref.get();if(!snap.exists)return;
+    const m=snap.data()||{};if(m.userId!==currentUser.uid&&!isAdmin)return showCustomAlert('غير مسموح','لا يمكنك حذف هذه الرسالة.');
+    showCustomConfirm('حذف الرسالة','هل تريد حذف هذه الرسالة؟',async()=>{await ref.update({deleted:true,deletedAt:firebase.firestore.FieldValue.serverTimestamp(),deletedBy:currentUser.uid});},()=>{});
+  };
+  window.loadChatPage=function(courseId){
+    const container=document.getElementById('chatPageMessagesList');if(!container)return;
+    if(chatUnsubscribe){chatUnsubscribe();chatUnsubscribe=null;}
+    container.innerHTML='<p style="color:var(--text-muted);text-align:center;padding:30px;">جاري تحميل الرسائل...</p>';
+    chatUnsubscribe=db.collection('courses').doc(courseId).collection('chat').orderBy('createdAt','asc').onSnapshot(snapshot=>{
+      if(snapshot.empty){container.innerHTML='<p style="color:var(--text-muted);text-align:center;padding:30px;">لا توجد رسائل.</p>';return;}
+      let html='',lastDate='';const uid=currentUser?.uid||null;
+      snapshot.forEach(doc=>{const m=doc.data()||{};const date=m.createdAt?.toDate?m.createdAt.toDate():(m.createdAt?.seconds?new Date(m.createdAt.seconds*1000):new Date());const dateKey=date.toLocaleDateString('ar-SA',{year:'numeric',month:'long',day:'numeric'});if(dateKey!==lastDate){html+=`<div style="text-align:center;margin:15px 0;font-size:.8rem;color:var(--text-muted);"><span style="background:var(--bg-card);padding:5px 15px;border-radius:20px;">${escapeHtml(dateKey)}</span></div>`;lastDate=dateKey;}const mine=m.userId===uid,images=Array.isArray(m.imageUrls)?m.imageUrls:(m.imageUrl?[m.imageUrl]:[]),time=date.toLocaleTimeString('ar-SA',{hour:'2-digit',minute:'2-digit'});const deleted=!!m.deleted;const reply=m.replyToText?`<div class="reply-block"><div class="ru">${escapeHtml(m.replyToName||'زائر')}</div><div class="rt">${escapeHtml(m.replyToText)}</div></div>`:'';const gallery=(!deleted&&images.length)?`<div class="message-gallery">${images.map(u=>`<img src="${escapeHtml(u)}" alt="صورة" onclick="openChatMessageGallery('${courseId}','${doc.id}')">`).join('')}</div>`:'';let body='';if(deleted&&!isAdmin){body='<div class="t" style="color:var(--text-muted);font-style:italic;"><i class="fas fa-ban"></i> هذه الرسالة محذوفة</div>';}else{body=`${deleted?'<div style="color:#e74c3c;font-size:.78rem;font-weight:800;margin-bottom:5px;"><i class="fas fa-trash"></i> تم حذف هذه الرسالة</div>':''}<div class="t">${escapeHtml(m.message||'')}${m.edited?'<span class="edited-label">(معدلة)</span>':''}</div>${gallery}`;}const actions=deleted?'':`<div class="msg-actions"><button onclick='replyTo(${JSON.stringify(doc.id)},${JSON.stringify(m.userName||'زائر')},${JSON.stringify((m.message||'').slice(0,120))})' title="رد"><i class="fas fa-reply"></i></button>${mine?`<button onclick="editChatMessage('${courseId}','${doc.id}')" title="تعديل"><i class="fas fa-edit"></i></button>`:''}${(mine||isAdmin)?`<button onclick="deleteChatMessage('${courseId}','${doc.id}')" title="حذف"><i class="fas fa-trash"></i></button>`:''}</div>`;html+=`<div class="chat-msg ${mine?'sent':'received'} ${deleted?'deleted-message':''}" data-message-id="${doc.id}">${!mine?`<div class="msg-header"><span class="u">${escapeHtml(m.userName||'زائر')}</span></div>`:''}${reply}${body}<div class="msg-time">${time}</div>${actions}</div>`;});
+      container.innerHTML=html;container.scrollTop=container.scrollHeight;
+    },err=>{console.error(err);container.innerHTML='<p style="color:#e74c3c;text-align:center;padding:30px;">حدث خطأ في تحميل الدردشة.</p>';});
+  };
+
+  /* Ensure the enrollment agreement is explicit and cannot be bypassed. */
+  const agree=document.getElementById('enrollTermsAgree'),continueBtn=document.getElementById('enrollTermsContinueBtn');
+  if(agree&&continueBtn){const sync=()=>{continueBtn.disabled=!agree.checked;continueBtn.style.opacity=agree.checked?'1':'.5';continueBtn.style.cursor=agree.checked?'pointer':'not-allowed';};agree.addEventListener('change',sync);sync();}
+})();
+
+</script>
 </body>
 </html>
