@@ -1021,6 +1021,13 @@
         .chat-msg .message-gallery{display:flex;flex-direction:column;gap:6px;margin-top:6px;}
         .chat-msg .message-gallery img{width:220px;max-width:100%;max-height:220px;object-fit:cover;border-radius:10px;cursor:zoom-in;margin:0;}
         .chat-msg .edited-label{font-size:.65rem;opacity:.6;margin-inline-start:5px;}
+        .suspend-duration-choices{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin:8px 0 14px;}
+        .suspend-duration-choice{display:flex;align-items:center;justify-content:flex-start;gap:9px;min-height:52px;padding:10px 12px;border:1px solid var(--border);border-radius:14px;background:var(--bg-secondary);color:var(--text-primary);font-family:inherit;font-weight:700;cursor:pointer;transition:transform .18s ease,box-shadow .18s ease,border-color .18s ease,background .18s ease;}
+        .suspend-duration-choice i{color:var(--accent1);width:20px;text-align:center;}
+        .suspend-duration-choice:hover{transform:translateY(-1px);box-shadow:0 8px 18px rgba(0,0,0,.08);border-color:var(--accent1);}
+        .suspend-duration-choice.active{background:var(--accent-gradient);color:#fff;border-color:transparent;box-shadow:0 8px 20px rgba(77,93,230,.2);}
+        .suspend-duration-choice.active i{color:#fff;}
+        @media(max-width:600px){.suspend-duration-choices{grid-template-columns:1fr;}}
         .chat-lock-modal{width:min(620px,95vw);}
         .chat-lock-form-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
         .chat-lock-form-grid .full{grid-column:1/-1;}
@@ -1136,7 +1143,6 @@
             </a>
             <div class="nav-actions-top">
                 <a href="#coursesPage" class="nav-btn active" id="coursesNavBtn"><i class="fas fa-graduation-cap"></i></a>
-                <button class="nav-btn" id="langToggle"><i class="fas fa-language"></i></button>
                 <button class="nav-btn" id="themeToggle"><i class="fas fa-sun"></i></button>
                 <button class="auth-btn" id="authToggleBtn"><i class="fas fa-user"></i> <span id="authLabel"></span></button>
             </div>
@@ -1788,13 +1794,16 @@
         <div class="code-suspend-form">
             <div id="suspendUserLabel" style="font-weight:700;margin-bottom:10px;"></div>
             <label id="courseSuspendDurationLabel">مدة الإيقاف</label>
-            <select id="courseSuspendDuration">
-                <option value="1d" id="suspendOpt1d">يوم واحد</option>
-                <option value="3d" id="suspendOpt3d">3 أيام</option>
-                <option value="7d" id="suspendOpt7d">7 أيام</option>
-                <option value="30d" id="suspendOpt30d">30 يومًا</option>
-                <option value="custom" id="suspendOptCustom">حتى تاريخ ووقت محدد</option>
-                <option value="permanent" id="suspendOptPermanent">حتى ألغي الإيقاف بنفسي</option>
+            <div id="courseSuspendDurationChoices" class="suspend-duration-choices" role="radiogroup" aria-label="مدة الإيقاف">
+                <button type="button" class="suspend-duration-choice active" data-duration="1d"><i class="fas fa-clock"></i><span id="suspendChoice1d">يوم واحد</span></button>
+                <button type="button" class="suspend-duration-choice" data-duration="3d"><i class="fas fa-calendar-day"></i><span id="suspendChoice3d">3 أيام</span></button>
+                <button type="button" class="suspend-duration-choice" data-duration="7d"><i class="fas fa-calendar-week"></i><span id="suspendChoice7d">7 أيام</span></button>
+                <button type="button" class="suspend-duration-choice" data-duration="30d"><i class="fas fa-calendar-alt"></i><span id="suspendChoice30d">30 يومًا</span></button>
+                <button type="button" class="suspend-duration-choice" data-duration="custom"><i class="fas fa-calendar-check"></i><span id="suspendChoiceCustom">تاريخ ووقت محدد</span></button>
+                <button type="button" class="suspend-duration-choice" data-duration="permanent"><i class="fas fa-ban"></i><span id="suspendChoicePermanent">حتى ألغي الإيقاف بنفسي</span></button>
+            </div>
+            <select id="courseSuspendDuration" aria-hidden="true" tabindex="-1" style="position:absolute;width:1px;height:1px;opacity:0;pointer-events:none;">
+                <option value="1d">يوم واحد</option><option value="3d">3 أيام</option><option value="7d">7 أيام</option><option value="30d">30 يومًا</option><option value="custom">تاريخ ووقت محدد</option><option value="permanent">حتى ألغي الإيقاف بنفسي</option>
             </select>
             <div id="courseSuspendCustomWrap" style="display:none;">
                 <label id="courseSuspendUntilLabel">ينتهي الإيقاف في</label>
@@ -2180,6 +2189,12 @@
             safeSetText('suspendOpt30d', t.suspend30d || '30 days');
             safeSetText('suspendOptCustom', t.suspendCustom || 'Until a specific date and time');
             safeSetText('suspendOptPermanent', t.suspendPermanent || 'Until I manually lift the suspension');
+            safeSetText('suspendChoice1d', t.suspend1d || 'يوم واحد');
+            safeSetText('suspendChoice3d', t.suspend3d || '3 أيام');
+            safeSetText('suspendChoice7d', t.suspend7d || '7 أيام');
+            safeSetText('suspendChoice30d', t.suspend30d || '30 يومًا');
+            safeSetText('suspendChoiceCustom', 'تاريخ ووقت محدد');
+            safeSetText('suspendChoicePermanent', t.suspendPermanent || 'حتى ألغي الإيقاف بنفسي');
             safeSetText('courseSuspendUntilLabel', t.courseSuspendUntilLabel || 'Suspension ends at');
             safeSetText('courseSuspendTimeNote', t.courseSuspendTimeNote || 'Date and time use Saudi Arabia time.');
             safeSetText('courseSuspendReasonLabel', t.courseSuspendReasonLabel || 'Reason for suspension (optional)');
@@ -4486,14 +4501,24 @@
             if (!isAdmin || !activeCourseId) return;
             courseSuspendTargetUid = uid;
             document.getElementById('suspendUserLabel').textContent = `الحساب: ${name}`;
-            document.getElementById('courseSuspendDuration').value = '7d';
+            document.getElementById('courseSuspendDuration').value = '1d';
+            document.querySelectorAll('.suspend-duration-choice').forEach(b=>b.classList.toggle('active',b.dataset.duration==='1d'));
             document.getElementById('courseSuspendUntil').value = '';
             document.getElementById('courseSuspendReason').value = '';
             document.getElementById('courseSuspendCustomWrap').style.display = 'none';
             document.getElementById('courseAccessSuspendModal').classList.add('active');
         };
 
+        document.querySelectorAll('.suspend-duration-choice').forEach(btn=>btn.addEventListener('click',function(){
+            const value=this.dataset.duration;
+            const select=document.getElementById('courseSuspendDuration');
+            if(select) select.value=value;
+            document.querySelectorAll('.suspend-duration-choice').forEach(b=>b.classList.toggle('active',b===this));
+            const customWrap=document.getElementById('courseSuspendCustomWrap');
+            if(customWrap) customWrap.style.display=value==='custom'?'block':'none';
+        }));
         document.getElementById('courseSuspendDuration').addEventListener('change', function(){
+            document.querySelectorAll('.suspend-duration-choice').forEach(b=>b.classList.toggle('active',b.dataset.duration===this.value));
             document.getElementById('courseSuspendCustomWrap').style.display = this.value === 'custom' ? 'block' : 'none';
         });
 
@@ -4511,7 +4536,7 @@
                 until = new Date(`${m[1]}-${m[2]}-${m[3]}T${m[4]}:${m[5]}:00+03:00`);
                 if (isNaN(until.getTime()) || until.getTime() <= Date.now()) return showCustomAlert(currentLang==='ar'?'تنبيه':'Notice', currentLang==='ar'?'وقت الانتهاء يجب أن يكون في المستقبل.':'The end time must be in the future.');
             } else if (mode !== 'permanent') {
-                const days = parseInt(mode,10) || 7;
+                const days = ({'1d':1,'3d':3,'7d':7,'30d':30})[mode] || 1;
                 until = new Date(Date.now() + days*24*60*60*1000);
             }
             try {
@@ -4964,12 +4989,8 @@
         // ================================================================
         // 8. أحداث الواجهة والتهيئة
         // ================================================================
-        if (document.getElementById('langToggle')) document.getElementById('langToggle').addEventListener('click', () => {
-            currentLang = currentLang === 'ar' ? 'en' : 'ar';
-            applyTranslations(currentLang);
-            persistCourseState();
-            loadCourses();
-        });
+        // اللغة العربية هي اللغة الوحيدة للمنصة.
+        currentLang = 'ar';
 
         if (document.getElementById('themeToggle')) document.getElementById('themeToggle').addEventListener('click', () => {
             document.body.classList.toggle('light-mode');
@@ -5154,11 +5175,13 @@
         function restorePersistentState(){
             try{
                 const raw=localStorage.getItem('ananas.lastCourseState'); if(!raw)return;
-                const st=JSON.parse(raw); if(st.lang&&['ar','en'].includes(st.lang))currentLang=st.lang;
+                const st=JSON.parse(raw); currentLang='ar';
                 if(st.theme==='dark')document.body.classList.remove('light-mode'); else if(st.theme==='light')document.body.classList.add('light-mode');
             }catch(e){}
         }
         restorePersistentState();
+        currentLang = 'ar';
+        applyTranslations('ar');
 
         const adminGuardObserver=new MutationObserver(()=>{document.querySelectorAll('.admin-only').forEach(el=>{if(isAdmin)el.classList.add('show');else el.classList.remove('show');});});
         adminGuardObserver.observe(document.body,{subtree:true,childList:true});
