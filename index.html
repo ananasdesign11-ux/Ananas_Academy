@@ -1906,6 +1906,18 @@
 }
 @media(max-width:480px){.quiz-builder-card{padding:15px;border-radius:18px}.quiz-option-row{grid-template-columns:28px minmax(0,1fr) 32px}.quiz-builder-card textarea{min-height:82px}}
 </style>
+
+<style id="arabic-only-interface">
+/* المنصة عربية بالكامل: إخفاء جميع حقول ومحررات اللغة الإنجليزية من الواجهة */
+[id$="TitleEn"], [id$="TitleEnLbl"], [id$="DescEn"], [id$="DescEnLbl"],
+[id$="En"], [id$="EnLbl"], [id$="EnInput"], [id$="EnPlaceholder"],
+label[for*="En"], input[id*="En"], textarea[id*="En"] { display:none !important; }
+[dir="ltr"] { direction:rtl !important; }
+</style>
+
+<style id="arabic-only-visibility-final">
+[id*="En"], [class*="language"], [id*="Language"], [id*="language"] { display:none !important; }
+</style>
 </head>
 <body class="light-mode">
     
@@ -3322,6 +3334,16 @@
                         return bv - av;
                     });
                     coursesData = nextCourses;
+                    // Reconcile the displayed lesson counter with the real lessons subcollection.
+                    await Promise.all(coursesData.map(async course => {
+                        try {
+                            const ls = await db.collection('courses').doc(course.id).collection('lessons').get();
+                            let mins = 0; ls.forEach(d => mins += Number(d.data()?.duration)||0);
+                            course.lessons = ls.size;
+                            course.hours = Math.round((mins/60)*10)/10;
+                            await db.collection('courses').doc(course.id).set({lessons:ls.size,hours:course.hours},{merge:true});
+                        } catch(e) { console.warn('تعذر مزامنة عداد الحصص:',course.id,e); }
+                    }));
                     coursesLastLoadedAt = Date.now();
                     coursesLastLoadedUid = uid;
                     try { sessionStorage.setItem('ananas_courses_cache', JSON.stringify({at:coursesLastLoadedAt,data:coursesData})); } catch(e) {}
@@ -3398,8 +3420,8 @@
             // Build one HTML string, then commit once. This is considerably cheaper than
             // creating and inserting hundreds of individual nodes and avoids visual flicker.
             const html = coursesData.map(course => {
-                const title = currentLang === 'ar' ? (course.titleAr || '') : (course.titleEn || course.titleAr || '');
-                const desc = currentLang === 'ar' ? (course.descAr || '') : (course.descEn || course.descAr || '');
+                const title = course.titleAr || '';
+                const desc = course.descAr || '';
                 const image = course.image
                     ? `<img src="${escapeHtml(course.image)}" alt="" loading="lazy" decoding="async" fetchpriority="low">`
                     : `<i class="fas ${escapeHtml(course.imgIcon || 'fa-graduation-cap')}"></i>`;
@@ -3467,7 +3489,7 @@
             const price = safeGetValue('addCoursePrice');
             const file = safeGetFile('addCourseImg');
 
-            if(!titleAr || !titleEn) return showCustomAlert('خطأ', 'الرجاء إدخال عناوين الدورة.');
+            if(!titleAr) return showCustomAlert('خطأ', 'الرجاء إدخال عنوان الدورة.');
 
             let imageUrl = '';
             if (file) {
@@ -3476,7 +3498,7 @@
             }
 
             const courseData = {
-                titleAr, titleEn, descAr, descEn, price: parseFloat(price) || 0,
+                titleAr, titleEn: titleAr, descAr, descEn: descAr, price: parseFloat(price) || 0,
                 imgIcon: 'fa-graduation-cap', lessons: 0, hours: 0, quizzes: 0,
                 createdAt: firebase.firestore.FieldValue.serverTimestamp()
             };
@@ -3774,12 +3796,12 @@
             setMobileNavActive('overview');
             
             const t = translations[currentLang] || translations['ar'] || {};
-            document.getElementById('courseDetailTitle').textContent = currentLang === 'ar' ? course.titleAr : course.titleEn;
-            document.getElementById('courseDetailSubtitle').textContent = currentLang === 'ar' ? course.descAr : course.descEn;
+            document.getElementById('courseDetailTitle').textContent = course.titleAr || '';
+            document.getElementById('courseDetailSubtitle').textContent = course.descAr || '';
             
             // Update Overview Stats
-            document.getElementById('overviewTitle').textContent = currentLang === 'ar' ? course.titleAr : course.titleEn;
-            document.getElementById('overviewDesc').textContent = currentLang === 'ar' ? course.descAr : course.descEn;
+            document.getElementById('overviewTitle').textContent = course.titleAr || '';
+            document.getElementById('overviewDesc').textContent = course.descAr || '';
             const imgEl = document.getElementById('overviewImg');
             if (course.image) { imgEl.src = course.image; } else { imgEl.src = 'https://i.postimg.cc/q7Frnj7k/image.png'; }
             document.getElementById('ovLessons').textContent = Math.max(0, Number(course.lessons) || 0);
@@ -3961,7 +3983,7 @@
                     const status=done ? `<span style="color:#2ecc71;font-weight:800;">✓ مكتمل — ${Math.max(0,Number(score)||0)}%</span>` : '<span style="color:var(--text-muted);">لم يتم</span>';
                     card.innerHTML=`<div style="display:flex;justify-content:space-between;gap:15px;align-items:flex-start;">
                         <div style="cursor:pointer;flex:1;min-width:0;" onclick="openQuiz('${courseId}','${doc.id}')">
-                            <div style="font-size:1.15rem;font-weight:800;margin-bottom:8px;">${escapeHtml(currentLang==='ar'?q.titleAr:q.titleEn)}</div>
+                            <div style="font-size:1.15rem;font-weight:800;margin-bottom:8px;">${escapeHtml(q.titleAr || 'اختبار')}</div>
                             <div style="color:var(--text-muted);font-size:.88rem;">${(q.questions||[]).length} أسئلة · آخر نتيجة: ${status}</div>
                         </div>
                         ${isAdmin?`<div class="admin-actions admin-only show" style="display:flex;gap:6px;"><button title="تعديل" onclick="event.stopPropagation();editQuiz('${courseId}','${doc.id}')" style="border:1px solid var(--border);background:var(--bg-secondary);color:var(--text-primary);width:36px;height:36px;border-radius:50%;cursor:pointer;"><i class="fas fa-edit"></i></button><button title="حذف" onclick="event.stopPropagation();deleteQuiz('${courseId}','${doc.id}')" style="border:1px solid var(--border);background:var(--bg-secondary);color:#e74c3c;width:36px;height:36px;border-radius:50%;cursor:pointer;"><i class="fas fa-trash"></i></button></div>`:''}
@@ -4021,8 +4043,8 @@
                     card.dataset.id = doc.id;
                     const submissions = Array.isArray(a.submissions) ? a.submissions : [];
                     const approvedCount = submissions.filter(x=>x.approved).length;
-                    const title = currentLang === 'ar' ? a.titleAr : a.titleEn;
-                    const desc = currentLang === 'ar' ? (a.descAr || '') : (a.descEn || '');
+                    const title = a.titleAr || 'واجب';
+                    const desc = a.descAr || '';
                     card.innerHTML = `
                         <div style="display:flex;justify-content:space-between;gap:15px;align-items:flex-start;">
                             <div style="min-width:0;flex:1;">
@@ -4123,8 +4145,8 @@
             const result=await getAssignmentData(courseId,assignmentId);
             if(!result)return showCustomAlert('خطأ','الواجب غير موجود.');
             const a=result.data;
-            document.getElementById('assignmentDetailTitle').textContent=currentLang==='ar'?a.titleAr:a.titleEn;
-            document.getElementById('assignmentDetailDesc').textContent=currentLang==='ar'?(a.descAr||''):(a.descEn||'');
+            document.getElementById('assignmentDetailTitle').textContent=a.titleAr || 'واجب';
+            document.getElementById('assignmentDetailDesc').textContent=a.descAr || '';
             await refreshAssignmentDetail(courseId,assignmentId);
         };
 
@@ -4275,10 +4297,13 @@
                     locked=now>=start && (!end || now<end); reason=currentChatLock.reason||'تم قفل الدردشة.';
                 }
                 if(banner){banner.classList.toggle('active',locked); banner.innerHTML=`<strong><i class="fas fa-lock"></i> الدردشة مقفلة للطلاب</strong><div style="margin-top:4px;">${reason}</div>`;}
-                const input=document.getElementById('fullChatPageInput'), send=document.getElementById('fullChatPageSendBtn'), file=document.getElementById('fullChatPageFileInput'), emoji=document.getElementById('chatEmojiBtnPage');
+                const input=document.getElementById('fullChatPageInput'), legacyInput=document.getElementById('fullChatInput'), send=document.getElementById('fullChatPageSendBtn'), legacySend=document.getElementById('fullSendChatBtn'), file=document.getElementById('fullChatPageFileInput'), legacyFile=document.getElementById('fullChatFileInput'), emoji=document.getElementById('chatEmojiBtnPage');
                 if(input){input.disabled=locked&&!isAdmin; input.placeholder=locked&&!isAdmin?'الدردشة مقفلة حالياً':'اكتب رسالتك هنا...';}
+                if(legacyInput)legacyInput.disabled=locked&&!isAdmin;
                 if(send)send.disabled=locked&&!isAdmin;
+                if(legacySend)legacySend.disabled=locked&&!isAdmin;
                 if(file)file.disabled=locked&&!isAdmin;
+                if(legacyFile)legacyFile.disabled=locked&&!isAdmin;
                 if(emoji)emoji.disabled=locked&&!isAdmin;
                 document.getElementById('chatLockBtn')?.style.setProperty('display',isAdmin&&!locked?'inline-flex':'none');
                 document.getElementById('chatUnlockBtn')?.style.setProperty('display',isAdmin&&locked?'inline-flex':'none');
@@ -4363,6 +4388,7 @@
             document.getElementById('addLessonModalTitle').textContent = translations[currentLang]?.addLessonModalTitle || 'Add New Lesson';
             
             const originalSave = window.saveLesson;
+            const isEditingLesson = !!editingCourseId;
             window.saveLesson = async function() {
                 const titleAr = safeGetValue('addLessonTitleAr');
                 const titleEn = safeGetValue('addLessonTitleEn');
@@ -4375,11 +4401,11 @@
                 const assignmentTitleAr = safeGetValue('addLessonAssignmentTitleAr');
                 const assignmentTitleEn = safeGetValue('addLessonAssignmentTitleEn');
                 
-                if(!titleAr || !titleEn || !url) return showCustomAlert('خطأ', 'يرجى ملء جميع الحقول المطلوبة.');
+                if(!titleAr || !url) return showCustomAlert('خطأ', 'يرجى إدخال عنوان الحصة ورابطها.');
 
                 try {
                     const lessonData = { 
-                        titleAr, titleEn, type, url, duration, xpReward,
+                        titleAr, titleEn: titleAr, type, url, duration, xpReward,
                         hasAssignment: hasAssignment,
                         order: new Date().getTime() 
                     };
@@ -4389,31 +4415,42 @@
                     } else {
                         const newLessonRef = await db.collection('courses').doc(activeCourseId).collection('lessons').add(lessonData);
                         // ===== Create Assignment if required =====
-                        if(hasAssignment && assignmentTitleAr && assignmentTitleEn) {
+                        if(hasAssignment && assignmentTitleAr) {
                             await db.collection('courses').doc(activeCourseId).collection('assignments').add({
                                 titleAr: assignmentTitleAr,
-                                titleEn: assignmentTitleEn,
+                                titleEn: assignmentTitleAr,
                                 lessonId: newLessonRef.id,
                                 xpReward: assignmentXP,
                                 descAr: 'تصميم مطلوب في هذه الحصة',
-                                descEn: 'Design required for this lesson',
+                                descEn: 'تصميم مطلوب في هذه الحصة',
                                 submissions: [],
                                 createdAt: firebase.firestore.FieldValue.serverTimestamp()
                             });
                         }
                     }
                     
-                    // Update course stats (Total lessons and total hours)
+                    // Update course stats. Editing a lesson must NOT increase the lesson count.
                     const courseDoc = await db.collection('courses').doc(activeCourseId).get();
                     if(courseDoc.exists) {
-                        const currentHours = courseDoc.data().hours || 0;
-                        const totalHours = currentHours + (duration / 60);
-                        const roundedHours = Math.round(totalHours * 10) / 10;
-                        
-                        await db.collection('courses').doc(activeCourseId).update({
-                            lessons: firebase.firestore.FieldValue.increment(1),
-                            hours: roundedHours
-                        });
+                        const currentData = courseDoc.data() || {};
+                        if(!isEditingLesson) {
+                            const currentHours = Number(currentData.hours) || 0;
+                            const totalHours = currentHours + (duration / 60);
+                            const roundedHours = Math.round(totalHours * 10) / 10;
+                            await db.collection('courses').doc(activeCourseId).update({
+                                lessons: firebase.firestore.FieldValue.increment(1),
+                                hours: roundedHours
+                            });
+                        } else {
+                            // Recalculate from the actual lessons collection to repair stale counters too.
+                            const allLessons = await db.collection('courses').doc(activeCourseId).collection('lessons').get();
+                            let totalMinutes = 0;
+                            allLessons.forEach(d => { totalMinutes += Number(d.data()?.duration) || 0; });
+                            await db.collection('courses').doc(activeCourseId).update({
+                                lessons: allLessons.size,
+                                hours: Math.round((totalMinutes / 60) * 10) / 10
+                            });
+                        }
                     }
                     
                     document.getElementById('addLessonModal').classList.remove('active');
@@ -4472,28 +4509,28 @@
                 const assignmentTitleAr = safeGetValue('addLessonAssignmentTitleAr');
                 const assignmentTitleEn = safeGetValue('addLessonAssignmentTitleEn');
 
-                if(!titleAr || !titleEn || !url) return showCustomAlert('خطأ', 'يرجى ملء جميع الحقول المطلوبة.');
+                if(!titleAr || !url) return showCustomAlert('خطأ', 'يرجى إدخال عنوان الحصة ورابطها.');
                 await db.collection('courses').doc(courseId).collection('lessons').doc(lessonId).update({
-                    titleAr, titleEn, type, url, duration, xpReward, hasAssignment
+                    titleAr, titleEn: titleAr, type, url, duration, xpReward, hasAssignment
                 });
                 
                 // Update or Create Assignment
                 const assignSnapshot = await db.collection('courses').doc(courseId).collection('assignments').where('lessonId', '==', lessonId).get();
-                if(hasAssignment && assignmentTitleAr && assignmentTitleEn) {
+                if(hasAssignment && assignmentTitleAr) {
                     if(!assignSnapshot.empty) {
                         await assignSnapshot.docs[0].ref.update({
                             titleAr: assignmentTitleAr,
-                            titleEn: assignmentTitleEn,
+                            titleEn: assignmentTitleAr,
                             xpReward: assignmentXP
                         });
                     } else {
                         await db.collection('courses').doc(courseId).collection('assignments').add({
                             titleAr: assignmentTitleAr,
-                            titleEn: assignmentTitleEn,
+                            titleEn: assignmentTitleAr,
                             lessonId: lessonId,
                             xpReward: assignmentXP,
                             descAr: 'تصميم مطلوب في هذه الحصة',
-                            descEn: 'Design required for this lesson',
+                            descEn: 'تصميم مطلوب في هذه الحصة',
                             submissions: [],
                             createdAt: firebase.firestore.FieldValue.serverTimestamp()
                         });
@@ -4627,7 +4664,7 @@
                 if(!newCache.length){container.innerHTML='<p style="color:var(--text-muted);text-align:center;grid-column:1/-1;padding:50px;">لا توجد حصص مضافة بعد.</p>';if(sidebar)sidebar.innerHTML='';container.dataset.loaded='1';return;}
                 const fragment=document.createDocumentFragment();
                 newCache.forEach((lesson,index)=>{
-                    const done=!!completedMap[lesson.id],title=currentLang==='ar'?lesson.titleAr:lesson.titleEn;
+                    const done=!!completedMap[lesson.id],title=lesson.titleAr || 'حصة';
                     const card=document.createElement('div');card.className='full-page-card lesson-card'+(done?' completed':'');card.dataset.id=lesson.id;
                     const progressEntry = window.lessonProgressCache?.[lesson.id] || {};
                     const progressPercent = Math.max(0, Math.min(100, Number(progressEntry.percent || progressEntry.progress || 0)));
@@ -4653,7 +4690,7 @@
             lessonListCache.forEach((lesson, index) => {
                 const item = document.createElement('div');
                 item.className = 'lesson-player-item' + (lesson.id === activeLessonId ? ' active' : '');
-                const title = currentLang === 'ar' ? lesson.titleAr : lesson.titleEn;
+                const title = lesson.titleAr || 'حصة';
                 item.innerHTML = `
                     <div class="num">${index+1}</div>
                     <div class="info"><div class="title">${title || 'حصة'}</div><div class="meta">${lesson.duration || 0} دقيقة • ${lesson.xpReward || 0} XP</div></div>
@@ -4695,7 +4732,7 @@
             lessonCurrentData = lesson;
             document.getElementById('courseLessonsPage').classList.remove('active');
             document.getElementById('courseLessonPlayerPage').classList.add('active');
-            document.getElementById('lessonPlayerTitle').textContent = currentLang === 'ar' ? lesson.titleAr : lesson.titleEn;
+            document.getElementById('lessonPlayerTitle').textContent = lesson.titleAr || 'حصة';
             document.getElementById('lessonPlayerMeta').textContent = `${lesson.duration || 0} دقيقة • ${lesson.xpReward || 0} XP`;
             renderLessonPlayerList();
             await renderLessonRelatedActions(courseId, lessonId);
@@ -5359,7 +5396,7 @@
                     if(activeQuizId === doc.id) item.classList.add('active');
                     item.innerHTML = `
                         <div>
-                            <div class="q-title">${currentLang === 'ar' ? q.titleAr : q.titleEn}</div>
+                            <div class="q-title">${q.titleAr || 'اختبار'}</div>
                             <div class="q-meta">${(q.questions || []).length} أسئلة</div>
                         </div>
                         ${isAdmin ? `
@@ -5395,7 +5432,7 @@
                 document.getElementById('quizActiveScreen').style.display = 'none';
                 document.getElementById('quizResultScreen').style.display = 'none';
                 const resultLoading=document.getElementById('quizResultLoading'); if(resultLoading)resultLoading.style.display='none';
-                document.getElementById('quizStartTitle').textContent = currentLang === 'ar' ? q.titleAr : q.titleEn;
+                document.getElementById('quizStartTitle').textContent = q.titleAr || 'اختبار';
                 document.getElementById('quizStartDesc').textContent = `يتكون هذا الاختبار من ${(q.questions || []).length} سؤال.`;
                 document.getElementById('quizHeaderTitle').textContent = q.titleAr || 'Quiz';
                 
@@ -5439,7 +5476,7 @@
             document.getElementById('quizProgressPercent').textContent = Math.round(pct) + '%';
 
             // Display Question Text
-            document.getElementById('questionText').textContent = currentLang === 'ar' ? q.questionAr : q.questionEn;
+            document.getElementById('questionText').textContent = q.questionAr || '';
 
             // Display Image
             const imgEl = document.getElementById('questionImage');
@@ -5596,24 +5633,23 @@
                 const titleAr = safeGetValue('addQuizTitleAr');
                 const titleEn = safeGetValue('addQuizTitleEn');
                 const lessonId = safeGetSelectVal('addQuizLessonId') || null;
-                if(!titleAr || !titleEn) return showCustomAlert('خطأ', 'الرجاء إدخال عناوين الاختبار.');
+                if(!titleAr) return showCustomAlert('خطأ', 'الرجاء إدخال عنوان الاختبار.');
                 
                 // Collect questions
                 const questionItems = container.querySelectorAll('.question-item');
                 const finalQuestions = [];
                 for(let item of questionItems) {
                     const qAr = item.querySelector('.q-ar').value.trim();
-                    const qEn = item.querySelector('.q-en').value.trim();
+                    const qEn = qAr;
                     const type = item.querySelector('.q-type').value;
                     
                     // Get correct answer from radio buttons
                     const selectedRadio = item.querySelector('input.correct-answer:checked');
                     const checkedRow = selectedRadio?.closest('.quiz-option-row');
-                    if(checkedRow){ selectedRadio.value = checkedRow.querySelector('.q-option')?.value?.trim() || ''; }
-                    let correctAnswer = selectedRadio ? selectedRadio.value : '';
-                    if(type === 'truefalse') {
-                        correctAnswer = item.querySelector('input.correct-answer:checked') ? item.querySelector('input.correct-answer:checked').value : '';
-                    }
+                    let correctAnswer = checkedRow
+                        ? (checkedRow.querySelector('.q-option')?.value || '').trim()
+                        : (selectedRadio?.value || '').trim();
+                    if(type === 'truefalse' && selectedRadio) correctAnswer = selectedRadio.value;
 
                     const xpReward = parseInt(item.querySelector('.q-xp').value) || 0;
                     const fileInput = item.querySelector('.q-image');
@@ -5633,8 +5669,8 @@
                         });
                         if(!selectedRadio || !String(correctAnswer).trim()) return showCustomAlert('خطأ', 'الرجاء تحديد الإجابة الصحيحة لسؤال الاختيار من متعدد.');
                     }
-                    if(!qAr || !qEn) {
-                        showCustomAlert('خطأ', 'الرجاء ملء نص السؤال بالعربية والإنجليزية لجميع الأسئلة.');
+                    if(!qAr) {
+                        showCustomAlert('خطأ', 'الرجاء ملء نص السؤال بالعربية.');
                         return;
                     }
                     finalQuestions.push({
@@ -5643,7 +5679,7 @@
                 }
                 
                 await db.collection('courses').doc(courseId).collection('quizzes').doc(quizId).update({
-                    titleAr, titleEn, lessonId, questions: finalQuestions
+                    titleAr, titleEn: titleAr, lessonId, questions: finalQuestions
                 });
                 document.getElementById('addQuizModal').classList.remove('active');
                 loadQuizzesForCourse(courseId);
@@ -5687,7 +5723,7 @@
                 snap.forEach(doc => {
                     const q = doc.data();
                     const div = document.createElement('div'); div.className = 'sidebar-quiz-item';
-                    div.innerHTML = `<div class="q-title">${currentLang === 'ar' ? q.titleAr : q.titleEn}</div><div class="q-meta">${(q.questions || []).length} أسئلة</div>`;
+                    div.innerHTML = `<div class="q-title">${q.titleAr || 'اختبار'}</div><div class="q-meta">${(q.questions || []).length} أسئلة</div>`;
                     div.onclick = () => openQuiz(courseId, doc.id);
                     listContainer.appendChild(div);
                 });
@@ -5703,7 +5739,7 @@
             select.innerHTML='<option value="">بدون حصة</option>';
             try{
                 const snap=await db.collection('courses').doc(courseId).collection('lessons').orderBy('order','asc').get();
-                snap.forEach(d=>{const l=d.data()||{};const opt=document.createElement('option');opt.value=d.id;opt.textContent=currentLang==='ar'?(l.titleAr||'حصة'):(l.titleEn||l.titleAr||'Lesson');if(String(d.id)===String(selectedId))opt.selected=true;select.appendChild(opt);});
+                snap.forEach(d=>{const l=d.data()||{};const opt=document.createElement('option');opt.value=d.id;opt.textContent=l.titleAr || 'حصة';if(String(d.id)===String(selectedId))opt.selected=true;select.appendChild(opt);});
             }catch(e){console.error('populate quiz lessons',e);}
         }
 
@@ -5733,7 +5769,7 @@
                 const titleAr = safeGetValue('addQuizTitleAr');
                 const titleEn = safeGetValue('addQuizTitleEn');
                 const lessonId = safeGetSelectVal('addQuizLessonId') || null;
-                if(!titleAr || !titleEn) return showCustomAlert('خطأ', 'الرجاء إدخال عناوين الاختبار.');
+                if(!titleAr) return showCustomAlert('خطأ', 'الرجاء إدخال عنوان الاختبار.');
                 
                 // Collect questions
                 const container = document.getElementById('questionsContainer');
@@ -5741,17 +5777,16 @@
                 const finalQuestions = [];
                 for(let item of questionItems) {
                     const qAr = item.querySelector('.q-ar').value.trim();
-                    const qEn = item.querySelector('.q-en').value.trim();
+                    const qEn = qAr;
                     const type = item.querySelector('.q-type').value;
                     
                     // Get correct answer from radio buttons
                     const selectedRadio = item.querySelector('input.correct-answer:checked');
                     const checkedRow = selectedRadio?.closest('.quiz-option-row');
-                    if(checkedRow){ selectedRadio.value = checkedRow.querySelector('.q-option')?.value?.trim() || ''; }
-                    let correctAnswer = selectedRadio ? selectedRadio.value : '';
-                    if(type === 'truefalse') {
-                        correctAnswer = item.querySelector('input.correct-answer:checked') ? item.querySelector('input.correct-answer:checked').value : '';
-                    }
+                    let correctAnswer = checkedRow
+                        ? (checkedRow.querySelector('.q-option')?.value || '').trim()
+                        : (selectedRadio?.value || '').trim();
+                    if(type === 'truefalse' && selectedRadio) correctAnswer = selectedRadio.value;
 
                     const xpReward = parseInt(item.querySelector('.q-xp').value) || 0;
                     const fileInput = item.querySelector('.q-image');
@@ -5772,8 +5807,8 @@
                         if(options.length < 2) return showCustomAlert('خطأ', 'يجب إضافة خيارين على الأقل لأسئلة الاختيار من متعدد.');
                         if(!selectedRadio || !String(correctAnswer).trim()) return showCustomAlert('خطأ', 'الرجاء تحديد الإجابة الصحيحة لسؤال الاختيار من متعدد.');
                     }
-                    if(!qAr || !qEn) {
-                        showCustomAlert('خطأ', 'الرجاء ملء نص السؤال بالعربية والإنجليزية لجميع الأسئلة.');
+                    if(!qAr) {
+                        showCustomAlert('خطأ', 'الرجاء ملء نص السؤال بالعربية.');
                         return;
                     }
                     finalQuestions.push({
@@ -5783,7 +5818,7 @@
                 if(finalQuestions.length === 0) return showCustomAlert('خطأ', 'يجب إضافة سؤال واحد على الأقل.');
                 
                 try {
-                    const quizData = { titleAr, titleEn, lessonId, questions: finalQuestions };
+                    const quizData = { titleAr, titleEn: titleAr, lessonId, questions: finalQuestions };
                     await db.collection('courses').doc(activeCourseId).collection('quizzes').add(quizData);
                     
                     await db.collection('courses').doc(activeCourseId).update({
@@ -5809,14 +5844,15 @@
             const div=document.createElement('div');
             div.className='question-item quiz-builder-card';
             div.dataset.correctGroup='correct-radio-'+Date.now()+'-'+Math.random().toString(36).slice(2,8);
-            const type=data?.type||'mcq', qAr=data?.questionAr||'', qEn=data?.questionEn||'', correct=data?.correctAnswer||'', xp=data?.xpReward??10, opts=Array.isArray(data?.options)?data.options:[];
+            const type=data?.type||'mcq', qAr=data?.questionAr||'', qEn=data?.questionAr||data?.questionEn||'', xp=data?.xpReward??10, opts=Array.isArray(data?.options)?[...data.options]:[];
+            let correct=data?.correctAnswer||'';
             const group=div.dataset.correctGroup;
             const inputValue=v=>escapeHtml(String(v??''));
             let html=`
               <div class="quiz-builder-head"><div><span class="quiz-builder-index"></span><strong>السؤال</strong></div><button type="button" class="quiz-builder-remove" title="حذف السؤال"> <i class="fas fa-trash"></i> </button></div>
               <div class="quiz-builder-grid">
                 <div><label>السؤال بالعربية</label><textarea class="q-ar" rows=3 placeholder="اكتب نص السؤال بالعربية">${inputValue(qAr)}</textarea></div>
-                <div><label>السؤال بالإنجليزية</label><textarea class="q-en" rows=3 placeholder="Write the question in English">${inputValue(qEn)}</textarea></div>
+                
                 <div><label>نوع السؤال</label><select class="q-type"><option value="mcq" ${type==='mcq'?'selected':''}>اختيار من متعدد</option><option value="truefalse" ${type==='truefalse'?'selected':''}>صح / خطأ</option></select></div>
                 <div><label>نقاط الخبرة</label><input type="number" min="0" class="q-xp" value="${Number(xp)||0}" placeholder="10"></div>
               </div>
@@ -5846,10 +5882,14 @@
             const row=document.createElement('div');row.className='quiz-option-row';
             row.innerHTML=`<label class="quiz-radio"><input class="correct-answer" type="radio" name="${group}" value="${escapeHtml(value)}" ${checked?'checked':''}><span></span></label><input type="text" class="q-option" value="${escapeHtml(value)}" placeholder="اكتب الخيار هنا"><button type="button" class="quiz-remove-option" title="حذف الخيار"><i class="fas fa-trash"></i></button>`;
             const text=row.querySelector('.q-option'),radio=row.querySelector('.correct-answer');
-            text.addEventListener('input',()=>{if(radio.checked)radio.value=text.value;});
-            radio.addEventListener('change',()=>{document.querySelectorAll(`input[name="${group}"]`).forEach(r=>{const txt=r.closest('.quiz-option-row')?.querySelector('.q-option');if(txt&&r.checked)r.value=txt.value;});});
+            const selectThis=()=>{ radio.checked=true; radio.value=text.value.trim(); row.classList.add('is-correct'); list.querySelectorAll('.quiz-option-row').forEach(r=>{if(r!==row)r.classList.remove('is-correct');}); };
+            row.addEventListener('click',e=>{if(e.target.closest('.quiz-remove-option'))return;selectThis();});
+            text.addEventListener('input',()=>{if(radio.checked)radio.value=text.value.trim();});
+            radio.addEventListener('change',selectThis);
             row.querySelector('.quiz-remove-option').onclick=()=>{row.remove();};
-            list.appendChild(row);if(focusNew)requestAnimationFrame(()=>text.focus());
+            list.appendChild(row);
+            if(checked) selectThis();
+            if(focusNew)requestAnimationFrame(()=>text.focus());
         }
         function refreshQuizBuilderIndexes(){document.querySelectorAll('#questionsContainer .question-item').forEach((el,i)=>{const x=el.querySelector('.quiz-builder-index');if(x)x.textContent=`${i+1}`;});}
 
@@ -5878,7 +5918,7 @@
                     item.innerHTML = `
                         <div style="width:100%; display:flex; justify-content:space-between; align-items:center;">
                             <div>
-                                <div class="l-title">${currentLang === 'ar' ? a.titleAr : a.titleEn}</div>
+                                <div class="l-title">${a.titleAr || 'واجب'}</div>
                                 <div class="l-dur">${a.descAr || a.descEn || ''} | XP: ${a.xpReward || 0}</div>
                             </div>
                             ${isAdmin ? `
@@ -6007,11 +6047,11 @@
                 const xpReward = parseInt(safeGetValue('addAssignmentXP')) || 50;
                 const lessonId = safeGetSelectVal('addAssignmentLessonId') || null;
 
-                if(!titleAr || !titleEn) return showCustomAlert('خطأ', 'الرجاء إدخال عناوين الواجب.');
+                if(!titleAr) return showCustomAlert('خطأ', 'الرجاء إدخال عنوان الواجب.');
 
                 try {
                     const assignData = { 
-                        titleAr, titleEn, descAr, descEn, 
+                        titleAr, titleEn: titleAr, descAr, descEn: descAr, 
                         xpReward: xpReward,
                         lessonId: lessonId,
                         submissions: [],
@@ -6535,6 +6575,7 @@
             const input = document.getElementById('fullChatInput');
             const fileInput = document.getElementById('fullChatFileInput');
             if(!activeCourseId) return;
+            if(currentChatLock?.locked && !isAdmin) return showCustomAlert('الدردشة مقفلة',currentChatLock.reason||'الدردشة مقفلة حالياً.');
             
             let imageUrl = null;
             if(fileInput && fileInput.files && fileInput.files[0]) {
@@ -6947,12 +6988,12 @@
                 'skipAd','speed','quality','seekFwd','seekBwd'
             ];
             
-            for(let i=0; i<ids.length; i++) {
+            // المنصة عربية فقط: احفظ الحقول العربية ولا تنشئ أي نصوص إنجليزية.
+            for(let i=0; i<ids.length; i+=2) {
                 const el = document.getElementById(ids[i]);
                 if(el) {
-                    const key = (i % 2 === 0) ? arKeys[Math.floor(i/2)] : enKeys[Math.floor(i/2)];
-                    const lang = (i % 2 === 0) ? 'ar' : 'en';
-                    updates[`${lang}.${key}`] = el.value.trim();
+                    const key = arKeys[Math.floor(i/2)];
+                    updates[`ar.${key}`] = el.value.trim();
                 }
             }
             await saveToFirestore(updates, null, 'editCoursePageTextsModal');
@@ -7533,7 +7574,125 @@
   window.addEventListener('beforeunload',save);
 })();
 </script>
-</body>
+\n<script id="arabic-only-final-fixes">
+(function(){
+  currentLang = 'ar';
+  try { localStorage.setItem('ananas.language','ar'); } catch(e){}
+
+  // Never render English text when Arabic is selected.
+  const oldLang = window.currentLang;
+  window.currentLang = 'ar';
+
+  // Repair lesson counts from the actual lessons collection whenever a course is loaded.
+  const repairCourseLessonCount = async (courseId) => {
+    if(!courseId) return;
+    try {
+      const snap = await db.collection('courses').doc(courseId).collection('lessons').get();
+      let minutes = 0; snap.forEach(d => minutes += Number(d.data()?.duration)||0);
+      await db.collection('courses').doc(courseId).set({
+        lessons: snap.size,
+        hours: Math.round((minutes/60)*10)/10
+      }, {merge:true});
+      const course = coursesData?.find(c=>c.id===courseId);
+      if(course){ course.lessons=snap.size; course.hours=Math.round((minutes/60)*10)/10; }
+      renderCourses?.();
+    } catch(e){ console.warn('تعذر إصلاح عداد الحصص:',e); }
+  };
+  window.repairCourseLessonCount = repairCourseLessonCount;
+
+  // Robust quiz answer selection. Clicking anywhere on an option selects it.
+  window.__installQuizAnswerFix = function(root){
+    const scope=root||document;
+    scope.querySelectorAll('.quiz-option-row').forEach(row=>{
+      if(row.dataset.answerBound==='1') return;
+      row.dataset.answerBound='1';
+      const radio=row.querySelector('input.correct-answer');
+      const text=row.querySelector('.q-option');
+      const select=()=>{
+        if(!radio) return;
+        radio.checked=true;
+        if(text) radio.value=text.value.trim();
+        radio.dispatchEvent(new Event('change',{bubbles:true}));
+        row.classList.add('is-correct');
+        row.parentElement?.querySelectorAll('.quiz-option-row').forEach(r=>{if(r!==row)r.classList.remove('is-correct');});
+      };
+      row.addEventListener('click',e=>{ if(e.target.closest('.quiz-remove-option')) return; select(); });
+      text?.addEventListener('input',()=>{ if(radio.checked) radio.value=text.value.trim(); });
+    });
+    scope.querySelectorAll('.correct-choice').forEach(choice=>{
+      if(choice.dataset.answerBound==='1') return;
+      choice.dataset.answerBound='1';
+      choice.addEventListener('click',()=>{
+        const radio=choice.querySelector('input.correct-answer');
+        if(radio){ radio.checked=true; radio.dispatchEvent(new Event('change',{bubbles:true})); }
+        choice.parentElement?.querySelectorAll('.correct-choice').forEach(c=>c.classList.toggle('is-correct',c===choice));
+      });
+    });
+  };
+
+  // Ensure changing to صح/خطأ ALWAYS creates exactly the two default choices.
+  const oldAddQuestion = window.addQuestionToForm;
+  if(typeof oldAddQuestion==='function' && !window.__quizTFPatched){
+    window.__quizTFPatched=true;
+    window.addQuestionToForm = function(data,idx){
+      oldAddQuestion(data,idx);
+      const cards=document.querySelectorAll('#questionsContainer .question-item');
+      const card=cards[cards.length-1];
+      if(!card) return;
+      const select=card.querySelector('.q-type');
+      const forceTF=()=>{
+        if(select.value!=='truefalse') return;
+        const wrap=card.querySelector('.options-wrapper');
+        const group=card.dataset.correctGroup||('correct-radio-'+Date.now());
+        card.dataset.correctGroup=group;
+        wrap.innerHTML=`<div class="quiz-options-title"><span>الإجابة الصحيحة</span><small>اختر إجابة واحدة</small></div><div class="truefalse-grid"><label class="correct-choice"><input class="correct-answer" type="radio" name="${group}" value="صح"><span><i class="fas fa-check"></i> صح</span></label><label class="correct-choice"><input class="correct-answer" type="radio" name="${group}" value="خطأ"><span><i class="fas fa-xmark"></i> خطأ</span></label></div>`;
+        window.__installQuizAnswerFix(card);
+      };
+      select?.addEventListener('change',forceTF);
+      window.__installQuizAnswerFix(card);
+      if(select?.value==='truefalse') forceTF();
+    };
+  }
+
+  // Make quiz save read the actual selected option text, not a stale radio value.
+  window.__getQuizCorrectAnswer = function(item){
+    const checked=item?.querySelector('input.correct-answer:checked');
+    if(!checked) return '';
+    const row=checked.closest('.quiz-option-row');
+    if(row){ return (row.querySelector('.q-option')?.value||'').trim(); }
+    return String(checked.value||'').trim();
+  };
+
+  // Chat lock: apply the lock immediately after saving, and use an explicit locked state.
+  const applyChatLockNow=()=>{
+    const locked=!!currentChatLock?.locked;
+    const input=document.getElementById('fullChatPageInput'),legacyInput=document.getElementById('fullChatInput'),send=document.getElementById('fullChatPageSendBtn'),legacySend=document.getElementById('fullSendChatBtn'),file=document.getElementById('fullChatPageFileInput'),legacyFile=document.getElementById('fullChatFileInput'),emoji=document.getElementById('chatEmojiBtnPage');
+    if(input){input.disabled=locked&&!isAdmin;input.placeholder=locked&&!isAdmin?'الدردشة مقفلة حالياً':'اكتب رسالتك هنا...';}
+    if(legacyInput)legacyInput.disabled=locked&&!isAdmin;
+    if(send)send.disabled=locked&&!isAdmin; if(legacySend)legacySend.disabled=locked&&!isAdmin; if(file)file.disabled=locked&&!isAdmin; if(legacyFile)legacyFile.disabled=locked&&!isAdmin; if(emoji)emoji.disabled=locked&&!isAdmin;
+    const banner=document.getElementById('chatLockBannerPage');
+    if(banner){banner.classList.toggle('active',locked);banner.innerHTML=locked?'<strong><i class="fas fa-lock"></i> الدردشة مقفلة للطلاب</strong><div style="margin-top:4px;">'+escapeHtml(currentChatLock?.reason||'تم قفل الدردشة.')+'</div>':'';}
+    document.getElementById('chatLockBtn')?.style.setProperty('display',isAdmin&&!locked?'inline-flex':'none');
+    document.getElementById('chatUnlockBtn')?.style.setProperty('display',isAdmin&&locked?'inline-flex':'none');
+  };
+  const originalSaveLock=window.saveChatLockSettings;
+  window.saveChatLockSettings=async function(){
+    if(!isAdmin||!activeCourseId)return;
+    const start=document.getElementById('chatLockStartInput')?.value||'',end=document.getElementById('chatLockEndInput')?.value||'',reason=(document.getElementById('chatLockReasonInput')?.value||'').trim()||'تم قفل الدردشة من قبل المشرف.';
+    const startDate=start?parseRiyadhDateTime(start):new Date(),endDate=end?parseRiyadhDateTime(end):null;
+    if(Number.isNaN(startDate.getTime())||(endDate&&Number.isNaN(endDate.getTime()))||(endDate&&endDate<=startDate))return showCustomAlert('خطأ','تحقق من التاريخ والوقت.');
+    const payload={locked:true,startAt:firebase.firestore.Timestamp.fromDate(startDate),endAt:endDate?firebase.firestore.Timestamp.fromDate(endDate):null,reason,timezone:'Asia/Riyadh',updatedAt:firebase.firestore.FieldValue.serverTimestamp()};
+    try{
+      await db.collection('courses').doc(activeCourseId).collection('settings').doc('chat').set(payload,{merge:true});
+      currentChatLock={...payload,startAt:firebase.firestore.Timestamp.fromDate(startDate),endAt:endDate?firebase.firestore.Timestamp.fromDate(endDate):null};
+      applyChatLockNow();
+      closeChatLockModal();
+      showCustomAlert('تم القفل','تم قفل الدردشة على الطلاب.');
+    }catch(e){console.error(e);showCustomAlert('خطأ','تعذر قفل الدردشة. تحقق من صلاحيات Firestore.');}
+  };
+  window.applyChatLockNow=applyChatLockNow;
+})();
+</script>\n</body>
 </html>
 
 
