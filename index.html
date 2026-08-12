@@ -361,6 +361,7 @@
             background:var(--bg-card);margin-bottom:12px;color:var(--text-muted);
         }
         .lesson-completion-status.completed { border-color:rgba(46,204,113,.4); color:#2ecc71; }
+        .context-back-bar button:hover{border-color:var(--accent1)!important;color:var(--accent1)!important;transform:translateY(-1px);}
         .lesson-related-actions { display:flex;gap:10px;flex-wrap:wrap;margin-bottom:25px; }
         .lesson-related-actions .related-action {
             border:1px solid var(--border);background:var(--bg-card);color:var(--text-primary);
@@ -1341,6 +1342,10 @@
                 <div id="courseAssignmentDetailPage" class="assignment-detail-page">
                     <div class="page-title" style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;border-bottom:1px solid var(--border);padding-bottom:15px;margin-bottom:15px;">
                         <div><h2 id="assignmentDetailTitle" style="color:var(--accent1);margin:0;"></h2><p id="assignmentDetailDesc" style="color:var(--text-muted);margin-top:6px;"></p></div>
+                        <div id="assignmentContextBackBar" style="display:none;align-items:center;gap:8px;">
+                            <button type="button" onclick="backFromRelatedAssignmentToLesson()" title="العودة للحصة" aria-label="العودة للحصة" style="width:42px;height:42px;border-radius:50%;border:1px solid var(--border);background:var(--bg-card);color:var(--text-primary);cursor:pointer;"><i class="fas fa-video"></i></button>
+                            <button type="button" onclick="backFromRelatedAssignmentToList()" title="العودة للواجبات" aria-label="العودة للواجبات" style="width:42px;height:42px;border-radius:50%;border:1px solid var(--border);background:var(--bg-card);color:var(--text-primary);cursor:pointer;"><i class="fas fa-clipboard-list"></i></button>
+                        </div>
                         <button class="full-page-back-btn" onclick="closeAssignmentDetail()"><i class="fas fa-arrow-right"></i> العودة</button>
                     </div>
                     <div id="assignmentDetailContent"></div>
@@ -1491,19 +1496,6 @@
         </div>
     </div>
 
-    <!-- ===== User Profile Modal ===== -->
-    <div class="custom-alert-modal" id="userProfileModal">
-        <div class="custom-alert-box" style="max-width:520px;text-align:right;">
-            <button class="close-lightbox" id="closeUserProfileBtn" style="float:left;">&times;</button>
-            <div style="display:flex;align-items:center;gap:14px;margin-bottom:18px;">
-                <div style="width:58px;height:58px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:var(--accent-gradient);color:#fff;font-size:1.5rem;"><i class="fas fa-user"></i></div>
-                <div><h3 id="userProfileTitle" style="margin:0;">بيانات الحساب</h3><p id="userProfileSubtitle" style="margin:4px 0 0;color:var(--text-muted);">معلومات حسابك</p></div>
-            </div>
-            <div id="userProfileFields" style="display:grid;gap:10px;"></div>
-            <button id="userProfileLogoutBtn" class="btn btn-danger" style="width:100%;margin-top:20px;">تسجيل الخروج</button>
-        </div>
-    </div>
-
     <!-- ===== Auth Popup ===== -->
     <div class="auth-popup" id="authPopup">
         <button class="close-lightbox" id="authCloseBtn" style="position:static; float:left; font-size:1.5rem; background:none; border:none; color:var(--text-muted); cursor:pointer;">&times;</button>
@@ -1627,6 +1619,10 @@
     <!-- ===== NEW OVERLAY QUIZ PLAYER ===== -->
     <div id="quizOverlay">
         <div class="quiz-container" id="quizContainer">
+            <div id="quizContextBackBar" class="context-back-bar" style="display:none;align-items:center;justify-content:flex-start;gap:8px;padding:10px 14px;border-bottom:1px solid var(--border);">
+                <button id="quizBackLessonBtn" type="button" onclick="backFromRelatedQuizToLesson()" title="العودة للحصة" aria-label="العودة للحصة" style="width:42px;height:42px;border-radius:50%;border:1px solid var(--border);background:var(--bg-card);color:var(--text-primary);cursor:pointer;"><i class="fas fa-video"></i></button>
+                <button id="quizBackListBtn" type="button" onclick="backFromRelatedQuizToList()" title="العودة للاختبارات" aria-label="العودة للاختبارات" style="width:42px;height:42px;border-radius:50%;border:1px solid var(--border);background:var(--bg-card);color:var(--text-primary);cursor:pointer;"><i class="fas fa-question-circle"></i></button>
+            </div>
             <!-- Start Screen -->
             <div class="quiz-start-screen" id="quizStartScreen">
                 <h2 id="quizStartTitle">اختبار</h2>
@@ -1991,7 +1987,6 @@
         // 3. متغيرات الحالة والنصوص الافتراضية
         // ================================================================
         let currentUser = null;
-        let currentUserProfile = {};
         let isAdmin = false;
         let currentLang = 'ar';
         let translations = {};
@@ -2005,6 +2000,9 @@
 
         // Chat & Quiz State
         let activeQuizId = null;
+        let relatedQuizLessonId = null;
+        let relatedAssignmentLessonId = null;
+        let quizOpenedFromLesson = false;
         let activeQuizData = null;
         let currentQuestionIndex = 0;
         let quizUserAnswers = {};
@@ -2344,48 +2342,31 @@
             const now = Date.now();
             if (!force && coursesLoadInFlight) return coursesLoadInFlight;
 
-            // First paint: use a short-lived session cache when available, then refresh silently.
-            if (!force && !coursesData?.length) {
-                try {
-                    const cached = JSON.parse(sessionStorage.getItem('ananas_courses_cache') || 'null');
-                    if (cached && Array.isArray(cached.data) && (now - Number(cached.at || 0)) < 120000) {
-                        coursesData = cached.data;
-                        coursesLastLoadedAt = Number(cached.at || now);
-                        coursesLastLoadedUid = uid;
-                        renderCourses();
-                    }
-                } catch(e) { /* ignore cache errors */ }
-            }
-
+            // Cached courses: render from memory immediately. No Firestore wait on navigation.
             if (!force && coursesData?.length && coursesLastLoadedUid === uid && (now - coursesLastLoadedAt) < 30000) {
                 renderCourses();
+                // Refresh enrollment in the background without blocking the UI.
                 if (currentUser) refreshUserEnrollmentMap(false).then(() => updateCourseActionButtons()).catch(()=>{});
-                // Do not block navigation on a refresh; only refresh in the background when stale.
                 return;
             }
 
-            if (force && coursesData?.length) renderCourses();
+            // If we already have course cards, keep them visible while refreshing in the background.
+            if (force && coursesData?.length) {
+                renderCourses();
+            }
 
             coursesLoadInFlight = (async () => {
                 try {
-                    // Do NOT depend on createdAt/orderBy. Older courses may not have that field.
-                    // Fetch the complete collection once, then sort safely in memory.
-                    const snapshot = await db.collection('courses').get();
+                    const snapshot = await db.collection('courses').orderBy('createdAt', 'desc').get();
                     const nextCourses = [];
                     snapshot.forEach(doc => nextCourses.push({ id: doc.id, ...doc.data() }));
-                    nextCourses.sort((a,b) => {
-                        const av = a.createdAt?.seconds ? a.createdAt.seconds : (Date.parse(a.createdAt || '') || 0);
-                        const bv = b.createdAt?.seconds ? b.createdAt.seconds : (Date.parse(b.createdAt || '') || 0);
-                        return bv - av;
-                    });
                     coursesData = nextCourses;
                     coursesLastLoadedAt = Date.now();
                     coursesLastLoadedUid = uid;
-                    try { sessionStorage.setItem('ananas_courses_cache', JSON.stringify({at:coursesLastLoadedAt,data:coursesData})); } catch(e) {}
                     renderCourses();
                 } catch (error) {
                     console.error('Error loading courses:', error);
-                    // Keep cached/visible cards intact on transient Firebase failures.
+                    // Never blank an already-rendered page because of a transient network error.
                     if (!coursesData?.length) renderCourses();
                 } finally {
                     coursesLoadInFlight = null;
@@ -2542,11 +2523,9 @@
             try {
                 if(editingCourseId) {
                     await db.collection('courses').doc(editingCourseId).update(courseData);
-                    try { sessionStorage.removeItem('ananas_courses_cache'); } catch(e) {}
                     showCustomAlert('تم التعديل', 'تم تعديل الدورة بنجاح!');
                 } else {
                     await db.collection('courses').add(courseData);
-                    try { sessionStorage.removeItem('ananas_courses_cache'); } catch(e) {}
                     showCustomAlert('تم الإضافة', 'تم إضافة الدورة بنجاح!');
                 }
                 document.getElementById('addCourseModal').classList.remove('active');
@@ -2805,22 +2784,12 @@
             document.getElementById('ovHours').textContent = Math.max(0, Number(course.hours) || 0);
             document.getElementById('ovQuizzes').textContent = Math.max(0, Number(course.quizzes) || 0);
             
-            // Switch Views: always reset every course sub-view before showing the overview.
-            // This prevents a previously-open dashboard/page from remaining visible underneath
-            // the overview when entering another course.
-            const overviewView = document.getElementById('courseOverviewContainer');
-            const dashboardView = document.getElementById('courseDashboard');
-            if (overviewView) overviewView.style.display = 'block';
-            if (dashboardView) dashboardView.style.display = 'none';
+            // Switch Views
+            document.getElementById('courseOverviewContainer').style.display = 'block';
             document.getElementById('courseLearningView').classList.remove('active');
             document.getElementById('fullChatPage').classList.remove('active');
             document.getElementById('courseLessonsPage').classList.remove('active');
             document.getElementById('courseLessonPlayerPage').classList.remove('active');
-            document.getElementById('courseQuizzesPage').style.display = 'none';
-            document.getElementById('courseAssignmentsPage').style.display = 'none';
-            document.getElementById('courseChatPage').style.display = 'none';
-            document.getElementById('courseAssignmentDetailPage')?.classList.remove('active');
-            currentCoursePage = 'overview';
             
             // Reset video & sidebar
             if(ytPlayer) {
@@ -2838,9 +2807,16 @@
         // === بدء التعلم (Switch to Split View) ===
         document.getElementById('startLearningBtn').addEventListener('click', function() {
             if (!activeCourseId) return;
-            // Use the single course-page switcher so the overview can never remain visible.
-            switchCoursePage('dashboard');
-            setMobileNavActive('dashboard');
+            // Hide Overview, Show Dashboard
+            document.getElementById('courseOverviewContainer').style.display = 'none';
+            document.getElementById('courseDashboard').style.display = 'flex';
+            
+            // Hide other pages
+            document.getElementById('courseLearningView').classList.remove('active');
+            document.getElementById('fullChatPage').classList.remove('active');
+            document.getElementById('courseQuizzesPage').style.display = 'none';
+            document.getElementById('courseAssignmentsPage').style.display = 'none';
+            document.getElementById('courseChatPage').style.display = 'none';
         });
 
         // ================================================================
@@ -3126,7 +3102,8 @@
             };
         }
 
-        window.openAssignmentDetail = async function(courseId, assignmentId) {
+        window.openAssignmentDetail = async function(courseId, assignmentId, context = {}) {
+            relatedAssignmentLessonId = context.lessonId || null;
             const page=document.getElementById('courseAssignmentDetailPage');
             page.classList.add('active');
             document.getElementById('courseAssignmentsPage').style.display='none';
@@ -3135,10 +3112,27 @@
             const a=result.data;
             document.getElementById('assignmentDetailTitle').textContent=currentLang==='ar'?a.titleAr:a.titleEn;
             document.getElementById('assignmentDetailDesc').textContent=currentLang==='ar'?(a.descAr||''):(a.descEn||'');
+            updateAssignmentContextButtons();
             await refreshAssignmentDetail(courseId,assignmentId);
         };
 
+        function updateAssignmentContextButtons() {
+            const bar = document.getElementById('assignmentContextBackBar');
+            if(!bar) return;
+            bar.style.display = relatedAssignmentLessonId ? 'flex' : 'none';
+        }
+        function backFromRelatedAssignmentToLesson() {
+            const lessonId = relatedAssignmentLessonId;
+            closeAssignmentDetail();
+            if(activeCourseId && lessonId) openLessonPlayer(activeCourseId, lessonId);
+        }
+        function backFromRelatedAssignmentToList() {
+            closeAssignmentDetail();
+            if(activeCourseId) switchCoursePage('assignments');
+        }
+
         window.closeAssignmentDetail=function(){
+            relatedAssignmentLessonId = null;
             document.getElementById('courseAssignmentDetailPage')?.classList.remove('active');
             document.getElementById('courseAssignmentsPage').style.display='block';
         };
@@ -3704,22 +3698,24 @@
             area.innerHTML = '';
             try {
                 const quizSnap = await db.collection('courses').doc(courseId).collection('quizzes').where('lessonId','==',lessonId).get();
-                if(!quizSnap.empty) {
+                quizSnap.forEach(doc => {
+                    const q = doc.data() || {};
                     const quizBtn = document.createElement('button');
                     quizBtn.className = 'related-action';
-                    quizBtn.innerHTML = `<i class="fas fa-question-circle"></i> ${quizSnap.size > 1 ? 'اختبارات الحصة' : 'اختبار الحصة'}`;
-                    quizBtn.onclick = () => switchCoursePage('quizzes');
+                    quizBtn.innerHTML = `<i class="fas fa-question-circle"></i> ${quizSnap.size > 1 ? (currentLang==='ar' ? 'اختبار: ' : 'Quiz: ') : (currentLang==='ar' ? 'اختبار الحصة' : 'Lesson Quiz')}${quizSnap.size > 1 ? escapeHtml(currentLang==='ar' ? (q.titleAr||'اختبار') : (q.titleEn||'Quiz')) : ''}`;
+                    quizBtn.onclick = () => openQuiz(courseId, doc.id, {fromLesson:true, lessonId});
                     area.appendChild(quizBtn);
-                }
+                });
                 if(lessonCurrentData && lessonCurrentData.hasAssignment) {
                     const assignmentSnap = await db.collection('courses').doc(courseId).collection('assignments').where('lessonId','==',lessonId).get();
-                    if(!assignmentSnap.empty) {
+                    assignmentSnap.forEach(doc => {
+                        const a = doc.data() || {};
                         const aBtn = document.createElement('button');
                         aBtn.className = 'related-action';
-                        aBtn.innerHTML = '<i class="fas fa-paint-brush"></i> واجب الحصة';
-                        aBtn.onclick = () => switchCoursePage('assignments');
+                        aBtn.innerHTML = `<i class="fas fa-paint-brush"></i> ${assignmentSnap.size > 1 ? escapeHtml(currentLang==='ar' ? (a.titleAr||'واجب') : (a.titleEn||'Assignment')) : (currentLang==='ar' ? 'واجب الحصة' : 'Lesson Assignment')}`;
+                        aBtn.onclick = () => openAssignmentDetail(courseId, doc.id, {fromLesson:true, lessonId});
                         area.appendChild(aBtn);
-                    }
+                    });
                 }
             } catch(e) { console.error('Related lesson content error:',e); }
         }
@@ -3939,16 +3935,17 @@
         }
 
         // === NEW QUIZ LOGIC ===
-        window.openQuiz = async function(courseId, quizId) {
+        window.openQuiz = async function(courseId, quizId, context = {}) {
             if (!currentUser) { triggerAuth(); return; }
-            // Show custom confirm modal
-            showCustomConfirm('تأكيد الدخول', 'هل أنت متأكد من بدء هذا الاختبار؟', async () => {
+            const proceed = async () => {
                 const doc = await db.collection('courses').doc(courseId).collection('quizzes').doc(quizId).get();
                 if(!doc.exists) return showCustomAlert('خطأ', 'الاختبار غير موجود');
                 const q = doc.data();
                 
                 activeQuizId = quizId;
                 activeQuizData = q;
+                quizOpenedFromLesson = !!context.fromLesson;
+                relatedQuizLessonId = context.lessonId || q.lessonId || null;
                 currentQuestionIndex = 0;
                 quizUserAnswers = {};
                 totalXPGained = 0;
@@ -3963,9 +3960,31 @@
                 document.getElementById('quizStartDesc').textContent = `يتكون هذا الاختبار من ${(q.questions || []).length} سؤال.`;
                 document.getElementById('quizHeaderTitle').textContent = q.titleAr || 'Quiz';
                 
+                updateQuizContextButtons();
                 document.getElementById('quizOverlay').classList.add('active');
-            }, () => {});
+            };
+            if(context.fromLesson) proceed();
+            else showCustomConfirm('تأكيد الدخول', 'هل أنت متأكد من بدء هذا الاختبار؟', proceed, () => {});
         };
+
+        function updateQuizContextButtons() {
+            const bar = document.getElementById('quizContextBackBar');
+            const lessonBtn = document.getElementById('quizBackLessonBtn');
+            const listBtn = document.getElementById('quizBackListBtn');
+            if(!bar || !lessonBtn || !listBtn) return;
+            bar.style.display = quizOpenedFromLesson ? 'flex' : 'none';
+            lessonBtn.style.display = relatedQuizLessonId ? 'inline-flex' : 'none';
+            listBtn.style.display = quizOpenedFromLesson ? 'inline-flex' : 'none';
+        }
+        function backFromRelatedQuizToLesson() {
+            const lessonId = relatedQuizLessonId;
+            closeQuiz();
+            if(activeCourseId && lessonId) openLessonPlayer(activeCourseId, lessonId);
+        }
+        function backFromRelatedQuizToList() {
+            closeQuiz();
+            if(activeCourseId) switchCoursePage('quizzes');
+        }
 
         window.startQuiz = function() {
             document.getElementById('quizStartScreen').style.display = 'none';
@@ -3977,6 +3996,8 @@
             document.getElementById('quizOverlay').classList.remove('active');
             activeQuizId = null;
             activeQuizData = null;
+            quizOpenedFromLesson = false;
+            relatedQuizLessonId = null;
             // Reload quizzes in case of progress update
             if(activeCourseId) {
                 loadQuizzesForCourse(activeCourseId);
@@ -5196,28 +5217,9 @@
         const authStep2 = document.getElementById('authStep2');
 
         authToggleBtn.addEventListener('click', () => {
-            if (currentUser) { openUserProfileModal(); }
+            if (currentUser) { auth.signOut(); } 
             else { if (authPopup) authPopup.classList.add('active'); if (authStep1) authStep1.style.display = 'block'; if (authStep2) authStep2.style.display = 'none'; if (authStatus) authStatus.textContent = ''; }
         });
-
-        function openUserProfileModal() {
-            if (!currentUser) return;
-            const p = currentUserProfile || {};
-            const name = p.displayName || currentUser.displayName || 'مستخدم';
-            const email = p.email || currentUser.email || 'غير متوفر';
-            const uid = currentUser.uid || 'غير متوفر';
-            const phone = p.phone || 'غير مضاف';
-            const gender = p.gender === 'female' ? 'أنثى' : (p.gender === 'male' ? 'ذكر' : 'غير محدد');
-            const created = p.createdAt?.toDate ? p.createdAt.toDate().toLocaleDateString('ar-SA') : (p.createdAt ? new Date(p.createdAt).toLocaleDateString('ar-SA') : 'غير متوفر');
-            const fields = [
-                ['الاسم', name], ['البريد الإلكتروني', email], ['رقم الهاتف', phone], ['الجنس', gender], ['معرّف الحساب', uid], ['تاريخ إنشاء الحساب', created]
-            ];
-            const box = document.getElementById('userProfileFields');
-            if (box) box.innerHTML = fields.map(([label,value]) => `<div style="padding:12px 14px;border:1px solid var(--border);border-radius:14px;background:var(--bg-secondary);display:flex;justify-content:space-between;gap:12px;align-items:center;"><strong>${escapeHtml(label)}</strong><span style="color:var(--text-muted);word-break:break-word;text-align:left;">${escapeHtml(String(value))}</span></div>`).join('');
-            document.getElementById('userProfileModal')?.classList.add('active');
-        }
-        document.getElementById('closeUserProfileBtn')?.addEventListener('click', () => document.getElementById('userProfileModal')?.classList.remove('active'));
-        document.getElementById('userProfileLogoutBtn')?.addEventListener('click', () => { document.getElementById('userProfileModal')?.classList.remove('active'); auth.signOut(); });
         if (authCloseBtn) authCloseBtn.addEventListener('click', () => { if (authPopup) authPopup.classList.remove('active'); });
 
         if (document.getElementById('googleSignInBtn')) document.getElementById('googleSignInBtn').addEventListener('click', () => {
@@ -5252,7 +5254,7 @@
         auth.onAuthStateChanged(async (user) => {
             if (user) {
                 currentUser = user;
-                const name = user.displayName || (currentUserProfile?.displayName) || (translations[currentLang]?.authLabel || 'My Account');
+                const name = user.displayName || (translations[currentLang]?.authLabel || 'My Account');
                 if (authToggleBtn) authToggleBtn.innerHTML = `<i class="fas fa-user-circle"></i> <span id="authLabel">${name}</span>`;
                 
                 try {
@@ -5269,12 +5271,8 @@
                 try {
                     const userDoc = await db.collection('users').doc(user.uid).get();
                     if (userDoc.exists) {
-                        currentUserProfile = userDoc.data() || {};
-                        const profileDisplayName = currentUserProfile.displayName || currentUserProfile.name || user.displayName || '';
-                        if (profileDisplayName && authToggleBtn) authToggleBtn.innerHTML = `<i class="fas fa-user-circle"></i> <span id="authLabel">${escapeHtml(profileDisplayName)}</span>`;
                         if (authPopup) authPopup.classList.remove('active');
                     } else {
-                        currentUserProfile = { uid:user.uid, email:user.email || '', displayName:user.displayName || '' };
                         if (authPopup) authPopup.classList.add('active');
                         if (authStep1) authStep1.style.display = 'none'; if (authStep2) authStep2.style.display = 'block';
                         const emailInput = document.getElementById('emailInput'); if (emailInput) emailInput.value = '';
@@ -5294,7 +5292,7 @@
                 setTimeout(restoreLastCourseRoute, 350);
             } else {
                 // ===== LOGOUT LOGIC =====
-                currentUser = null; currentUserProfile = {}; isAdmin = false;
+                currentUser = null; isAdmin = false;
                 document.querySelectorAll('.admin-only').forEach(el => el.classList.remove('show'));
                 const t = translations[currentLang] || translations['ar'] || {};
                 if (authToggleBtn) authToggleBtn.innerHTML = `<i class="fas fa-user"></i> <span id="authLabel">${t.authLabel || 'Sign In'}</span>`;
@@ -5391,33 +5389,16 @@
         // 9. التهيئة النهائية واخفاء شاشة التحميل
         // ================================================================
         (async function init() {
-            // Load the courses immediately and independently from remote text settings.
-            // This prevents the courses page from staying empty until another action
-            // (such as creating a new course) triggers loadCourses().
-            const coursesPromise = loadCourses(false).catch(error => {
-                console.error('Initial courses load failed:', error);
-            });
-
-            // Translations are loaded in parallel so a slow/failed texts document
-            // can never block the first courses render.
-            const translationsPromise = loadTranslations().catch(error => {
-                console.error('Initial translations load failed:', error);
-            });
-
-            await Promise.allSettled([coursesPromise, translationsPromise]);
-
-            // Re-render once after translations are ready, without another Firebase read.
-            renderCourses();
-            updateCourseActionButtons();
-
-            // Hide Loading Screen with a smooth fade, without delaying the interactive UI.
-            const loadingScreen = document.getElementById('loadingScreen');
-            if (loadingScreen) {
+            await loadTranslations();
+            
+            // Hide Loading Screen with a smooth fade
+            setTimeout(() => {
+                const loadingScreen = document.getElementById('loadingScreen');
                 loadingScreen.classList.add('fade-out');
                 setTimeout(() => {
                     loadingScreen.style.display = 'none';
-                }, 350);
-            }
+                }, 600);
+            }, 500);
         })();
 
         // ================================================================
