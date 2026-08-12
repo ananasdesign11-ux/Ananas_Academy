@@ -4933,20 +4933,57 @@
         });
 
         // ================================================================
-        // 9. التهيئة النهائية واخفاء شاشة التحميل
+        // 9. التهيئة النهائية - لا نمنع فتح الموقع بسبب Firebase
         // ================================================================
-        (async function init() {
-            await loadTranslations();
-            await loadCourses();
-            
-            // Hide Loading Screen with a smooth fade
-            setTimeout(() => {
-                const loadingScreen = document.getElementById('loadingScreen');
+        (function init() {
+            const loadingScreen = document.getElementById('loadingScreen');
+            const loadingText = document.getElementById('loadingText');
+            let loadingClosed = false;
+
+            // نستخدم النصوص الافتراضية فوراً حتى لا تبقى الشاشة البيضاء
+            // ظاهرة إذا كان اتصال Firebase بطيئاً أو غير متاح مؤقتاً.
+            try {
+                translations = JSON.parse(JSON.stringify(DEFAULT_TEXTS));
+                applyTranslations(currentLang);
+            } catch (e) {
+                console.warn('تعذر تطبيق النصوص الافتراضية:', e);
+            }
+
+            const closeLoadingScreen = (reason) => {
+                if (loadingClosed) return;
+                loadingClosed = true;
+                if (reason && loadingText) loadingText.textContent = reason;
+                if (!loadingScreen) return;
                 loadingScreen.classList.add('fade-out');
                 setTimeout(() => {
                     loadingScreen.style.display = 'none';
-                }, 600);
-            }, 500);
+                }, 450);
+            };
+
+            // حد أقصى مطلق: الموقع لا يمكن أن يبقى عالقاً في شاشة التحميل.
+            setTimeout(() => closeLoadingScreen(), 3500);
+
+            // نحمّل البيانات في الخلفية ولا ننتظرها قبل فتح الواجهة.
+            Promise.resolve().then(async () => {
+                try {
+                    await Promise.race([
+                        loadTranslations(),
+                        new Promise(resolve => setTimeout(resolve, 5000))
+                    ]);
+                } catch (e) {
+                    console.warn('تعذر تحميل النصوص من Firebase:', e);
+                }
+                try {
+                    await Promise.race([
+                        loadCourses(),
+                        new Promise(resolve => setTimeout(resolve, 7000))
+                    ]);
+                } catch (e) {
+                    console.warn('تعذر تحميل الدورات من Firebase:', e);
+                    try { renderCourses(); } catch (_) {}
+                }
+                closeLoadingScreen();
+            });
         })();
 
         // ================================================================
@@ -5994,6 +6031,14 @@
     adminObserver.observe(document.body,{subtree:true,childList:true,attributes:true,attributeFilter:['class','style']});
     setTimeout(enforceAdminVisibility,0);
 
+    // Safety net: never leave the user trapped behind the loading overlay.
+    window.addEventListener('error', function(){
+        const ls = document.getElementById('loadingScreen');
+        if(ls && getComputedStyle(ls).display !== 'none'){
+            ls.classList.add('fade-out');
+            setTimeout(()=>{ ls.style.display='none'; },450);
+        }
+    });
 })();
 </script>
 
