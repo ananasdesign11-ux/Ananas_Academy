@@ -4447,6 +4447,7 @@
         let lessonCurrentData = null;
         let lessonListCache = [];
         let lessonWatchState = { lessonId:null, watchedSeconds:0, lastTick:null, duration:0, granted:false };
+        let lessonCompletionInFlight = false;
 
         function getYouTubeId(url) {
             if(!url) return null;
@@ -4549,7 +4550,19 @@
             renderLessonPlayerList();
             await renderLessonRelatedActions(courseId, lessonId);
             await renderLessonCompletionStatus(courseId, lessonId);
+            try {
+                const alreadyDone = await db.collection('users').doc(currentUser.uid)
+                    .collection('completedLessons').doc(lessonId).get();
+                lessonWatchState.granted = alreadyDone.exists;
+            } catch(e) {
+                lessonWatchState.granted = false;
+            }
             resetLessonWatchState(lessonId, lesson.duration);
+            try {
+                const alreadyDoneAfterReset = await db.collection('users').doc(currentUser.uid)
+                    .collection('completedLessons').doc(lessonId).get();
+                lessonWatchState.granted = alreadyDoneAfterReset.exists;
+            } catch(e) {}
             if(window.prepareLessonResume) await window.prepareLessonResume(courseId,lessonId);
             loadLessonVideo(lesson);
             persistCourseState();
@@ -4676,13 +4689,13 @@
             if(lessonPlaybackTimer) clearInterval(lessonPlaybackTimer);
 
             /*
-             * IMPORTANT:
-             * Completion is tied to the VIDEO CURSOR, not listening time.
-             * We therefore inspect getCurrentTime() even while the video is
-             * paused. This makes manual seeking to 90% count immediately.
+             * Completion is based ONLY on the position of the video cursor.
+             * The check intentionally runs while PLAYING, PAUSED and after a
+             * manual seek, so moving the cursor to 90% is sufficient.
              */
             lessonPlaybackTimer = setInterval(() => {
                 if(!lessonPlayerReady || !lessonPlayer || !lessonCurrentData) return;
+
                 try {
                     const state = lessonPlayer.getPlayerState();
                     const now = Date.now();
@@ -4691,7 +4704,7 @@
                         if(lessonWatchState.lastTick) {
                             lessonWatchState.watchedSeconds += Math.max(
                                 0,
-                                Math.min(2.2, (now - lessonWatchState.lastTick) / 1000)
+                                Math.min(2.5, (now - lessonWatchState.lastTick) / 1000)
                             );
                         }
                         lessonWatchState.lastTick = now;
@@ -4699,71 +4712,208 @@
                         lessonWatchState.lastTick = null;
                     }
 
-                    /*
-                     * Always update the UI and completion check, regardless
-                     * of player state. A seek while paused must work too.
-                     */
                     updateLessonControls();
-                    checkLessonAutoCompletion(false);
-                } catch(e) {}
-            }, 250);
+
+                    // Do NOT gate this by player state.
+                    checkLessonAutoCompletion();
+                } catch(e) {
+                    console.warn('Lesson progress monitor:', e);
+                }
+            }, 100);
         }
 
         function updateLessonControls() {
             if(!lessonPlayerReady || !lessonPlayer) return;
             try {
-                const current = lessonPlayer.getCurrentTime() || 0;
-                const duration = lessonPlayer.getDuration() || lessonWatchState.duration || 1;
-                document.getElementById('lessonProgressBarFill').style.width = Math.min(100,(current/duration)*100) + '%';
-                document.getElementById('lessonTimerDisplay').textContent = `${formatVideoTime(current)} / ${formatVideoTime(duration)}`;
-                const state = lessonPlayer.getPlayerState();
-                document.getElementById('lessonPlayPauseBtn').innerHTML = state === YT.PlayerState.PLAYING ? '<i class="fas fa-pause"></i>' : '<i class="fas fa-play"></i>';
+                const current = Number(lessonPlayer.getCurrentTime()) || 0;
+                const duration = Number(lessonPlayer.getDuration()) ||
+                                 Number(lessonWatchState.duration) || 1;
+
+                lessonWatchState.duration = duration;
+
+                const fill = document.getElementById('lessonProgressBarFill');
+                const timer = document.getElementById('lessonTimerDisplay');
+                const playBtn = document.getElementById('lessonPlayPauseBtn');
+
+                if(fill) {
+                    fill.style.width = Math.min(100, Math.max(0, (current / duration) * 100)) + '%';
+                }
+
+                if(timer) {
+                    timer.textContent =
+                        `${formatVideoTime(current)} / ${formatVideoTime(duration)}`;
+                }
+
+                if(playBtn) {
+                    const state = lessonPlayer.getPlayerState();
+                    playBtn.innerHTML =
+                        state === YT.PlayerState.PLAYING
+                            ? '<i class="fas fa-pause"></i>'
+                            : '<i class="fas fa-play"></i>';
+                }
             } catch(e) {}
         }
 
-        async function checkLessonAutoCompletion(force=false) {
-            if(!currentUser || !lessonCurrentData || lessonWatchState.granted) return;
+        async function checkLessonAutoCompletion() {
+            if(!currentUser || !lessonCurrentData || lessonCompletionInFlight) return;
+            if(!lessonPlayerReady || !lessonPlayer) return;
 
-            /*
-             * Use the real duration reported by the player whenever possible.
-             * The lesson's manually entered duration is only a fallback.
-             */
             let currentPosition = 0;
-            let actualDuration = 0;
+            let duration = 0;
 
             try {
-                currentPosition = Number(lessonPlayer?.getCurrentTime?.() || 0);
-                actualDuration = Number(lessonPlayer?.getDuration?.() || 0);
-            } catch(e) {}
+                currentPosition = Number(lessonPlayer.getCurrentTime()) || 0;
+                duration = Number(lessonPlayer.getDuration()) || 0;
+            } catch(e) {
+                return;
+            }
 
-            const duration =
-                actualDuration > 0
-                    ? actualDuration
-                    : Number(lessonWatchState.duration || (Number(lessonCurrentData.duration)||0) * 60);
-
-            if(duration <= 0 || currentPosition < 0) return;
+            // The YouTube player can briefly return 0 immediately after ready.
+            if(duration <= 0) return;
 
             lessonWatchState.duration = duration;
 
+            const percent = (currentPosition / duration) * 100;
+
             /*
-             * The ONLY completion threshold:
-             * current cursor position >= 90% of the actual video duration.
-             *
-             * It does not matter whether the student watched it normally,
-             * dragged the progress bar, clicked a point, or reached 90%
-             * while the player is paused.
+             * HARD RULE:
+             * cursor >= 90% => lesson completed.
+             * Watching time is NOT used for this decision.
              */
-            const progressPercent = (currentPosition / duration) * 100;
+            if(percent < 90) return;
 
-            if(progressPercent < 90) return;
+            lessonCompletionInFlight = true;
 
-            lessonWatchState.granted = true;
+            try {
+                const completedRef = db.collection('users')
+                    .doc(currentUser.uid)
+                    .collection('completedLessons')
+                    .doc(activeLessonId);
 
-            await grantLessonAutoXP(
-                activeCourseId,
-                activeLessonId,
-                Number(lessonCurrentData.xpReward) || 0
-            );
+                // Server-side guard: XP can only be awarded once.
+                const result = await db.runTransaction(async transaction => {
+                    const completedSnap = await transaction.get(completedRef);
+
+                    if(completedSnap.exists) {
+                        return {
+                            newlyCompleted: false,
+                            xp: Number(completedSnap.data()?.xpEarned || 0)
+                        };
+                    }
+
+                    const xpAmount = Number(lessonCurrentData.xpReward) || 0;
+                    transaction.set(completedRef, {
+                        completedAt: firebase.firestore.FieldValue.serverTimestamp(),
+                        xpEarned: xpAmount,
+                        completionPercent: Math.round(percent * 100) / 100,
+                        completionPosition: currentPosition
+                    });
+
+                    const statsRef = db.collection('userStats').doc(currentUser.uid);
+                    const statsSnap = await transaction.get(statsRef);
+
+                    if(statsSnap.exists) {
+                        const data = statsSnap.data() || {};
+                        const currentXP = Number(data.xp) || 0;
+                        transaction.update(statsRef, {
+                            xp: currentXP + xpAmount,
+                            lastLessonCompletedAt:
+                                firebase.firestore.FieldValue.serverTimestamp()
+                        });
+                    } else {
+                        transaction.set(statsRef, {
+                            xp: xpAmount,
+                            level: 1,
+                            rank: 1,
+                            progress: 0,
+                            avgScore: '0%',
+                            awards: [],
+                            lastLessonCompletedAt:
+                                firebase.firestore.FieldValue.serverTimestamp()
+                        });
+                    }
+
+                    return {
+                        newlyCompleted: true,
+                        xp: xpAmount
+                    };
+                });
+
+                lessonWatchState.granted = true;
+
+                // Update local cache immediately.
+                const cached = lessonListCache.find(l => l.id === activeLessonId);
+                if(cached) cached.completed = true;
+
+                // Update the current lesson card immediately.
+                const card = Array.from(document.querySelectorAll('#lessonsCardsContainer .lesson-card'))
+                    .find(el => String(el.dataset.id) === String(activeLessonId));
+
+                if(card) {
+                    card.classList.add('completed');
+                    card.dataset.completed = 'true';
+                    card.style.borderColor = 'rgba(46,204,113,.65)';
+                    card.style.boxShadow = '0 10px 30px rgba(46,204,113,.16)';
+
+                    const meta = card.querySelector('.lesson-meta');
+                    if(meta && !meta.textContent.includes('مكتملة')) {
+                        meta.textContent += ' · ✓ مكتملة';
+                        meta.style.color = '#27ae60';
+                        meta.style.fontWeight = '800';
+                    }
+
+                    if(!card.querySelector('.lesson-completed-badge')) {
+                        const badge = document.createElement('div');
+                        badge.className = 'lesson-completed-badge';
+                        badge.innerHTML =
+                            '<i class="fas fa-check-circle"></i> مكتملة';
+                        badge.style.cssText =
+                            'display:inline-flex;align-items:center;gap:6px;' +
+                            'margin-top:10px;padding:6px 11px;border-radius:999px;' +
+                            'font-size:.8rem;font-weight:800;color:#1f9d55;' +
+                            'background:rgba(46,204,113,.12);';
+                        card.appendChild(badge);
+                    }
+                }
+
+                // Update sidebar completion immediately.
+                document.querySelectorAll('#lessonPlayerList .done').forEach(el => {
+                    if(String(el.dataset.done) !== String(activeLessonId)) return;
+                    el.style.display = 'inline-flex';
+                });
+
+                const status = document.getElementById('lessonCompletionStatus');
+                if(status) {
+                    status.className = 'lesson-completion-status completed';
+
+                    if(result.newlyCompleted) {
+                        status.innerHTML =
+                            `<i class="fas fa-check-circle"></i> مكتمل — تم الوصول إلى 90% من الفيديو وحصلت على ${result.xp} نقطة خبرة.`;
+                    } else {
+                        status.innerHTML =
+                            '<i class="fas fa-check-circle"></i> مكتمل — حصلت على نقاط الخبرة مسبقًا.';
+                    }
+                }
+
+                // Refresh only the completion indicators, never the lesson list.
+                refreshLessonDoneIndicators();
+
+                if(result.newlyCompleted) {
+                    showCustomAlert(
+                        'مبارك!',
+                        `تم إكمال الحصة عند الوصول إلى 90% وحصلت على ${result.xp} نقطة خبرة.`
+                    );
+                }
+            } catch(error) {
+                /*
+                 * Do not permanently lock completion if Firebase temporarily
+                 * fails. The next 100ms check can retry.
+                 */
+                lessonWatchState.granted = false;
+                console.error('90% lesson completion failed:', error);
+            } finally {
+                lessonCompletionInFlight = false;
+            }
         }
 
         async function grantLessonAutoXP(courseId, lessonId, xpAmount) {
