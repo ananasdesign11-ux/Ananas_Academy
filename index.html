@@ -1778,6 +1778,20 @@
 }
 
     </style>
+
+<style id="lesson-completion-visual-fix">
+.lesson-card.completed {
+    border-color: rgba(46, 204, 113, .55) !important;
+    box-shadow: 0 10px 28px rgba(46, 204, 113, .13);
+}
+.lesson-card.completed .card-actions button {
+    border-color: rgba(46, 204, 113, .45);
+}
+.lesson-card.completed .lesson-meta {
+    color: #27ae60 !important;
+    font-weight: 700;
+}
+</style>
 </head>
 <body class="light-mode">
     
@@ -4482,7 +4496,7 @@
                     const done=!!completedMap[lesson.id],title=currentLang==='ar'?lesson.titleAr:lesson.titleEn;
                     const card=document.createElement('div');card.className='full-page-card lesson-card'+(done?' completed':'');card.dataset.id=lesson.id;
                     card.innerHTML=`<div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start;">
-                        <div style="cursor:pointer;flex:1;min-width:0;"><div style="font-size:1.08rem;font-weight:800;margin-bottom:7px;">${index+1}. ${escapeHtml(title||'حصة')}</div><div style="color:var(--text-muted);font-size:.86rem;">${Math.max(0,Number(lesson.duration)||0)} دقيقة · ${Math.max(0,Number(lesson.xpReward)||0)} XP ${done?'· ✓ مكتملة':''}</div></div>
+                        <div style="cursor:pointer;flex:1;min-width:0;"><div style="font-size:1.08rem;font-weight:800;margin-bottom:7px;">${index+1}. ${escapeHtml(title||'حصة')}</div><div class="lesson-meta" data-lesson-meta style="color:var(--text-muted);font-size:.86rem;">${Math.max(0,Number(lesson.duration)||0)} دقيقة · ${Math.max(0,Number(lesson.xpReward)||0)} XP ${done?'· ✓ مكتملة':''}</div></div>
                         ${isAdmin?`<div class="admin-actions admin-only show" style="display:flex;gap:6px;"><button title="تعديل" onclick="event.stopPropagation();editLesson('${courseId}','${lesson.id}')" style="border:1px solid var(--border);background:var(--bg-secondary);color:var(--text-primary);width:36px;height:36px;border-radius:50%;cursor:pointer;"><i class="fas fa-edit"></i></button><button title="حذف" onclick="event.stopPropagation();deleteLesson('${courseId}','${lesson.id}')" style="border:1px solid var(--border);background:var(--bg-secondary);color:#e74c3c;width:36px;height:36px;border-radius:50%;cursor:pointer;"><i class="fas fa-trash"></i></button></div>`:''}
                     </div><div class="card-actions"><button type="button" onclick="event.stopPropagation();openLessonPlayer('${courseId}','${lesson.id}')"><i class="fas fa-play"></i> مشاهدة الحصة</button></div>`;
                     card.onclick=()=>openLessonPlayer(courseId,lesson.id);fragment.appendChild(card);
@@ -4660,20 +4674,39 @@
 
         function startLessonPlaybackMonitor() {
             if(lessonPlaybackTimer) clearInterval(lessonPlaybackTimer);
+
+            /*
+             * IMPORTANT:
+             * Completion is tied to the VIDEO CURSOR, not listening time.
+             * We therefore inspect getCurrentTime() even while the video is
+             * paused. This makes manual seeking to 90% count immediately.
+             */
             lessonPlaybackTimer = setInterval(() => {
                 if(!lessonPlayerReady || !lessonPlayer || !lessonCurrentData) return;
                 try {
-                    if(lessonPlayer.getPlayerState() === YT.PlayerState.PLAYING) {
-                        const now = Date.now();
+                    const state = lessonPlayer.getPlayerState();
+                    const now = Date.now();
+
+                    if(state === YT.PlayerState.PLAYING) {
                         if(lessonWatchState.lastTick) {
-                            lessonWatchState.watchedSeconds += Math.max(0, Math.min(2.2, (now - lessonWatchState.lastTick)/1000));
+                            lessonWatchState.watchedSeconds += Math.max(
+                                0,
+                                Math.min(2.2, (now - lessonWatchState.lastTick) / 1000)
+                            );
                         }
                         lessonWatchState.lastTick = now;
-                        updateLessonControls();
-                        checkLessonAutoCompletion(false);
+                    } else {
+                        lessonWatchState.lastTick = null;
                     }
+
+                    /*
+                     * Always update the UI and completion check, regardless
+                     * of player state. A seek while paused must work too.
+                     */
+                    updateLessonControls();
+                    checkLessonAutoCompletion(false);
                 } catch(e) {}
-            }, 2000);
+            }, 250);
         }
 
         function updateLessonControls() {
@@ -4690,16 +4723,47 @@
 
         async function checkLessonAutoCompletion(force=false) {
             if(!currentUser || !lessonCurrentData || lessonWatchState.granted) return;
-            const duration = lessonWatchState.duration || (Number(lessonCurrentData.duration)||0)*60;
-            if(duration <= 0) return;
-            /* Completion is based on the actual video progress bar reaching 90%,
-               not on accumulated watched time. */
+
+            /*
+             * Use the real duration reported by the player whenever possible.
+             * The lesson's manually entered duration is only a fallback.
+             */
             let currentPosition = 0;
-            try { currentPosition = Number(lessonPlayer?.getCurrentTime?.() || 0); } catch(e) {}
-            const progressRatio = currentPosition / duration;
-            if(progressRatio < 0.9) return;
+            let actualDuration = 0;
+
+            try {
+                currentPosition = Number(lessonPlayer?.getCurrentTime?.() || 0);
+                actualDuration = Number(lessonPlayer?.getDuration?.() || 0);
+            } catch(e) {}
+
+            const duration =
+                actualDuration > 0
+                    ? actualDuration
+                    : Number(lessonWatchState.duration || (Number(lessonCurrentData.duration)||0) * 60);
+
+            if(duration <= 0 || currentPosition < 0) return;
+
+            lessonWatchState.duration = duration;
+
+            /*
+             * The ONLY completion threshold:
+             * current cursor position >= 90% of the actual video duration.
+             *
+             * It does not matter whether the student watched it normally,
+             * dragged the progress bar, clicked a point, or reached 90%
+             * while the player is paused.
+             */
+            const progressPercent = (currentPosition / duration) * 100;
+
+            if(progressPercent < 90) return;
+
             lessonWatchState.granted = true;
-            await grantLessonAutoXP(activeCourseId, activeLessonId, Number(lessonCurrentData.xpReward)||0);
+
+            await grantLessonAutoXP(
+                activeCourseId,
+                activeLessonId,
+                Number(lessonCurrentData.xpReward) || 0
+            );
         }
 
         async function grantLessonAutoXP(courseId, lessonId, xpAmount) {
@@ -4720,14 +4784,64 @@
                     return true;
                 });
                 if(result) {
+                    /*
+                     * Update the current lesson card immediately instead of
+                     * waiting for a complete lessons reload.
+                     */
+                    const currentCard = document.querySelector(
+                        `#lessonsCardsContainer .lesson-card[data-id="${lessonId}"]`
+                    );
+
+                    if(currentCard) {
+                        currentCard.classList.add('completed');
+
+                        const meta = currentCard.querySelector('.lesson-meta, [data-lesson-meta]');
+                        if(meta && !meta.textContent.includes('مكتملة')) {
+                            meta.textContent += ' · ✓ مكتملة';
+                        }
+
+                        if(!currentCard.querySelector('.lesson-completed-badge')) {
+                            const badge = document.createElement('span');
+                            badge.className = 'lesson-completed-badge';
+                            badge.innerHTML = '<i class="fas fa-check-circle"></i> مكتملة';
+                            badge.style.cssText =
+                                'display:inline-flex;align-items:center;gap:5px;margin-top:8px;' +
+                                'padding:5px 9px;border-radius:999px;font-size:.78rem;' +
+                                'font-weight:800;color:#1f9d55;background:rgba(46,204,113,.12);';
+                            currentCard.appendChild(badge);
+                        }
+                    }
+
+                    /*
+                     * Update the sidebar immediately as well.
+                     */
+                    const sidebarDone = document.querySelector(
+                        `#lessonPlayerList .lesson-player-item .done[data-done="${lessonId}"]`
+                    );
+                    if(sidebarDone) {
+                        sidebarDone.style.display = 'inline';
+                    }
+
                     const status = document.getElementById('lessonCompletionStatus');
                     if(status) {
                         status.className = 'lesson-completion-status completed';
-                        status.innerHTML = `<i class="fas fa-check-circle"></i> أحسنت! أكملت 90% من الحصة وحصلت على ${xpAmount} نقطة خبرة.`;
+                        status.innerHTML =
+                            `<i class="fas fa-check-circle"></i> أحسنت! أكملت 90% من الحصة وحصلت على ${xpAmount} نقطة خبرة.`;
                     }
+
                     refreshLessonDoneIndicators();
-                    loadLessonsForCourse(courseId);
-                    showCustomAlert('مبارك!', `تم إكمال الحصة تلقائيًا ومنحك ${xpAmount} نقطة خبرة.`);
+
+                    /*
+                     * Keep the list data in sync without forcing a visible
+                     * page refresh/re-render that could make cards disappear.
+                     */
+                    const cachedLesson = lessonListCache.find(l => l.id === lessonId);
+                    if(cachedLesson) cachedLesson.completed = true;
+
+                    showCustomAlert(
+                        'مبارك!',
+                        `تم إكمال الحصة تلقائيًا ومنحك ${xpAmount} نقطة خبرة.`
+                    );
                 }
             } catch(e) {
                 lessonWatchState.granted = false;
