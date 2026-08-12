@@ -3736,11 +3736,17 @@
         // ================================================================
         async function saveLessonPositionBeforeLeaving() {
             if(!activeCourseId || !activeLessonId || !lessonPlayer || !currentUser) return;
-            try { await persistCourseState(); } catch(e) { console.warn('تعذر حفظ موضع الحصة:',e); }
+            try {
+                if(typeof window.saveLessonProgressNow === 'function') await window.saveLessonProgressNow();
+                if(typeof window.persistCourseState === 'function') await window.persistCourseState();
+            } catch(e) { console.warn('تعذر حفظ موضع الحصة:',e); }
         }
 
         function stopLessonForNavigation() {
-            saveLessonPositionBeforeLeaving();
+            try {
+                const pending = window.saveLessonPositionBeforeLeaving?.();
+                if(pending && typeof pending.catch === 'function') pending.catch(()=>{});
+            } catch(e) {}
             destroyLessonVideo();
         }
 
@@ -4703,22 +4709,31 @@
                     onReady: async () => {
                         lessonPlayerReady = true;
                         lessonWatchState.duration = lessonPlayer.getDuration() || lessonWatchState.duration;
-                        let saved=0;
+                        let saved=Number(window.__lessonResumePosition||0);
                         try {
                             if(currentUser && activeCourseId){
                                 const stSnap=await db.collection('users').doc(currentUser.uid).collection('courseState').doc(activeCourseId).get();
                                 const st=stSnap.exists?(stSnap.data()||{}):{};
-                                if(String(st.lessonId||'')===String(activeLessonId||'')) saved=Number(st.lessonTime||0);
+                                if(String(st.lessonId||'')===String(activeLessonId||'')) {
+                                    saved=Math.max(saved,Number(st.lessonTime||0));
+                                }
                             }
                         } catch(e) { console.warn('تعذر استعادة موضع الحصة:',e); }
-                        if(saved>3){try{lessonPlayer.seekTo(saved,true);}catch(e){}}
+                        window.__lessonResumePosition=saved;
+                        if(saved>0.5){try{lessonPlayer.seekTo(saved,true);}catch(e){}}
                         startLessonPlaybackMonitor();
                         updateLessonControls();
                     },
                     onStateChange: (event) => {
-                        if(event.data === YT.PlayerState.PLAYING) lessonWatchState.lastTick = Date.now();
-                        else lessonWatchState.lastTick = null;
+                        if(event.data === YT.PlayerState.PLAYING) {
+                            lessonWatchState.lastTick=Date.now();
+                        } else {
+                            lessonWatchState.lastTick=null;
+                            window.saveLessonProgressNow?.();
+                            window.persistCourseState?.();
+                        }
                         if(event.data === YT.PlayerState.ENDED) {
+                            window.saveLessonProgressNow?.();
                             updateLessonControls();
                             checkLessonAutoCompletion(true);
                         }
@@ -4737,31 +4752,30 @@
              */
             lessonPlaybackTimer = setInterval(() => {
                 if(!lessonPlayerReady || !lessonPlayer || !lessonCurrentData) return;
-
                 try {
                     const state = lessonPlayer.getPlayerState();
                     const now = Date.now();
 
                     if(state === YT.PlayerState.PLAYING) {
                         if(lessonWatchState.lastTick) {
-                            lessonWatchState.watchedSeconds += Math.max(
-                                0,
-                                Math.min(2.5, (now - lessonWatchState.lastTick) / 1000)
-                            );
+                            lessonWatchState.watchedSeconds += Math.max(0, Math.min(2.5,(now-lessonWatchState.lastTick)/1000));
                         }
-                        lessonWatchState.lastTick = now;
+                        lessonWatchState.lastTick=now;
                     } else {
-                        lessonWatchState.lastTick = null;
+                        lessonWatchState.lastTick=null;
                     }
 
                     updateLessonControls();
-
-                    // Do NOT gate this by player state.
                     checkLessonAutoCompletion();
+
+                    if(!window.__lessonProgressSaveAt || now-window.__lessonProgressSaveAt>=1000) {
+                        window.__lessonProgressSaveAt=now;
+                        window.saveLessonProgressNow?.();
+                    }
                 } catch(e) {
-                    console.warn('Lesson progress monitor:', e);
+                    console.warn('Lesson progress monitor:',e);
                 }
-            }, 100);
+            },250);
         }
 
         function updateLessonControls() {
@@ -7378,6 +7392,20 @@
 #courseChatPage #chatEmojiPickerPage{left:0!important;right:auto!important;bottom:calc(100% + 8px)!important;}
 </style>
 
+<script>
+/* ===== FINAL LESSON POSITION SAFETY SAVE ===== */
+(function(){
+  function save(){
+    try{
+      const p=window.saveLessonPositionBeforeLeaving?.();
+      if(p&&typeof p.catch==='function')p.catch(()=>{});
+    }catch(e){}
+  }
+  document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden')save();});
+  window.addEventListener('pagehide',save);
+  window.addEventListener('beforeunload',save);
+})();
+</script>
 </body>
 </html>
 
@@ -7395,17 +7423,28 @@ function lessonProgressRef(courseId,lessonId){
 }
 async function saveLessonProgressNow(){
   if(!currentUser||!activeCourseId||!activeLessonId||!window.lessonPlayer)return;
+  if(window.__lessonProgressWriteBusy)return;
   try{
-    const pos=Number(lessonPlayer.getCurrentTime?.()||0), duration=Number(lessonPlayer.getDuration?.()||lessonWatchState.duration||0);
-    if(!Number.isFinite(pos)||!Number.isFinite(duration))return;
+    window.__lessonProgressWriteBusy=true;
+    const pos=Number(lessonPlayer.getCurrentTime?.()||0);
+    const duration=Number(lessonPlayer.getDuration?.()||lessonWatchState.duration||0);
+    if(!Number.isFinite(pos)||!Number.isFinite(duration)||duration<=0)return;
     const ref=lessonProgressRef(activeCourseId,activeLessonId); if(!ref)return;
-    const percent = duration > 0 ? Math.max(0, Math.min(100, (pos / duration) * 100)) : 0;
-    window.lessonProgressCache = window.lessonProgressCache || {};
-    window.lessonProgressCache[activeLessonId] = {percent,position:pos,duration};
-    await ref.set({lessonId:activeLessonId,courseId:activeCourseId,lastPosition:pos,maxWatchedSeconds:Math.max(Number(lessonWatchState.watchedSeconds||0),pos),duration,percent,progress:percent,updatedAt:firebase.firestore.FieldValue.serverTimestamp()},{merge:true});
-    await window.persistCourseState?.();
+    const percent=Math.max(0,Math.min(100,(pos/duration)*100));
+    window.lessonProgressCache=window.lessonProgressCache||{};
+    window.lessonProgressCache[activeLessonId]={percent,position:pos,duration};
+    await ref.set({
+      lessonId:activeLessonId,courseId:activeCourseId,
+      lastPosition:pos,position:pos,
+      maxWatchedSeconds:Math.max(Number(lessonWatchState.watchedSeconds||0),pos),
+      duration,percent,progress:percent,
+      updatedAt:firebase.firestore.FieldValue.serverTimestamp()
+    },{merge:true});
+    if(typeof window.persistCourseState==='function') await window.persistCourseState();
   }catch(e){console.warn('تعذر حفظ تقدم الحصة:',e);}
+  finally{window.__lessonProgressWriteBusy=false;}
 }
+window.saveLessonProgressNow=saveLessonProgressNow;
 window.prepareLessonResume=async function(courseId,lessonId){
   if(!currentUser)return;
   try{
@@ -7646,7 +7685,12 @@ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',
 const tl=document.getElementById('enrollCodeTermsLink');if(tl)tl.onclick=e=>{e.preventDefault();window.openEnrollmentTermsPreview();};
 
 /* Before leaving/suspension, force the latest position into Firestore. */
-window.saveLessonPositionBeforeLeaving=async function(){try{await saveLessonProgressNow();await window.persistCourseState?.();}catch(e){}};
+window.saveLessonPositionBeforeLeaving=async function(){
+  try{
+    await window.saveLessonProgressNow?.();
+    await window.persistCourseState?.();
+  }catch(e){console.warn('تعذر حفظ آخر نقطة للحصة:',e);}
+};
 
 })();
 </script>
