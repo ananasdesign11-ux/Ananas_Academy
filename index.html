@@ -8331,6 +8331,166 @@ body.light-mode .logo-img{content:url('https://i.postimg.cc/q7Frnj7k/image.png')
 })();
 </script>
 
+
+<style id="ananas-final-v7-fixes">
+/* ===== V7: unified polish ===== */
+#profileLogoutBtnV7{width:100%;margin-top:18px;min-height:46px;border:0;border-radius:14px;background:linear-gradient(135deg,#e74c3c,#c0392b);color:#fff;font:inherit;font-weight:900;cursor:pointer;box-shadow:0 10px 25px rgba(231,76,60,.16);transition:.2s}
+#profileLogoutBtnV7:hover{transform:translateY(-2px);filter:saturate(1.05)}
+#profileLogoutBtnV7:active{transform:scale(.98)}
+.profile-subscriptions-v7{margin-top:18px}
+.profile-subscription-grid-v7{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px}
+.profile-subscription-card-v7{border:1px solid var(--border);background:var(--bg-card);border-radius:18px;padding:14px;box-shadow:0 8px 22px rgba(0,0,0,.04)}
+.profile-subscription-card-v7 strong{display:block;margin-bottom:5px;color:var(--text-primary)}
+.profile-subscription-card-v7 small{display:block;color:var(--text-muted);line-height:1.7}
+.profile-admin-detail-grid-v7{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-top:12px}
+.profile-admin-detail-v7{padding:12px 14px;border:1px solid var(--border);border-radius:14px;background:var(--bg-secondary)}
+.profile-admin-detail-v7 strong{display:block;font-size:.76rem;color:var(--text-muted);margin-bottom:4px}.profile-admin-detail-v7 span{display:block;word-break:break-word}
+.chat-profile-head-v7{display:flex;align-items:center;gap:9px;min-width:0;margin-bottom:5px;cursor:pointer}
+.chat-profile-head-v7 .avatar{width:34px;height:34px;border-radius:50%;overflow:hidden;display:grid;place-items:center;flex:0 0 auto;background:var(--accent-gradient);color:#fff;font-weight:900}
+.chat-profile-head-v7 .avatar img{width:100%;height:100%;object-fit:cover}
+.chat-profile-head-v7 .name{font-weight:900;color:var(--text-primary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.chat-profile-head-v7:hover .name{color:var(--accent1)}
+#courseFilesPage .files-page-upload-head{background:linear-gradient(135deg,rgba(108,92,231,.08),var(--bg-card));border:1px solid var(--border);border-radius:20px}
+.ananas-code-expiry-v7{margin-top:6px;padding:10px 12px;border:1px dashed var(--border);border-radius:14px;background:var(--bg-secondary)}
+.ananas-code-expiry-v7 label{display:flex;align-items:center;gap:8px;font-weight:800;color:var(--text-primary);cursor:pointer}
+.ananas-code-expiry-v7 small{display:block;color:var(--text-muted);margin-top:4px}
+@media(max-width:768px){.profile-admin-detail-grid-v7{grid-template-columns:1fr}.profile-subscription-grid-v7{grid-template-columns:1fr}.profile-page-inner{padding-bottom:30px!important}}
+</style>
+<script id="ananas-final-v7-script">
+(function(){
+'use strict';
+const $v=id=>document.getElementById(id);
+const escV=v=>String(v??'').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+const fmtV=v=>{try{const d=v?.toDate?v.toDate():(v?new Date(v):null);return d&&!isNaN(d)?d.toLocaleString('ar-SA',{year:'numeric',month:'long',day:'numeric',hour:'2-digit',minute:'2-digit'}):'—'}catch(e){return '—'}};
+
+/* ===== 1. Brand: light logo in light theme, white logo in dark theme ===== */
+const LIGHT_LOGO='https://i.postimg.cc/q7Frnj7k/image.png';
+const DARK_LOGO='https://i.postimg.cc/WbmsKG5y/image.png';
+function syncBrandLogoV7(){const img=$v('siteLogo');if(!img)return;img.src=document.body.classList.contains('light-mode')?LIGHT_LOGO:DARK_LOGO;img.style.filter='none';img.style.mixBlendMode='normal';}
+syncBrandLogoV7();
+const themeBtnV7=$v('themeToggle');if(themeBtnV7&&!themeBtnV7.dataset.v7Logo){themeBtnV7.dataset.v7Logo='1';themeBtnV7.addEventListener('click',()=>setTimeout(syncBrandLogoV7,40),true)}
+new MutationObserver(syncBrandLogoV7).observe(document.body,{attributes:true,attributeFilter:['class']});
+
+/* ===== 2. Logout button at the bottom of own profile ===== */
+function ensureProfileLogoutV7(){
+ const page=$v('userProfilePage');if(!page)return;
+ const selfToolbar=$v('profileSelfToolbar');if(!selfToolbar)return;
+ let footer=page.querySelector('#profileLogoutFooterV7');
+ if(!footer){footer=document.createElement('section');footer.id='profileLogoutFooterV7';footer.className='profile-panel';footer.style.marginTop='18px';footer.innerHTML='<button id="profileLogoutBtnV7" type="button"><i class="fas fa-right-from-bracket"></i> تسجيل الخروج</button>';page.querySelector('.profile-page-inner')?.appendChild(footer)}
+ const btn=$v('profileLogoutBtnV7');if(btn&&!btn.dataset.bound){btn.dataset.bound='1';btn.onclick=async()=>{try{await auth.signOut();$('userProfilePage')?.classList.remove('active');showCustomAlert('تم تسجيل الخروج','تم تسجيل الخروج من الحساب.');}catch(e){console.error(e);showCustomAlert('خطأ','تعذر تسجيل الخروج.')}}}
+ footer.style.display=(selfToolbar.style.display!=='none'?'block':'none');
+}
+const oldOpenUserProfilePageV7=window.openUserProfilePage;
+window.openUserProfilePage=async function(){const r=await oldOpenUserProfilePageV7?.apply(this,arguments);ensureProfileLogoutV7();return r};
+
+/* ===== 3. Admin account directory: students can see profiles only through direct profile links; admin gets full directory ===== */
+async function loadAdminAccountDirectoryV7(){
+ const grid=$v('profileDirectoryGrid'),count=$v('profileDirectoryCount'),section=$v('profileDirectorySection');
+ if(!grid)return;
+ if(!isAdmin){if(section)section.style.display='none';return;}
+ if(section)section.style.display='block';grid.innerHTML='<div class="profile-empty">جاري تحميل الحسابات...</div>';
+ try{
+   const usersSnap=await db.collection('users').get();
+   const users=usersSnap.docs.map(d=>({id:d.id,...(d.data()||{})}));
+   const rows=await Promise.all(users.map(async u=>{
+     const enrollSnap=await db.collection('users').doc(u.id).collection('enrolledCourses').get().catch(()=>({empty:true,docs:[]}));
+     const enrollments=[];enrollSnap.forEach(d=>enrollments.push({courseId:d.id,...(d.data()||{})}));
+     return {...u,enrollments};
+   }));
+   count.textContent=`${rows.length} حساب`;
+   grid.innerHTML=rows.sort((a,b)=>String(a.displayName||a.name||'').localeCompare(String(b.displayName||b.name||''),'ar')).map(u=>{
+     const n=u.displayName||u.name||'مستخدم',photo=u.photoURL||u.photoUrl||u.photo||'';
+     return `<button type="button" class="profile-directory-card" data-profile-target="${escV(u.id)}"><div class="profile-directory-avatar">${photo?`<img src="${escV(photo)}" alt="">`:escV(n.slice(0,1))}</div><div class="profile-directory-copy"><strong>${escV(n)}</strong><span>${u.enrollments.length} دورة · ${u.profilePublic===false?'ملف خاص':'ملف عام'}</span></div><i class="fas fa-chevron-left"></i></button>`;
+   }).join('');
+   grid.querySelectorAll('[data-profile-target]').forEach(b=>b.onclick=()=>window.openPublicProfileFinal?.(b.dataset.profileTarget));
+ }catch(e){console.error(e);grid.innerHTML='<div class="profile-empty">تعذر تحميل الحسابات.</div>'}
+}
+/* Replace the directory loader used by the own profile page. */
+window.loadDirectoryFinal=loadAdminAccountDirectoryV7;
+
+/* ===== 4. Full student/admin profile details including subscriptions ===== */
+const oldOpenPublicProfileV7=window.openPublicProfileFinal;
+window.openPublicProfileFinal=async function(uid){
+ const r=await oldOpenPublicProfileV7?.apply(this,arguments); if(!uid||!$v('profileDataList'))return r;
+ try{
+   const snap=await db.collection('users').doc(uid).get();if(!snap.exists)return r;const p=snap.data()||{};
+   const coursesSnap=await db.collection('users').doc(uid).collection('enrolledCourses').get();
+   const courseRows=[];
+   for(const d of coursesSnap.docs){const cSnap=await db.collection('courses').doc(d.id).get().catch(()=>null);if(cSnap?.exists)courseRows.push({id:d.id,data:d.data()||{},course:cSnap.data()||{}})}
+   const base=[['الاسم',p.displayName||p.name||'مستخدم'],['البريد الإلكتروني',p.email||'غير متوفر'],['رقم الهاتف',p.phone||'غير مضاف'],['الجنس',p.gender==='female'?'أنثى':p.gender==='male'?'ذكر':'غير محدد'],['معرّف الحساب',uid],['تاريخ التسجيل',fmtV(p.createdAt)],['حالة البروفايل',p.profilePublic===false?'خاص':'عام']];
+   if(isAdmin){$v('profileDataList').innerHTML=base.map(x=>`<div class="profile-admin-detail-v7"><strong>${escV(x[0])}</strong><span>${escV(x[1])}</span></div>`).join('');}
+   let sec=$v('profileSubscriptionsV7');
+   if(!sec){sec=document.createElement('section');sec.id='profileSubscriptionsV7';sec.className='profile-panel profile-subscriptions-v7';sec.innerHTML='<h3>الدورات المشترك بها</h3><div class="profile-subscription-grid-v7"></div>';$v('profileDirectorySection')?.before(sec)}
+   sec.style.display=isAdmin?'block':'none';
+   if(isAdmin){const wrap=sec.querySelector('.profile-subscription-grid-v7');wrap.innerHTML=courseRows.length?courseRows.map(x=>`<article class="profile-subscription-card-v7"><strong>${escV(x.course.titleAr||'دورة')}</strong><small>تاريخ الاشتراك: ${escV(fmtV(x.data.enrolledAt))}</small><small>الكود المستخدم: ${escV(x.data.codeUsed||'—')}</small><small>قبول الشروط: ${x.data.termsAccepted?'نعم':'غير مسجل'}</small></article>`).join(''):'<div class="profile-empty">لا توجد دورات مشترَك بها حاليًا.</div>'}
+   const data=getComputedStyle($v('profileDirectorySection')||document.body);
+   return r;
+ }catch(e){console.error('admin profile details',e);return r}
+};
+
+/* Re-open profile pages with current directory state when admin returns. */
+const profileBack=$v('profileBackToMembers');if(profileBack&&!profileBack.dataset.v7){profileBack.dataset.v7='1';profileBack.onclick=async()=>{await loadAdminAccountDirectoryV7();$v('profileDirectorySection')?.scrollIntoView({behavior:'smooth',block:'start'})}}
+
+/* ===== 5. Enrollment code expiry UI: optional end date ===== */
+function setupCodeExpiryV7(){
+ const end=$v('codeEndDate');if(!end||end.dataset.v7)return;end.dataset.v7='1';const host=end.closest('div');if(!host)return;
+ const wrap=document.createElement('div');wrap.className='ananas-code-expiry-v7';wrap.innerHTML='<label><input id="codeHasEndDateV7" type="checkbox"> تحديد نهاية صلاحية للكود</label><small>يمكن إنشاء الكود بدون تاريخ انتهاء، أو تحديد موعد ينتهي عنده تلقائيًا.</small>';
+ end.parentElement?.appendChild(wrap);
+ const cb=$v('codeHasEndDateV7');end.disabled=true;end.value='';cb.onchange=()=>{end.disabled=!cb.checked;if(!cb.checked)end.value=''};
+}
+setupCodeExpiryV7();
+
+/* ===== 6. Chat: avatar + name, clickable to public profile ===== */
+window.loadFullChatForCourseV7=async function(courseId){
+ const container=$v('fullChatMessagesList');if(!container)return;if(chatUnsubscribe){chatUnsubscribe();chatUnsubscribe=null}
+ container.innerHTML='<p style="color:var(--text-muted);text-align:center;padding:30px">جاري تحميل الرسائل...</p>';
+ try{chatUnsubscribe=db.collection('courses').doc(courseId).collection('chat').orderBy('createdAt','asc').onSnapshot(async snap=>{
+   if(snap.empty){container.innerHTML='<p style="color:var(--text-muted);text-align:center;padding:30px">لا توجد رسائل.</p>';return}
+   const ids=[...new Set(snap.docs.map(d=>d.data()?.userId).filter(Boolean))];const profiles={};await Promise.all(ids.map(async id=>{const ps=await db.collection('users').doc(id).get().catch(()=>null);profiles[id]=ps?.exists?(ps.data()||{}):{}}));
+   const me=currentUser?.uid||null;let html='',last='';
+   snap.forEach(doc=>{const m=doc.data()||{},profile=profiles[m.userId]||{},name=profile.displayName||profile.name||m.userName||'زائر',photo=profile.photoURL||profile.photoUrl||profile.photo||'',d=m.createdAt?.toDate?m.createdAt.toDate():new Date();const date=d.toLocaleDateString('ar-SA',{year:'numeric',month:'long',day:'numeric'});if(date!==last){html+=`<div style="text-align:center;margin:14px 0;color:var(--text-muted);font-size:.78rem">${escV(date)}</div>`;last=date}const mine=m.userId===me;html+=`<article class="chat-msg ${mine?'sent':'received'}" data-message-id="${escV(doc.id)}"><div class="chat-profile-head-v7" onclick="openStudentProfile('${escV(m.userId||'')}')"><div class="avatar">${photo?`<img src="${escV(photo)}" alt="">`:escV(name.slice(0,1))}</div><div class="name">${escV(name)}</div></div>${m.replyToText?`<div class="reply-block"><div class="ru">${escV(m.replyToName||'زائر')}</div><div class="rt">${escV(m.replyToText)}</div></div>`:''}<div class="t">${escV(m.message||'')}</div>${m.imageUrl?`<img src="${escV(m.imageUrl)}" alt="صورة">`:''}<div class="msg-time">${escV(d.toLocaleTimeString('ar-SA',{hour:'2-digit',minute:'2-digit'}))}</div><div class="msg-actions"><button type="button" onclick="replyTo('${escV(doc.id)}','${escV(name)}','${escV((m.message||'').slice(0,50))}')"><i class="fas fa-reply"></i></button>${(isAdmin||mine)?`<button type="button" onclick="deleteChatMessage('${escV(courseId)}','${escV(doc.id)}')"><i class="fas fa-trash"></i></button>`:''}</div></article>`});container.innerHTML=html;container.scrollTop=container.scrollHeight;
+ },err=>{console.error(err);container.innerHTML='<p style="color:#e74c3c;text-align:center;padding:30px">حدث خطأ في تحميل الدردشة.</p>'})}catch(e){console.error(e)}
+};
+/* Replace the actual entry point used when opening full chat. */
+window.loadFullChatForCourse=window.loadFullChatForCourseV7;
+window.openStudentProfile=window.openPublicProfileFinal;
+
+/* ===== 7. Collapse duplicate lesson buttons while preserving one of each feature ===== */
+async function renderLessonRelatedActionsV7(courseId,lessonId){
+ const area=$v('lessonRelatedActions');if(!area)return;area.innerHTML='';
+ try{
+  const [qSnap,aSnap,fSnap]=await Promise.all([
+    db.collection('courses').doc(courseId).collection('quizzes').where('lessonId','==',lessonId).get(),
+    db.collection('courses').doc(courseId).collection('assignments').where('lessonId','==',lessonId).get(),
+    db.collection('courses').doc(courseId).collection('files').where('lessonId','==',lessonId).where('deleted','==',false).get().catch(()=>({empty:true,docs:[]}))
+  ]);
+  const add=(html,click,kind)=>{if(area.querySelector(`[data-v7-kind="${kind}"]`))return;const b=document.createElement('button');b.type='button';b.className='related-action';b.dataset.v7Kind=kind;b.innerHTML=html;b.onclick=click;area.appendChild(b)};
+  if(!qSnap.empty)add('<i class="fas fa-question-circle"></i> اختبار الحصة',()=>window.openQuiz(courseId,qSnap.docs[0].id,true),'quiz');
+  if(!aSnap.empty)add('<i class="fas fa-paint-brush"></i> واجب الحصة',()=>window.openAssignmentDetail(courseId,aSnap.docs[0].id,true),'assignment');
+  if(!fSnap.empty||isAdmin)add(`<i class="fas fa-folder-open"></i> ملفات الحصة${fSnap.size?` (${fSnap.size})`:''}`,()=>{window.switchCoursePage?.('files');setTimeout(()=>window.loadCourseFilesPage?.(courseId),80)},'files');
+  if(isAdmin)add('<i class="fas fa-cloud-arrow-up"></i> رفع ملف للحصة',()=>window.openCourseFileUploadModal?.(lessonId),'upload');
+ }catch(e){console.warn(e)}
+}
+window.renderLessonRelatedActions=renderLessonRelatedActionsV7;
+
+/* ===== 8. Preserve exact video position when moving to quiz and returning ===== */
+const oldOpenQuizV7=window.openQuiz;
+window.openQuiz=async function(courseId,quizId,fromLesson=false){
+ if(fromLesson&&lessonPlayerReady&&lessonPlayer&&activeLessonId){try{const pos=Number(lessonPlayer.getCurrentTime())||0,dur=Number(lessonPlayer.getDuration())||0;window.__lessonReturnAfterQuiz={courseId,lessonId:activeLessonId,position:pos,duration:dur};writeLocalLessonResume(courseId,activeLessonId,pos,dur);await window.saveLessonProgressNow?.()}catch(e){}}
+ return oldOpenQuizV7?.apply(this,arguments);
+};
+const oldReturnQuizLessonV7=window.returnToQuizLesson;
+window.returnToQuizLesson=async function(){
+ const state=window.__lessonReturnAfterQuiz||{};const r=await oldReturnQuizLessonV7?.apply(this,arguments);if(state.courseId&&state.lessonId){setTimeout(async()=>{try{if(activeCourseId===state.courseId&&activeLessonId===state.lessonId&&lessonPlayerReady&&lessonPlayer){await Promise.resolve(lessonPlayer.seekTo(state.position));window.__allowedLessonSeekUntil=Date.now()+1800;updateLessonControls();}}catch(e){}},900)}return r;
+};
+
+/* ===== 9. Ensure the code expiry checkbox never blocks optional creation ===== */
+const codeEndObs=new MutationObserver(setupCodeExpiryV7);codeEndObs.observe(document.body,{subtree:true,childList:true});
+
+/* Initial sync when profile is already open. */
+setTimeout(()=>{ensureProfileLogoutV7();syncBrandLogoV7();},250);
+})();
+</script>
 </body>
 </html>
 
