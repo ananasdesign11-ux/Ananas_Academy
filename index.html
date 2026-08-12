@@ -85,8 +85,15 @@
     const c=document.getElementById('quizContainer'); if(!c)return;
     let nav=document.getElementById('quizRouteNav');
     if(!nav){nav=document.createElement('div');nav.id='quizRouteNav';nav.style.cssText='display:flex;gap:8px;justify-content:flex-start;align-items:center;flex-wrap:wrap;margin:0 0 18px;';c.insertBefore(nav,c.firstChild);}
-    nav.innerHTML=`<button type="button" class="full-page-back-btn" title="العودة للحصة" onclick="returnToQuizLesson()"><i class="fas fa-video"></i></button><button type="button" class="full-page-back-btn" title="الاختبارات" onclick="returnToQuizList()"><i class="fas fa-clipboard-list"></i></button>`;
-    nav.dataset.fromLesson=fromLesson?'1':'0';
+    if(fromLesson){
+      nav.innerHTML=`<button type="button" class="full-page-back-btn" title="العودة للحصة" onclick="returnToQuizLesson()"><i class="fas fa-video"></i></button><button type="button" class="full-page-back-btn" title="الاختبارات" onclick="returnToQuizList()"><i class="fas fa-question-circle"></i></button>`;
+      nav.style.display='flex';
+      nav.dataset.fromLesson='1';
+    }else{
+      nav.innerHTML='';
+      nav.style.display='none';
+      nav.dataset.fromLesson='0';
+    }
   }
   window.returnToQuizLesson=function(){
     const lid=activeLessonId||(()=>{try{return JSON.parse(localStorage.getItem('ananas.lastCourseState')||'{}').lessonId}catch(e){return null}})();
@@ -103,7 +110,15 @@
     const page=document.getElementById('courseAssignmentDetailPage');if(!page)return;
     let nav=document.getElementById('assignmentRouteNav');
     if(!nav){nav=document.createElement('div');nav.id='assignmentRouteNav';nav.style.cssText='display:flex;gap:8px;align-items:center;margin-bottom:14px;';page.querySelector('.page-title')?.prepend(nav);}
-    nav.innerHTML=`<button type="button" class="full-page-back-btn" title="العودة للحصة" onclick="returnToAssignmentLesson()"><i class="fas fa-video"></i></button><button type="button" class="full-page-back-btn" title="الواجبات" onclick="returnToAssignmentList()"><i class="fas fa-clipboard-list"></i></button>`;
+    if(fromLesson){
+      nav.innerHTML=`<button type="button" class="full-page-back-btn" title="العودة للحصة" onclick="returnToAssignmentLesson()"><i class="fas fa-video"></i></button><button type="button" class="full-page-back-btn" title="الواجبات" onclick="returnToAssignmentList()"><i class="fas fa-paint-brush"></i></button>`;
+      nav.style.display='flex';
+      nav.dataset.fromLesson='1';
+    }else{
+      nav.innerHTML='';
+      nav.style.display='none';
+      nav.dataset.fromLesson='0';
+    }
   };
   window.returnToAssignmentLesson=function(){const lid=activeLessonId||(()=>{try{return JSON.parse(localStorage.getItem('ananas.lastCourseState')||'{}').lessonId}catch(e){return null}})();document.getElementById('courseAssignmentDetailPage')?.classList.remove('active');if(activeCourseId&&lid){__origSwitchCoursePage('learning');setTimeout(()=>openLessonPlayer(activeCourseId,lid),50);}else if(activeCourseId)__origSwitchCoursePage('learning');persistCourseState();};
   window.returnToAssignmentList=function(){window.activeAssignmentDetailId=null;document.getElementById('courseAssignmentDetailPage')?.classList.remove('active');if(activeCourseId)__origSwitchCoursePage('assignments');persistCourseState();};
@@ -113,9 +128,9 @@
     const area=document.getElementById('lessonRelatedActions');if(!area)return;area.innerHTML='';
     try{
       const qs=await db.collection('courses').doc(courseId).collection('quizzes').where('lessonId','==',lessonId).get();
-      qs.forEach(doc=>{const b=document.createElement('button');b.className='related-action';b.innerHTML='<i class="fas fa-clipboard-list"></i> اختبار الحصة';b.onclick=()=>window.openQuiz(courseId,doc.id,true);area.appendChild(b);});
+      qs.forEach(doc=>{const b=document.createElement('button');b.className='related-action';b.innerHTML='<i class="fas fa-question-circle"></i> اختبار الحصة';b.onclick=()=>{stopLessonForNavigation();window.openQuiz(courseId,doc.id,true);}area.appendChild(b);});
       const as=await db.collection('courses').doc(courseId).collection('assignments').where('lessonId','==',lessonId).get();
-      as.forEach(doc=>{const b=document.createElement('button');b.className='related-action';b.innerHTML='<i class="fas fa-clipboard-list"></i> واجب الحصة';b.onclick=()=>window.openAssignmentDetail(courseId,doc.id,true);area.appendChild(b);});
+      as.forEach(doc=>{const b=document.createElement('button');b.className='related-action';b.innerHTML='<i class="fas fa-paint-brush"></i> واجب الحصة';b.onclick=()=>{stopLessonForNavigation();window.openAssignmentDetail(courseId,doc.id,true);}area.appendChild(b);});
     }catch(e){console.error('related actions',e);}
   };
 
@@ -220,7 +235,7 @@
     const c=document.getElementById('quizContainer'); if(!c)return;
     let nav=document.getElementById('quizRouteNav');
     if(!nav){nav=document.createElement('div');nav.id='quizRouteNav';nav.style.cssText='display:flex;gap:8px;justify-content:flex-start;align-items:center;flex-wrap:wrap;margin:0 0 18px;';c.insertBefore(nav,c.firstChild);}
-    nav.innerHTML=`<button type="button" class="full-page-back-btn" title="العودة للحصة" onclick="returnToQuizLesson()"><i class="fas fa-video"></i></button><button type="button" class="full-page-back-btn" title="الاختبارات" onclick="returnToQuizList()"><i class="fas fa-clipboard-list"></i></button>`;
+    nav.innerHTML=`<button type="button" class="full-page-back-btn" title="العودة للحصة" onclick="returnToQuizLesson()"><i class="fas fa-video"></i></button><button type="button" class="full-page-back-btn" title="الاختبارات" onclick="returnToQuizList()"><i class="fas fa-question-circle"></i></button>`;
     nav.dataset.fromLesson=fromLesson?'1':'0';
   }
   window.returnToQuizLesson=function(){
@@ -238,7 +253,15 @@
     const page=document.getElementById('courseAssignmentDetailPage');if(!page)return;
     let nav=document.getElementById('assignmentRouteNav');
     if(!nav){nav=document.createElement('div');nav.id='assignmentRouteNav';nav.style.cssText='display:flex;gap:8px;align-items:center;margin-bottom:14px;';page.querySelector('.page-title')?.prepend(nav);}
-    nav.innerHTML=`<button type="button" class="full-page-back-btn" title="العودة للحصة" onclick="returnToAssignmentLesson()"><i class="fas fa-video"></i></button><button type="button" class="full-page-back-btn" title="الواجبات" onclick="returnToAssignmentList()"><i class="fas fa-clipboard-list"></i></button>`;
+    if(fromLesson){
+      nav.innerHTML=`<button type="button" class="full-page-back-btn" title="العودة للحصة" onclick="returnToAssignmentLesson()"><i class="fas fa-video"></i></button><button type="button" class="full-page-back-btn" title="الواجبات" onclick="returnToAssignmentList()"><i class="fas fa-paint-brush"></i></button>`;
+      nav.style.display='flex';
+      nav.dataset.fromLesson='1';
+    }else{
+      nav.innerHTML='';
+      nav.style.display='none';
+      nav.dataset.fromLesson='0';
+    }
   };
   window.returnToAssignmentLesson=function(){const lid=activeLessonId||(()=>{try{return JSON.parse(localStorage.getItem('ananas.lastCourseState')||'{}').lessonId}catch(e){return null}})();document.getElementById('courseAssignmentDetailPage')?.classList.remove('active');if(activeCourseId&&lid){__origSwitchCoursePage('learning');setTimeout(()=>openLessonPlayer(activeCourseId,lid),50);}else if(activeCourseId)__origSwitchCoursePage('learning');persistCourseState();};
   window.returnToAssignmentList=function(){window.activeAssignmentDetailId=null;document.getElementById('courseAssignmentDetailPage')?.classList.remove('active');if(activeCourseId)__origSwitchCoursePage('assignments');persistCourseState();};
@@ -248,9 +271,9 @@
     const area=document.getElementById('lessonRelatedActions');if(!area)return;area.innerHTML='';
     try{
       const qs=await db.collection('courses').doc(courseId).collection('quizzes').where('lessonId','==',lessonId).get();
-      qs.forEach(doc=>{const b=document.createElement('button');b.className='related-action';b.innerHTML='<i class="fas fa-clipboard-list"></i> اختبار الحصة';b.onclick=()=>window.openQuiz(courseId,doc.id,true);area.appendChild(b);});
+      qs.forEach(doc=>{const b=document.createElement('button');b.className='related-action';b.innerHTML='<i class="fas fa-question-circle"></i> اختبار الحصة';b.onclick=()=>{stopLessonForNavigation();window.openQuiz(courseId,doc.id,true);}area.appendChild(b);});
       const as=await db.collection('courses').doc(courseId).collection('assignments').where('lessonId','==',lessonId).get();
-      as.forEach(doc=>{const b=document.createElement('button');b.className='related-action';b.innerHTML='<i class="fas fa-clipboard-list"></i> واجب الحصة';b.onclick=()=>window.openAssignmentDetail(courseId,doc.id,true);area.appendChild(b);});
+      as.forEach(doc=>{const b=document.createElement('button');b.className='related-action';b.innerHTML='<i class="fas fa-paint-brush"></i> واجب الحصة';b.onclick=()=>{stopLessonForNavigation();window.openAssignmentDetail(courseId,doc.id,true);}area.appendChild(b);});
     }catch(e){console.error('related actions',e);}
   };
 
@@ -355,7 +378,7 @@
     const c=document.getElementById('quizContainer'); if(!c)return;
     let nav=document.getElementById('quizRouteNav');
     if(!nav){nav=document.createElement('div');nav.id='quizRouteNav';nav.style.cssText='display:flex;gap:8px;justify-content:flex-start;align-items:center;flex-wrap:wrap;margin:0 0 18px;';c.insertBefore(nav,c.firstChild);}
-    nav.innerHTML=`<button type="button" class="full-page-back-btn" title="العودة للحصة" onclick="returnToQuizLesson()"><i class="fas fa-video"></i></button><button type="button" class="full-page-back-btn" title="الاختبارات" onclick="returnToQuizList()"><i class="fas fa-clipboard-list"></i></button>`;
+    nav.innerHTML=`<button type="button" class="full-page-back-btn" title="العودة للحصة" onclick="returnToQuizLesson()"><i class="fas fa-video"></i></button><button type="button" class="full-page-back-btn" title="الاختبارات" onclick="returnToQuizList()"><i class="fas fa-question-circle"></i></button>`;
     nav.dataset.fromLesson=fromLesson?'1':'0';
   }
   window.returnToQuizLesson=function(){
@@ -373,7 +396,15 @@
     const page=document.getElementById('courseAssignmentDetailPage');if(!page)return;
     let nav=document.getElementById('assignmentRouteNav');
     if(!nav){nav=document.createElement('div');nav.id='assignmentRouteNav';nav.style.cssText='display:flex;gap:8px;align-items:center;margin-bottom:14px;';page.querySelector('.page-title')?.prepend(nav);}
-    nav.innerHTML=`<button type="button" class="full-page-back-btn" title="العودة للحصة" onclick="returnToAssignmentLesson()"><i class="fas fa-video"></i></button><button type="button" class="full-page-back-btn" title="الواجبات" onclick="returnToAssignmentList()"><i class="fas fa-clipboard-list"></i></button>`;
+    if(fromLesson){
+      nav.innerHTML=`<button type="button" class="full-page-back-btn" title="العودة للحصة" onclick="returnToAssignmentLesson()"><i class="fas fa-video"></i></button><button type="button" class="full-page-back-btn" title="الواجبات" onclick="returnToAssignmentList()"><i class="fas fa-paint-brush"></i></button>`;
+      nav.style.display='flex';
+      nav.dataset.fromLesson='1';
+    }else{
+      nav.innerHTML='';
+      nav.style.display='none';
+      nav.dataset.fromLesson='0';
+    }
   };
   window.returnToAssignmentLesson=function(){const lid=activeLessonId||(()=>{try{return JSON.parse(localStorage.getItem('ananas.lastCourseState')||'{}').lessonId}catch(e){return null}})();document.getElementById('courseAssignmentDetailPage')?.classList.remove('active');if(activeCourseId&&lid){__origSwitchCoursePage('learning');setTimeout(()=>openLessonPlayer(activeCourseId,lid),50);}else if(activeCourseId)__origSwitchCoursePage('learning');persistCourseState();};
   window.returnToAssignmentList=function(){window.activeAssignmentDetailId=null;document.getElementById('courseAssignmentDetailPage')?.classList.remove('active');if(activeCourseId)__origSwitchCoursePage('assignments');persistCourseState();};
@@ -383,9 +414,9 @@
     const area=document.getElementById('lessonRelatedActions');if(!area)return;area.innerHTML='';
     try{
       const qs=await db.collection('courses').doc(courseId).collection('quizzes').where('lessonId','==',lessonId).get();
-      qs.forEach(doc=>{const b=document.createElement('button');b.className='related-action';b.innerHTML='<i class="fas fa-clipboard-list"></i> اختبار الحصة';b.onclick=()=>window.openQuiz(courseId,doc.id,true);area.appendChild(b);});
+      qs.forEach(doc=>{const b=document.createElement('button');b.className='related-action';b.innerHTML='<i class="fas fa-question-circle"></i> اختبار الحصة';b.onclick=()=>{stopLessonForNavigation();window.openQuiz(courseId,doc.id,true);}area.appendChild(b);});
       const as=await db.collection('courses').doc(courseId).collection('assignments').where('lessonId','==',lessonId).get();
-      as.forEach(doc=>{const b=document.createElement('button');b.className='related-action';b.innerHTML='<i class="fas fa-clipboard-list"></i> واجب الحصة';b.onclick=()=>window.openAssignmentDetail(courseId,doc.id,true);area.appendChild(b);});
+      as.forEach(doc=>{const b=document.createElement('button');b.className='related-action';b.innerHTML='<i class="fas fa-paint-brush"></i> واجب الحصة';b.onclick=()=>{stopLessonForNavigation();window.openAssignmentDetail(courseId,doc.id,true);}area.appendChild(b);});
     }catch(e){console.error('related actions',e);}
   };
 
@@ -492,7 +523,7 @@
     const c=document.getElementById('quizContainer'); if(!c)return;
     let nav=document.getElementById('quizRouteNav');
     if(!nav){nav=document.createElement('div');nav.id='quizRouteNav';nav.style.cssText='display:flex;gap:8px;justify-content:flex-start;align-items:center;flex-wrap:wrap;margin:0 0 18px;';c.insertBefore(nav,c.firstChild);}
-    nav.innerHTML=`<button type="button" class="full-page-back-btn" title="العودة للحصة" onclick="returnToQuizLesson()"><i class="fas fa-video"></i></button><button type="button" class="full-page-back-btn" title="الاختبارات" onclick="returnToQuizList()"><i class="fas fa-clipboard-list"></i></button>`;
+    nav.innerHTML=`<button type="button" class="full-page-back-btn" title="العودة للحصة" onclick="returnToQuizLesson()"><i class="fas fa-video"></i></button><button type="button" class="full-page-back-btn" title="الاختبارات" onclick="returnToQuizList()"><i class="fas fa-question-circle"></i></button>`;
     nav.dataset.fromLesson=fromLesson?'1':'0';
   }
   window.returnToQuizLesson=function(){
@@ -510,7 +541,15 @@
     const page=document.getElementById('courseAssignmentDetailPage');if(!page)return;
     let nav=document.getElementById('assignmentRouteNav');
     if(!nav){nav=document.createElement('div');nav.id='assignmentRouteNav';nav.style.cssText='display:flex;gap:8px;align-items:center;margin-bottom:14px;';page.querySelector('.page-title')?.prepend(nav);}
-    nav.innerHTML=`<button type="button" class="full-page-back-btn" title="العودة للحصة" onclick="returnToAssignmentLesson()"><i class="fas fa-video"></i></button><button type="button" class="full-page-back-btn" title="الواجبات" onclick="returnToAssignmentList()"><i class="fas fa-clipboard-list"></i></button>`;
+    if(fromLesson){
+      nav.innerHTML=`<button type="button" class="full-page-back-btn" title="العودة للحصة" onclick="returnToAssignmentLesson()"><i class="fas fa-video"></i></button><button type="button" class="full-page-back-btn" title="الواجبات" onclick="returnToAssignmentList()"><i class="fas fa-paint-brush"></i></button>`;
+      nav.style.display='flex';
+      nav.dataset.fromLesson='1';
+    }else{
+      nav.innerHTML='';
+      nav.style.display='none';
+      nav.dataset.fromLesson='0';
+    }
   };
   window.returnToAssignmentLesson=function(){const lid=activeLessonId||(()=>{try{return JSON.parse(localStorage.getItem('ananas.lastCourseState')||'{}').lessonId}catch(e){return null}})();document.getElementById('courseAssignmentDetailPage')?.classList.remove('active');if(activeCourseId&&lid){__origSwitchCoursePage('learning');setTimeout(()=>openLessonPlayer(activeCourseId,lid),50);}else if(activeCourseId)__origSwitchCoursePage('learning');persistCourseState();};
   window.returnToAssignmentList=function(){window.activeAssignmentDetailId=null;document.getElementById('courseAssignmentDetailPage')?.classList.remove('active');if(activeCourseId)__origSwitchCoursePage('assignments');persistCourseState();};
@@ -520,9 +559,9 @@
     const area=document.getElementById('lessonRelatedActions');if(!area)return;area.innerHTML='';
     try{
       const qs=await db.collection('courses').doc(courseId).collection('quizzes').where('lessonId','==',lessonId).get();
-      qs.forEach(doc=>{const b=document.createElement('button');b.className='related-action';b.innerHTML='<i class="fas fa-clipboard-list"></i> اختبار الحصة';b.onclick=()=>window.openQuiz(courseId,doc.id,true);area.appendChild(b);});
+      qs.forEach(doc=>{const b=document.createElement('button');b.className='related-action';b.innerHTML='<i class="fas fa-question-circle"></i> اختبار الحصة';b.onclick=()=>{stopLessonForNavigation();window.openQuiz(courseId,doc.id,true);}area.appendChild(b);});
       const as=await db.collection('courses').doc(courseId).collection('assignments').where('lessonId','==',lessonId).get();
-      as.forEach(doc=>{const b=document.createElement('button');b.className='related-action';b.innerHTML='<i class="fas fa-clipboard-list"></i> واجب الحصة';b.onclick=()=>window.openAssignmentDetail(courseId,doc.id,true);area.appendChild(b);});
+      as.forEach(doc=>{const b=document.createElement('button');b.className='related-action';b.innerHTML='<i class="fas fa-paint-brush"></i> واجب الحصة';b.onclick=()=>{stopLessonForNavigation();window.openAssignmentDetail(courseId,doc.id,true);}area.appendChild(b);});
     }catch(e){console.error('related actions',e);}
   };
 
@@ -1528,6 +1567,42 @@
         }
 
 
+        /* ===== MOBILE VIEWPORT SAFE AREA: content lives strictly between fixed bars ===== */
+        @media(max-width:768px){
+            #coursesPage{
+                padding-top:calc(var(--nav-height-desktop) + 8px) !important;
+                padding-bottom:calc(var(--mobile-bottom-nav-content-height) + env(safe-area-inset-bottom) + 24px) !important;
+                min-height:calc(100vh - var(--nav-height-desktop) - var(--mobile-bottom-nav-content-height) - env(safe-area-inset-bottom)) !important;
+                box-sizing:border-box !important;
+            }
+            #courseDetailView{
+                margin-top:var(--nav-height-desktop) !important;
+                height:calc(100vh - var(--nav-height-desktop) - var(--mobile-bottom-nav-content-height) - env(safe-area-inset-bottom)) !important;
+                min-height:0 !important;
+                max-height:calc(100vh - var(--nav-height-desktop) - var(--mobile-bottom-nav-content-height) - env(safe-area-inset-bottom)) !important;
+                padding-bottom:24px !important;
+                box-sizing:border-box !important;
+                overflow-y:auto !important;
+                overflow-x:hidden !important;
+                border-radius:0 !important;
+            }
+            #courseLessonsPage,#courseQuizzesPage,#courseAssignmentsPage,#courseChatPage,#courseLessonPlayerPage,.assignment-detail-page{
+                min-height:100% !important;
+                padding-bottom:24px !important;
+                box-sizing:border-box !important;
+            }
+            #courseLessonPlayerPage{padding-top:12px !important;}
+        }
+
+        #enrollCodeTermsAgreement{
+            display:none;align-items:center;gap:7px;line-height:1.45;cursor:pointer;padding:6px 8px !important;
+            border:1px solid var(--border);border-radius:10px;background:var(--bg-secondary);font-size:.78rem;
+        }
+        #enrollCodeTermsAgree{
+            width:16px !important;height:16px !important;min-width:16px !important;max-width:16px !important;
+            padding:0 !important;margin:0 !important;flex:0 0 16px !important;accent-color:var(--accent1);
+        }
+        #enrollCodeTermsAgreement span{display:inline;white-space:normal;}
         /* ===== FINAL POLISH / NAV / CARDS / CHAT / WORK GALLERY ===== */
         .logo-text{white-space:nowrap;line-height:1.2;display:inline-block;padding-bottom:2px;overflow:visible;}
         .logo{overflow:visible;align-items:center;}
@@ -2526,7 +2601,7 @@
     const c=document.getElementById('quizContainer'); if(!c)return;
     let nav=document.getElementById('quizRouteNav');
     if(!nav){nav=document.createElement('div');nav.id='quizRouteNav';nav.style.cssText='display:flex;gap:8px;justify-content:flex-start;align-items:center;flex-wrap:wrap;margin:0 0 18px;';c.insertBefore(nav,c.firstChild);}
-    nav.innerHTML=`<button type="button" class="full-page-back-btn" title="العودة للحصة" onclick="returnToQuizLesson()"><i class="fas fa-video"></i></button><button type="button" class="full-page-back-btn" title="الاختبارات" onclick="returnToQuizList()"><i class="fas fa-clipboard-list"></i></button>`;
+    nav.innerHTML=`<button type="button" class="full-page-back-btn" title="العودة للحصة" onclick="returnToQuizLesson()"><i class="fas fa-video"></i></button><button type="button" class="full-page-back-btn" title="الاختبارات" onclick="returnToQuizList()"><i class="fas fa-question-circle"></i></button>`;
     nav.dataset.fromLesson=fromLesson?'1':'0';
   }
   window.returnToQuizLesson=function(){
@@ -2544,7 +2619,15 @@
     const page=document.getElementById('courseAssignmentDetailPage');if(!page)return;
     let nav=document.getElementById('assignmentRouteNav');
     if(!nav){nav=document.createElement('div');nav.id='assignmentRouteNav';nav.style.cssText='display:flex;gap:8px;align-items:center;margin-bottom:14px;';page.querySelector('.page-title')?.prepend(nav);}
-    nav.innerHTML=`<button type="button" class="full-page-back-btn" title="العودة للحصة" onclick="returnToAssignmentLesson()"><i class="fas fa-video"></i></button><button type="button" class="full-page-back-btn" title="الواجبات" onclick="returnToAssignmentList()"><i class="fas fa-clipboard-list"></i></button>`;
+    if(fromLesson){
+      nav.innerHTML=`<button type="button" class="full-page-back-btn" title="العودة للحصة" onclick="returnToAssignmentLesson()"><i class="fas fa-video"></i></button><button type="button" class="full-page-back-btn" title="الواجبات" onclick="returnToAssignmentList()"><i class="fas fa-paint-brush"></i></button>`;
+      nav.style.display='flex';
+      nav.dataset.fromLesson='1';
+    }else{
+      nav.innerHTML='';
+      nav.style.display='none';
+      nav.dataset.fromLesson='0';
+    }
   };
   window.returnToAssignmentLesson=function(){const lid=activeLessonId||(()=>{try{return JSON.parse(localStorage.getItem('ananas.lastCourseState')||'{}').lessonId}catch(e){return null}})();document.getElementById('courseAssignmentDetailPage')?.classList.remove('active');if(activeCourseId&&lid){__origSwitchCoursePage('learning');setTimeout(()=>openLessonPlayer(activeCourseId,lid),50);}else if(activeCourseId)__origSwitchCoursePage('learning');persistCourseState();};
   window.returnToAssignmentList=function(){window.activeAssignmentDetailId=null;document.getElementById('courseAssignmentDetailPage')?.classList.remove('active');if(activeCourseId)__origSwitchCoursePage('assignments');persistCourseState();};
@@ -2554,9 +2637,9 @@
     const area=document.getElementById('lessonRelatedActions');if(!area)return;area.innerHTML='';
     try{
       const qs=await db.collection('courses').doc(courseId).collection('quizzes').where('lessonId','==',lessonId).get();
-      qs.forEach(doc=>{const b=document.createElement('button');b.className='related-action';b.innerHTML='<i class="fas fa-clipboard-list"></i> اختبار الحصة';b.onclick=()=>window.openQuiz(courseId,doc.id,true);area.appendChild(b);});
+      qs.forEach(doc=>{const b=document.createElement('button');b.className='related-action';b.innerHTML='<i class="fas fa-question-circle"></i> اختبار الحصة';b.onclick=()=>{stopLessonForNavigation();window.openQuiz(courseId,doc.id,true);}area.appendChild(b);});
       const as=await db.collection('courses').doc(courseId).collection('assignments').where('lessonId','==',lessonId).get();
-      as.forEach(doc=>{const b=document.createElement('button');b.className='related-action';b.innerHTML='<i class="fas fa-clipboard-list"></i> واجب الحصة';b.onclick=()=>window.openAssignmentDetail(courseId,doc.id,true);area.appendChild(b);});
+      as.forEach(doc=>{const b=document.createElement('button');b.className='related-action';b.innerHTML='<i class="fas fa-paint-brush"></i> واجب الحصة';b.onclick=()=>{stopLessonForNavigation();window.openAssignmentDetail(courseId,doc.id,true);}area.appendChild(b);});
     }catch(e){console.error('related actions',e);}
   };
 
@@ -6418,7 +6501,7 @@
     const c=document.getElementById('quizContainer'); if(!c)return;
     let nav=document.getElementById('quizRouteNav');
     if(!nav){nav=document.createElement('div');nav.id='quizRouteNav';nav.style.cssText='display:flex;gap:8px;justify-content:flex-start;align-items:center;flex-wrap:wrap;margin:0 0 18px;';c.insertBefore(nav,c.firstChild);}
-    nav.innerHTML=`<button type="button" class="full-page-back-btn" title="العودة للحصة" onclick="returnToQuizLesson()"><i class="fas fa-video"></i></button><button type="button" class="full-page-back-btn" title="الاختبارات" onclick="returnToQuizList()"><i class="fas fa-clipboard-list"></i></button>`;
+    nav.innerHTML=`<button type="button" class="full-page-back-btn" title="العودة للحصة" onclick="returnToQuizLesson()"><i class="fas fa-video"></i></button><button type="button" class="full-page-back-btn" title="الاختبارات" onclick="returnToQuizList()"><i class="fas fa-question-circle"></i></button>`;
     nav.dataset.fromLesson=fromLesson?'1':'0';
   }
   window.returnToQuizLesson=function(){
@@ -6436,7 +6519,15 @@
     const page=document.getElementById('courseAssignmentDetailPage');if(!page)return;
     let nav=document.getElementById('assignmentRouteNav');
     if(!nav){nav=document.createElement('div');nav.id='assignmentRouteNav';nav.style.cssText='display:flex;gap:8px;align-items:center;margin-bottom:14px;';page.querySelector('.page-title')?.prepend(nav);}
-    nav.innerHTML=`<button type="button" class="full-page-back-btn" title="العودة للحصة" onclick="returnToAssignmentLesson()"><i class="fas fa-video"></i></button><button type="button" class="full-page-back-btn" title="الواجبات" onclick="returnToAssignmentList()"><i class="fas fa-clipboard-list"></i></button>`;
+    if(fromLesson){
+      nav.innerHTML=`<button type="button" class="full-page-back-btn" title="العودة للحصة" onclick="returnToAssignmentLesson()"><i class="fas fa-video"></i></button><button type="button" class="full-page-back-btn" title="الواجبات" onclick="returnToAssignmentList()"><i class="fas fa-paint-brush"></i></button>`;
+      nav.style.display='flex';
+      nav.dataset.fromLesson='1';
+    }else{
+      nav.innerHTML='';
+      nav.style.display='none';
+      nav.dataset.fromLesson='0';
+    }
   };
   window.returnToAssignmentLesson=function(){const lid=activeLessonId||(()=>{try{return JSON.parse(localStorage.getItem('ananas.lastCourseState')||'{}').lessonId}catch(e){return null}})();document.getElementById('courseAssignmentDetailPage')?.classList.remove('active');if(activeCourseId&&lid){__origSwitchCoursePage('learning');setTimeout(()=>openLessonPlayer(activeCourseId,lid),50);}else if(activeCourseId)__origSwitchCoursePage('learning');persistCourseState();};
   window.returnToAssignmentList=function(){window.activeAssignmentDetailId=null;document.getElementById('courseAssignmentDetailPage')?.classList.remove('active');if(activeCourseId)__origSwitchCoursePage('assignments');persistCourseState();};
@@ -6446,9 +6537,9 @@
     const area=document.getElementById('lessonRelatedActions');if(!area)return;area.innerHTML='';
     try{
       const qs=await db.collection('courses').doc(courseId).collection('quizzes').where('lessonId','==',lessonId).get();
-      qs.forEach(doc=>{const b=document.createElement('button');b.className='related-action';b.innerHTML='<i class="fas fa-clipboard-list"></i> اختبار الحصة';b.onclick=()=>window.openQuiz(courseId,doc.id,true);area.appendChild(b);});
+      qs.forEach(doc=>{const b=document.createElement('button');b.className='related-action';b.innerHTML='<i class="fas fa-question-circle"></i> اختبار الحصة';b.onclick=()=>{stopLessonForNavigation();window.openQuiz(courseId,doc.id,true);}area.appendChild(b);});
       const as=await db.collection('courses').doc(courseId).collection('assignments').where('lessonId','==',lessonId).get();
-      as.forEach(doc=>{const b=document.createElement('button');b.className='related-action';b.innerHTML='<i class="fas fa-clipboard-list"></i> واجب الحصة';b.onclick=()=>window.openAssignmentDetail(courseId,doc.id,true);area.appendChild(b);});
+      as.forEach(doc=>{const b=document.createElement('button');b.className='related-action';b.innerHTML='<i class="fas fa-paint-brush"></i> واجب الحصة';b.onclick=()=>{stopLessonForNavigation();window.openAssignmentDetail(courseId,doc.id,true);}area.appendChild(b);});
     }catch(e){console.error('related actions',e);}
   };
 
