@@ -4692,9 +4692,12 @@
             if(!currentUser || !lessonCurrentData || lessonWatchState.granted) return;
             const duration = lessonWatchState.duration || (Number(lessonCurrentData.duration)||0)*60;
             if(duration <= 0) return;
-            const required = duration * 0.9;
-            if(!force && lessonWatchState.watchedSeconds < required) return;
-            if(force && lessonWatchState.watchedSeconds < required) return;
+            /* Completion is based on the actual video progress bar reaching 90%,
+               not on accumulated watched time. */
+            let currentPosition = 0;
+            try { currentPosition = Number(lessonPlayer?.getCurrentTime?.() || 0); } catch(e) {}
+            const progressRatio = currentPosition / duration;
+            if(progressRatio < 0.9) return;
             lessonWatchState.granted = true;
             await grantLessonAutoXP(activeCourseId, activeLessonId, Number(lessonCurrentData.xpReward)||0);
         }
@@ -7178,9 +7181,9 @@ document.head.appendChild(st);
 
 <style>
 /* Requested dashboard gradient: match the login button gradient. */
-#courseDashboard .dashboard-btn{background:var(--accent-gradient)!important;color:#fff!important;border:1px solid transparent!important;box-shadow:0 6px 18px rgba(108,92,231,.18)!important;}
-#courseDashboard .dashboard-btn i,#courseDashboard .dashboard-btn span,#courseDashboard h2{color:#fff!important;}
-#courseDashboard .dashboard-btn:hover{filter:brightness(1.04);transform:translateY(-2px);}
+#courseDashboard .dashboard-btn{background:var(--bg-card)!important;color:var(--text-primary)!important;border:1px solid var(--border)!important;box-shadow:0 6px 18px rgba(108,92,231,.08)!important;}
+#courseDashboard .dashboard-btn i,#courseDashboard .dashboard-btn span{background:var(--accent-gradient)!important;-webkit-background-clip:text!important;background-clip:text!important;-webkit-text-fill-color:transparent!important;color:transparent!important;}
+#courseDashboard .dashboard-btn:hover{filter:brightness(1.04);transform:translateY(-2px);box-shadow:0 8px 22px rgba(108,92,231,.14)!important;}
 /* Keep assignment work image area aligned and consistent with quiz card proportions. */
 .assignment-work-card > div[style*="position:relative"]{aspect-ratio:16/9!important;overflow:hidden!important;border-radius:12px!important;}
 .assignment-work-card > div[style*="position:relative"] img{width:100%!important;height:100%!important;object-fit:cover!important;display:block!important;}
