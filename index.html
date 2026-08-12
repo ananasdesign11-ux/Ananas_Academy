@@ -2339,7 +2339,7 @@
             <div class="admin-controls admin-only" style="margin-top: 15px; justify-content: flex-start;">
                 <button type="button" class="btn" id="addQuestionBtn" style="background: var(--bg-card); border: 1px dashed var(--border); padding: 10px 20px; border-radius: var(--btn-radius);"><i class="fas fa-plus-circle"></i> إضافة سؤال جديد</button>
             </div>
-            <button onclick="saveQuiz()" style="width:100%; padding:12px; margin-top:20px; background:var(--accent-gradient); color:#fff; border:none; border-radius:var(--btn-radius); font-weight:700; cursor:pointer;" id="saveQuizBtn"></button>
+            <button onclick="saveQuiz()" style="width:100%; padding:12px; margin-top:20px; background:var(--accent-gradient); color:#fff; border:none; border-radius:var(--btn-radius); font-weight:700; cursor:pointer;" id="saveQuizBtn" onclick=""></button>
         </div>
     </div>
 
@@ -5575,10 +5575,10 @@
                     const type = item.querySelector('.q-type').value;
                     
                     // Get correct answer from radio buttons
-                    const selectedRadio = item.querySelector('input[data-correct-radio="1"]:checked');
+                    const selectedRadio = item.querySelector('input[name="correct-radio"]:checked');
                     let correctAnswer = selectedRadio ? selectedRadio.value : '';
                     if(type === 'truefalse') {
-                        correctAnswer = item.querySelector('input[data-correct-radio="1"]:checked') ? item.querySelector('input[data-correct-radio="1"]:checked').value : '';
+                        correctAnswer = item.querySelector('input[name="correct-radio"]:checked') ? item.querySelector('input[name="correct-radio"]:checked').value : '';
                     }
 
                     const xpReward = parseInt(item.querySelector('.q-xp').value) || 0;
@@ -5712,10 +5712,10 @@
                     const type = item.querySelector('.q-type').value;
                     
                     // Get correct answer from radio buttons
-                    const selectedRadio = item.querySelector('input[data-correct-radio="1"]:checked');
+                    const selectedRadio = item.querySelector('input[name="correct-radio"]:checked');
                     let correctAnswer = selectedRadio ? selectedRadio.value : '';
                     if(type === 'truefalse') {
-                        correctAnswer = item.querySelector('input[data-correct-radio="1"]:checked') ? item.querySelector('input[data-correct-radio="1"]:checked').value : '';
+                        correctAnswer = item.querySelector('input[name="correct-radio"]:checked') ? item.querySelector('input[name="correct-radio"]:checked').value : '';
                     }
 
                     const xpReward = parseInt(item.querySelector('.q-xp').value) || 0;
@@ -7560,6 +7560,477 @@
   window.addEventListener('beforeunload',save);
 })();
 </script>
+
+<style id="ananas-final-polish-style"></style>
+<script id="ananas-final-behavior-patch">
+(function(){
+'use strict';
+
+/* ================================================================
+ * FINAL LESSON BEHAVIOR + QUIZ/ADMIN UI PATCH
+ * ================================================================ */
+const LESSON_COMPLETE_EPSILON = 0.9999;
+const LESSON_CHEAT_FORWARD_MIN = 45;
+const LESSON_CHEAT_JUMP_RATIO = 0.25;
+
+function getLessonDurationSafe(){
+  try{return Number(lessonPlayer?.getDuration?.()||lessonWatchState?.duration||0)||0;}catch(e){return 0;}
+}
+function getLessonPositionSafe(){
+  try{return Number(lessonPlayer?.getCurrentTime?.()||0)||0;}catch(e){return 0;}
+}
+function ensureLessonAuditState(){
+  lessonWatchState = lessonWatchState || {};
+  if(typeof lessonWatchState.lastKnownPosition !== 'number') lessonWatchState.lastKnownPosition=0;
+  if(typeof lessonWatchState.cheatDetected !== 'boolean') lessonWatchState.cheatDetected=false;
+  if(!Array.isArray(lessonWatchState.suspiciousJumps)) lessonWatchState.suspiciousJumps=[];
+}
+function markLessonSuspiciousSeek(from,to,duration,source){
+  ensureLessonAuditState();
+  const delta=to-from;
+  if(delta<=0 || duration<=0) return false;
+  const largeJump = delta >= Math.max(LESSON_CHEAT_FORWARD_MIN,duration*LESSON_CHEAT_JUMP_RATIO);
+  const finishJump = from < duration*0.60 && to >= duration*0.95;
+  if(largeJump || finishJump){
+    lessonWatchState.cheatDetected=true;
+    lessonWatchState.suspiciousJumps.push({from,to,duration,delta,source:source||'seek',at:Date.now()});
+    return true;
+  }
+  return false;
+}
+function controlledLessonSeek(target,source){
+  if(!lessonPlayerReady||!lessonPlayer) return;
+  const duration=getLessonDurationSafe(),from=getLessonPositionSafe();
+  const next=Math.max(0,Math.min(duration||Infinity,Number(target)||0));
+  if(!window.__lessonAllowResumeSeek) markLessonSuspiciousSeek(from,next,duration,source);
+  try{lessonPlayer.seekTo(next,true);}catch(e){try{lessonPlayer.seekTo(next);}catch(_) {}}
+  lessonWatchState.lastKnownPosition=next;
+  window.lessonProgressCache=window.lessonProgressCache||{};
+  if(duration>0) window.lessonProgressCache[activeLessonId]={percent:(next/duration)*100,position:next,duration};
+  updateLessonControls();
+  window.saveLessonProgressNow?.();
+  renderLessonWatchPolicy?.();
+}
+function seekLessonBySafe(seconds){
+  if(!lessonPlayerReady||!lessonPlayer)return;
+  controlledLessonSeek(getLessonPositionSafe()+Number(seconds||0),'button/keyboard');
+}
+window.seekLessonBy = seekLessonBySafe;
+
+/* Prevent the current lesson from completing before the video really ends. */
+window.checkLessonAutoCompletion = async function(){
+  if(!currentUser || !lessonCurrentData || !lessonPlayerReady || !lessonPlayer) return;
+  const current=getLessonPositionSafe(), duration=getLessonDurationSafe();
+  if(duration<=0) return;
+  ensureLessonAuditState();
+  lessonWatchState.duration=duration;
+  lessonWatchState.lastKnownPosition=current;
+  const percent=current/duration;
+  window.lessonProgressCache=window.lessonProgressCache||{};
+  window.lessonProgressCache[activeLessonId]={percent:percent*100,position:current,duration};
+  if(percent < LESSON_COMPLETE_EPSILON || lessonWatchState.granted || lessonCompletionInFlight) return;
+  await completeLessonAtEnd(activeCourseId,activeLessonId);
+};
+
+async function completeLessonAtEnd(courseId,lessonId){
+  if(!currentUser || !lessonId || lessonCompletionInFlight) return;
+  const lesson=lessonListCache.find(l=>String(l.id)===String(lessonId));
+  if(!lesson) return;
+  const duration=getLessonDurationSafe();
+  const current=getLessonPositionSafe();
+  const playerState=lessonPlayer?.getPlayerState?.();
+  const trulyEnded=(playerState===LESSON_MEDIA_STATE.ENDED)||(current>=duration-0.25);
+  if(duration<=0 || !trulyEnded) return;
+  lessonCompletionInFlight=true;
+  try{
+    const completedRef=db.collection('users').doc(currentUser.uid).collection('completedLessons').doc(lessonId);
+    const result=await db.runTransaction(async tx=>{
+      const snap=await tx.get(completedRef);
+      if(snap.exists) return {newlyCompleted:false,xp:Number(snap.data()?.xpEarned||0),cheat:!!snap.data()?.cheatDetected};
+      const cheat=!!lessonWatchState.cheatDetected;
+      const xpAmount=cheat?0:(Number(lesson.xpReward)||0);
+      tx.set(completedRef,{
+        completedAt:firebase.firestore.FieldValue.serverTimestamp(),
+        xpEarned:xpAmount,
+        completionPercent:100,
+        completionPosition:duration,
+        cheatDetected:cheat,
+        cheatReason:cheat?'قفزة كبيرة في الفيديو قبل نهايته':null
+      });
+      return {newlyCompleted:true,xp:xpAmount,cheat};
+    });
+
+    lessonWatchState.granted=true;
+    const cached=lessonListCache.find(l=>String(l.id)===String(lessonId));
+    if(cached){cached.completed=true;cached.readyToComplete=false;cached.progressPercent=100;cached.cheatDetected=!!result.cheat;}
+
+    const card=document.querySelector(`#lessonsCardsContainer .lesson-card[data-id="${lessonId}"]`);
+    if(card){
+      card.classList.remove('lesson-ready-to-complete');
+      card.classList.add('completed');
+      card.querySelector('.lesson-manual-complete-btn')?.remove();
+      const meta=card.querySelector('.lesson-meta,[data-lesson-meta]');
+      if(meta){meta.style.color='#2ecc71';if(!meta.textContent.includes('مكتملة'))meta.textContent+=' · ✓ مكتملة';}
+      if(!card.querySelector('.lesson-completed-badge')){
+        const badge=document.createElement('span');badge.className='lesson-completed-badge';badge.innerHTML='<i class="fas fa-check-circle"></i> مكتملة';card.appendChild(badge);
+      }
+    }
+
+    /* Award XP exactly once, and never for a cheating completion. */
+    if(result.newlyCompleted && !result.cheat && result.xp>0){
+      try{
+        const statsRef=db.collection('userStats').doc(currentUser.uid);
+        const stats=await statsRef.get();
+        if(stats.exists){
+          await statsRef.update({xp:firebase.firestore.FieldValue.increment(result.xp),rank:firebase.firestore.FieldValue.increment(1)});
+        }else{
+          await statsRef.set({xp:result.xp,level:1,rank:'#1',progress:0,avgScore:'0%',awards:[]});
+        }
+      }catch(statsErr){
+        console.warn('Completion saved but XP stats update failed:',statsErr);
+      }
+    }
+
+    const status=document.getElementById('lessonCompletionStatus');
+    if(status){
+      status.style.display='block';
+      if(result.cheat){
+        status.className='lesson-completion-status completed lesson-completion-cheat';
+        status.innerHTML='<i class="fas fa-circle-exclamation"></i><strong>اكتملت الحصة، لكن تم رصد قفزة كبيرة في الفيديو.</strong><span>تم تسجيل الحصة كمكتملة، لكن لم تُمنح نقاط الخبرة لهذه الحصة بسبب تخطي جزء كبير منها دفعة واحدة.</span>';
+      }else{
+        status.className='lesson-completion-status completed';
+        status.innerHTML=`<i class="fas fa-check-circle"></i><strong>تم إكمال الحصة بالكامل.</strong><span>${result.newlyCompleted?`حصلت على ${result.xp} نقطة خبرة.`:'تم تسجيل الإكمال مسبقًا.'}</span>`;
+      }
+    }
+    renderLessonWatchPolicy();
+    await refreshLessonDoneIndicators?.();
+    renderLessonPlayerList?.();
+    if(result.newlyCompleted && result.cheat){
+      showCustomAlert('تنبيه الحصة','أكملت الفيديو، لكن لم تُمنح نقاط الخبرة بسبب رصد قفزة كبيرة من منتصف الفيديو إلى النهاية.');
+    }else if(result.newlyCompleted && result.xp>0){
+      showCustomAlert('تم إكمال الحصة',`تم إكمال الحصة بالكامل وحصلت على ${result.xp} نقطة خبرة.`);
+    }
+  }catch(e){
+    console.error('Final lesson completion failed:',e);
+    showCustomAlert('تعذر إتمام الحصة','تعذر تسجيل إكمال الحصة حاليًا. سيتم إعادة المحاولة عند وصول الفيديو إلى النهاية مرة أخرى.');
+  }finally{lessonCompletionInFlight=false;}
+}
+window.completeLessonAtEnd=completeLessonAtEnd;
+window.completeLessonManually=completeLessonAtEnd;
+
+/* Hook the actual playback state: only ENDED/99.5% completes. */
+const __origHandleStopped=window.handleLessonPlaybackStopped;
+window.handleLessonPlaybackStopped=function(state){
+  try{__origHandleStopped?.apply(this,arguments);}catch(e){}
+  if(state===LESSON_MEDIA_STATE.ENDED){setTimeout(()=>window.checkLessonAutoCompletion?.(),0);}
+};
+
+/* Replace the stale progress updater with a player-agnostic one. */
+window.updateLessonControls=function(){
+  if(!lessonPlayerReady||!lessonPlayer)return;
+  try{
+    const current=getLessonPositionSafe(), duration=getLessonDurationSafe()||1;
+    const pct=Math.max(0,Math.min(100,(current/duration)*100));
+    lessonWatchState.duration=duration;
+    lessonWatchState.lastKnownPosition=current;
+    const fill=document.getElementById('lessonProgressBarFill');
+    const thumb=document.getElementById('lessonProgressBarThumb');
+    const timer=document.getElementById('lessonTimerDisplay');
+    const playBtn=document.getElementById('lessonPlayPauseBtn');
+    if(fill){fill.style.width=pct+'%';fill.style.transform='translateZ(0)';}
+    if(thumb)thumb.style.insetInlineStart=pct+'%';
+    if(timer)timer.textContent=`${formatVideoTime(current)} / ${formatVideoTime(duration)}`;
+    if(playBtn){const st=lessonPlayer.getPlayerState?.();playBtn.innerHTML=st===LESSON_MEDIA_STATE.PLAYING?'<i class="fas fa-pause"></i>':'<i class="fas fa-play"></i>';}
+  }catch(e){console.warn('updateLessonControls',e);}
+};
+
+/* Suppress the old manual-complete button behavior. */
+function disableLegacyManualCompletionUI(){
+  document.querySelectorAll('.lesson-manual-complete-btn').forEach(b=>b.remove());
+  document.querySelectorAll('.lesson-card.lesson-ready-to-complete').forEach(c=>c.classList.remove('lesson-ready-to-complete'));
+  lessonListCache?.forEach(l=>{if(l)l.readyToComplete=false;});
+}
+
+/* Small, optional warning/policy panel shown in every lesson player. */
+function renderLessonWatchPolicy(){
+  const title=document.getElementById('lessonPlayerTitleBlock');
+  if(!title)return;
+  let box=document.getElementById('lessonWatchPolicy');
+  if(!box){
+    box=document.createElement('div');box.id='lessonWatchPolicy';box.className='lesson-watch-policy';
+    title.after(box);
+  }
+  const cheated=!!lessonWatchState?.cheatDetected;
+  box.innerHTML=`<div class="policy-main"><i class="fas ${cheated?'fa-triangle-exclamation':'fa-circle-info'}"></i><div><strong>${cheated?'تنبيه على هذه الحصة':'ملاحظة مهمة للحصول على نقاط الخبرة'}</strong><p>${cheated?'تم رصد قفزة كبيرة أثناء المشاهدة. أكمل الحصة حتى النهاية، لكن هذه الحصة لن تمنح نقاط خبرة.':'يجب مشاهدة الحصة حتى النهاية للحصول على نقاط الخبرة. التقديم أو الترجيع البسيط داخل الفيديو مسموح، لكن الانتقال دفعة واحدة من جزء مبكر إلى قرب النهاية يُسجل كحالة غش ويحرم هذه الحصة من XP.'}</p></div></div>`;
+}
+
+/* Reset the cheat/audit state per lesson and load existing progress. */
+const __origOpenLessonPlayer=window.openLessonPlayer;
+window.openLessonPlayer=async function(courseId,lessonId){
+  const result=await __origOpenLessonPlayer.apply(this,arguments);
+  ensureLessonAuditState();
+  lessonWatchState.cheatDetected=false;
+  lessonWatchState.lastKnownPosition=Number(window.__lessonResumePosition||0);
+  lessonWatchState.suspiciousJumps=[];
+  renderLessonWatchPolicy();
+  disableLegacyManualCompletionUI();
+  return result;
+};
+
+/* Safer seeking through the visible progress bar. */
+const pbar=document.getElementById('lessonProgressBarWrap');
+if(pbar && !pbar.dataset.finalSeekBound){
+  pbar.dataset.finalSeekBound='1';
+  pbar.addEventListener('click',e=>{
+    if(!lessonPlayerReady||!lessonPlayer)return;
+    const r=pbar.getBoundingClientRect(),ratio=Math.max(0,Math.min(1,(e.clientX-r.left)/r.width));
+    controlledLessonSeek(ratio*getLessonDurationSafe(),'progress-bar');
+  },true);
+}
+
+/* Keyboard works regardless of which player control has focus. */
+document.addEventListener('keydown',e=>{
+  if(currentCoursePage!=='lessonPlayer'||!lessonPlayerReady||!lessonPlayer)return;
+  const tag=document.activeElement?.tagName;
+  if(['INPUT','TEXTAREA','SELECT'].includes(tag))return;
+  if(['ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(e.key))e.preventDefault();
+  if(e.key==='ArrowLeft')seekLessonBySafe(-10);
+  else if(e.key==='ArrowRight')seekLessonBySafe(10);
+  else if(e.key==='ArrowUp' || e.key==='ArrowDown'){
+    const delta=e.key==='ArrowUp'?5:-5;
+    const slider=document.getElementById('lessonVolumeSlider');
+    if(slider){slider.value=Math.max(0,Math.min(100,Number(slider.value||0)+delta));slider.dispatchEvent(new Event('input',{bubbles:true}));}
+    else{
+      const v=Math.max(0,Math.min(100,(Number(lessonPlayer.getVolume?.()||100))+delta));lessonPlayer.unMute?.();lessonPlayer.setVolume?.(v);
+    }
+  }
+},{capture:true,passive:false});
+
+/* Mobile double tap. */
+const wrapper=document.getElementById('lessonVideoWrapper');
+if(wrapper && !wrapper.dataset.finalDoubleTap){
+  wrapper.dataset.finalDoubleTap='1';let last=0,lastSide='';
+  wrapper.addEventListener('touchend',e=>{
+    if(currentCoursePage!=='lessonPlayer'||!lessonPlayerReady||!lessonPlayer)return;
+    if(e.target.closest?.('.lesson-platform-controls,.lesson-video-center-play,button,input'))return;
+    const t=e.changedTouches?.[0];if(!t)return;
+    const r=wrapper.getBoundingClientRect(),side=(t.clientX-r.left)<r.width/2?'left':'right',now=Date.now();
+    if(last && now-last<360 && side===lastSide){e.preventDefault();seekLessonBySafe(side==='left'?-10:10);showLessonResumeIndicator?.(0);const ind=document.getElementById('lessonResumeIndicator');if(ind){ind.textContent=side==='left'?'↶ 10 ثوانٍ':'↷ 10 ثوانٍ';ind.classList.add('show');clearTimeout(ind.__hideTimer);ind.__hideTimer=setTimeout(()=>ind.classList.remove('show'),750);}last=0;lastSide='';}
+    else{last=now;lastSide=side;}
+  },{passive:false});
+}
+
+/* Auto-play the lesson from its saved position when the lesson is opened. */
+const __autoplayOpenLesson=window.openLessonPlayer;
+window.openLessonPlayer=async function(courseId,lessonId){
+  const result=await __autoplayOpenLesson.apply(this,arguments);
+  setTimeout(async()=>{
+    try{
+      if(currentCoursePage!=='lessonPlayer'||String(activeLessonId)!==String(lessonId)||!lessonPlayerReady||!lessonPlayer)return;
+      await Promise.resolve(restoreLessonPlayerPosition?.());
+      setTimeout(()=>{try{lessonPlayer.playVideo?.();}catch(e){try{lessonHtmlVideo?.play?.();}catch(_){} }},120);
+    }catch(e){}
+  },120);
+  return result;
+};
+
+/* Override restore seek so it is never mistaken for cheating. */
+const originalRestoreLessonPlayerPosition=window.restoreLessonPlayerPosition;
+if(originalRestoreLessonPlayerPosition){
+  window.restoreLessonPlayerPosition=async function(){
+    window.__lessonAllowResumeSeek=true;
+    try{return await originalRestoreLessonPlayerPosition.apply(this,arguments);}finally{setTimeout(()=>window.__lessonAllowResumeSeek=false,500);}
+  };
+}
+
+/* ================= QUIZ LESSON DROPDOWN ================= */
+async function populateQuizLessonSelect(courseId,selectedId){
+  const select=document.getElementById('addQuizLessonId');if(!select||!courseId)return;
+  const keep=selectedId!=null?String(selectedId):String(select.value||'');
+  select.innerHTML='<option value="">بدون حصة</option>';
+  try{
+    let snap;
+    try{snap=await db.collection('courses').doc(courseId).collection('lessons').orderBy('order','asc').get();}
+    catch(_){snap=await db.collection('courses').doc(courseId).collection('lessons').get();}
+    const docs=snap.docs.slice().sort((a,b)=>Number(a.data()?.order||999999)-Number(b.data()?.order||999999));
+    for(const d of docs){
+      const l=d.data()||{},opt=document.createElement('option');opt.value=d.id;opt.textContent=currentLang==='ar'?(l.titleAr||l.titleEn||'حصة'):(l.titleEn||l.titleAr||'Lesson');select.appendChild(opt);
+    }
+    if([...select.options].some(o=>String(o.value)===keep))select.value=keep;
+  }catch(e){console.warn('populate quiz lesson list',e);}
+}
+window.populateQuizLessonSelect=populateQuizLessonSelect;
+
+const baseEditQuiz=window.editQuiz;
+if(baseEditQuiz){
+  window.editQuiz=async function(courseId,quizId){
+    let selectedLesson='';
+    try{const snap=await db.collection('courses').doc(courseId).collection('quizzes').doc(quizId).get();selectedLesson=snap.exists?String(snap.data()?.lessonId||''):'';}catch(e){}
+    const res=await baseEditQuiz.apply(this,arguments);
+    try{await populateQuizLessonSelect(courseId,selectedLesson); }catch(e){}
+    const modal=document.getElementById('addQuizModal');if(modal)modal.dataset.editQuizId=quizId;
+    normalizeQuizQuestionRadioGroups();
+    return res;
+  };
+}
+
+/* Fix correct-answer grouping: every question gets its own radio group. */
+function normalizeQuizQuestionRadioGroups(){
+  document.querySelectorAll('#questionsContainer .question-item').forEach((item,idx)=>{
+    const group=`correct-radio-${idx}`;
+    item.querySelectorAll('input[type="radio"]').forEach(r=>{r.name=group;r.classList.add('q-correct');});
+  });
+}
+const qContainer=document.getElementById('questionsContainer');
+if(qContainer && !qContainer.dataset.radioNormalizer){
+  qContainer.dataset.radioNormalizer='1';
+  const mo=new MutationObserver(()=>normalizeQuizQuestionRadioGroups());mo.observe(qContainer,{childList:true,subtree:true});
+  normalizeQuizQuestionRadioGroups();
+}
+
+function collectQuizQuestionsFromUI(){
+  const container=document.getElementById('questionsContainer'),items=[...(container?.querySelectorAll('.question-item')||[])],out=[];
+  for(const item of items){
+    const qAr=item.querySelector('.q-ar')?.value.trim()||'',qEn=item.querySelector('.q-en')?.value.trim()||'',type=item.querySelector('.q-type')?.value||'mcq';
+    const selected=item.querySelector('input[type="radio"]:checked');
+    const correctAnswer=selected?.value||'';
+    const xpReward=parseInt(item.querySelector('.q-xp')?.value||'0',10)||0;
+    if(!qAr||!qEn)throw new Error('الرجاء ملء نص السؤال بالعربية والإنجليزية لجميع الأسئلة.');
+    let options=[];
+    if(type==='mcq'){
+      options=[...item.querySelectorAll('.q-option')].map(i=>i.value.trim()).filter(Boolean);
+      if(options.length<2)throw new Error('يجب إضافة خيارين على الأقل لأسئلة الاختيار من متعدد.');
+      if(!selected)throw new Error('الرجاء تحديد الإجابة الصحيحة لكل سؤال اختيار من متعدد.');
+    }
+    out.push({questionAr:qAr,questionEn:qEn,type,options,correctAnswer,xpReward,image:item.querySelector('.q-image')?.dataset.existingImage||''});
+  }
+  return out;
+}
+
+/* Use a stable serializer for both new and edited quizzes. */
+async function saveQuizStable(courseId,quizId){
+  if(!isAdmin)return showCustomAlert('غير مسموح','حفظ الاختبارات متاح للمشرف فقط.');
+  const titleAr=safeGetValue('addQuizTitleAr'),titleEn=safeGetValue('addQuizTitleEn'),lessonId=safeGetSelectVal('addQuizLessonId')||null;
+  if(!titleAr||!titleEn)return showCustomAlert('خطأ','الرجاء إدخال عناوين الاختبار.');
+  let questions;
+  try{questions=collectQuizQuestionsFromUI();}catch(e){return showCustomAlert('خطأ',e.message);}
+  if(!questions.length)return showCustomAlert('خطأ','يجب إضافة سؤال واحد على الأقل.');
+  try{
+    for(const item of document.querySelectorAll('#questionsContainer .question-item')){
+      const input=item.querySelector('.q-image');
+      if(input?.files?.[0]){
+        const url=await uploadImage(input.files[0]);
+        if(!url)return showCustomAlert('خطأ','خطأ في رفع صورة السؤال.');
+        const qIndex=[...document.querySelectorAll('#questionsContainer .question-item')].indexOf(item);
+        if(qIndex>=0)questions[qIndex].image=url;
+      }
+    }
+    const ref=db.collection('courses').doc(courseId).collection('quizzes');
+    if(quizId)await ref.doc(quizId).update({titleAr,titleEn,lessonId,questions});
+    else{await ref.add({titleAr,titleEn,lessonId,questions});await db.collection('courses').doc(courseId).update({quizzes:firebase.firestore.FieldValue.increment(1)});}
+    document.getElementById('addQuizModal').classList.remove('active');
+    loadQuizzesForCourse(courseId);loadQuizzesPage(courseId);if(activeLessonId)loadQuizzesForLesson(courseId,activeLessonId);loadCourses();
+    showCustomAlert('تم الحفظ',quizId?'تم تعديل الاختبار بنجاح!':'تم حفظ الاختبار بنجاح!');
+  }catch(e){showCustomAlert('خطأ','تعذر حفظ الاختبار: '+(e.message||e));}
+}
+
+/* Ensure add/edit buttons use the stable serializer. */
+document.getElementById('saveQuizBtn')?.removeAttribute('onclick');
+document.getElementById('saveQuizBtn')?.addEventListener('click',async e=>{
+  e.preventDefault();
+  const mode=document.getElementById('addQuizModalTitle')?.textContent?.includes('تعديل')?'edit':'new';
+  const quizId=document.getElementById('addQuizModal')?.dataset.editQuizId||null;
+  await saveQuizStable(activeCourseId,mode==='edit'?quizId:null);
+});
+const originalEditQuizForId=window.editQuiz;
+
+/* Make new-quiz open always use the current lesson list and reset edit identity. */
+document.getElementById('addQuizBtn')?.addEventListener('click',()=>{
+  const modal=document.getElementById('addQuizModal');if(modal)delete modal.dataset.editQuizId;
+  setTimeout(()=>{populateQuizLessonSelect(activeCourseId,'');normalizeQuizQuestionRadioGroups();},0);
+},{capture:true});
+
+/* ================================================================
+ * VISUAL / RESPONSIVE POLISH
+ * ================================================================ */
+const css=document.createElement('style');
+css.textContent=`
+/* Lesson player polish */
+.lesson-platform-controls{background:linear-gradient(180deg,transparent 0%,rgba(5,8,15,.40) 18%,rgba(5,8,15,.94) 100%)!important;padding:16px 18px 14px!important;backdrop-filter:blur(8px);}
+.lesson-platform-controls .controls-btn{width:38px;height:38px;border-radius:12px;border:1px solid rgba(255,255,255,.12);display:inline-flex;align-items:center;justify-content:center;gap:4px;}
+.lesson-platform-controls .controls-btn:hover{transform:translateY(-1px) scale(1.03)!important;box-shadow:0 8px 18px rgba(0,0,0,.25);}
+.lesson-platform-controls .seek-label{font-size:.62rem;font-weight:800;}
+.lesson-video-brand{pointer-events:none;}
+.lesson-watch-policy{width:min(920px,100%);margin:0 0 12px;background:linear-gradient(135deg,rgba(108,92,231,.10),rgba(9,132,227,.07));border:1px solid rgba(108,92,231,.25);border-radius:18px;padding:13px 15px;}
+.lesson-watch-policy .policy-main{display:flex;align-items:flex-start;gap:11px;}
+.lesson-watch-policy i{color:var(--accent1);font-size:1.1rem;margin-top:2px;}
+.lesson-watch-policy strong{display:block;margin-bottom:3px;}
+.lesson-watch-policy p{color:var(--text-muted);font-size:.82rem;line-height:1.65;margin:0;}
+.lesson-completion-cheat{color:#f59e0b!important;border-color:rgba(245,158,11,.38)!important;background:rgba(245,158,11,.07)!important;}
+.lesson-completion-status{display:flex!important;align-items:flex-start;gap:10px;flex-direction:column;}
+.progress-bar-fill{transition:none!important;will-change:width;}
+.progress-bar-thumb{transition:none!important;will-change:inset-inline-start,left;}
+
+/* Quiz/admin form redesign */
+#addQuizModal{width:min(980px,96vw)!important;max-height:min(92vh,900px)!important;padding:28px!important;}
+#addQuizModal>div{display:flex;flex-direction:column;gap:8px;}
+#addQuizModal .question-item{background:linear-gradient(180deg,var(--bg-secondary),rgba(255,255,255,.015))!important;border:1px solid var(--border)!important;border-radius:20px!important;padding:18px!important;box-shadow:0 10px 28px rgba(0,0,0,.08);}
+#questionsContainer{display:grid;gap:14px;}
+#questionsContainer .question-item label{font-size:.86rem;color:var(--text-muted);margin-top:0!important;margin-bottom:5px;}
+#questionsContainer .question-item input,#questionsContainer .question-item textarea,#questionsContainer .question-item select{border-radius:13px!important;min-height:44px;}
+#questionsContainer .options-list{display:grid;gap:8px;}
+#questionsContainer .options-list>div{display:grid!important;grid-template-columns:32px 1fr 42px!important;gap:8px!important;align-items:center!important;background:var(--bg-card)!important;padding:7px 8px!important;border:1px solid var(--border)!important;border-radius:13px!important;}
+#questionsContainer .options-list input.q-option{width:100%!important;margin:0!important;min-height:42px!important;box-sizing:border-box!important;}
+#questionsContainer .options-list input[type=radio]{accent-color:var(--accent1);justify-self:center;}
+#questionsContainer .options-list .btn{width:38px!important;height:38px;padding:0!important;border-radius:10px!important;}
+#questionsContainer .question-item>button{border-radius:12px!important;}
+#addQuizModalTitle{font-size:1.55rem!important;letter-spacing:-.2px;}
+#quizOverlay{z-index:9000!important;}
+#quizOverlay .quiz-container{box-shadow:0 25px 80px rgba(0,0,0,.26);}
+#quizOverlay .close-btn,.quiz-result-screen .btn-start{background:var(--bg-secondary)!important;color:var(--text-primary)!important;border:1px solid var(--border)!important;box-shadow:none!important;}
+#quizOverlay .close-btn:hover,.quiz-result-screen .btn-start:hover{border-color:var(--accent1)!important;color:var(--accent1)!important;transform:translateY(-1px)!important;}
+#quizOverlay .quiz-header .close-btn{width:42px;height:42px;border-radius:12px;display:inline-flex;align-items:center;justify-content:center;}
+
+/* Every edit modal follows the platform design language. */
+.edit-modal{border-radius:22px!important;backdrop-filter:blur(18px);}
+.edit-modal>button:first-child{width:40px!important;height:40px!important;border-radius:12px!important;background:var(--bg-secondary)!important;border:1px solid var(--border)!important;line-height:1!important;}
+.edit-modal input,.edit-modal textarea,.edit-modal select{border-radius:13px!important;min-height:44px!important;transition:border-color .18s,box-shadow .18s,transform .18s;}
+.edit-modal input:focus,.edit-modal textarea:focus,.edit-modal select:focus{outline:none!important;border-color:var(--accent1)!important;box-shadow:0 0 0 3px rgba(108,92,231,.12)!important;}
+
+/* Mobile: content exists only between the fixed top and bottom bars. */
+@media(max-width:768px){
+  :root{--ananas-top:var(--nav-height-mobile,70px);--ananas-bottom:calc(66px + env(safe-area-inset-bottom));}
+  #quizOverlay{top:var(--ananas-top)!important;bottom:var(--ananas-bottom)!important;left:0!important;right:0!important;width:auto!important;height:auto!important;padding:10px!important;align-items:stretch!important;z-index:9000!important;}
+  #quizOverlay .quiz-container{max-height:100%!important;overflow-y:auto!important;border-radius:18px!important;padding:15px!important;}
+  #courseDetailView>.course-overview,#courseDetailView>#courseDashboard,#courseDetailView>#courseLessonsPage,#courseDetailView>#courseLessonPlayerPage,#courseDetailView>#courseQuizzesPage,#courseDetailView>#courseAssignmentsPage,#courseDetailView>#courseChatPage{padding-top:12px!important;padding-bottom:18px!important;}
+  .lesson-player-main{padding:0 0 10px!important;}
+  .lesson-video-sticky{margin-top:4px!important;}
+  .lesson-watch-policy{font-size:.8rem;}
+  #addQuizModal{top:calc(var(--ananas-top) + 50%)!important;max-height:calc(100dvh - var(--ananas-top) - var(--ananas-bottom) - 18px)!important;width:min(96vw,720px)!important;padding:16px!important;}
+  #questionsContainer .question-item{padding:13px!important;}
+  #questionsContainer .options-list>div{grid-template-columns:30px 1fr 40px!important;}
+  .edit-modal{max-height:calc(100dvh - var(--ananas-top) - var(--ananas-bottom) - 18px)!important;max-width:calc(100vw - 18px)!important;}
+  #lessonCustomControls{opacity:1!important;pointer-events:auto!important;}
+  #lessonProgressBarWrap{height:7px!important;}
+  .lesson-platform-controls{padding:10px 9px 8px!important;}
+  .lesson-platform-controls .controls-btn{width:34px;height:34px;border-radius:10px;}
+  .lesson-volume-wrap{max-width:76px;}
+  .lesson-volume-slider{width:58px!important;}
+}
+`;
+document.head.appendChild(css);
+
+/* Keep mobile edit dialogs below the top bar and above the bottom bar. */
+if(window.matchMedia?.('(max-width:768px)').matches){
+  document.querySelectorAll('.edit-modal').forEach(m=>m.style.zIndex='9500');
+}
+
+/* Ensure all lesson cards reflect completion state after a refresh without legacy buttons. */
+setInterval(()=>{if(currentCoursePage==='learning' || currentCoursePage==='lessonPlayer')disableLegacyManualCompletionUI();},1500);
+
+})();
+
+</script>
 </body>
 </html>
 
@@ -7905,422 +8376,4 @@ st.textContent=`
 `;
 document.head.appendChild(st);
 })();
-</script>
-
-
-<!-- ===== ANANAS FINAL V2 PATCH ===== -->
-<script>
-(function(){
-'use strict';
-
-/* ============================================================
-   ANANAS FINAL LESSON + QUIZ + UI PATCH
-   ============================================================ */
-
-/* ---------- Lesson completion policy ---------- */
-const ANANAS_COMPLETION_THRESHOLD = 100;
-const ANANAS_ALLOWED_SMALL_SKIP = 10;
-const ANANAS_SUSPICIOUS_JUMP_SECONDS = 25;
-
-function ananasLessonState(){
-  if(!window.lessonWatchState) return null;
-  if(!Number.isFinite(Number(window.lessonWatchState.__lastObservedPosition))) window.lessonWatchState.__lastObservedPosition = null;
-  if(!Number.isFinite(Number(window.lessonWatchState.__maxObservedPosition))) window.lessonWatchState.__maxObservedPosition = 0;
-  if(typeof window.lessonWatchState.__cheatFlag !== 'boolean') window.lessonWatchState.__cheatFlag = false;
-  if(typeof window.lessonWatchState.__resumeApplied !== 'boolean') window.lessonWatchState.__resumeApplied = false;
-  return window.lessonWatchState;
-}
-
-function ananasTrackLessonSeek(current, duration, source){
-  const s=ananasLessonState();
-  if(!s || !Number.isFinite(current) || !Number.isFinite(duration) || duration<=0) return;
-  const prev=Number(s.__lastObservedPosition);
-  if(Number.isFinite(prev)){
-    const delta=current-prev;
-    const expected=s.__allowSeekUntil && Date.now()<=s.__allowSeekUntil;
-    const nearEnd=current >= duration*0.95;
-    const jumpedFromEarly=prev <= duration*0.80;
-    if(!expected && delta>ANANAS_SUSPICIOUS_JUMP_SECONDS && nearEnd && jumpedFromEarly){
-      s.__cheatFlag=true;
-      window.__lessonCheatDetected=true;
-    }
-    /* A direct large jump from early/middle video to very late video is suspicious. */
-    if(!expected && delta>Math.max(ANANAS_SUSPICIOUS_JUMP_SECONDS, duration*0.06) && current/duration>0.9 && prev/duration<0.85){
-      s.__cheatFlag=true;
-      window.__lessonCheatDetected=true;
-    }
-  }
-  s.__lastObservedPosition=current;
-  s.__maxObservedPosition=Math.max(Number(s.__maxObservedPosition||0),current);
-  if(source==='seek-button') s.__allowSeekUntil=Date.now()+450;
-}
-
-/* ---------- Persistent position: local first, Firestore second ---------- */
-const __originalSaveLessonProgressNow = window.saveLessonProgressNow;
-window.saveLessonProgressNow = async function(){
-  try{
-    if(window.currentUser && window.activeCourseId && window.activeLessonId && window.lessonPlayer){
-      const pos=Number(window.lessonPlayer.getCurrentTime?.()||0);
-      const dur=Number(window.lessonPlayer.getDuration?.()||window.lessonWatchState?.duration||0);
-      if(Number.isFinite(pos)&&Number.isFinite(dur)&&dur>0){
-        try{ window.writeLocalLessonResume?.(window.activeCourseId,window.activeLessonId,pos,dur); }catch(e){}
-        window.lessonProgressCache=window.lessonProgressCache||{};
-        window.lessonProgressCache[window.activeLessonId]={percent:Math.max(0,Math.min(100,pos/dur*100)),position:pos,duration:dur};
-      }
-    }
-  }catch(e){}
-  try{
-    return await __originalSaveLessonProgressNow?.apply(this,arguments);
-  }catch(e){
-    console.warn('Ananas progress save fallback:',e);
-  }
-};
-
-/* ---------- Completion status / warning ---------- */
-const __originalRenderLessonCompletionStatus = window.renderLessonCompletionStatus;
-window.renderLessonCompletionStatus = async function(courseId, lessonId){
-  const el=document.getElementById('lessonCompletionStatus');
-  if(!el) return;
-  try{
-    const snap=await db.collection('users').doc(currentUser.uid).collection('completedLessons').doc(lessonId).get();
-    if(snap.exists){
-      const d=snap.data()||{};
-      const xp=Number(d.xpEarned||0);
-      const cheated=d.xpEligible===false || d.antiCheat==='flagged';
-      el.className='lesson-completion-status completed'+(cheated?' lesson-completed-no-xp':'');
-      el.innerHTML=cheated
-        ? '<i class="fas fa-circle-exclamation"></i> تم إنهاء الحصة، لكن لم تُمنح نقاط الخبرة لأن النظام سجّل انتقالًا كبيرًا إلى نهاية الفيديو. يمكنك مشاهدة الحصة مرة أخرى، لكن نقاط هذه الحصة لن تُمنح.'
-        : `<i class="fas fa-check-circle"></i> تم إكمال الحصة بالكامل${xp?` والحصول على ${xp} نقطة خبرة.`:' بنجاح.'}`;
-      return;
-    }
-  }catch(e){ console.warn('completion status read',e); }
-  el.className='lesson-completion-status lesson-completion-guidance';
-  el.innerHTML='<div><i class="fas fa-circle-info"></i> <strong>مهم:</strong> أكمل الفيديو حتى <strong>النهاية 100%</strong> حتى تُحتسب الحصة وتحصل على نقاط الخبرة.</div><div class="lesson-cheat-warning"><i class="fas fa-triangle-exclamation"></i> التقديمات البسيطة داخل الفيديو مسموحة، أما الانتقال الكبير مباشرة من منتصف/بداية الفيديو إلى نهايته فقد يُعتبر تجاوزًا ويحرمك من نقاط الخبرة لهذه الحصة.</div>';
-};
-
-/* ---------- One-time completion at exact end ---------- */
-const __originalCompleteLessonManually = window.completeLessonManually;
-window.completeLessonManually = async function(courseId, lessonId){
-  if(!currentUser) return triggerAuth();
-  if(window.lessonCompletionInFlight) return;
-  const lesson=Array.isArray(window.lessonListCache)?window.lessonListCache.find(l=>String(l.id)===String(lessonId)):null;
-  if(!lesson) return;
-  let position=0,duration=0;
-  try{
-    if(window.activeLessonId===lessonId && window.lessonPlayerReady && window.lessonPlayer){
-      position=Number(window.lessonPlayer.getCurrentTime?.()||0);
-      duration=Number(window.lessonPlayer.getDuration?.()||0);
-    }else{
-      const p=window.lessonProgressCache?.[lessonId]||{};
-      position=Number(p.position||0); duration=Number(p.duration||0);
-    }
-  }catch(e){}
-  if(duration<=0 || position < duration-0.75){
-    window.showCustomAlert?.('أكمل الحصة للنهاية','يتم احتساب الحصة ومنح نقاط الخبرة فقط عند وصول الفيديو إلى 100% والنهاية.');
-    return;
-  }
-
-  window.lessonCompletionInFlight=true;
-  const ref=db.collection('users').doc(currentUser.uid).collection('completedLessons').doc(lessonId);
-  const suspicious=!!(window.lessonWatchState?.__cheatFlag || window.__lessonCheatDetected);
-  try{
-    const existing=await ref.get();
-    if(existing.exists){
-      window.lessonWatchState.granted=true;
-      window.lessonCompletionInFlight=false;
-      await window.renderLessonCompletionStatus?.(courseId,lessonId);
-      return;
-    }
-
-    const xpAmount=suspicious?0:Number(lesson.xpReward||0);
-    await ref.set({
-      completedAt:firebase.firestore.FieldValue.serverTimestamp(),
-      xpEarned:xpAmount,
-      xpEligible:!suspicious,
-      antiCheat:suspicious?'flagged':'clear',
-      completionPercent:100,
-      completionPosition:duration,
-      cheated:suspicious
-    },{merge:true});
-
-    /* Award XP exactly once, and never from the result of a repeated lesson close. */
-    if(!suspicious && xpAmount>0){
-      try{
-        const statsRef=db.collection('userStats').doc(currentUser.uid);
-        const statsSnap=await statsRef.get();
-        if(statsSnap.exists){
-          await statsRef.set({xp:firebase.firestore.FieldValue.increment(xpAmount),rank:firebase.firestore.FieldValue.increment(1)},{merge:true});
-        }else{
-          await statsRef.set({xp:xpAmount,level:1,rank:'#1',progress:0,avgScore:'0%',awards:[]},{merge:true});
-        }
-      }catch(xpErr){ console.warn('XP update rejected after lesson completion:',xpErr); }
-    }
-
-    window.lessonWatchState.granted=true;
-    const cached=window.lessonListCache?.find(l=>String(l.id)===String(lessonId));
-    if(cached){cached.completed=true;cached.readyToComplete=false;cached.progressPercent=100;}
-    const card=document.querySelector(`#lessonsCardsContainer .lesson-card[data-id="${CSS.escape(String(lessonId))}"]`);
-    if(card){
-      card.classList.remove('lesson-ready-to-complete');
-      card.classList.add('completed');
-      card.querySelector('.lesson-manual-complete-btn')?.remove();
-      const meta=card.querySelector('.lesson-meta,[data-lesson-meta]');
-      if(meta){meta.style.color='#22c55e';if(!meta.textContent.includes('مكتملة'))meta.textContent+=' · ✓ مكتملة';}
-      if(!card.querySelector('.lesson-completed-badge')){const b=document.createElement('span');b.className='lesson-completed-badge';b.innerHTML='<i class="fas fa-check-circle"></i> مكتملة';card.appendChild(b);}
-    }
-    window.renderLessonPlayerList?.();
-    await window.refreshLessonDoneIndicators?.();
-    await window.renderLessonCompletionStatus?.(courseId,lessonId);
-    window.showCustomAlert?.(suspicious?'تم إنهاء الحصة بدون نقاط خبرة':'تم إكمال الحصة', suspicious?'تم إنهاء الحصة، لكن لم تُمنح نقاط الخبرة بسبب تجاوز كبير في الفيديو.':`أكملت الحصة للنهاية وحصلت على ${xpAmount} نقطة خبرة.`);
-  }catch(e){
-    console.error('Final lesson completion failed:',e);
-    window.showCustomAlert?.('تعذر حفظ إكمال الحصة','تعذر تسجيل إكمال الحصة في حسابك. حاول مرة أخرى.');
-  }finally{
-    window.lessonCompletionInFlight=false;
-  }
-};
-
-/* ---------- Completion check only at 100% / ended ---------- */
-window.checkLessonAutoCompletion = async function(){
-  if(!currentUser||!lessonCurrentData||!lessonPlayerReady||!lessonPlayer)return;
-  let current=0,duration=0,state=null;
-  try{current=Number(lessonPlayer.getCurrentTime?.()||0);duration=Number(lessonPlayer.getDuration?.()||0);state=lessonPlayer.getPlayerState?.();}catch(e){return;}
-  if(duration<=0)return;
-  lessonWatchState.duration=duration;
-  const pct=duration?current/duration*100:0;
-  window.lessonProgressCache=window.lessonProgressCache||{};
-  window.lessonProgressCache[activeLessonId]={percent:Math.min(100,pct),position:current,duration};
-  const ended = state===LESSON_MEDIA_STATE.ENDED || pct>=99.8;
-  if(!ended) return;
-  await window.completeLessonManually(activeCourseId,activeLessonId);
-};
-
-/* ---------- Smooth progress UI ---------- */
-let ananasProgressRAF=0, ananasProgressLast=0;
-function ananasProgressLoop(ts){
-  if(!window.lessonPlayerReady||!window.lessonPlayer||window.currentCoursePage!=='lessonPlayer'){
-    ananasProgressRAF=0; return;
-  }
-  if(ts-ananasProgressLast>=45){
-    ananasProgressLast=ts;
-    try{
-      const current=Number(window.lessonPlayer.getCurrentTime?.()||0), duration=Number(window.lessonPlayer.getDuration?.()||window.lessonWatchState?.duration||1);
-      if(duration>0){
-        ananasTrackLessonSeek(current,duration,'frame');
-        const pct=Math.max(0,Math.min(100,current/duration*100));
-        const fill=document.getElementById('lessonProgressBarFill'); if(fill) fill.style.width=pct+'%';
-        const thumb=document.getElementById('lessonProgressBarThumb'); if(thumb) thumb.style.left=pct+'%';
-        const timer=document.getElementById('lessonTimerDisplay'); if(timer) timer.textContent=`${formatVideoTime(current)} / ${formatVideoTime(duration)}`;
-        const btn=document.getElementById('lessonPlayPauseBtn');
-        const state=window.lessonPlayer.getPlayerState?.();
-        if(btn)btn.innerHTML=(state===LESSON_MEDIA_STATE.PLAYING || (window.YT&&state===YT.PlayerState.PLAYING))?'<i class="fas fa-pause"></i>':'<i class="fas fa-play"></i>';
-      }
-    }catch(e){}
-  }
-  ananasProgressRAF=requestAnimationFrame(ananasProgressLoop);
-}
-function startAnanasProgressLoop(){if(!ananasProgressRAF)ananasProgressRAF=requestAnimationFrame(ananasProgressLoop);}
-window.startAnanasProgressLoop=startAnanasProgressLoop;
-
-const __oldStartMonitor=window.startLessonPlaybackMonitor;
-window.startLessonPlaybackMonitor=function(){
-  try{__oldStartMonitor?.apply(this,arguments);}catch(e){}
-  startAnanasProgressLoop();
-};
-
-/* ---------- Ensure player restoration applies after every player ready ---------- */
-const __oldRestoreLessonPosition=window.restoreLessonPlayerPosition;
-window.restoreLessonPlayerPosition=async function(){
-  let best=0;
-  try{best=Number(window.__lessonResumePosition||0);}catch(e){}
-  try{best=Math.max(best,Number(readLocalLessonResume(activeCourseId,activeLessonId).position||0));}catch(e){}
-  try{
-    if(currentUser&&activeCourseId&&activeLessonId){
-      const p=await lessonProgressRef(activeCourseId,activeLessonId).get();
-      if(p.exists)best=Math.max(best,Number(p.data()?.lastPosition||0));
-      const st=await db.collection('users').doc(currentUser.uid).collection('courseState').doc(activeCourseId).get();
-      if(st.exists&&String(st.data()?.lessonId)===String(activeLessonId))best=Math.max(best,Number(st.data()?.lessonTime||0));
-    }
-  }catch(e){}
-  window.__lessonResumePosition=Math.max(0,best);
-  const s=ananasLessonState(); if(s){s.__lastObservedPosition=best;s.__resumeApplied=true;s.__cheatFlag=false;}
-  if(best>0.5){
-    try{await Promise.resolve(lessonPlayer.seekTo(best,true));}catch(e){try{await Promise.resolve(lessonPlayer.seekTo(best));}catch(_){} }
-    showLessonResumeIndicator?.(best);
-  }
-  return best;
-};
-
-/* Mark a 10-second button seek as an allowed small navigation; progress-bar jumps remain monitored. */
-const __oldSeekLessonBy=window.seekLessonBy;
-window.seekLessonBy=function(seconds){
-  const s=ananasLessonState(); if(s && Math.abs(Number(seconds)||0)<=ANANAS_ALLOWED_SMALL_SKIP) s.__allowSeekUntil=Date.now()+600;
-  return __oldSeekLessonBy?.apply(this,arguments);
-};
-
-/* ---------- Keyboard controls: capture phase, button focus does not matter ---------- */
-window.addEventListener('keydown',function(e){
-  if(window.currentCoursePage!=='lessonPlayer'||!window.lessonPlayerReady||!window.lessonPlayer)return;
-  if(e.altKey||e.ctrlKey||e.metaKey||e.shiftKey)return;
-  const blocked=['INPUT','TEXTAREA','SELECT'].includes(document.activeElement?.tagName);
-  if(blocked)return;
-  const k=e.key;
-  if(!['ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(k))return;
-  e.preventDefault(); e.stopPropagation();
-  if(k==='ArrowLeft'){window.seekLessonBy?.(-10);return;}
-  if(k==='ArrowRight'){window.seekLessonBy?.(10);return;}
-  const slider=document.getElementById('lessonVolumeSlider');
-  if(!slider)return;
-  const next=Math.max(0,Math.min(100,Number(slider.value||100)+(k==='ArrowUp'?5:-5)));
-  slider.value=String(next);slider.dispatchEvent(new Event('input',{bubbles:true}));
-},{capture:true});
-
-/* ---------- Progress bar direct seek should also update the observed position ---------- */
-document.getElementById('lessonProgressBarWrap')?.addEventListener('click',function(e){
-  if(!window.lessonPlayerReady||!window.lessonPlayer)return;
-  const r=this.getBoundingClientRect();const ratio=Math.max(0,Math.min(1,(e.clientX-r.left)/r.width));const d=Number(window.lessonPlayer.getDuration?.()||0);const target=d*ratio;
-  try{window.lessonPlayer.seekTo(target,true);}catch(err){try{window.lessonPlayer.seekTo(target);}catch(_){} }
-  try{ananasTrackLessonSeek(target,d,'progress-bar');}catch(err){}
-  window.saveLessonProgressNow?.();
-},{capture:true});
-
-/* ---------- Mobile double-tap: right +10 / left -10 ---------- */
-(function(){
-  const wrap=document.getElementById('lessonVideoWrapper'); if(!wrap||wrap.dataset.ananasDblTapV2==='1')return; wrap.dataset.ananasDblTapV2='1';
-  let last=0,lastSide='';
-  wrap.addEventListener('touchend',function(e){
-    if(window.currentCoursePage!=='lessonPlayer'||!window.lessonPlayerReady||!window.lessonPlayer)return;
-    if(e.target.closest('.lesson-platform-controls,.lesson-video-center-play,button,input,a,.settings-dropdown'))return;
-    const t=e.changedTouches?.[0];if(!t)return; const r=wrap.getBoundingClientRect(); const side=(t.clientX-r.left)<r.width/2?'left':'right'; const now=Date.now();
-    if(last&&now-last<340&&side===lastSide){e.preventDefault();e.stopPropagation();window.seekLessonBy?.(side==='left'?-10:10);const ind=document.getElementById('lessonResumeIndicator');if(ind){ind.textContent=side==='left'?'↶ 10 ثوانٍ':'↷ 10 ثوانٍ';ind.classList.add('show');clearTimeout(ind.__hideTimer);ind.__hideTimer=setTimeout(()=>ind.classList.remove('show'),700);}last=0;lastSide='';}
-    else{last=now;lastSide=side;}
-  },{passive:false});
-})();
-
-/* ---------- Lesson source type note / completion banner ---------- */
-(function(){
-  const oldOpenLesson=window.openLessonPlayer;
-  if(typeof oldOpenLesson!=='function')return;
-  window.openLessonPlayer=async function(courseId,lessonId){
-    window.__lessonCheatDetected=false;
-    const s=window.lessonWatchState; if(s){s.__lastObservedPosition=null;s.__maxObservedPosition=0;s.__cheatFlag=false;s.__allowSeekUntil=0;}
-    const result=await oldOpenLesson.apply(this,arguments);
-    setTimeout(()=>{window.renderLessonCompletionStatus?.(courseId,lessonId);window.startAnanasProgressLoop?.();},150);
-    return result;
-  };
-})();
-
-/* ---------- Quiz lesson selector: ALWAYS reload all current lessons ---------- */
-async function ananasPopulateQuizLessons(courseId, selectedId){
-  const select=document.getElementById('addQuizLessonId'); if(!select||!courseId)return;
-  const previous=selectedId!==undefined?selectedId:(select.value||'');
-  try{
-    const snap=await db.collection('courses').doc(courseId).collection('lessons').orderBy('order','asc').get();
-    const frag=document.createDocumentFragment();
-    const base=document.createElement('option');base.value='';base.textContent='بدون حصة';frag.appendChild(base);
-    snap.forEach(d=>{const l=d.data()||{},o=document.createElement('option');o.value=d.id;o.textContent=currentLang==='ar'?(l.titleAr||'حصة'):(l.titleEn||l.titleAr||'Lesson');frag.appendChild(o);});
-    select.replaceChildren(frag);
-    select.value=previous||'';
-  }catch(e){console.error('quiz lessons refresh',e);}
-}
-window.ananasPopulateQuizLessons=ananasPopulateQuizLessons;
-const quizModal=document.getElementById('addQuizModal');
-if(quizModal){
-  const obs=new MutationObserver(()=>{if(quizModal.classList.contains('active'))ananasPopulateQuizLessons(activeCourseId,document.getElementById('addQuizLessonId')?.value||'');});
-  obs.observe(quizModal,{attributes:true,attributeFilter:['class']});
-}
-
-/* ---------- Correct-answer radio isolation per question ---------- */
-const qContainer=document.getElementById('questionsContainer');
-function normalizeQuizRadioGroups(){
-  if(!qContainer)return;
-  qContainer.querySelectorAll('.question-item').forEach((item,i)=>{
-    const name=`ananas-correct-${i}-${item.dataset.questionUid||(item.dataset.questionUid=Math.random().toString(36).slice(2,9))}`;
-    item.querySelectorAll('input[type="radio"]').forEach(r=>{r.name=name;r.dataset.correctRadio='1';});
-  });
-}
-if(qContainer){
-  const qobs=new MutationObserver(()=>normalizeQuizRadioGroups());
-  qobs.observe(qContainer,{childList:true,subtree:true});
-  normalizeQuizRadioGroups();
-}
-
-/* ---------- Better quiz question editor ---------- */
-const ui=document.createElement('style');
-ui.textContent=`
-/* Lesson guidance / anti-cheat */
-#lessonCompletionStatus.lesson-completion-guidance{display:grid!important;gap:10px;background:linear-gradient(135deg,rgba(108,92,231,.09),rgba(34,197,94,.05));border-color:rgba(108,92,231,.25);color:var(--text-primary)!important;line-height:1.8}
-#lessonCompletionStatus .lesson-cheat-warning{padding:10px 12px;border-radius:12px;background:rgba(245,158,11,.10);border:1px solid rgba(245,158,11,.28);color:var(--text-primary)}
-#lessonCompletionStatus.lesson-completed-no-xp{border-color:rgba(245,158,11,.35)!important;color:var(--text-primary)!important;background:rgba(245,158,11,.08)}
-/* Quiz editor */
-#addQuizModal{width:min(980px,95vw)!important}
-#addQuizModal #questionsContainer{display:grid;gap:16px}
-#addQuizModal .question-item{background:linear-gradient(180deg,var(--bg-secondary),var(--bg-card))!important;border:1px solid var(--border)!important;border-radius:22px!important;padding:18px!important;box-shadow:var(--shadow);position:relative;overflow:hidden}
-#addQuizModal .question-item::before{content:"";position:absolute;inset-inline-start:0;top:0;bottom:0;width:4px;background:var(--accent-gradient)}
-#addQuizModal .question-item label{color:var(--text-primary);font-weight:800;font-size:.86rem}
-#addQuizModal .question-item .q-ar,#addQuizModal .question-item .q-en,#addQuizModal .question-item .q-xp,#addQuizModal .question-item .q-type,#addQuizModal .question-item .q-option{min-height:46px!important;padding:11px 13px!important;border-radius:14px!important;background:var(--bg-primary)!important;border:1px solid var(--border)!important;color:var(--text-primary)!important;outline:none!important;font-family:inherit!important;transition:border-color .18s,box-shadow .18s,transform .18s}
-#addQuizModal .question-item .q-ar:focus,#addQuizModal .question-item .q-en:focus,#addQuizModal .question-item .q-xp:focus,#addQuizModal .question-item .q-type:focus,#addQuizModal .question-item .q-option:focus{border-color:var(--accent1)!important;box-shadow:0 0 0 3px rgba(108,92,231,.13)!important}
-#addQuizModal .options-wrapper{padding:14px;border-radius:16px;background:rgba(108,92,231,.045);border:1px solid var(--border)}
-#addQuizModal .options-list>div{display:grid!important;grid-template-columns:32px 1fr 42px;gap:8px!important;align-items:center!important;margin:8px 0!important}
-#addQuizModal .options-list input[type="radio"]{width:19px!important;height:19px!important;accent-color:var(--accent1);cursor:pointer;justify-self:center}
-#addQuizModal .options-list .q-option{width:100%!important;min-height:44px!important}
-#addQuizModal .options-list .btn{width:42px;height:42px;padding:0!important;border-radius:12px!important;display:flex!important;align-items:center;justify-content:center}
-#addQuizModal .options-wrapper>.btn{border:1px dashed var(--accent1)!important;background:rgba(108,92,231,.08)!important;color:var(--accent1)!important;border-radius:12px!important}
-#addQuizModal .question-item button[onclick*="remove"]{border-radius:12px!important}
-#addQuizModal #addQuizLessonId{min-height:48px!important;border-radius:14px!important}
-#addQuizModal #addQuestionBtn{border:1px dashed var(--accent1)!important;color:var(--accent1)!important;background:rgba(108,92,231,.07)!important}
-#addQuizModal #saveQuizBtn{min-height:48px!important;box-shadow:0 10px 25px rgba(108,92,231,.22)}
-/* Quiz result close button */
-#quizResultScreen .btn-start{background:var(--accent-gradient)!important;color:#fff!important;border:0!important;box-shadow:0 10px 24px rgba(108,92,231,.22);min-height:46px;padding:10px 22px!important}
-/* Buttons */
-button,.btn,.dashboard-btn,.full-page-card,.lesson-card,.sidebar-quiz-item{transition:transform .18s ease,box-shadow .18s ease,border-color .18s ease,background .18s ease,filter .18s ease}
-button:not(:disabled):active,.btn:not(:disabled):active{transform:translateY(1px) scale(.985)!important}
-/* Mobile fixed viewport between bars */
-@media(max-width:768px){
-  :root{--ananas-top:var(--nav-height-mobile,70px);--ananas-bottom:calc(66px + env(safe-area-inset-bottom));}
-  #courseDetailView{top:var(--ananas-top)!important;bottom:var(--ananas-bottom)!important;height:auto!important;min-height:0!important;overflow:hidden!important}
-  #courseDetailView>.course-overview,#courseDetailView>#courseDashboard,#courseDetailView>#courseLessonsPage,#courseDetailView>#courseLessonPlayerPage,#courseDetailView>#courseQuizzesPage,#courseDetailView>#courseAssignmentsPage,#courseDetailView>#courseChatPage{height:100%!important;max-height:100%!important;min-height:0!important;overflow-y:auto!important;overscroll-behavior:contain!important;padding-bottom:24px!important}
-  #quizOverlay{top:var(--ananas-top)!important;bottom:var(--ananas-bottom)!important;left:0!important;right:0!important;width:auto!important;height:auto!important;padding:12px!important;align-items:flex-start!important;overflow:hidden!important}
-  #quizOverlay .quiz-container{width:100%!important;max-width:100%!important;height:100%!important;max-height:100%!important;overflow-y:auto!important;overscroll-behavior:contain!important;padding-bottom:12px}
-  .edit-modal{top:calc(var(--ananas-top) + 10px)!important;bottom:calc(var(--ananas-bottom) + 10px)!important;left:10px!important;right:10px!important;transform:none!important;width:auto!important;max-width:none!important;max-height:none!important;height:auto!important;overflow-y:auto!important;border-radius:20px!important;padding:18px!important}
-  #addQuizModal .question-item{padding:14px!important;border-radius:18px!important}
-  #addQuizModal .question-item>div:first-child{display:grid!important;grid-template-columns:1fr!important;gap:4px!important}
-  #addQuizModal .question-item>div:nth-child(2){display:grid!important;grid-template-columns:1fr!important}
-  #addQuizModal .options-list>div{grid-template-columns:30px 1fr 40px!important}
-  #addQuizModal .q-option{min-width:0!important}
-  .lesson-player-layout{height:100%!important;min-height:0!important}
-  #courseLessonPlayerPage{padding-bottom:0!important}
-}
-@media(min-width:769px){
-  #addQuizModal{max-height:88vh!important}
-}
-`;
-document.head.appendChild(ui);
-
-/* Friendly note directly under the lesson player title. */
-function ensureLessonGuidance(){
-  const title=document.getElementById('lessonPlayerTitleBlock');
-  if(!title||document.getElementById('lessonEndGuidanceNote'))return;
-  const note=document.createElement('div');note.id='lessonEndGuidanceNote';note.style.cssText='margin-top:8px;padding:9px 12px;border-radius:12px;background:rgba(108,92,231,.07);border:1px solid rgba(108,92,231,.18);color:var(--text-muted);font-size:.82rem;line-height:1.7;';
-  note.innerHTML='<i class="fas fa-graduation-cap"></i> للحصول على نقاط الخبرة: أكمل الحصة حتى النهاية 100%. التقديمات البسيطة مسموحة، لكن الانتقال الكبير مباشرة إلى النهاية قد يمنع نقاط الخبرة.';
-  title.appendChild(note);
-}
-setTimeout(ensureLessonGuidance,100);
-
-/* Refresh lesson selector whenever quiz modal opens. */
-setTimeout(()=>{if(quizModal&&quizModal.classList.contains('active'))ananasPopulateQuizLessons(activeCourseId);},250);
-
-/* Restore all lessons in the edit flow as well. */
-const originalEditQuiz = window.editQuiz;
-if(typeof originalEditQuiz==='function'){
-  window.editQuiz=async function(courseId,quizId){
-    const out=await originalEditQuiz.apply(this,arguments);
-    await ananasPopulateQuizLessons(courseId,document.getElementById('addQuizLessonId')?.value||'');
-    normalizeQuizRadioGroups();
-    return out;
-  };
-}
-
-})();
-
 </script>
