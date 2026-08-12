@@ -2805,12 +2805,22 @@
             document.getElementById('ovHours').textContent = Math.max(0, Number(course.hours) || 0);
             document.getElementById('ovQuizzes').textContent = Math.max(0, Number(course.quizzes) || 0);
             
-            // Switch Views
-            document.getElementById('courseOverviewContainer').style.display = 'block';
+            // Switch Views: always reset every course sub-view before showing the overview.
+            // This prevents a previously-open dashboard/page from remaining visible underneath
+            // the overview when entering another course.
+            const overviewView = document.getElementById('courseOverviewContainer');
+            const dashboardView = document.getElementById('courseDashboard');
+            if (overviewView) overviewView.style.display = 'block';
+            if (dashboardView) dashboardView.style.display = 'none';
             document.getElementById('courseLearningView').classList.remove('active');
             document.getElementById('fullChatPage').classList.remove('active');
             document.getElementById('courseLessonsPage').classList.remove('active');
             document.getElementById('courseLessonPlayerPage').classList.remove('active');
+            document.getElementById('courseQuizzesPage').style.display = 'none';
+            document.getElementById('courseAssignmentsPage').style.display = 'none';
+            document.getElementById('courseChatPage').style.display = 'none';
+            document.getElementById('courseAssignmentDetailPage')?.classList.remove('active');
+            currentCoursePage = 'overview';
             
             // Reset video & sidebar
             if(ytPlayer) {
@@ -2828,16 +2838,9 @@
         // === بدء التعلم (Switch to Split View) ===
         document.getElementById('startLearningBtn').addEventListener('click', function() {
             if (!activeCourseId) return;
-            // Hide Overview, Show Dashboard
-            document.getElementById('courseOverviewContainer').style.display = 'none';
-            document.getElementById('courseDashboard').style.display = 'flex';
-            
-            // Hide other pages
-            document.getElementById('courseLearningView').classList.remove('active');
-            document.getElementById('fullChatPage').classList.remove('active');
-            document.getElementById('courseQuizzesPage').style.display = 'none';
-            document.getElementById('courseAssignmentsPage').style.display = 'none';
-            document.getElementById('courseChatPage').style.display = 'none';
+            // Use the single course-page switcher so the overview can never remain visible.
+            switchCoursePage('dashboard');
+            setMobileNavActive('dashboard');
         });
 
         // ================================================================
