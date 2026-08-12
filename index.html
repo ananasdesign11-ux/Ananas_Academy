@@ -2211,8 +2211,8 @@
         <div style="display:flex; flex-direction:column; gap:15px;">
             <p id="enrollCodeDesc" style="color:var(--text-muted);">الرجاء إدخال الكود المخصص للوصول إلى محتوى هذه الدورة.</p>
             <input type="text" id="enrollCodeInput" placeholder="اكتب الكود هنا..." style="width:100%; padding:12px; border-radius:var(--radius); border:1px solid var(--border); background:var(--bg-secondary); color:var(--text-primary); font-family:inherit; text-align:center; font-size:1.2rem; letter-spacing:2px;">
-            <label id="enrollCodeTermsAgreement" style="display:none;align-items:flex-start;gap:10px;line-height:1.8;cursor:pointer;padding:10px 12px;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg-secondary);">
-                <input type="checkbox" id="enrollCodeTermsAgree" style="margin-top:6px;flex:0 0 auto;">
+            <label id="enrollCodeTermsAgreement" style="display:none;align-items:center;gap:7px;line-height:1.5;cursor:pointer;padding:7px 9px;border:1px solid var(--border);border-radius:10px;background:var(--bg-secondary);font-size:.85rem;">
+                <input type="checkbox" id="enrollCodeTermsAgree" style="margin:0;flex:0 0 auto;width:16px;height:16px;">
                 <span>أوافق على جميع <a href="#" id="enrollCodeTermsLink" style="color:#8b5cf6;font-weight:800;text-decoration:underline;">الشروط والأحكام</a></span>
             </label>
             <div style="display:flex; gap:10px; justify-content:flex-end;">
@@ -3555,15 +3555,19 @@
                             const authProfile = (firebase.auth && firebase.auth().currentUser) || currentUser || {};
                             let profileName = authProfile.displayName || 'مستخدم';
                             let profileEmail = authProfile.email || '';
+                            let profilePhone = '';
+                            let profileGender = '';
                             try {
                                 const profileSnap = await db.collection('users').doc(currentUser.uid).get();
                                 if (profileSnap.exists) {
                                     const profile = profileSnap.data() || {};
                                     profileName = profile.displayName || profile.name || profileName;
                                     profileEmail = profile.email || profileEmail;
+                                    profilePhone = profile.phone || '';
+                                    profileGender = profile.gender || '';
                                 }
                             } catch(profileError) { console.warn('تعذر تحميل بيانات الحساب للكود:', profileError); }
-                            const usedByInfo = { uid: currentUser.uid, email: profileEmail, name: profileName };
+                            const usedByInfo = { uid: currentUser.uid, email: profileEmail, name: profileName, phone: (typeof profilePhone !== 'undefined' ? profilePhone : ''), gender: (typeof profileGender !== 'undefined' ? profileGender : '') };
                             await db.collection('courses').doc(courseId).collection('codes').doc(codeDoc.id).update({
                                 usedCount: firebase.firestore.FieldValue.increment(1),
                                 usedBy: firebase.firestore.FieldValue.arrayUnion(currentUser.uid),
@@ -3666,7 +3670,6 @@
                 isVideoLoaded = false;
             }
             document.getElementById('activeLessonQuizzes').innerHTML = '';
-            activeLessonId = null;
 
             const enrollActionContainer=document.getElementById('enrollActionContainer'); if(enrollActionContainer) enrollActionContainer.innerHTML = `<span style="color: var(--text-muted);">${t.enrolledMsg || 'You are enrolled!'} ✅</span>`;
         }
@@ -3682,15 +3685,9 @@
         // ================================================================
         // ===== NEW: PAGE SWITCHER LOGIC =====
         // ================================================================
-        function saveLessonPositionBeforeLeaving() {
-            if(!activeCourseId || !activeLessonId || !lessonPlayer) return;
-            try {
-                const time = Number(lessonPlayer.getCurrentTime() || 0);
-                const uid = currentUser?.uid || 'guest';
-                const key = `ananas.lesson.position.${uid}.${activeCourseId}.${activeLessonId}`;
-                localStorage.setItem(key, String(time));
-                localStorage.setItem('ananas.lastCourseState', JSON.stringify({uid:currentUser?.uid||'guest', courseId:activeCourseId, lessonId:activeLessonId, page:currentCoursePage, time, lang:currentLang, theme:document.body.classList.contains('light-mode')?'light':'dark'}));
-            } catch(e) {}
+        async function saveLessonPositionBeforeLeaving() {
+            if(!activeCourseId || !activeLessonId || !lessonPlayer || !currentUser) return;
+            try { await persistCourseState(); } catch(e) { console.warn('تعذر حفظ موضع الحصة:',e); }
         }
 
         function stopLessonForNavigation() {
@@ -4601,11 +4598,18 @@
                 videoId,
                 playerVars:{rel:0,modestbranding:1,playsinline:1},
                 events:{
-                    onReady: () => {
+                    onReady: async () => {
                         lessonPlayerReady = true;
                         lessonWatchState.duration = lessonPlayer.getDuration() || lessonWatchState.duration;
-                        const uid = currentUser?.uid || 'guest';
-                        const saved=Number(localStorage.getItem(`ananas.lesson.position.${uid}.${activeCourseId}.${activeLessonId}`)||0); if(saved>3){try{lessonPlayer.seekTo(saved,true);}catch(e){}}
+                        let saved=0;
+                        try {
+                            if(currentUser && activeCourseId){
+                                const stSnap=await db.collection('users').doc(currentUser.uid).collection('courseState').doc(activeCourseId).get();
+                                const st=stSnap.exists?(stSnap.data()||{}):{};
+                                if(String(st.lessonId||'')===String(activeLessonId||'')) saved=Number(st.lessonTime||0);
+                            }
+                        } catch(e) { console.warn('تعذر استعادة موضع الحصة:',e); }
+                        if(saved>3){try{lessonPlayer.seekTo(saved,true);}catch(e){}}
                         startLessonPlaybackMonitor();
                         updateLessonControls();
                     },
@@ -5629,12 +5633,14 @@
                     const blockActive = !!block && (!blockUntil || blockUntil.getTime() > Date.now());
                     let name = cached.name || 'مستخدم';
                     let email = cached.email || '';
+                    let phone = cached.phone || '';
+                    let gender = cached.gender || '';
                     try {
                         const userSnap = await db.collection('users').doc(uid).get();
                         if (userSnap.exists) { const u=userSnap.data()||{}; name=u.displayName||u.name||name; email=u.email||email; }
                     } catch(e) {}
                     return `<div class="code-user-row" data-code-user="${uid}">
-                        <div class="code-user-meta"><strong>${String(name).replace(/</g,'&lt;')}</strong><div class="code-user-info"><span><i class="fas fa-envelope"></i> ${String(email || 'لا يوجد بريد').replace(/</g,'&lt;')}</span><span><i class="fas fa-id-card"></i> ${String(uid).replace(/</g,'&lt;')}</span></div><div class="code-user-status ${blockActive?'danger':'active'}">${blockActive?'موقوف عن الدخول':'استخدم الكود بنجاح'}</div>
+                        <div class="code-user-meta"><strong>${String(name).replace(/</g,'&lt;')}</strong><div class="code-user-info"><span><i class="fas fa-envelope"></i> ${String(email || 'لا يوجد بريد').replace(/</g,'&lt;')}</span><span><i class="fas fa-id-card"></i> ${String(uid).replace(/</g,'&lt;')}</span><span><i class="fas fa-phone"></i> ${String(phone||'لا يوجد').replace(/</g,'&lt;')}</span><span><i class="fas fa-venus-mars"></i> ${String(genderText).replace(/</g,'&lt;')}</span></div><div class="code-user-status ${blockActive?'danger':'active'}">${blockActive?'موقوف عن الدخول':'استخدم الكود بنجاح'}</div>
                         ${blockActive ? `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:8px;"><small style="color:var(--text-muted);">${blockUntil?`ينتهي: ${blockUntil.toLocaleString('ar-SA',{timeZone:'Asia/Riyadh'})}`:'حتى إلغاء الإيقاف'}${block?.reason?` — السبب: ${String(block.reason).replace(/</g,'&lt;')}`:''}</small><button type="button" class="code-action-btn success" onclick="cancelCodeUserSuspension('${codeId}','${String(uid).replace(/'/g,"\\'")}')">إلغاء الإيقاف</button></div>` : ''}
                         <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:8px;"><button type="button" class="code-action-btn danger" onclick="removeCodeUserEnrollment('${codeId}','${String(uid).replace(/'/g,"\\'")}')"><i class="fas fa-user-minus"></i> إلغاء الاشتراك</button></div></div>
                     </div>`;
@@ -5675,11 +5681,16 @@
                 btn.disabled=true; btn.dataset.originalText=btn.textContent; btn.textContent='جاري حفظ الإيقاف...';
                 const selectedUids=[...document.querySelectorAll('#codeSuspendUsersList .suspend-user-check:checked')].map(x=>x.value);
                 if(!selectedUids.length) return showCustomAlert('تنبيه','اختر حسابًا واحدًا على الأقل لإيقافه.');
-                const blockedUsers=selectedUids.map(uid=>{
+                const selectedBlockedUsers=selectedUids.map(uid=>{
                     const info=courseSuspendUsersCache.find(x=>String(x.uid)===String(uid))||{};
                     return {uid:String(uid),name:info.name||'مستخدم',email:info.email||'',suspendedUntil:until?until.toISOString():null,reason:reason||null};
                 });
-                await db.collection('courses').doc(activeCourseId).collection('codes').doc(courseSuspendTargetCodeId).update({
+                const codeRef=db.collection('courses').doc(activeCourseId).collection('codes').doc(courseSuspendTargetCodeId);
+                const latestCodeSnap=await codeRef.get();
+                const latestBlocked=latestCodeSnap.exists&&Array.isArray(latestCodeSnap.data()?.blockedUsers)?latestCodeSnap.data().blockedUsers:[];
+                const keep=latestBlocked.filter(x=>!selectedUids.includes(String(typeof x==='string'?x:x?.uid)));
+                const blockedUsers=keep.concat(selectedBlockedUsers);
+                await codeRef.update({
                     blockedUsers,
                     userSuspensionUpdatedAt:firebase.firestore.FieldValue.serverTimestamp(),
                     userSuspensionUpdatedBy:currentUser?.uid||null
@@ -6868,7 +6879,102 @@
 })();
 </script>
 
+
+<script>
+/* ===== FINAL PATCH 26: account-scoped route restore + direct linked lesson items ===== */
+(function(){
+  'use strict';
+  const stateRef=(courseId)=>currentUser&&courseId?db.collection('users').doc(currentUser.uid).collection('courseState').doc(courseId):null;
+  const lastRef=()=>currentUser?db.collection('users').doc(currentUser.uid).collection('courseState').doc('last'):null;
+  function buildState(){
+    const state={uid:currentUser?.uid||null,courseId:activeCourseId||null,page:currentCoursePage||'dashboard',lessonId:activeLessonId||null,quizId:window.activeQuizId||null,assignmentId:window.activeAssignmentDetailId||null,questionIndex:Number(window.currentQuestionIndex||0),updatedAt:firebase.firestore.FieldValue.serverTimestamp()};
+    try{if(window.lessonPlayer&&activeLessonId){const t=Number(window.lessonPlayer.getCurrentTime?.()||0);if(Number.isFinite(t)&&t>=0)state.lessonTime=t;}}catch(e){}
+    return state;
+  }
+  window.persistCourseState=async function(){
+    if(!currentUser||!activeCourseId||!window.db)return;
+    try{const payload=buildState();await stateRef(activeCourseId).set(payload,{merge:true});await lastRef().set(payload,{merge:true});}catch(e){console.warn('تعذر حفظ حالة الدورة:',e);}
+  };
+  window.saveLessonPositionBeforeLeaving=async function(){await window.persistCourseState();};
+
+  // Restore from Firestore whenever the user re-enters the course. Nothing here uses localStorage.
+  const oldOpenCourseContent=window.openCourseContent;
+  window.openCourseContent=async function(courseId){
+    await oldOpenCourseContent.apply(this,arguments);
+    if(currentUser&&!isAdmin) watchCourseAccess(courseId);
+    if(!currentUser||!courseId||window.__restoringAccountCourseState)return;
+    try{
+      const snap=await stateRef(courseId).get(); if(!snap.exists)return;
+      const st=snap.data()||{}; if(String(st.courseId)!==String(courseId))return;
+      window.__restoringAccountCourseState=true;
+      if(st.page==='learning'){switchCoursePage('learning');return;}
+      if(st.page==='lessonPlayer'&&st.lessonId){
+        switchCoursePage('learning');
+        const wait=()=>{if(Array.isArray(lessonListCache)&&lessonListCache.some(l=>String(l.id)===String(st.lessonId))){openLessonPlayer(courseId,st.lessonId);}else setTimeout(wait,100);};wait();return;
+      }
+      if(st.page==='quizzes'){switchCoursePage('quizzes');if(st.quizId)setTimeout(()=>window.openQuiz(courseId,st.quizId,true),80);return;}
+      if(st.page==='assignments'){switchCoursePage('assignments');if(st.assignmentId)setTimeout(()=>window.openAssignmentDetail(courseId,st.assignmentId,true),80);return;}
+      if(st.page==='chat'){switchCoursePage('chat');return;}
+      if(st.page==='dashboard')return;
+    }catch(e){console.warn('تعذر استعادة آخر حالة للدورة:',e);}finally{setTimeout(()=>window.__restoringAccountCourseState=false,250);}
+  };
+
+
+  // Real-time access guard: if the account's code is suspended or deleted, eject immediately.
+  let __accessUnsubs=[]; let __accessWatchCourse=null; let __accessKickBusy=false;
+  function stopAccessWatch(){__accessUnsubs.forEach(fn=>{try{fn();}catch(e){}});__accessUnsubs=[];__accessWatchCourse=null;}
+  function kickFromCourse(message){
+    if(__accessKickBusy||isAdmin)return; __accessKickBusy=true;
+    try{stopLessonForNavigation?.();}catch(e){}
+    activeCourseId=null;activeLessonId=null;activeQuizId=null;window.activeAssignmentDetailId=null;currentCoursePage='courses';
+    document.querySelectorAll('.course-page,.course-dashboard-page,.course-overview-page').forEach(el=>el.classList.remove('active'));
+    document.getElementById('coursesPage')?.classList.add('active');
+    document.getElementById('courseOverviewContainer')?.style.setProperty('display','none');
+    renderCourses?.();
+    showCustomAlert('تم إيقاف الدخول',message||'تم إيقاف اشتراكك في هذه الدورة.');
+    setTimeout(()=>{__accessKickBusy=false;},500);
+  }
+  function watchCourseAccess(courseId){
+    if(isAdmin||!currentUser||!courseId)return; stopAccessWatch(); __accessWatchCourse=courseId;
+    const er=db.collection('users').doc(currentUser.uid).collection('enrolledCourses').doc(courseId);
+    let currentCodeId=null;
+    const checkCode=(codeId)=>{
+      if(!codeId)return;
+      const cr=db.collection('courses').doc(courseId).collection('codes').doc(codeId);
+      __accessUnsubs.push(cr.onSnapshot(async snap=>{
+        if(!snap.exists)return kickFromCourse('تم حذف كود الاشتراك المرتبط بحسابك. يجب استخدام كود جديد.');
+        const d=snap.data()||{}; const now=Date.now();
+        const until=d.suspendedUntil?.toDate?d.suspendedUntil.toDate():d.suspendedUntil?new Date(d.suspendedUntil):null;
+        const globalSusp=!!d.disabled && (!until||until.getTime()>now);
+        if(globalSusp){kickFromCourse(`اشتراكك في هذه الدورة موقوف حاليًا.${d.suspensionReason?`\nالسبب: ${d.suspensionReason}`:''}`);return;}
+        const b=(Array.isArray(d.blockedUsers)?d.blockedUsers:[]).find(x=>String(typeof x==='string'?x:x?.uid)===String(currentUser.uid));
+        if(b){const bu=b.suspendedUntil?new Date(b.suspendedUntil):null;if(!bu||bu.getTime()>now){kickFromCourse(`تم إيقاف اشتراكك في هذه الدورة.${b.reason?`\nالسبب: ${b.reason}`:''}`);}}
+      }));
+    };
+    __accessUnsubs.push(er.onSnapshot(snap=>{
+      if(!snap.exists)return kickFromCourse('لم يعد لديك اشتراك فعال في هذه الدورة. يجب استخدام كود جديد.');
+      const d=snap.data()||{};
+      if(d.accessBlocked===true||d.codeDeleted===true){kickFromCourse(d.accessBlockReason||'تم إيقاف دخولك إلى هذه الدورة.');return;}
+      if(d.codeId&&d.codeId!==currentCodeId){currentCodeId=d.codeId;checkCode(currentCodeId);}
+    }));
+  }
+  window.watchCourseAccess=watchCourseAccess;
+  const __oldSignOut=window.signOutUser||window.logoutUser||window.handleLogout;
+  if(__oldSignOut){ const __logoutWrapper=async function(){stopAccessWatch();return __oldSignOut.apply(this,arguments);}; if(window.signOutUser)window.signOutUser=__logoutWrapper; if(window.logoutUser)window.logoutUser=__logoutWrapper; if(window.handleLogout)window.handleLogout=__logoutWrapper; }
+
+  // Linked buttons under the lesson open the exact item, not the list page.
+  window.renderLessonRelatedActions=async function(courseId,lessonId){
+    const area=document.getElementById('lessonRelatedActions');if(!area)return;area.innerHTML='';
+    try{
+      const qs=await db.collection('courses').doc(courseId).collection('quizzes').where('lessonId','==',lessonId).get();
+      qs.forEach(doc=>{const b=document.createElement('button');b.className='related-action';b.innerHTML='<i class="fas fa-question-circle"></i> اختبار الحصة';b.onclick=()=>window.openQuiz(courseId,doc.id,true);area.appendChild(b);});
+      const as=await db.collection('courses').doc(courseId).collection('assignments').where('lessonId','==',lessonId).get();
+      as.forEach(doc=>{const b=document.createElement('button');b.className='related-action';b.innerHTML='<i class="fas fa-paint-brush"></i> واجب الحصة';b.onclick=()=>window.openAssignmentDetail(courseId,doc.id,true);area.appendChild(b);});
+    }catch(e){console.error('related actions',e);}
+  };
+})();
+</script>
+
 </body>
 </html>
 
-<script>try{localStorage.removeItem('ananas.lastCourseState');}catch(e){}<\/script>
