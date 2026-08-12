@@ -2270,11 +2270,22 @@
             }
         }
 
-        function renderCourses() {
+        let userEnrollmentMap = {};
+        async function refreshUserEnrollmentMap() {
+            userEnrollmentMap = {};
+            if (!currentUser) return;
+            try {
+                const snap = await db.collection('users').doc(currentUser.uid).collection('enrolledCourses').get();
+                snap.forEach(doc => { userEnrollmentMap[doc.id] = doc.data() || {}; });
+            } catch(e) { console.warn('تعذر تحميل اشتراكات المستخدم:', e); }
+        }
+
+        async function renderCourses() {
             setMobileNavActive('courses');
             const grid = document.getElementById('coursesGridContainer');
             if (!grid) return;
             const t = translations[currentLang] || translations['ar'] || {};
+            await refreshUserEnrollmentMap();
             grid.innerHTML = '';
             
             if (!coursesData || coursesData.length === 0) {
@@ -2306,9 +2317,12 @@
                         </div>
                         <span class="course-price">${course.price || 0} ر.س</span>
                         <div class="course-actions">
-                            ${currentUser ? 
-                                `<button class="btn btn-primary" onclick="openCourse('${course.id}')">${t.enrollBtn || 'Enroll'}</button>` :
-                                `<button class="btn btn-outline" onclick="triggerAuth()">${t.enrollBtn || 'Enroll'} (تسجيل الدخول)</button>`
+                            ${!currentUser ? 
+                                `<button class="btn btn-outline" onclick="triggerAuth()">تسجيل الدخول</button>` :
+                                (userEnrollmentMap[course.id] ?
+                                    `<button class="btn btn-primary" onclick="openCourse('${course.id}')">الدخول للدورة</button>` :
+                                    `<button class="btn btn-primary" onclick="openCourse('${course.id}')">الاشتراك في الدورة</button>`
+                                )
                             }
                         </div>
                     </div>
@@ -2521,8 +2535,10 @@
                             });
 
                             isEnrolled = true;
-                            showCustomAlert('تم الاشتراك', t.enrollSuccess || 'تم الاشتراك بنجاح! يمكنك الآن بدء التعلم.');
+                            userEnrollmentMap[courseId] = { enrolledAt: new Date(), codeUsed: enteredCode };
                             cleanup();
+                            renderCourses();
+                            showCustomAlert('تم الاشتراك', t.enrollSuccess || 'تم الاشتراك بنجاح! يمكنك الآن بدء التعلم.');
                             await openCourseContent(courseId);
                         } catch (error) {
                             showCustomAlert('خطأ', 'حدث خطأ أثناء التحقق من الكود: ' + error.message);
@@ -2622,9 +2638,10 @@
             if(!activeCourseId || !activeLessonId || !lessonPlayer) return;
             try {
                 const time = Number(lessonPlayer.getCurrentTime() || 0);
-                const key = `ananas.lesson.position.${activeCourseId}.${activeLessonId}`;
+                const uid = currentUser?.uid || 'guest';
+                const key = `ananas.lesson.position.${uid}.${activeCourseId}.${activeLessonId}`;
                 localStorage.setItem(key, String(time));
-                localStorage.setItem('ananas.lastCourseState', JSON.stringify({courseId:activeCourseId, lessonId:activeLessonId, page:currentCoursePage, time, lang:currentLang, theme:document.body.classList.contains('light-mode')?'light':'dark'}));
+                localStorage.setItem('ananas.lastCourseState', JSON.stringify({uid:currentUser?.uid||'guest', courseId:activeCourseId, lessonId:activeLessonId, page:currentCoursePage, time, lang:currentLang, theme:document.body.classList.contains('light-mode')?'light':'dark'}));
             } catch(e) {}
         }
 
@@ -2725,7 +2742,7 @@
         }
 
         function persistCourseState() {
-            try { localStorage.setItem('ananas.lastCourseState', JSON.stringify({courseId:activeCourseId,lessonId:activeLessonId,page:currentCoursePage,lang:currentLang,theme:document.body.classList.contains('light-mode')?'light':'dark'})); } catch(e) {}
+            try { localStorage.setItem('ananas.lastCourseState', JSON.stringify({uid:currentUser?.uid||'guest',courseId:activeCourseId,lessonId:activeLessonId,page:currentCoursePage,lang:currentLang,theme:document.body.classList.contains('light-mode')?'light':'dark'})); } catch(e) {}
         }
 
         // ===== FULL PAGE: QUIZZES =====
@@ -3539,7 +3556,8 @@
                     onReady: () => {
                         lessonPlayerReady = true;
                         lessonWatchState.duration = lessonPlayer.getDuration() || lessonWatchState.duration;
-                        const saved=Number(localStorage.getItem(`ananas.lesson.position.${activeCourseId}.${activeLessonId}`)||0); if(saved>3){try{lessonPlayer.seekTo(saved,true);}catch(e){}}
+                        const uid = currentUser?.uid || 'guest';
+                        const saved=Number(localStorage.getItem(`ananas.lesson.position.${uid}.${activeCourseId}.${activeLessonId}`)||0); if(saved>3){try{lessonPlayer.seekTo(saved,true);}catch(e){}}
                         startLessonPlaybackMonitor();
                         updateLessonControls();
                     },
@@ -4935,6 +4953,7 @@
                         if (authStatus) authStatus.textContent = 'Complete your data to finish registration';
                     }
                 } catch (error) { console.error(error); }
+                await loadCourses();
                 setTimeout(restoreLastCourseRoute, 350);
             } else {
                 // ===== LOGOUT LOGIC =====
@@ -4943,30 +4962,31 @@
                 const t = translations[currentLang] || translations['ar'] || {};
                 if (authToggleBtn) authToggleBtn.innerHTML = `<i class="fas fa-user"></i> <span id="authLabel">${t.authLabel || 'Sign In'}</span>`;
                 
-                // If the user was inside a course, close it immediately
-                if (activeCourseId) {
-                    document.getElementById('courseDetailView').style.display = 'none';
-                    document.getElementById('coursesGridContainer').style.display = 'grid';
-                    const coursesHeader = document.getElementById('coursesListPageHeader');
-                    if (coursesHeader) coursesHeader.classList.remove('course-list-header-hidden');
-                    activeCourseId = null;
-                    activeLessonId = null;
-                    if(ytPlayer) { ytPlayer.destroy(); ytPlayer = null; ytPlayerReady = false; }
-                    if(chatUnsubscribe) { chatUnsubscribe(); chatUnsubscribe = null; }
-                    document.getElementById('courseLearningView').classList.remove('active');
-                    document.getElementById('fullChatPage').classList.remove('active');
-                    document.getElementById('courseLessonsPage').classList.remove('active');
-                    document.getElementById('courseLessonPlayerPage').classList.remove('active');
-                    if(typeof destroyLessonVideo === 'function') destroyLessonVideo();
-                    document.getElementById('courseDashboard').style.display = 'none';
-                    document.getElementById('courseQuizzesPage').style.display = 'none';
-                    document.getElementById('courseAssignmentsPage').style.display = 'none';
-                    document.getElementById('courseAssignmentDetailPage')?.classList.remove('active');
-                    if(chatLockUnsubscribe){chatLockUnsubscribe();chatLockUnsubscribe=null;}
-                    document.getElementById('courseChatPage').style.display = 'none';
-                }
-                
-                loadCourses(); // Reset UI
+                // بعد تسجيل الخروج: إغلاق أي صفحة داخل الدورة والعودة مباشرة للصفحة الرئيسية للدورات.
+                const courseViewsToClose = [
+                    ['courseDetailView', 'none'], ['courseLearningView', null], ['fullChatPage', null],
+                    ['courseLessonsPage', null], ['courseLessonPlayerPage', null], ['courseDashboard', 'none'],
+                    ['courseQuizzesPage', 'none'], ['courseAssignmentsPage', 'none'],
+                    ['courseAssignmentDetailPage', null], ['courseChatPage', 'none']
+                ];
+                courseViewsToClose.forEach(([id, display]) => {
+                    const el = document.getElementById(id);
+                    if (!el) return;
+                    if (display !== null) el.style.display = display;
+                    el.classList.remove('active');
+                });
+                const coursesGrid = document.getElementById('coursesGridContainer');
+                if (coursesGrid) coursesGrid.style.display = 'grid';
+                const coursesHeader = document.getElementById('coursesListPageHeader');
+                if (coursesHeader) coursesHeader.classList.remove('course-list-header-hidden');
+                activeCourseId = null; activeLessonId = null;
+                if (ytPlayer) { try { ytPlayer.destroy(); } catch(e) {} ytPlayer = null; ytPlayerReady = false; }
+                if (typeof destroyLessonVideo === 'function') { try { destroyLessonVideo(); } catch(e) {} }
+                if (chatUnsubscribe) { chatUnsubscribe(); chatUnsubscribe = null; }
+                if (chatLockUnsubscribe) { chatLockUnsubscribe(); chatLockUnsubscribe = null; }
+                if (typeof cancelReply === 'function') cancelReply();
+                try { localStorage.removeItem('ananas_last_course_route'); localStorage.removeItem('lastCourseRoute'); localStorage.removeItem('activeCourseRoute'); } catch(e) {}
+                loadCourses(); // العودة الفورية للصفحة الرئيسية للدورات
             }
         });
 
@@ -5161,6 +5181,7 @@
             try{
                 const raw=localStorage.getItem('ananas.lastCourseState'); if(!raw)return;
                 const st=JSON.parse(raw); if(!st.courseId)return;
+                if(st.uid && currentUser?.uid && st.uid !== currentUser.uid) return;
                 const course=coursesData.find(c=>c.id===st.courseId); if(!course)return;
                 if(!currentUser)return;
                 window.__restoredCourseRoute=true;
