@@ -16,7 +16,7 @@
   function routeState(){
     return {uid:currentUser?.uid||'guest',courseId:activeCourseId,lessonId:activeLessonId||null,page:currentCoursePage,quizId:activeQuizId||null,assignmentId:window.activeAssignmentDetailId||null,lang:'ar',theme:document.body.classList.contains('light-mode')?'light':'dark'};
   }
-  window.persistCourseState=function(){try{localStorage.setItem('ananas.lastCourseState',JSON.stringify(routeState()));}catch(e){}}
+  window.persistCourseState=function(){try{saveRemoteCourseRoute();}catch(e){}}
 
   /* Remember the exact page/item, including a quiz or assignment detail. */
   const __origSwitchCoursePage=window.switchCoursePage||switchCoursePage;
@@ -30,9 +30,8 @@
   window.openCourseContent=async function(courseId){
     await __origOpenCourseContent(courseId);
     if(window.__restoringCourseRoute) return;
-    const raw=localStorage.getItem('ananas.lastCourseState'); if(!raw||!currentUser)return;
-    let st; try{st=JSON.parse(raw);}catch(e){return;}
-    if(st.uid!==currentUser.uid || st.courseId!==courseId || !st.page || st.page==='overview') return;
+    if(!currentUser)return; const st=await loadRemoteCourseRoute(courseId); if(!st)return;
+    if(st.courseId!==courseId || !st.page || st.page==='overview') return;
     window.__restoringCourseRoute=true;
     try{
       if(st.page==='dashboard') return;
@@ -89,7 +88,7 @@
     nav.dataset.fromLesson=fromLesson?'1':'0';
   }
   window.returnToQuizLesson=function(){
-    const lid=activeLessonId||(()=>{try{return JSON.parse(localStorage.getItem('ananas.lastCourseState')||'{}').lessonId}catch(e){return null}})();
+    const lid=activeLessonId||null;
     document.getElementById('quizOverlay')?.classList.remove('active');activeQuizId=null;activeQuizData=null;
     if(activeCourseId&&lid){__origSwitchCoursePage('learning');setTimeout(()=>openLessonPlayer(activeCourseId,lid),50);}else if(activeCourseId)__origSwitchCoursePage('learning');
     persistCourseState();
@@ -105,7 +104,7 @@
     if(!nav){nav=document.createElement('div');nav.id='assignmentRouteNav';nav.style.cssText='display:flex;gap:8px;align-items:center;margin-bottom:14px;';page.querySelector('.page-title')?.prepend(nav);}
     nav.innerHTML=`<button type="button" class="full-page-back-btn" title="العودة للحصة" onclick="returnToAssignmentLesson()"><i class="fas fa-video"></i></button><button type="button" class="full-page-back-btn" title="الواجبات" onclick="returnToAssignmentList()"><i class="fas fa-clipboard-list"></i></button>`;
   };
-  window.returnToAssignmentLesson=function(){const lid=activeLessonId||(()=>{try{return JSON.parse(localStorage.getItem('ananas.lastCourseState')||'{}').lessonId}catch(e){return null}})();document.getElementById('courseAssignmentDetailPage')?.classList.remove('active');if(activeCourseId&&lid){__origSwitchCoursePage('learning');setTimeout(()=>openLessonPlayer(activeCourseId,lid),50);}else if(activeCourseId)__origSwitchCoursePage('learning');persistCourseState();};
+  window.returnToAssignmentLesson=function(){const lid=activeLessonId||null;document.getElementById('courseAssignmentDetailPage')?.classList.remove('active');if(activeCourseId&&lid){__origSwitchCoursePage('learning');setTimeout(()=>openLessonPlayer(activeCourseId,lid),50);}else if(activeCourseId)__origSwitchCoursePage('learning');persistCourseState();};
   window.returnToAssignmentList=function(){window.activeAssignmentDetailId=null;document.getElementById('courseAssignmentDetailPage')?.classList.remove('active');if(activeCourseId)__origSwitchCoursePage('assignments');persistCourseState();};
 
   /* Clicking the buttons under a lesson opens the actual linked item, not its list. */
@@ -151,7 +150,7 @@
   function routeState(){
     return {uid:currentUser?.uid||'guest',courseId:activeCourseId,lessonId:activeLessonId||null,page:currentCoursePage,quizId:activeQuizId||null,assignmentId:window.activeAssignmentDetailId||null,lang:'ar',theme:document.body.classList.contains('light-mode')?'light':'dark'};
   }
-  window.persistCourseState=function(){try{localStorage.setItem('ananas.lastCourseState',JSON.stringify(routeState()));}catch(e){}}
+  window.persistCourseState=function(){try{saveRemoteCourseRoute();}catch(e){}}
 
   /* Remember the exact page/item, including a quiz or assignment detail. */
   const __origSwitchCoursePage=window.switchCoursePage||switchCoursePage;
@@ -224,7 +223,7 @@
     nav.dataset.fromLesson=fromLesson?'1':'0';
   }
   window.returnToQuizLesson=function(){
-    const lid=activeLessonId||(()=>{try{return JSON.parse(localStorage.getItem('ananas.lastCourseState')||'{}').lessonId}catch(e){return null}})();
+    const lid=activeLessonId||null;
     document.getElementById('quizOverlay')?.classList.remove('active');activeQuizId=null;activeQuizData=null;
     if(activeCourseId&&lid){__origSwitchCoursePage('learning');setTimeout(()=>openLessonPlayer(activeCourseId,lid),50);}else if(activeCourseId)__origSwitchCoursePage('learning');
     persistCourseState();
@@ -240,7 +239,7 @@
     if(!nav){nav=document.createElement('div');nav.id='assignmentRouteNav';nav.style.cssText='display:flex;gap:8px;align-items:center;margin-bottom:14px;';page.querySelector('.page-title')?.prepend(nav);}
     nav.innerHTML=`<button type="button" class="full-page-back-btn" title="العودة للحصة" onclick="returnToAssignmentLesson()"><i class="fas fa-video"></i></button><button type="button" class="full-page-back-btn" title="الواجبات" onclick="returnToAssignmentList()"><i class="fas fa-clipboard-list"></i></button>`;
   };
-  window.returnToAssignmentLesson=function(){const lid=activeLessonId||(()=>{try{return JSON.parse(localStorage.getItem('ananas.lastCourseState')||'{}').lessonId}catch(e){return null}})();document.getElementById('courseAssignmentDetailPage')?.classList.remove('active');if(activeCourseId&&lid){__origSwitchCoursePage('learning');setTimeout(()=>openLessonPlayer(activeCourseId,lid),50);}else if(activeCourseId)__origSwitchCoursePage('learning');persistCourseState();};
+  window.returnToAssignmentLesson=function(){const lid=activeLessonId||null;document.getElementById('courseAssignmentDetailPage')?.classList.remove('active');if(activeCourseId&&lid){__origSwitchCoursePage('learning');setTimeout(()=>openLessonPlayer(activeCourseId,lid),50);}else if(activeCourseId)__origSwitchCoursePage('learning');persistCourseState();};
   window.returnToAssignmentList=function(){window.activeAssignmentDetailId=null;document.getElementById('courseAssignmentDetailPage')?.classList.remove('active');if(activeCourseId)__origSwitchCoursePage('assignments');persistCourseState();};
 
   /* Clicking the buttons under a lesson opens the actual linked item, not its list. */
@@ -286,7 +285,7 @@
   function routeState(){
     return {uid:currentUser?.uid||'guest',courseId:activeCourseId,lessonId:activeLessonId||null,page:currentCoursePage,quizId:activeQuizId||null,assignmentId:window.activeAssignmentDetailId||null,lang:'ar',theme:document.body.classList.contains('light-mode')?'light':'dark'};
   }
-  window.persistCourseState=function(){try{localStorage.setItem('ananas.lastCourseState',JSON.stringify(routeState()));}catch(e){}}
+  window.persistCourseState=function(){try{saveRemoteCourseRoute();}catch(e){}}
 
   /* Remember the exact page/item, including a quiz or assignment detail. */
   const __origSwitchCoursePage=window.switchCoursePage||switchCoursePage;
@@ -359,7 +358,7 @@
     nav.dataset.fromLesson=fromLesson?'1':'0';
   }
   window.returnToQuizLesson=function(){
-    const lid=activeLessonId||(()=>{try{return JSON.parse(localStorage.getItem('ananas.lastCourseState')||'{}').lessonId}catch(e){return null}})();
+    const lid=activeLessonId||null;
     document.getElementById('quizOverlay')?.classList.remove('active');activeQuizId=null;activeQuizData=null;
     if(activeCourseId&&lid){__origSwitchCoursePage('learning');setTimeout(()=>openLessonPlayer(activeCourseId,lid),50);}else if(activeCourseId)__origSwitchCoursePage('learning');
     persistCourseState();
@@ -375,7 +374,7 @@
     if(!nav){nav=document.createElement('div');nav.id='assignmentRouteNav';nav.style.cssText='display:flex;gap:8px;align-items:center;margin-bottom:14px;';page.querySelector('.page-title')?.prepend(nav);}
     nav.innerHTML=`<button type="button" class="full-page-back-btn" title="العودة للحصة" onclick="returnToAssignmentLesson()"><i class="fas fa-video"></i></button><button type="button" class="full-page-back-btn" title="الواجبات" onclick="returnToAssignmentList()"><i class="fas fa-clipboard-list"></i></button>`;
   };
-  window.returnToAssignmentLesson=function(){const lid=activeLessonId||(()=>{try{return JSON.parse(localStorage.getItem('ananas.lastCourseState')||'{}').lessonId}catch(e){return null}})();document.getElementById('courseAssignmentDetailPage')?.classList.remove('active');if(activeCourseId&&lid){__origSwitchCoursePage('learning');setTimeout(()=>openLessonPlayer(activeCourseId,lid),50);}else if(activeCourseId)__origSwitchCoursePage('learning');persistCourseState();};
+  window.returnToAssignmentLesson=function(){const lid=activeLessonId||null;document.getElementById('courseAssignmentDetailPage')?.classList.remove('active');if(activeCourseId&&lid){__origSwitchCoursePage('learning');setTimeout(()=>openLessonPlayer(activeCourseId,lid),50);}else if(activeCourseId)__origSwitchCoursePage('learning');persistCourseState();};
   window.returnToAssignmentList=function(){window.activeAssignmentDetailId=null;document.getElementById('courseAssignmentDetailPage')?.classList.remove('active');if(activeCourseId)__origSwitchCoursePage('assignments');persistCourseState();};
 
   /* Clicking the buttons under a lesson opens the actual linked item, not its list. */
@@ -423,7 +422,7 @@
   function routeState(){
     return {uid:currentUser?.uid||'guest',courseId:activeCourseId,lessonId:activeLessonId||null,page:currentCoursePage,quizId:activeQuizId||null,assignmentId:window.activeAssignmentDetailId||null,lang:'ar',theme:document.body.classList.contains('light-mode')?'light':'dark'};
   }
-  window.persistCourseState=function(){try{localStorage.setItem('ananas.lastCourseState',JSON.stringify(routeState()));}catch(e){}}
+  window.persistCourseState=function(){try{saveRemoteCourseRoute();}catch(e){}}
 
   /* Remember the exact page/item, including a quiz or assignment detail. */
   const __origSwitchCoursePage=window.switchCoursePage||switchCoursePage;
@@ -496,7 +495,7 @@
     nav.dataset.fromLesson=fromLesson?'1':'0';
   }
   window.returnToQuizLesson=function(){
-    const lid=activeLessonId||(()=>{try{return JSON.parse(localStorage.getItem('ananas.lastCourseState')||'{}').lessonId}catch(e){return null}})();
+    const lid=activeLessonId||null;
     document.getElementById('quizOverlay')?.classList.remove('active');activeQuizId=null;activeQuizData=null;
     if(activeCourseId&&lid){__origSwitchCoursePage('learning');setTimeout(()=>openLessonPlayer(activeCourseId,lid),50);}else if(activeCourseId)__origSwitchCoursePage('learning');
     persistCourseState();
@@ -512,7 +511,7 @@
     if(!nav){nav=document.createElement('div');nav.id='assignmentRouteNav';nav.style.cssText='display:flex;gap:8px;align-items:center;margin-bottom:14px;';page.querySelector('.page-title')?.prepend(nav);}
     nav.innerHTML=`<button type="button" class="full-page-back-btn" title="العودة للحصة" onclick="returnToAssignmentLesson()"><i class="fas fa-video"></i></button><button type="button" class="full-page-back-btn" title="الواجبات" onclick="returnToAssignmentList()"><i class="fas fa-clipboard-list"></i></button>`;
   };
-  window.returnToAssignmentLesson=function(){const lid=activeLessonId||(()=>{try{return JSON.parse(localStorage.getItem('ananas.lastCourseState')||'{}').lessonId}catch(e){return null}})();document.getElementById('courseAssignmentDetailPage')?.classList.remove('active');if(activeCourseId&&lid){__origSwitchCoursePage('learning');setTimeout(()=>openLessonPlayer(activeCourseId,lid),50);}else if(activeCourseId)__origSwitchCoursePage('learning');persistCourseState();};
+  window.returnToAssignmentLesson=function(){const lid=activeLessonId||null;document.getElementById('courseAssignmentDetailPage')?.classList.remove('active');if(activeCourseId&&lid){__origSwitchCoursePage('learning');setTimeout(()=>openLessonPlayer(activeCourseId,lid),50);}else if(activeCourseId)__origSwitchCoursePage('learning');persistCourseState();};
   window.returnToAssignmentList=function(){window.activeAssignmentDetailId=null;document.getElementById('courseAssignmentDetailPage')?.classList.remove('active');if(activeCourseId)__origSwitchCoursePage('assignments');persistCourseState();};
 
   /* Clicking the buttons under a lesson opens the actual linked item, not its list. */
@@ -2457,7 +2456,7 @@
   function routeState(){
     return {uid:currentUser?.uid||'guest',courseId:activeCourseId,lessonId:activeLessonId||null,page:currentCoursePage,quizId:activeQuizId||null,assignmentId:window.activeAssignmentDetailId||null,lang:'ar',theme:document.body.classList.contains('light-mode')?'light':'dark'};
   }
-  window.persistCourseState=function(){try{localStorage.setItem('ananas.lastCourseState',JSON.stringify(routeState()));}catch(e){}}
+  window.persistCourseState=function(){try{saveRemoteCourseRoute();}catch(e){}}
 
   /* Remember the exact page/item, including a quiz or assignment detail. */
   const __origSwitchCoursePage=window.switchCoursePage||switchCoursePage;
@@ -2530,7 +2529,7 @@
     nav.dataset.fromLesson=fromLesson?'1':'0';
   }
   window.returnToQuizLesson=function(){
-    const lid=activeLessonId||(()=>{try{return JSON.parse(localStorage.getItem('ananas.lastCourseState')||'{}').lessonId}catch(e){return null}})();
+    const lid=activeLessonId||null;
     document.getElementById('quizOverlay')?.classList.remove('active');activeQuizId=null;activeQuizData=null;
     if(activeCourseId&&lid){__origSwitchCoursePage('learning');setTimeout(()=>openLessonPlayer(activeCourseId,lid),50);}else if(activeCourseId)__origSwitchCoursePage('learning');
     persistCourseState();
@@ -2546,7 +2545,7 @@
     if(!nav){nav=document.createElement('div');nav.id='assignmentRouteNav';nav.style.cssText='display:flex;gap:8px;align-items:center;margin-bottom:14px;';page.querySelector('.page-title')?.prepend(nav);}
     nav.innerHTML=`<button type="button" class="full-page-back-btn" title="العودة للحصة" onclick="returnToAssignmentLesson()"><i class="fas fa-video"></i></button><button type="button" class="full-page-back-btn" title="الواجبات" onclick="returnToAssignmentList()"><i class="fas fa-clipboard-list"></i></button>`;
   };
-  window.returnToAssignmentLesson=function(){const lid=activeLessonId||(()=>{try{return JSON.parse(localStorage.getItem('ananas.lastCourseState')||'{}').lessonId}catch(e){return null}})();document.getElementById('courseAssignmentDetailPage')?.classList.remove('active');if(activeCourseId&&lid){__origSwitchCoursePage('learning');setTimeout(()=>openLessonPlayer(activeCourseId,lid),50);}else if(activeCourseId)__origSwitchCoursePage('learning');persistCourseState();};
+  window.returnToAssignmentLesson=function(){const lid=activeLessonId||null;document.getElementById('courseAssignmentDetailPage')?.classList.remove('active');if(activeCourseId&&lid){__origSwitchCoursePage('learning');setTimeout(()=>openLessonPlayer(activeCourseId,lid),50);}else if(activeCourseId)__origSwitchCoursePage('learning');persistCourseState();};
   window.returnToAssignmentList=function(){window.activeAssignmentDetailId=null;document.getElementById('courseAssignmentDetailPage')?.classList.remove('active');if(activeCourseId)__origSwitchCoursePage('assignments');persistCourseState();};
 
   /* Clicking the buttons under a lesson opens the actual linked item, not its list. */
@@ -3546,14 +3545,60 @@
         // ================================================================
         // ===== NEW: PAGE SWITCHER LOGIC =====
         // ================================================================
+        // ===== ACCOUNT-BASED COURSE PROGRESS =====
+        // Progress is stored in Firestore under the signed-in user's account,
+        // not in localStorage, so it follows the user to any device.
+        let __remoteProgressSaveTimer = null;
+        let __remoteProgressSaveInFlight = false;
+        let __remoteProgressPending = false;
+
+        async function saveRemoteCourseRoute(extra={}) {
+            if(!currentUser?.uid || !activeCourseId) return;
+            try {
+                const route = {
+                    page: currentCoursePage || 'overview',
+                    lessonId: activeLessonId || null,
+                    quizId: activeQuizId || null,
+                    assignmentId: window.activeAssignmentDetailId || null,
+                    updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+                    ...extra
+                };
+                await db.collection('users').doc(currentUser.uid).collection('courseProgress').doc(activeCourseId).set({route}, {merge:true});
+            } catch(e) { console.warn('Remote course route save failed:', e); }
+        }
+
+        async function saveRemoteLessonPosition(courseId, lessonId, time) {
+            if(!currentUser?.uid || !courseId || !lessonId || !Number.isFinite(Number(time))) return;
+            try {
+                await db.collection('users').doc(currentUser.uid).collection('courseProgress').doc(courseId).collection('lessons').doc(lessonId).set({
+                    position: Math.max(0, Number(time)),
+                    updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+                }, {merge:true});
+            } catch(e) { console.warn('Remote lesson position save failed:', e); }
+        }
+
+        async function loadRemoteCourseRoute(courseId) {
+            if(!currentUser?.uid || !courseId) return null;
+            try {
+                const snap = await db.collection('users').doc(currentUser.uid).collection('courseProgress').doc(courseId).get();
+                return snap.exists ? (snap.data()?.route || null) : null;
+            } catch(e) { console.warn('Remote course route load failed:', e); return null; }
+        }
+
+        async function loadRemoteLessonPosition(courseId, lessonId) {
+            if(!currentUser?.uid || !courseId || !lessonId) return 0;
+            try {
+                const snap = await db.collection('users').doc(currentUser.uid).collection('courseProgress').doc(courseId).collection('lessons').doc(lessonId).get();
+                return snap.exists ? Math.max(0, Number(snap.data()?.position || 0)) : 0;
+            } catch(e) { console.warn('Remote lesson position load failed:', e); return 0; }
+        }
+
         function saveLessonPositionBeforeLeaving() {
-            if(!activeCourseId || !activeLessonId || !lessonPlayer) return;
+            if(!currentUser?.uid || !activeCourseId || !activeLessonId || !lessonPlayer) return;
             try {
                 const time = Number(lessonPlayer.getCurrentTime() || 0);
-                const uid = currentUser?.uid || 'guest';
-                const key = `ananas.lesson.position.${uid}.${activeCourseId}.${activeLessonId}`;
-                localStorage.setItem(key, String(time));
-                localStorage.setItem('ananas.lastCourseState', JSON.stringify({uid:currentUser?.uid||'guest', courseId:activeCourseId, lessonId:activeLessonId, page:currentCoursePage, time, lang:currentLang, theme:document.body.classList.contains('light-mode')?'light':'dark'}));
+                saveRemoteLessonPosition(activeCourseId, activeLessonId, time);
+                saveRemoteCourseRoute({ lessonId: activeLessonId, page: currentCoursePage, lastVideoPosition: time });
             } catch(e) {}
         }
 
@@ -4468,9 +4513,9 @@
                     onReady: () => {
                         lessonPlayerReady = true;
                         lessonWatchState.duration = lessonPlayer.getDuration() || lessonWatchState.duration;
-                        const uid = currentUser?.uid || 'guest';
-                        const saved=Number(localStorage.getItem(`ananas.lesson.position.${uid}.${activeCourseId}.${activeLessonId}`)||0); if(saved>3){try{lessonPlayer.seekTo(saved,true);}catch(e){}}
-                        startLessonPlaybackMonitor();
+                        loadRemoteLessonPosition(activeCourseId, activeLessonId).then(saved=>{
+                            if(saved>3 && lessonPlayer && lessonPlayerReady){ try{ lessonPlayer.seekTo(saved,true); }catch(e){} }
+                        }).finally(()=>{ startLessonPlaybackMonitor(); });
                         updateLessonControls();
                     },
                     onStateChange: (event) => {
@@ -4497,6 +4542,17 @@
                         }
                         lessonWatchState.lastTick = now;
                         updateLessonControls();
+                        // Persist the current playback position to the user's account.
+                        if(currentUser?.uid && activeCourseId && activeLessonId){
+                            const currentPos = Number(lessonPlayer.getCurrentTime() || 0);
+                            if(!__remoteProgressSaveTimer){
+                                __remoteProgressSaveTimer = setTimeout(()=>{
+                                    __remoteProgressSaveTimer = null;
+                                    saveRemoteLessonPosition(activeCourseId, activeLessonId, currentPos);
+                                    saveRemoteCourseRoute({page:'lessonPlayer', lessonId:activeLessonId, lastVideoPosition:currentPos});
+                                }, 3500);
+                            }
+                        }
                         checkLessonAutoCompletion(false);
                     }
                 } catch(e) {}
@@ -6295,28 +6351,35 @@
         }
 
         async function restoreLastCourseRoute(){
-            if(window.__restoredCourseRoute)return;
+            if(window.__restoredCourseRoute || !currentUser?.uid)return;
             try{
-                const raw=localStorage.getItem('ananas.lastCourseState'); if(!raw)return;
-                const st=JSON.parse(raw); if(!st.courseId)return;
-                if(st.uid && currentUser?.uid && st.uid !== currentUser.uid) return;
-                const course=coursesData.find(c=>c.id===st.courseId); if(!course)return;
-                if(!currentUser)return;
+                // The course route belongs to the account, so it works on every device.
+                const courseCandidates = coursesData.filter(c=>c.id);
+                let st = null;
+                for(const c of courseCandidates){
+                    const r = await loadRemoteCourseRoute(c.id);
+                    if(r && r.updatedAt){
+                        const ts = r.updatedAt.toDate ? r.updatedAt.toDate().getTime() : 0;
+                        if(!st || ts > st._ts) st = {...r, courseId:c.id, _ts:ts};
+                    }
+                }
+                if(!st || !st.courseId)return;
                 window.__restoredCourseRoute=true;
                 await openCourseContent(st.courseId);
-                if(st.page==='overview')return;
                 document.getElementById('courseOverviewContainer').style.display='none';
                 document.getElementById('courseDashboard').style.display='flex';
-                if(st.page==='dashboard')return;
+                if(st.page==='overview')return;
+                if(st.page==='dashboard'){switchCoursePage('dashboard');return;}
                 if(st.page==='learning'){switchCoursePage('learning');return;}
-                if(st.page==='quizzes'){switchCoursePage('quizzes');return;}
-                if(st.page==='assignments'){switchCoursePage('assignments');return;}
+                if(st.page==='quizzes'){switchCoursePage('quizzes'); if(st.quizId)setTimeout(()=>window.openQuiz(st.courseId,st.quizId,true),120); return;}
+                if(st.page==='assignments'){switchCoursePage('assignments'); if(st.assignmentId)setTimeout(()=>window.openAssignmentDetail(st.courseId,st.assignmentId,true),120); return;}
                 if(st.page==='chat'){switchCoursePage('chat');return;}
                 if(st.page==='lessonPlayer'&&st.lessonId){
                     switchCoursePage('learning');
-                    const wait=()=>{if(lessonListCache.some(l=>l.id===st.lessonId)){openLessonPlayer(st.courseId,st.lessonId);}else setTimeout(wait,250);}; wait();
+                    const wait=()=>{if(lessonListCache.some(l=>l.id===st.lessonId)){openLessonPlayer(st.courseId,st.lessonId);}else setTimeout(wait,250);};
+                    wait();
                 }
-            }catch(e){console.warn('restore route failed',e);}
+            }catch(e){console.warn('restore remote route failed',e);}
         }
         // ===== Persistent page / language / theme state =====
         window.addEventListener('beforeunload',()=>{try{saveLessonPositionBeforeLeaving();persistCourseState();}catch(e){}});
@@ -6349,7 +6412,7 @@
   function routeState(){
     return {uid:currentUser?.uid||'guest',courseId:activeCourseId,lessonId:activeLessonId||null,page:currentCoursePage,quizId:activeQuizId||null,assignmentId:window.activeAssignmentDetailId||null,lang:'ar',theme:document.body.classList.contains('light-mode')?'light':'dark'};
   }
-  window.persistCourseState=function(){try{localStorage.setItem('ananas.lastCourseState',JSON.stringify(routeState()));}catch(e){}}
+  window.persistCourseState=function(){try{saveRemoteCourseRoute();}catch(e){}}
 
   /* Remember the exact page/item, including a quiz or assignment detail. */
   const __origSwitchCoursePage=window.switchCoursePage||switchCoursePage;
@@ -6422,7 +6485,7 @@
     nav.dataset.fromLesson=fromLesson?'1':'0';
   }
   window.returnToQuizLesson=function(){
-    const lid=activeLessonId||(()=>{try{return JSON.parse(localStorage.getItem('ananas.lastCourseState')||'{}').lessonId}catch(e){return null}})();
+    const lid=activeLessonId||null;
     document.getElementById('quizOverlay')?.classList.remove('active');activeQuizId=null;activeQuizData=null;
     if(activeCourseId&&lid){__origSwitchCoursePage('learning');setTimeout(()=>openLessonPlayer(activeCourseId,lid),50);}else if(activeCourseId)__origSwitchCoursePage('learning');
     persistCourseState();
@@ -6438,7 +6501,7 @@
     if(!nav){nav=document.createElement('div');nav.id='assignmentRouteNav';nav.style.cssText='display:flex;gap:8px;align-items:center;margin-bottom:14px;';page.querySelector('.page-title')?.prepend(nav);}
     nav.innerHTML=`<button type="button" class="full-page-back-btn" title="العودة للحصة" onclick="returnToAssignmentLesson()"><i class="fas fa-video"></i></button><button type="button" class="full-page-back-btn" title="الواجبات" onclick="returnToAssignmentList()"><i class="fas fa-clipboard-list"></i></button>`;
   };
-  window.returnToAssignmentLesson=function(){const lid=activeLessonId||(()=>{try{return JSON.parse(localStorage.getItem('ananas.lastCourseState')||'{}').lessonId}catch(e){return null}})();document.getElementById('courseAssignmentDetailPage')?.classList.remove('active');if(activeCourseId&&lid){__origSwitchCoursePage('learning');setTimeout(()=>openLessonPlayer(activeCourseId,lid),50);}else if(activeCourseId)__origSwitchCoursePage('learning');persistCourseState();};
+  window.returnToAssignmentLesson=function(){const lid=activeLessonId||null;document.getElementById('courseAssignmentDetailPage')?.classList.remove('active');if(activeCourseId&&lid){__origSwitchCoursePage('learning');setTimeout(()=>openLessonPlayer(activeCourseId,lid),50);}else if(activeCourseId)__origSwitchCoursePage('learning');persistCourseState();};
   window.returnToAssignmentList=function(){window.activeAssignmentDetailId=null;document.getElementById('courseAssignmentDetailPage')?.classList.remove('active');if(activeCourseId)__origSwitchCoursePage('assignments');persistCourseState();};
 
   /* Clicking the buttons under a lesson opens the actual linked item, not its list. */
@@ -7103,7 +7166,7 @@
     },100);
   }
   window.returnToQuizLesson=function(){
-    const lid=activeLessonId||(()=>{try{return JSON.parse(localStorage.getItem('ananas.lastCourseState')||'{}').lessonId}catch(e){return null}})();
+    const lid=activeLessonId||null;
     document.getElementById('quizOverlay')?.classList.remove('active');
     activeQuizId=null;activeQuizData=null;
     if(activeCourseId&&lid)resumeLessonAfterReturn(activeCourseId,lid);
@@ -7111,7 +7174,7 @@
     try{persistCourseState();}catch(e){}
   };
   window.returnToAssignmentLesson=function(){
-    const lid=activeLessonId||(()=>{try{return JSON.parse(localStorage.getItem('ananas.lastCourseState')||'{}').lessonId}catch(e){return null}})();
+    const lid=activeLessonId||null;
     document.getElementById('courseAssignmentDetailPage')?.classList.remove('active');
     if(activeCourseId&&lid)resumeLessonAfterReturn(activeCourseId,lid);
     else if(activeCourseId){try{switchCoursePage('learning');}catch(e){}}
