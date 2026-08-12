@@ -3925,7 +3925,7 @@
                 const own=canEditSubmission(sub);
                 const status=sub.approved?'✅ معتمد':'⏳ قيد المراجعة';
                 const first=imgs[0];
-                html+=`<div class="assignment-work-card" data-work-id="${escapeHtml(workId)}">
+                html+=`<div class="assignment-work-card" data-work-id="${escapeHtml(workId)}" data-user-id="${escapeHtml(sub.userId||'')}">
                     <div style="font-weight:700;font-size:.82rem;margin-bottom:7px;">${escapeHtml(sub.userName||'طالب')} <span style="color:var(--text-muted);">${status}</span></div>
                     <div style="position:relative;">
                         <button type="button" onclick="openAssignmentWorkViewer('${courseId}','${assignmentId}','${escapeHtml(workId)}')" style="display:block;width:100%;padding:0;border:0;background:none;cursor:zoom-in;"><img src="${escapeHtml(first)}" alt="عمل مرفوع"></button>
@@ -3948,6 +3948,16 @@
         async function refreshAssignmentDetail(courseId,assignmentId){
             const result=await getAssignmentData(courseId,assignmentId); if(!result)return;
             document.getElementById('assignmentDetailContent').innerHTML=renderAssignmentDetailHtml(courseId,assignmentId,result.data);
+            if(isAdmin){
+                const content=document.getElementById('assignmentDetailContent');
+                const subs=Array.isArray(result.data.submissions)?result.data.submissions:[];
+                const people=[]; const seen=new Set();
+                subs.forEach(sub=>{ if(!sub?.userId || seen.has(sub.userId))return; seen.add(sub.userId); people.push({id:sub.userId,name:sub.userName||'طالب'}); });
+                const bar=document.createElement('div'); bar.id='assignmentPeopleFilter'; bar.style.cssText='display:flex;gap:8px;flex-wrap:wrap;margin:0 0 16px;padding:10px;border:1px solid var(--border);border-radius:14px;background:var(--bg-secondary);';
+                const makeBtn=(label,id)=>{const b=document.createElement('button');b.type='button';b.textContent=label;b.dataset.user=id;b.style.cssText='border:1px solid var(--border);background:var(--bg-card);color:var(--text-primary);padding:8px 13px;border-radius:999px;cursor:pointer;font-family:inherit;font-weight:700;';b.onclick=()=>{bar.querySelectorAll('button').forEach(x=>{x.style.background='var(--bg-card)';x.style.color='var(--text-primary)';x.style.borderColor='var(--border)';});b.style.background='var(--accent-gradient)';b.style.color='#fff';b.style.borderColor='transparent';content.querySelectorAll('.assignment-work-card').forEach(card=>{card.style.display=(!id||card.dataset.userId===id)?'':'none';});};return b;};
+                bar.appendChild(makeBtn('كل الأعمال','')); people.forEach(person=>bar.appendChild(makeBtn(person.name,person.id)));
+                content.prepend(bar); bar.querySelector('button')?.click();
+            }
             const inp=document.getElementById('assignmentDetailUpload');
             if(inp) inp.onchange=async e=>{
                 const files=Array.from(e.target.files||[]); if(!files.length||!currentUser)return;
@@ -4065,7 +4075,7 @@
             const submissions=Array.isArray(result.data.submissions)?[...result.data.submissions]:[];
             const index=submissions.findIndex((sub,i)=>submissionWorkId(sub,i)===workId); if(index<0)return;
             if(submissions[index].userId!==currentUser?.uid)return showCustomAlert('غير مسموح','لا يمكنك تعديل هذا العمل.');
-            submissions[index]={...submissions[index],images:[...images],imageUrl:images[0],approved:false};
+            submissions[index]={...submissions[index],images:[...images],imageUrl:images[0],approved:false,xpGranted:false};
             await result.ref.update({submissions});
             closeAssignmentWorkEditor(); await refreshAssignmentDetail(courseId,assignmentId); loadAssignmentsPage(courseId);
         };
@@ -4442,16 +4452,35 @@
             const container=document.getElementById('lessonsCardsContainer'),sidebar=document.getElementById('lessonPlayerList'); if(!container||!courseId)return;
             if(!container.querySelector('.lesson-card')&&!container.dataset.loaded){container.innerHTML='<div style="display:flex;justify-content:center;align-items:center;gap:10px;padding:45px;color:var(--text-muted);grid-column:1/-1;"><span class="mini-spin" style="display:inline-block;width:22px;height:22px;border-radius:50%;border:3px solid var(--border);border-top-color:var(--accent1);animation:spin 1s linear infinite;"></span><span>جاري تحميل الحصص...</span></div>';}
             try{
-                const snap=await db.collection('courses').doc(courseId).collection('lessons').orderBy('order','asc').get();
-                const newCache=[];snap.forEach((doc,index)=>newCache.push({id:doc.id,...doc.data(),index:index+1}));
+                let snap;
+                try {
+                    snap=await db.collection('courses').doc(courseId).collection('lessons').orderBy('order','asc').get();
+                } catch(orderErr) {
+                    console.warn('Lessons order query failed, using fallback:', orderErr);
+                    snap=await db.collection('courses').doc(courseId).collection('lessons').get();
+                }
+                const docs=snap.docs.slice().sort((a,b)=>{
+                    const ao=Number(a.data()?.order); const bo=Number(b.data()?.order);
+                    if(Number.isFinite(ao)&&Number.isFinite(bo)&&ao!==bo)return ao-bo;
+                    if(Number.isFinite(ao))return -1; if(Number.isFinite(bo))return 1;
+                    return String(a.id).localeCompare(String(b.id));
+                });
+                const newCache=[];docs.forEach((doc,index)=>newCache.push({id:doc.id,...doc.data(),index:index+1}));
                 lessonListCache=newCache;document.getElementById('lessonSidebarCount').textContent=`${Math.max(0,newCache.length)} حصة`;
                 const completedMap={};
-                if(currentUser){const completedSnap=await db.collection('users').doc(currentUser.uid).collection('completedLessons').get();completedSnap.forEach(d=>completedMap[d.id]=true);}
+                if(currentUser){
+                    const completedSnap=await db.collection('users').doc(currentUser.uid).collection('completedLessons').get();
+                    completedSnap.forEach(d=>completedMap[d.id]=true);
+                    try{
+                        const progressSnap=await db.collection('users').doc(currentUser.uid).collection('courseProgress').doc(courseId).collection('lessons').get();
+                        progressSnap.forEach(d=>{const pd=d.data()||{};const pct=Number(pd.percent||pd.progress||0);if(pct>=90)completedMap[d.id]=true;});
+                    }catch(progressErr){console.warn('تعذر قراءة تقدم الحصص:',progressErr);}
+                }
                 if(!newCache.length){container.innerHTML='<p style="color:var(--text-muted);text-align:center;grid-column:1/-1;padding:50px;">لا توجد حصص مضافة بعد.</p>';if(sidebar)sidebar.innerHTML='';container.dataset.loaded='1';return;}
                 const fragment=document.createDocumentFragment();
                 newCache.forEach((lesson,index)=>{
-                    const card=document.createElement('div');card.className='full-page-card lesson-card'+(done?' completed':'');card.dataset.id=lesson.id;
                     const done=!!completedMap[lesson.id],title=currentLang==='ar'?lesson.titleAr:lesson.titleEn;
+                    const card=document.createElement('div');card.className='full-page-card lesson-card'+(done?' completed':'');card.dataset.id=lesson.id;
                     card.innerHTML=`<div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start;">
                         <div style="cursor:pointer;flex:1;min-width:0;"><div style="font-size:1.08rem;font-weight:800;margin-bottom:7px;">${index+1}. ${escapeHtml(title||'حصة')}</div><div style="color:var(--text-muted);font-size:.86rem;">${Math.max(0,Number(lesson.duration)||0)} دقيقة · ${Math.max(0,Number(lesson.xpReward)||0)} XP ${done?'· ✓ مكتملة':''}</div></div>
                         ${isAdmin?`<div class="admin-actions admin-only show" style="display:flex;gap:6px;"><button title="تعديل" onclick="event.stopPropagation();editLesson('${courseId}','${lesson.id}')" style="border:1px solid var(--border);background:var(--bg-secondary);color:var(--text-primary);width:36px;height:36px;border-radius:50%;cursor:pointer;"><i class="fas fa-edit"></i></button><button title="حذف" onclick="event.stopPropagation();deleteLesson('${courseId}','${lesson.id}')" style="border:1px solid var(--border);background:var(--bg-secondary);color:#e74c3c;width:36px;height:36px;border-radius:50%;cursor:pointer;"><i class="fas fa-trash"></i></button></div>`:''}
@@ -4836,10 +4865,14 @@
             const total = questions.length;
             const t = translations[currentLang] || translations['ar'] || {};
 
-            // Update Progress
-            const pct = ((currentQuestionIndex + 1) / total) * 100;
+            // Progress is based on answered questions, not merely navigating between them.
+            const answeredCount = Object.keys(quizUserAnswers || {}).filter(k => {
+                const v = quizUserAnswers[k];
+                return v !== undefined && v !== null && String(v).trim() !== '';
+            }).length;
+            const pct = total ? (answeredCount / total) * 100 : 0;
             document.getElementById('quizProgressFill').style.width = pct + '%';
-            document.getElementById('quizProgressText').textContent = `${currentQuestionIndex + 1} / ${total}`;
+            document.getElementById('quizProgressText').textContent = `${answeredCount} / ${total}`;
             document.getElementById('quizProgressPercent').textContent = Math.round(pct) + '%';
 
             // Display Question Text
@@ -6972,6 +7005,17 @@
  #courseChatPage #chatEmojiPickerPage{width:210px!important;max-width:calc(100vw - 24px)!important;max-height:240px!important;grid-template-columns:repeat(6,minmax(0,1fr))!important;left:0!important;}
 }
 </style>
+<style>
+/* Emoji trigger is the leftmost control of the message composer; picker stays anchored above it. */
+#courseChatPage .chat-input-group{direction:ltr!important;display:flex!important;align-items:center!important;gap:6px!important;}
+#courseChatPage .chat-input-wrap{display:flex!important;align-items:center!important;position:relative!important;order:3!important;flex:1 1 auto!important;min-width:0!important;}
+#courseChatPage #chatEmojiBtnPage{order:1!important;flex:0 0 auto!important;margin:0!important;}
+#courseChatPage #chatImageBtnPage{order:2!important;flex:0 0 auto!important;}
+#courseChatPage #fullChatPageInput{direction:rtl!important;order:1!important;flex:1 1 auto!important;min-width:0!important;}
+#courseChatPage #fullChatPageSendBtn{order:4!important;flex:0 0 auto!important;}
+#courseChatPage #chatEmojiPickerPage{left:0!important;right:auto!important;bottom:calc(100% + 8px)!important;}
+</style>
+
 </body>
 </html>
 
@@ -7131,6 +7175,17 @@ document.head.appendChild(st);
 
 })();
 </script>
+
+<style>
+/* Requested dashboard gradient: match the login button gradient. */
+#courseDashboard .dashboard-btn{background:var(--accent-gradient)!important;color:#fff!important;border:1px solid transparent!important;box-shadow:0 6px 18px rgba(108,92,231,.18)!important;}
+#courseDashboard .dashboard-btn i,#courseDashboard .dashboard-btn span,#courseDashboard h2{color:#fff!important;}
+#courseDashboard .dashboard-btn:hover{filter:brightness(1.04);transform:translateY(-2px);}
+/* Keep assignment work image area aligned and consistent with quiz card proportions. */
+.assignment-work-card > div[style*="position:relative"]{aspect-ratio:16/9!important;overflow:hidden!important;border-radius:12px!important;}
+.assignment-work-card > div[style*="position:relative"] img{width:100%!important;height:100%!important;object-fit:cover!important;display:block!important;}
+#assignmentPeopleFilter button:hover{filter:brightness(1.04);transform:translateY(-1px);}
+</style>
 
 <!-- ===== FINAL PATCH 28: final behavior corrections ===== -->
 <script>
