@@ -9069,6 +9069,133 @@ async function enrichChatHeadersV13(){
 setInterval(enrichChatHeadersV13,1200);setTimeout(enrichChatHeadersV13,500);
 })();
 </script>
+
+<!-- ===== FINAL V14: reliable lesson playback + reliable chat profiles ===== -->
+<style id="ananas-v14-final-fix-css">
+#lessonPlayPauseBtn{position:relative;z-index:20!important;pointer-events:auto!important;touch-action:manipulation!important;cursor:pointer!important}
+.chat-profile-head,.chat-profile-avatar,.chat-profile-name,.chat-msg .msg-header .u{pointer-events:auto!important;cursor:pointer!important}
+</style>
+<script id="ananas-v14-final-fix-script">
+(function(){
+'use strict';
+const q=id=>document.getElementById(id);
+
+/* ---------- 1) Guaranteed play/pause ---------- */
+function v14PlayPause(){
+  try{
+    const p=lessonPlayer;
+    const html=lessonHtmlVideo;
+    if(!lessonPlayerReady && !html) return;
+    let state=null;
+    try{ state=p?.getPlayerState?.(); }catch(_){ state=null; }
+    const playing = state===1 || state===2+999 || state===(window.YT?.PlayerState?.PLAYING) || (html && !html.paused);
+    if(html){
+      if(html.paused){ const r=html.play(); if(r?.catch)r.catch(()=>{}); }
+      else html.pause();
+    }else if(p){
+      if(playing) p.pauseVideo?.(); else p.playVideo?.();
+    }
+    setTimeout(()=>{try{updateLessonControls?.()}catch(_){ }},80);
+  }catch(err){console.error('V14 playback toggle',err)}
+}
+function bindV14PlayButton(){
+  const b=q('lessonPlayPauseBtn'); if(!b||b.dataset.v14Final==='1')return;
+  b.dataset.v14Final='1';
+  const handler=e=>{e.preventDefault();e.stopImmediatePropagation();v14PlayPause();};
+  b.addEventListener('pointerup',handler,true);
+  b.addEventListener('click',handler,true);
+  b.addEventListener('touchend',handler,{capture:true,passive:false});
+}
+bindV14PlayButton();
+new MutationObserver(bindV14PlayButton).observe(document.body,{subtree:true,childList:true});
+
+/* ---------- 2) F/M always work regardless of Arabic keyboard layout ---------- */
+document.addEventListener('keydown',e=>{
+  if(currentCoursePage!=='lessonPlayer')return;
+  const code=e.code;
+  const target=e.target;
+  if(target&&['INPUT','TEXTAREA','SELECT'].includes(target.tagName))return;
+  if(code==='KeyF'){
+    e.preventDefault();e.stopImmediatePropagation();
+    const wrap=q('lessonVideoWrapper');
+    if(document.fullscreenElement)document.exitFullscreen?.();else wrap?.requestFullscreen?.();
+  }else if(code==='KeyM'){
+    e.preventDefault();e.stopImmediatePropagation();q('lessonMuteBtn')?.click();
+  }
+},true);
+
+/* ---------- 3) Reliable chat profile opening ---------- */
+async function v14OpenProfile(uid){
+  if(!uid||!currentUser)return;
+  try{
+    const snap=await db.collection('users').doc(uid).get();
+    if(!snap.exists)return showCustomAlert?.('غير متاح','الحساب غير موجود.');
+    const p=snap.data()||{};
+    const isSelf=uid===currentUser.uid;
+    if(!isSelf&&!isAdmin&&p.profilePublic===false){
+      let modal=q('ananasPrivateProfileOverlay');
+      if(!modal){
+        modal=document.createElement('div');modal.id='ananasPrivateProfileOverlay';
+        modal.innerHTML=`<div class="v12-private-card"><div class="v12-private-head"><div class="v12-private-avatar" id="v14PrivateAvatar"></div><div style="min-width:0"><h3 id="v14PrivateName" style="margin:0"></h3><p style="margin:4px 0 0;color:var(--text-muted);font-size:.82rem">الملف الشخصي</p></div><button type="button" id="v14PrivateClose" style="margin-inline-start:auto;width:40px;height:40px;border-radius:13px;border:1px solid var(--border);background:var(--bg-secondary);color:var(--text-primary);cursor:pointer"><i class="fas fa-xmark"></i></button></div><div class="v12-private-body"><div class="v12-private-blur"><div class="v12-private-lock"><div class="v12-private-lock-box"><i class="fas fa-lock" style="font-size:1.5rem;color:var(--accent1)"></i><h3 style="margin:9px 0 5px">الحساب خاص</h3><p style="margin:0;color:var(--text-muted)">صاحب الحساب جعل ملفه خاصًا، لذلك تظهر لك صورته واسمه فقط.</p></div></div></div><div class="v12-private-actions"><button class="primary" id="v14PrivateClose2">إغلاق</button></div></div></div>`;
+        document.body.appendChild(modal);
+        q('v14PrivateClose').onclick=()=>modal.classList.remove('active');q('v14PrivateClose2').onclick=()=>modal.classList.remove('active');
+        modal.addEventListener('click',e=>{if(e.target===modal)modal.classList.remove('active')});
+      }
+      const name=p.displayName||p.name||'مستخدم',photo=p.photoURL||p.photoUrl||p.photo||'';
+      q('v14PrivateName').textContent=name;
+      q('v14PrivateAvatar').innerHTML=photo?`<img src="${escapeHtml(photo)}" alt="">`:String(name).slice(0,1);
+      modal.classList.add('active');return;
+    }
+    /* Use the established full profile page directly, avoiding any older wrapper recursion. */
+    if(typeof ensureProfilePageFinal==='function' && typeof renderProfileForUidFinal==='function'){
+      const page=ensureProfilePageFinal();
+      const name=p.displayName||p.name||'مستخدم',photo=p.photoURL||p.photoUrl||p.photo||'';
+      q('profilePageName').textContent=name;
+      q('profilePageEmail').textContent=isAdmin||isSelf?(p.email||currentUser.email||'غير متوفر'):'ملف طالب';
+      q('profilePageAvatar').innerHTML=photo?`<img src="${escapeHtml(photo)}" alt="">`:String(name).slice(0,1);
+      q('profilePrivacyBadge').textContent=p.profilePublic===false?'الملف خاص':'الملف عام';
+      q('profileSelfToolbar').style.display=isSelf?'flex':'none';
+      q('profileDataList').innerHTML=[['الاسم',name],['رقم الهاتف',isAdmin||isSelf?(p.phone||'غير مضاف'):'مخفي'],['النوع',p.gender==='female'?'أنثى':p.gender==='male'?'ذكر':'غير محدد'],['تاريخ التسجيل',fmt?.(p.createdAt)||'—']].map(x=>`<div class="profile-list-item"><strong>${escapeHtml(x[0])}</strong><span>${escapeHtml(x[1])}</span></div>`).join('');
+      window.__v10ViewingUid=uid;
+      page.classList.add('active');
+      document.querySelectorAll('.nav-btn,.auth-btn').forEach(x=>x.classList.remove('active'));
+      await renderProfileForUidFinal(uid,isSelf);
+      return;
+    }
+    if(typeof window.openAnanasV10Profile==='function' && window.openAnanasV10Profile!==v14OpenProfile)return window.openAnanasV10Profile(uid,isSelf);
+  }catch(err){console.error('V14 profile',err);showCustomAlert?.('خطأ','تعذر فتح الملف الشخصي.');}
+}
+window.openChatProfileV13=v14OpenProfile;
+window.openChatProfileV12=v14OpenProfile;
+/* Also override the legacy profile function used by older chat handlers. */
+window.openAnanasV10Profile=v14OpenProfile;
+window.viewProfileByUserId=v14OpenProfile;
+
+/* Direct click: works even if an old handler already stopped propagation. */
+function bindV14ChatNodes(){
+  document.querySelectorAll('.chat-msg .msg-header,.chat-profile-head,.chat-profile-name,.chat-profile-avatar,.chat-msg .msg-header .u').forEach(node=>{
+    if(node.dataset.v14ProfileBound==='1')return;
+    node.dataset.v14ProfileBound='1';
+    node.addEventListener('click',async e=>{
+      e.preventDefault();e.stopImmediatePropagation();
+      const uid=node.dataset.profileUid||node.closest('[data-profile-uid]')?.dataset.profileUid;
+      if(uid)return v14OpenProfile(uid);
+      const msg=node.closest('.chat-msg'),id=msg?.dataset.messageId;
+      if(id&&activeCourseId){
+        try{const s=await db.collection('courses').doc(activeCourseId).collection('chat').doc(id).get();const uid2=s.data()?.userId;if(uid2)await v14OpenProfile(uid2);}catch(err){console.error(err)}}
+    },true);
+  });
+}
+bindV14ChatNodes();
+new MutationObserver(bindV14ChatNodes).observe(document.body,{subtree:true,childList:true});
+/* Periodically enrich headers so the UID exists before the user clicks. */
+if(!window.__v14ChatEnricher){window.__v14ChatEnricher=setInterval(()=>{document.querySelectorAll('.chat-msg').forEach(async msg=>{
+  const id=msg.dataset.messageId;if(!id||msg.dataset.v14UidLoaded==='1')return;
+  msg.dataset.v14UidLoaded='1';
+  try{const s=await db.collection('courses').doc(activeCourseId).collection('chat').doc(id).get();const uid=s.data()?.userId;if(uid){const h=msg.querySelector('.msg-header');if(h)h.dataset.profileUid=uid;h?.querySelectorAll('.u,.chat-profile-name,.chat-profile-avatar').forEach(n=>n.dataset.profileUid=uid);}}catch(_){msg.dataset.v14UidLoaded='0'}
+});},700)}
+})();
+</script>
 </body>
 </html>
 
