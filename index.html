@@ -8904,6 +8904,171 @@ unlockBtn?.addEventListener('click',async e=>{
 })();
 </script>
 
+
+<style id="ananas-v13-repair-style">
+/* Final reliability patch */
+.ananas-chat-lock-v13 .v13-lock-end-input{display:block!important;width:100%!important;min-height:48px!important;opacity:1!important;visibility:visible!important;position:static!important;pointer-events:auto!important;}
+.ananas-chat-lock-v13 .v13-lock-mode{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px}
+.ananas-chat-lock-v13 .v13-lock-mode label{display:flex;align-items:center;gap:10px;padding:12px 14px;border:1px solid var(--border);border-radius:14px;background:var(--bg-secondary);cursor:pointer;transition:.2s}
+.ananas-chat-lock-v13 .v13-lock-mode label.active{border-color:var(--accent1);background:rgba(108,92,231,.08);box-shadow:0 8px 24px rgba(108,92,231,.08)}
+.ananas-chat-lock-v13 .v13-lock-mode input{accent-color:var(--accent1);margin:0}
+.ananas-file-drop.v13-ready{cursor:pointer!important;position:relative!important;overflow:hidden!important}
+.ananas-file-drop.v13-ready > input[type=file]{position:absolute!important;inset:0!important;width:100%!important;height:100%!important;opacity:0!important;cursor:pointer!important;z-index:10!important;display:block!important}
+.ananas-file-drop.v13-ready *{pointer-events:none!important}
+.chat-profile-head,.chat-profile-avatar,.chat-profile-name{cursor:pointer!important}
+</style>
+<script id="ananas-v13-repair">
+(function(){
+'use strict';
+const q=id=>document.getElementById(id);
+const escV13=v=>String(v??'').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+
+/* 1) Chat lock: one final modal, visible end-date field in both modes. */
+function buildChatLockV13(){
+  const m=q('chatLockModal'); if(!m)return;
+  m.className='edit-modal chat-lock-modal ananas-chat-lock-v13';
+  m.innerHTML=`
+  <div style="padding:22px 24px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:12px;background:linear-gradient(145deg,var(--bg-card),rgba(108,92,231,.05))">
+    <div style="width:50px;height:50px;border-radius:16px;background:rgba(108,92,231,.10);color:var(--accent1);display:grid;place-items:center;font-size:1.25rem"><i class="fas fa-lock"></i></div>
+    <div><h3 style="margin:0">قفل الدردشة</h3><p style="margin:5px 0 0;color:var(--text-muted);font-size:.82rem">حدد متى يبدأ القفل وكيف تريد فتح الدردشة.</p></div>
+    <button type="button" id="chatV13Close" style="margin-inline-start:auto;width:40px;height:40px;border-radius:13px;border:1px solid var(--border);background:var(--bg-secondary);color:var(--text-primary);cursor:pointer"><i class="fas fa-xmark"></i></button>
+  </div>
+  <div style="padding:22px 24px">
+    <label class="v11-field"><span>بداية الإيقاف</span><input id="chatV13Start" type="datetime-local"><small>افتراضيًا الوقت الحالي، ويمكن تحديد وقت مستقبلي.</small></label>
+    <div class="v11-field" style="margin-top:14px">
+      <span>نهاية الإيقاف</span>
+      <input id="chatV13End" class="v13-lock-end-input" type="datetime-local">
+      <div class="ananas-chat-lock-v13 v13-lock-mode">
+        <label id="chatV13TimedLabel"><input id="chatV13Timed" type="radio" name="chatV13Mode" value="timed"><span><strong>فتح تلقائيًا</strong><small style="display:block;color:var(--text-muted)">يتم فتح الدردشة في التاريخ والوقت المحددين.</small></span></label>
+        <label id="chatV13ManualLabel"><input id="chatV13Manual" type="radio" name="chatV13Mode" value="manual" checked><span><strong>فتح يدويًا</strong><small style="display:block;color:var(--text-muted)">تبقى الدردشة مقفلة حتى أفتحها أنا.</small></span></label>
+      </div>
+    </div>
+    <label class="v11-field" style="margin-top:14px"><span>سبب القفل <small>(اختياري)</small></span><textarea id="chatV13Reason" rows="4" placeholder="يمكنك كتابة سبب القفل أو تركه فارغًا"></textarea></label>
+    <div style="margin-top:10px;padding:11px 13px;border-radius:14px;background:rgba(108,92,231,.07);border:1px solid rgba(108,92,231,.14);color:var(--text-muted);font-size:.8rem"><i class="fas fa-circle-info" style="color:var(--accent1)"></i> المشرف يستطيع إرسال الرسائل أثناء القفل.</div>
+    <div style="display:flex;gap:10px;margin-top:17px"><button type="button" id="chatV13Cancel" class="ananas-secondary-btn" style="flex:1">إلغاء</button><button type="button" id="chatV13Save" class="ananas-primary-btn" style="flex:1"><i class="fas fa-lock"></i> حفظ القفل</button></div>
+  </div>`;
+  const sync=()=>{
+    const timed=q('chatV13Timed')?.checked;
+    q('chatV13TimedLabel')?.classList.toggle('active',!!timed);
+    q('chatV13ManualLabel')?.classList.toggle('active',!timed);
+    const end=q('chatV13End'); if(end){end.disabled=!timed;end.style.opacity='1';end.style.visibility='visible';}
+  };
+  q('chatV13Timed')?.addEventListener('change',sync); q('chatV13Manual')?.addEventListener('change',sync);
+  q('chatV13Close').onclick=()=>m.classList.remove('active');
+  q('chatV13Cancel').onclick=()=>m.classList.remove('active');
+  q('chatV13Save').onclick=async()=>{
+    if(typeof isAdmin==='undefined'||!isAdmin||typeof activeCourseId==='undefined'||!activeCourseId)return;
+    const s=q('chatV13Start')?.value||'', e=q('chatV13End')?.value||'', r=(q('chatV13Reason')?.value||'').trim();
+    const timed=!!q('chatV13Timed')?.checked;
+    const start=typeof parseRiyadhDateTime==='function'&&s?parseRiyadhDateTime(s):new Date();
+    const end=timed&&e&&typeof parseRiyadhDateTime==='function'?parseRiyadhDateTime(e):null;
+    if(isNaN(start.getTime()) || (timed && (!end||isNaN(end.getTime()))) || (end&&end<=start)){
+      return showCustomAlert('خطأ','تحقق من تاريخ ووقت بداية ونهاية القفل.');
+    }
+    try{
+      const payload={locked:true,startAt:firebase.firestore.Timestamp.fromDate(start),endAt:end?firebase.firestore.Timestamp.fromDate(end):null,autoExpire:!!end,reason:r,timezone:'Asia/Riyadh',updatedAt:firebase.firestore.FieldValue.serverTimestamp()};
+      await db.collection('courses').doc(activeCourseId).collection('settings').doc('chat').set(payload,{merge:true});
+      currentChatLock={...payload,startAt:firebase.firestore.Timestamp.fromDate(start),endAt:end?firebase.firestore.Timestamp.fromDate(end):null};
+      window.applyChatLockNow?.();m.classList.remove('active');
+      showCustomAlert('تم الحفظ','تم إعداد قفل الدردشة بنجاح.');
+    }catch(err){console.error(err);showCustomAlert('خطأ','تعذر حفظ إعدادات قفل الدردشة.');}
+  };
+  sync();
+}
+function openChatLockV13(){
+  if(typeof isAdmin==='undefined'||!isAdmin||typeof activeCourseId==='undefined'||!activeCourseId)return;
+  buildChatLockV13(); const n=new Date(),p=x=>String(x).padStart(2,'0');
+  q('chatV13Start').value=`${n.getFullYear()}-${p(n.getMonth()+1)}-${p(n.getDate())}T${p(n.getHours())}:${p(n.getMinutes())}`;
+  q('chatV13End').value='';q('chatV13Reason').value='';q('chatV13Manual').checked=true;q('chatV13Timed').checked=false;
+  q('chatV13End').disabled=true;q('chatV13End').style.opacity='1';q('chatV13ManualLabel').classList.add('active');q('chatV13TimedLabel').classList.remove('active');
+  q('chatLockModal').classList.add('active');
+}
+window.openChatLockDialog=openChatLockV13;
+window.saveChatLockSettings=async()=>{
+  const btn=q('chatV13Save'); if(btn)btn.click();
+};
+window.__v13ChatLockBound=true;
+document.addEventListener('click',e=>{
+  const lock=e.target.closest?.('#chatLockBtn'); const unlock=e.target.closest?.('#chatUnlockBtn');
+  if(lock){e.preventDefault();e.stopImmediatePropagation();openChatLockV13();return;}
+  if(unlock){e.preventDefault();e.stopImmediatePropagation();if(window.unlockCourseChat)window.unlockCourseChat();return;}
+},true);
+
+/* 2) File picker: bind to the REAL hidden input created by the upload modal. */
+function bindV13FilePicker(){
+  const modal=q('ananasFileUploadModal'),drop=q('ananasFileDrop'),input=q('ananasUploadInput'),pick=q('ananasUploadPickText');
+  if(!modal||!drop||!input)return false;
+  drop.classList.add('v13-ready');
+  input.style.cssText='position:absolute!important;inset:0!important;width:100%!important;height:100%!important;opacity:0!important;cursor:pointer!important;z-index:10!important;display:block!important;';
+  drop.onclick=e=>{if(e.target!==input){e.preventDefault();e.stopPropagation();input.click();}};
+  input.onchange=()=>{if(pick)pick.textContent=input.files?.length?`تم اختيار ${input.files.length} ملف`:'اختر الملفات';};
+  return true;
+}
+const oldOpenUpload=window.openCourseFileUploadModal;
+window.openCourseFileUploadModal=async function(pre=''){
+  const r=await oldOpenUpload?.apply(this,arguments);
+  bindV13FilePicker();
+  return r;
+};
+new MutationObserver(()=>bindV13FilePicker()).observe(document.body,{subtree:true,childList:true});
+setTimeout(bindV13FilePicker,0);
+
+/* 3) Video play/pause button: use the actual player adapters and bind dynamically. */
+function v13TogglePlayback(){
+  const p=lessonPlayer; if(!p||!lessonPlayerReady)return;
+  try{
+    const st=p.getPlayerState?.();
+    const playing=st===1 || st===window.LESSON_MEDIA_STATE?.PLAYING;
+    if(playing)p.pauseVideo?.(); else p.playVideo?.();
+  }catch(e){console.warn('play/pause',e)}
+}
+function bindV13VideoControls(){
+  const btn=q('lessonPlayPauseBtn');if(btn&&!btn.dataset.v13){btn.dataset.v13='1';btn.onclick=e=>{e.preventDefault();e.stopPropagation();v13TogglePlayback();};}
+}
+bindV13VideoControls();new MutationObserver(bindV13VideoControls).observe(document.body,{subtree:true,childList:true});
+
+document.addEventListener('keydown',e=>{
+  if(currentCoursePage!=='lessonPlayer'||!lessonPlayerReady||!lessonPlayer)return;
+  /* Use physical key codes so F/M work with Arabic keyboard layouts too. */
+  if(e.code==='KeyF'){e.preventDefault();e.stopPropagation();const el=q('lessonVideoWrapper');if(document.fullscreenElement)document.exitFullscreen?.();else el?.requestFullscreen?.();return;}
+  if(e.code==='KeyM'){e.preventDefault();e.stopPropagation();q('lessonMuteBtn')?.click();return;}
+  if(e.code==='Space' && !['INPUT','TEXTAREA','SELECT'].includes(document.activeElement?.tagName)){e.preventDefault();e.stopPropagation();v13TogglePlayback();}
+},true);
+
+/* 4) Chat profile: direct delegation from the profile uid when available, otherwise resolve from message id. */
+window.openChatProfileV13=async function(uid){
+  if(!uid||!currentUser)return;
+  try{
+    if(uid===currentUser.uid||isAdmin){return window.openAnanasV10Profile?.(uid,uid===currentUser.uid);}
+    const s=await db.collection('users').doc(uid).get(); if(!s.exists)return;
+    const p=s.data()||{};
+    if(p.profilePublic===false){
+      let m=q('ananasPrivateProfileOverlay'); if(!m){m=document.createElement('div');m.id='ananasPrivateProfileOverlay';m.innerHTML='<div class="v12-private-card"><div class="v12-private-head"><div class="v12-private-avatar" id="v13PrivateAvatar"></div><div><h3 id="v13PrivateName" style="margin:0"></h3><p style="margin:4px 0 0;color:var(--text-muted);font-size:.82rem">الملف الشخصي</p></div><button type="button" id="v13PrivateClose" style="margin-inline-start:auto;width:40px;height:40px;border-radius:13px;border:1px solid var(--border);background:var(--bg-secondary);color:var(--text-primary);cursor:pointer"><i class="fas fa-xmark"></i></button></div><div class="v12-private-body"><div class="v12-private-blur"><div class="v12-private-lock"><div class="v12-private-lock-box"><i class="fas fa-lock" style="font-size:1.5rem;color:var(--accent1)"></i><h3 style="margin:9px 0 5px">الحساب خاص</h3><p style="margin:0;color:var(--text-muted)">صاحب الحساب جعل ملفه خاصًا، لذلك لا يمكن للطلاب الآخرين مشاهدة بياناته.</p></div></div></div><div class="v12-private-actions"><button class="primary" id="v13PrivateClose2">إغلاق</button></div></div></div>';document.body.appendChild(m);q('v13PrivateClose').onclick=()=>m.classList.remove('active');q('v13PrivateClose2').onclick=()=>m.classList.remove('active');}
+      const name=p.displayName||'مستخدم',photo=p.photoURL||p.photoUrl||p.photo||'';q('v13PrivateName').textContent=name;q('v13PrivateAvatar').innerHTML=photo?`<img src="${escV13(photo)}" alt="">`:escV13(name.slice(0,1));m.classList.add('active');return;
+    }
+    return window.openAnanasV10Profile?.(uid,false);
+  }catch(err){console.error('chat profile',err)}
+};
+document.addEventListener('click',async e=>{
+  const direct=e.target.closest?.('[data-profile-uid],.chat-profile-head,.chat-profile-name,.chat-profile-avatar,.chat-msg .msg-header .u');
+  if(direct){e.preventDefault();e.stopImmediatePropagation();const uid=direct.dataset.profileUid||direct.closest('[data-profile-uid]')?.dataset.profileUid;if(uid){window.openChatProfileV13(uid);return;}}
+  const msg=e.target.closest?.('.chat-msg');if(!msg||!activeCourseId)return;
+  if(e.target.closest('.msg-header')){
+    e.preventDefault();e.stopImmediatePropagation();try{const s=await db.collection('courses').doc(activeCourseId).collection('chat').doc(msg.dataset.messageId).get();const uid=s.data()?.userId;if(uid)window.openChatProfileV13(uid);}catch(err){console.error(err)}}
+},true);
+
+/* Force profile UID onto chat headers when a renderer created only a name. */
+async function enrichChatHeadersV13(){
+  const list=q('chatPageMessagesList');if(!list)return;
+  for(const msg of list.querySelectorAll('.chat-msg')){
+    const head=msg.querySelector('.msg-header');if(!head||head.dataset.v13Enriched==='1')continue;
+    const id=msg.dataset.messageId;if(!id)continue;head.dataset.v13Enriched='1';
+    try{const s=await db.collection('courses').doc(activeCourseId).collection('chat').doc(id).get();const uid=s.data()?.userId;if(!uid)continue;head.dataset.profileUid=uid;const els=[head,head.querySelector('.u'),head.querySelector('.chat-profile-name'),head.querySelector('.chat-profile-avatar')].filter(Boolean);els.forEach(el=>{el.dataset.profileUid=uid;el.onclick=e=>{e.preventDefault();e.stopPropagation();window.openChatProfileV13(uid);};});}catch(_){ }
+  }
+}
+setInterval(enrichChatHeadersV13,1200);setTimeout(enrichChatHeadersV13,500);
+})();
+</script>
 </body>
 </html>
 
