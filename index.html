@@ -9342,6 +9342,169 @@ window.__openCanonicalProfile=openCanonicalV17;window.openUserProfilePage=()=>cu
 document.addEventListener('click',async e=>{const n=e.target.closest?.('.chat-msg .chat-profile-avatar,.chat-msg .chat-profile-name,.chat-msg .msg-header .u,[data-profile-uid]');if(!n)return;const msg=n.closest('.chat-msg');let uid=n.dataset.profileUid||n.closest('[data-profile-uid]')?.dataset.profileUid;if(!uid&&msg?.dataset.messageId&&typeof activeCourseId!=='undefined'&&activeCourseId){try{const s=await db.collection('courses').doc(activeCourseId).collection('chat').doc(msg.dataset.messageId).get();uid=s.data()?.userId||''}catch(_){}}if(uid){e.preventDefault();e.stopImmediatePropagation();await openCanonicalV17(uid,uid===currentUser?.uid);}},true);
 })();
 </script>
+
+<!-- STABLE V20 PATCH: profile back/scroll/mobile/account/chat/gallery without changing existing features -->
+<style id="ananas-v20-stable-css">
+/* Restore the older profile proportions/visual rhythm. */
+#ananasCanonicalProfilePage .acp-shell{width:min(1100px,100%)!important;padding:24px 20px 32px!important}
+#ananasCanonicalProfilePage .acp-hero{padding:20px!important;border-radius:24px!important}
+#ananasCanonicalProfilePage .acp-avatar{width:82px!important;height:82px!important;border-radius:24px!important}
+.v20-back-arrow{width:44px!important;min-width:44px!important;height:44px!important;min-height:44px!important;padding:0!important;display:inline-flex!important;align-items:center!important;justify-content:center!important;border-radius:14px!important}
+.acp-work-cover img,.ananas-v10-work-cover img{cursor:zoom-in!important}
+.v20-gallery-viewer{position:fixed;inset:0;z-index:150000;display:none;align-items:center;justify-content:center;padding:16px;background:rgba(4,6,12,.86);backdrop-filter:blur(10px)}
+.v20-gallery-viewer.active{display:flex}
+.v20-gallery-viewer img{max-width:96vw;max-height:86vh;object-fit:contain;border-radius:18px;box-shadow:0 30px 90px rgba(0,0,0,.55)}
+.v20-gallery-close{position:absolute;top:16px;inset-inline-end:16px;width:46px;height:46px;border:1px solid rgba(255,255,255,.25);border-radius:14px;background:rgba(255,255,255,.1);color:#fff;font-size:1.8rem;cursor:pointer}
+.v20-gallery-caption{position:absolute;bottom:18px;left:16px;right:16px;text-align:center;color:#fff;font-weight:900}
+.auth-btn.v20-account{display:inline-flex!important;align-items:center!important;gap:8px!important;padding:6px 10px!important}
+.auth-btn.v20-account .v20-avatar{width:32px;height:32px;border-radius:50%;overflow:hidden;display:grid;place-items:center;background:var(--accent-gradient);color:#fff;font-weight:900;flex:0 0 auto}
+.auth-btn.v20-account .v20-avatar img{width:100%;height:100%;object-fit:cover}
+.auth-btn.v20-account .v20-name{max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.chat-reply-target-v20{animation:v20ReplyFlash 1.5s ease both!important}
+@keyframes v20ReplyFlash{0%,100%{outline:0 solid transparent;box-shadow:none}15%,70%{outline:3px solid var(--accent1);box-shadow:0 0 0 8px rgba(108,92,231,.14)}}
+@media(max-width:760px){
+  :root{--v20-top:var(--nav-height-mobile,62px);--v20-bottom:calc(var(--mobile-bottom-nav-content-height,66px) + env(safe-area-inset-bottom))}
+  /* Keep page content strictly between fixed top and bottom navigation. */
+  #coursesPage,#courseDashboard,#courseOverviewContainer,#courseLessonsPage,#courseLessonPlayerPage,#courseQuizzesPage,#courseAssignmentsPage,#courseAssignmentDetailPage,#courseChatPage,#courseFilesPage,#fullChatPage,#courseLearningView,#userProfilePage,#ananasCanonicalProfilePage,#ananasV10ProfilePage{
+    position:fixed!important;top:var(--v20-top)!important;right:0!important;bottom:var(--v20-bottom)!important;left:0!important;width:auto!important;height:auto!important;max-height:none!important;overflow-y:auto!important;overflow-x:hidden!important;box-sizing:border-box!important;padding-top:12px!important;padding-bottom:20px!important;overscroll-behavior:contain!important
+  }
+  body{overflow:hidden!important}
+  #ananasCanonicalProfilePage .acp-shell{padding:12px 10px 22px!important}
+}
+</style>
+<script id="ananas-v20-stable-js">
+(function(){
+'use strict';
+const q=id=>document.getElementById(id);
+const esc=window.escapeHtml||((v)=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])));
+
+/* ---------- 1) Canonical profile: arrow ONLY on another user's profile ---------- */
+function currentProfileUid(){return window.__v18ViewingProfileUid||window.__v17ViewingUid||window.__v10ViewingUid||null;}
+function configureProfileBack(){
+  const b=q('acpBack'); if(!b)return;
+  const uid=currentProfileUid(); const self=!!currentUser&&uid===currentUser.uid;
+  b.classList.add('v20-back-arrow');
+  b.innerHTML='<i class="fas fa-chevron-left" aria-hidden="true"></i>';
+  b.title='العودة إلى حسابي'; b.setAttribute('aria-label','العودة إلى حسابي');
+  b.style.display=self?'none':'inline-flex';
+  if(b.dataset.v20Bound==='1')return;
+  b.dataset.v20Bound='1';
+  b.addEventListener('click',async e=>{
+    e.preventDefault();e.stopImmediatePropagation();
+    if(!currentUser||uid===currentUser.uid)return;
+    if(window.__openCanonicalProfile) await window.__openCanonicalProfile(currentUser.uid,true);
+  },true);
+}
+const baseCanonical=window.__openCanonicalProfile;
+if(typeof baseCanonical==='function'&&!window.__v20CanonicalWrapped){
+  window.__v20CanonicalWrapped=true;
+  window.__openCanonicalProfile=async function(uid,isSelf){
+    window.__v18ViewingProfileUid=uid;
+    const r=await baseCanonical.apply(this,arguments);
+    configureProfileBack();
+    resetPlatformPageScroll?.();
+    const p=q('ananasCanonicalProfilePage'); if(p)p.scrollTop=0;
+    window.scrollTo({top:0,left:0,behavior:'auto'});
+    return r;
+  };
+  window.openUserProfilePage=()=>currentUser?window.__openCanonicalProfile(currentUser.uid,true):undefined;
+  window.openPublicProfileFinal=uid=>window.__openCanonicalProfile(uid,uid===currentUser?.uid);
+  window.openAnanasV10Profile=window.openPublicProfileFinal;
+  window.viewProfileByUserId=window.openPublicProfileFinal;
+  window.openChatProfileV13=window.openPublicProfileFinal;
+  window.openChatProfileV12=window.openPublicProfileFinal;
+}
+
+/* ---------- 2) Every destination starts at the top, including profile-to-profile ---------- */
+history.scrollRestoration='manual';
+function resetV20Scroll(){
+  try{window.scrollTo({top:0,left:0,behavior:'auto'});}catch(_){try{window.scrollTo(0,0)}catch(__){}}
+  try{document.scrollingElement.scrollTop=0}catch(_){ }
+  const selectors=['#coursesPage','#courseDashboard','#courseOverviewContainer','#courseLessonsPage','#courseLessonPlayerPage','#courseQuizzesPage','#courseAssignmentsPage','#courseAssignmentDetailPage','#courseChatPage','#courseFilesPage','#fullChatPage','#courseLearningView','#userProfilePage','#ananasCanonicalProfilePage','#ananasV10ProfilePage','.page-content','.course-page-content','.profile-page-inner','.acp-shell'];
+  document.querySelectorAll(selectors.join(',')).forEach(el=>{try{el.scrollTop=0}catch(_){}});
+}
+window.resetPlatformPageScroll=resetV20Scroll;
+['switchCoursePage','mobileNavigate','openCourse','openCourseContent','openAssignmentDetail'].forEach(name=>{
+  const fn=window[name]; if(typeof fn!=='function'||fn.__v20Wrapped)return;
+  const wrapped=function(){const out=fn.apply(this,arguments);setTimeout(resetV20Scroll,0);setTimeout(resetV20Scroll,80);if(out&&typeof out.then==='function')out.finally(()=>{setTimeout(resetV20Scroll,0);setTimeout(resetV20Scroll,120)});return out};
+  wrapped.__v20Wrapped=true;window[name]=wrapped;
+});
+document.addEventListener('click',e=>{const nav=e.target.closest?.('.nav-btn,.mobile-nav-item,[data-page],[data-profile-page-link]');if(nav){setTimeout(resetV20Scroll,0);setTimeout(resetV20Scroll,80)}},true);
+window.addEventListener('load',()=>{setTimeout(resetV20Scroll,0);setTimeout(resetV20Scroll,250)});
+window.addEventListener('pageshow',()=>{setTimeout(resetV20Scroll,0);setTimeout(resetV20Scroll,120)});
+
+/* ---------- 3) Logged-in account button = avatar + account name ---------- */
+function refreshV20Account(){
+ const b=q('authToggleBtn'); if(!b)return;
+ if(!currentUser){b.classList.remove('v20-account');b.innerHTML='<i class="fas fa-user"></i><span id="authLabel">تسجيل الدخول</span>';return;}
+ const p=currentUserProfile||{};const name=p.displayName||p.name||currentUser.displayName||'حسابي';const photo=p.photoURL||p.photoUrl||p.photo||currentUser.photoURL||'';
+ b.classList.add('v20-account');b.innerHTML='<span class="v20-avatar">'+(photo?'<img src="'+esc(photo)+'" alt="">':'<i class="fas fa-user"></i>')+'</span><span class="v20-name">'+esc(name)+'</span>';
+ if(!b.dataset.v20Bound){b.dataset.v20Bound='1';b.addEventListener('click',e=>{if(!currentUser)return;e.preventDefault();e.stopImmediatePropagation();window.openUserProfilePage?.()},true)}
+}
+refreshV20Account();setInterval(refreshV20Account,1200);
+
+/* ---------- 4) Gallery preview for personal/assignment work images ---------- */
+function ensureV20Gallery(){
+ let m=q('v20GalleryViewer');if(m)return m;
+ m=document.createElement('div');m.id='v20GalleryViewer';m.className='v20-gallery-viewer';
+ m.innerHTML='<button type="button" class="v20-gallery-close" aria-label="إغلاق">×</button><img id="v20GalleryImg" alt="معاينة العمل"><div class="v20-gallery-caption" id="v20GalleryCaption"></div>';
+ document.body.appendChild(m);m.querySelector('.v20-gallery-close').onclick=()=>m.classList.remove('active');m.addEventListener('click',e=>{if(e.target===m)m.classList.remove('active')});return m;
+}
+function openV20Gallery(url,caption){if(!url)return;const m=ensureV20Gallery();q('v20GalleryImg').src=url;q('v20GalleryCaption').textContent=caption||'معرض الأعمال';m.classList.add('active');}
+window.openProfileGalleryImageV20=openV20Gallery;
+function bindV20Gallery(){document.querySelectorAll('#ananasCanonicalProfilePage .acp-gallery img,#ananasV10ProfilePage .ananas-v10-gallery img').forEach(img=>{if(img.dataset.v20Bound==='1')return;img.dataset.v20Bound='1';img.addEventListener('click',e=>{e.preventDefault();e.stopImmediatePropagation();const card=img.closest('.acp-work,.ananas-v10-work');openV20Gallery(img.currentSrc||img.src,card?.querySelector('.acp-work-title,.ananas-v10-work-title')?.textContent||'معرض الأعمال')},true);});}
+bindV20Gallery();setInterval(bindV20Gallery,800);
+
+/* ---------- 5) Chat: own + other messages show registered profile identity ---------- */
+const v20ChatCache=window.__v20ChatCache||{};window.__v20ChatCache=v20ChatCache;
+async function hydrateV20Chat(){
+ const list=q('chatPageMessagesList');if(!list)return;
+ for(const msg of [...list.querySelectorAll('.chat-msg')]){
+   let uid=msg.dataset.userId||msg.querySelector('[data-profile-uid]')?.dataset.profileUid||'';
+   if(!uid&&msg.dataset.messageId&&activeCourseId){try{const s=await db.collection('courses').doc(activeCourseId).collection('chat').doc(msg.dataset.messageId).get();uid=s.data()?.userId||'';msg.dataset.userId=uid}catch(_){}}
+   if(!uid)continue;
+   let p=v20ChatCache[uid];
+   if(!p){try{const s=await db.collection('users').doc(uid).get();const d=s.exists?(s.data()||{}):{};p={name:d.displayName||d.name||'مستخدم',photo:d.photoURL||d.photoUrl||d.photo||''};v20ChatCache[uid]=p}catch(_){continue}}
+   let head=msg.querySelector('.chat-profile-head');
+   if(!head){head=document.createElement('div');head.className='chat-profile-head';msg.prepend(head)}
+   head.dataset.profileUid=uid;head.innerHTML='<span class="chat-profile-avatar" data-profile-uid="'+esc(uid)+'">'+(p.photo?'<img src="'+esc(p.photo)+'" alt="">':'<i class="fas fa-user"></i>')+'</span><span class="chat-profile-name" data-profile-uid="'+esc(uid)+'">'+esc(p.name)+'</span>';
+   msg.querySelector('.msg-header')?.classList.add('v20-legacy-header');
+ }
+}
+setInterval(hydrateV20Chat,900);setTimeout(hydrateV20Chat,400);
+
+document.addEventListener('click',async e=>{
+ const target=e.target.closest?.('.chat-profile-avatar,.chat-profile-name,.chat-profile-head,.chat-msg .msg-header .u');if(!target)return;
+ const msg=target.closest('.chat-msg');let uid=target.dataset.profileUid||target.closest('[data-profile-uid]')?.dataset.profileUid||msg?.querySelector('[data-profile-uid]')?.dataset.profileUid||'';
+ if(!uid&&msg?.dataset.messageId&&activeCourseId){try{const s=await db.collection('courses').doc(activeCourseId).collection('chat').doc(msg.dataset.messageId).get();uid=s.data()?.userId||''}catch(_){}}
+ if(uid){e.preventDefault();e.stopImmediatePropagation();await window.__openCanonicalProfile?.(uid,uid===currentUser?.uid);}
+},true);
+
+/* ---------- 6) New messages always leave the list at the bottom ---------- */
+function scrollV20ChatBottom(){['chatPageMessagesList','fullChatPageMessagesList','fullChatMessagesList'].forEach(id=>{const el=q(id);if(el){el.scrollTop=el.scrollHeight;setTimeout(()=>el.scrollTop=el.scrollHeight,80)}})}
+if(typeof window.sendFullPageChatMessage==='function'&&!window.sendFullPageChatMessage.__v20Wrapped){const old=window.sendFullPageChatMessage;window.sendFullPageChatMessage=async function(){const r=await old.apply(this,arguments);setTimeout(scrollV20ChatBottom,60);setTimeout(scrollV20ChatBottom,250);return r};}
+['fullPageSendBtn','fullChatPageSendBtn','fullChatSendBtn'].forEach(id=>q(id)?.addEventListener('click',()=>{setTimeout(scrollV20ChatBottom,80);setTimeout(scrollV20ChatBottom,250)}));
+['fullChatPageInput','fullChatInput'].forEach(id=>q(id)?.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){setTimeout(scrollV20ChatBottom,100);setTimeout(scrollV20ChatBottom,300)}}));
+
+/* ---------- 7) Clicking a reply jumps to original message and flashes it ---------- */
+async function bindV20ReplyBlocks(){
+ const list=q('chatPageMessagesList');if(!list)return;
+ for(const msg of [...list.querySelectorAll('.chat-msg')]){
+   const block=msg.querySelector('.reply-block');if(!block||block.dataset.v20ReplyBound==='1')continue;
+   let targetId=block.dataset.replyTargetId||msg.dataset.replyToId||'';
+   if(!targetId&&msg.dataset.messageId&&activeCourseId){try{const s=await db.collection('courses').doc(activeCourseId).collection('chat').doc(msg.dataset.messageId).get();targetId=s.data()?.replyToId||''}catch(_){}}
+   if(!targetId)continue;
+   block.dataset.v20ReplyBound='1';block.dataset.replyTargetId=targetId;block.style.cursor='pointer';block.title='عرض الرسالة الأصلية';
+   block.addEventListener('click',e=>{e.preventDefault();e.stopPropagation();const target=list.querySelector('.chat-msg[data-message-id="'+CSS.escape(targetId)+'"]');if(target){target.scrollIntoView({behavior:'smooth',block:'center'});target.classList.remove('chat-reply-target-v20');void target.offsetWidth;target.classList.add('chat-reply-target-v20');setTimeout(()=>target.classList.remove('chat-reply-target-v20'),1600)}});
+ }
+}
+setInterval(bindV20ReplyBlocks,900);setTimeout(bindV20ReplyBlocks,500);
+
+/* Keep profile back state updated without a MutationObserver feedback loop. */
+setInterval(()=>configureProfileBack(),900);
+
+})();
+</script>
 </body>
 </html>
 
@@ -11148,208 +11311,5 @@ document.head.appendChild(v18ChatStyle);
 /* Initial deterministic reset after reload, including restored browser scroll. */
 setTimeout(()=>{resetPageScroll();configureCanonicalBack();hydrateCanonicalGallery();hydrateV18Chat();},0);
 setTimeout(()=>{resetPageScroll();hydrateCanonicalGallery();hydrateV18Chat();},500);
-})();
-</script>
-
-
-<style id="ananas-final-user-patch-v20">
-/* === V20 FINAL REQUESTED BEHAVIOR: keep existing functionality, restore V10 profile visual language === */
-#ananasCanonicalProfilePage{display:none!important}
-#ananasV10ProfilePage{z-index:120000!important;}
-#ananasV10ProfilePage .v20-back-arrow{width:46px!important;height:46px!important;min-width:46px!important;padding:0!important;border-radius:14px!important;display:inline-flex!important;align-items:center!important;justify-content:center!important;font-size:0!important}
-#ananasV10ProfilePage .v20-back-arrow::before{content:'<';font-size:1.55rem!important;line-height:1!important;font-weight:900!important}
-#ananasV10ProfilePage .v20-admin-directory{margin-top:16px;background:var(--bg-card);border:1px solid var(--surface-border,var(--border));border-radius:20px;padding:18px;box-shadow:var(--surface-shadow,0 10px 30px rgba(0,0,0,.04))}
-#ananasV10ProfilePage .v20-admin-directory h3{margin:0 0 12px}
-#ananasV10ProfilePage .v20-dir-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px}
-#ananasV10ProfilePage .v20-dir-card{display:flex;align-items:center;gap:10px;width:100%;padding:11px;border:1px solid var(--border);border-radius:16px;background:var(--bg-primary);color:var(--text-primary);font:inherit;text-align:right;cursor:pointer}
-#ananasV10ProfilePage .v20-dir-avatar{width:42px;height:42px;border-radius:14px;overflow:hidden;background:var(--accent-gradient);color:#fff;display:grid;place-items:center;font-weight:900;flex:none}
-#ananasV10ProfilePage .v20-dir-avatar img{width:100%;height:100%;object-fit:cover}
-#ananasV10ProfilePage .v20-dir-copy{min-width:0;flex:1}.v20-dir-copy strong{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.v20-dir-copy small{display:block;color:var(--text-muted);margin-top:3px}
-.v20-gallery-viewer{position:fixed;inset:0;z-index:200000;background:rgba(0,0,0,.86);display:none;align-items:center;justify-content:center;padding:22px;backdrop-filter:blur(12px)}
-.v20-gallery-viewer.active{display:flex}.v20-gallery-frame{max-width:96vw;max-height:92vh;display:flex;flex-direction:column;align-items:center;gap:10px}.v20-gallery-frame img{max-width:94vw;max-height:82vh;object-fit:contain;border-radius:18px;box-shadow:0 28px 90px rgba(0,0,0,.5)}.v20-gallery-caption{max-width:90vw;color:#fff;text-align:center;font-weight:900}.v20-gallery-close{position:absolute;top:16px;inset-inline-end:16px;width:46px;height:46px;border-radius:14px;border:1px solid rgba(255,255,255,.25);background:rgba(255,255,255,.12);color:#fff;font-size:1.7rem;cursor:pointer}
-.chat-profile-head{display:flex!important;align-items:center!important;gap:9px!important;margin-bottom:7px!important;min-height:34px!important}
-.chat-profile-avatar{width:34px!important;height:34px!important;border-radius:50%!important;overflow:hidden!important;display:inline-flex!important;align-items:center!important;justify-content:center!important;background:var(--accent-gradient)!important;color:#fff!important;font-weight:900!important;flex:0 0 auto!important;cursor:pointer!important}
-.chat-profile-avatar img{width:100%!important;height:100%!important;object-fit:cover!important}.chat-profile-name{font-weight:900!important;cursor:pointer!important}
-.chat-msg .reply-block{cursor:pointer!important}.v20-reply-highlight{animation:v20ReplyFlash 1.4s ease both!important}
-@keyframes v20ReplyFlash{0%{box-shadow:0 0 0 0 rgba(108,92,231,.0);background:rgba(108,92,231,.0)}20%{box-shadow:0 0 0 4px rgba(108,92,231,.32);background:rgba(108,92,231,.16)}70%{box-shadow:0 0 0 4px rgba(108,92,231,.18);background:rgba(108,92,231,.10)}100%{box-shadow:0 0 0 0 rgba(108,92,231,0);background:transparent}}
-/* Mobile viewport: content only exists between fixed top/bottom bars. */
-@media(max-width:768px){
-  html,body{min-height:100%;scroll-padding-top:var(--nav-height-mobile,70px);scroll-padding-bottom:calc(66px + env(safe-area-inset-bottom))}
-  body{padding-top:var(--nav-height-mobile,70px)!important;padding-bottom:calc(66px + env(safe-area-inset-bottom))!important;}
-  .navbar{height:var(--nav-height-mobile,70px)!important;top:0!important;bottom:auto!important;z-index:100000!important}
-  .mobile-bottom-nav{position:fixed!important;left:0!important;right:0!important;bottom:0!important;top:auto!important;height:calc(66px + env(safe-area-inset-bottom))!important;z-index:100000!important;padding-bottom:env(safe-area-inset-bottom)!important;box-sizing:border-box!important}
-  #coursesPage,#courseDetailView,#courseDashboard,#courseOverviewContainer,#courseLessonsPage,#courseLessonPlayerPage,#courseQuizzesPage,#courseAssignmentsPage,#courseAssignmentDetailPage,#courseChatPage,#courseFilesPage,#fullChatPage,#courseLearningView,#ananasV10ProfilePage,#userProfilePage{max-height:calc(100dvh - var(--nav-height-mobile,70px) - 66px - env(safe-area-inset-bottom))!important;}
-  #ananasV10ProfilePage{top:var(--nav-height-mobile,70px)!important;bottom:calc(66px + env(safe-area-inset-bottom))!important;padding:12px 10px 22px!important;overflow-y:auto!important}
-  #userProfilePage,#courseFilesPage,#courseChatPage,#courseQuizzesPage,#courseAssignmentsPage,#courseAssignmentDetailPage,#courseLessonsPage,#courseLessonPlayerPage,#fullChatPage{top:var(--nav-height-mobile,70px)!important;bottom:calc(66px + env(safe-area-inset-bottom))!important;overflow-y:auto!important}
-  #courseDetailView{top:var(--nav-height-mobile,70px)!important;bottom:calc(66px + env(safe-area-inset-bottom))!important;height:auto!important;overflow:hidden!important}
-  .page-content,.course-page-content{max-height:100%!important;overflow:auto!important}
-}
-</style>
-<script id="ananas-final-v20-requested-patch">
-(function(){
-'use strict';
-const $=id=>document.getElementById(id);
-const escV20=window.escapeHtml||((v)=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])));
-
-/* ---------- A. Canonical profile = the existing V10/old profile. ---------- */
-function hideNewerProfiles(){
-  ['ananasCanonicalProfilePage','userProfilePage','ananasPrivateProfileOverlay'].forEach(id=>{const el=$(id);if(el){el.classList.remove('active');el.style.setProperty('display','none','important')}});
-}
-function configureOldProfileBack(){
-  const b=$('v10BackProfile');if(!b)return;
-  const other=window.__v20ViewingUid&&window.__v20ViewingUid!==currentUser?.uid;
-  b.classList.toggle('v20-back-arrow',!!other);
-  b.style.display=other?'inline-flex':'none';
-  b.textContent='';
-  if(other)b.setAttribute('aria-label','العودة إلى حسابي');
-}
-function resetV20Scroll(){
-  try{window.scrollTo({top:0,left:0,behavior:'auto'})}catch(_){try{window.scrollTo(0,0)}catch(__){}}
-  try{document.scrollingElement.scrollTop=0}catch(_){ }
-  document.querySelectorAll('.ananas-v10-profile-shell,#ananasV10ProfilePage').forEach(e=>{try{e.scrollTop=0}catch(_){}});
-}
-
-/* Always open the old profile, hide newer profile layers, and start at its top. */
-window.__openV20Profile=async function(uid,isSelf){
-  if(!currentUser||!uid)return triggerAuth?.();
-  hideNewerProfiles();
-  window.__v20ViewingUid=uid;
-  try{
-    const snap=await db.collection('users').doc(uid).get();
-    if(!snap.exists)return showCustomAlert?.('غير متاح','الحساب غير موجود.');
-    const p=snap.data()||{};
-    const self=uid===currentUser.uid;
-    const admin=(typeof isAdmin==='boolean'&&isAdmin)===true;
-    if(!self&&!admin&&p.profilePublic===false){
-      await window.refreshAnanasV10Profile(uid,false);
-      configureOldProfileBack();
-      resetV20Scroll();
-      return;
-    }
-    await window.refreshAnanasV10Profile(uid,self);
-    configureOldProfileBack();
-    await renderV20AdminDirectory();
-    resetV20Scroll();
-    requestAnimationFrame(resetV20Scroll);
-  }catch(err){console.error('V20 profile',err);showCustomAlert?.('خطأ','تعذر تحميل الملف الشخصي.');}
-};
-window.openUserProfilePage=()=>currentUser?window.__openV20Profile(currentUser.uid,true):triggerAuth?.();
-window.openPublicProfileFinal=uid=>window.__openV20Profile(uid,uid===currentUser?.uid);
-window.openAnanasV10Profile=window.__openV20Profile;
-window.viewProfileByUserId=window.__openV20Profile;
-window.openChatProfileV13=window.__openV20Profile;
-window.openChatProfileV12=window.__openV20Profile;
-
-const oldBack=$('v10BackProfile');
-if(oldBack&&!oldBack.dataset.v20){
-  oldBack.dataset.v20='1';
-  oldBack.onclick=(e)=>{e.preventDefault();e.stopImmediatePropagation(); if(window.__v20ViewingUid&&window.__v20ViewingUid!==currentUser?.uid)window.__openV20Profile(currentUser.uid,true); else {window.closeAnanasV10Profile?.();resetV20Scroll();}};
-}
-
-/* Account button: after login show avatar + name, and open old profile. */
-const accountBtn=$('authToggleBtn');
-function syncAccountButton(){
-  if(!accountBtn||!currentUser)return;
-  const name=currentUserProfile?.displayName||currentUser?.displayName||'حسابي';
-  const photo=currentUserProfile?.photoURL||currentUserProfile?.photoUrl||currentUserProfile?.photo||currentUser?.photoURL||'';
-  accountBtn.innerHTML=(photo?`<img class="v20-account-avatar" src="${escV20(photo)}" alt="">`:'<i class="fas fa-user-circle"></i>')+`<span id="authLabel">${escV20(name)}</span>`;
-  accountBtn.classList.add('v20-account-btn');
-}
-const accStyle=document.createElement('style');accStyle.textContent='.v20-account-btn{display:inline-flex!important;align-items:center!important;gap:8px!important}.v20-account-avatar{width:32px!important;height:32px!important;border-radius:50%!important;object-fit:cover!important;display:block!important}';document.head.appendChild(accStyle);
-if(accountBtn&&!accountBtn.dataset.v20){accountBtn.dataset.v20='1';accountBtn.addEventListener('click',e=>{if(!currentUser)return;e.preventDefault();e.stopImmediatePropagation();syncAccountButton();window.__openV20Profile(currentUser.uid,true)},true)}
-syncAccountButton();
-
-/* ---------- B. Admin directory in the same old-profile language. ---------- */
-function ensureV20DirectoryPanel(){
-  const page=$('ananasV10ProfilePage');if(!page)return null;
-  let panel=$('v20AdminDirectory');
-  if(panel)return panel;
-  panel=document.createElement('section');panel.id='v20AdminDirectory';panel.className='v20-admin-directory';
-  panel.innerHTML='<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px"><h3>الحسابات والطلاب</h3><span id="v20DirectoryCount" style="color:var(--text-muted);font-size:.78rem"></span></div><div class="v20-dir-grid" id="v20DirectoryGrid"></div>';
-  const shell=page.querySelector('.ananas-v10-profile-shell');shell?.appendChild(panel);return panel;
-}
-async function renderV20AdminDirectory(){
-  const admin=(typeof isAdmin==='boolean'&&isAdmin)===true;if(!admin){$('v20AdminDirectory')?.remove();return;}
-  const panel=ensureV20DirectoryPanel();const grid=$('v20DirectoryGrid');if(!grid)return;
-  grid.innerHTML='<div class="ananas-v10-empty">جاري تحميل الحسابات...</div>';
-  try{
-    const snap=await db.collection('users').get();
-    const users=snap.docs.map(d=>({id:d.id,...(d.data()||{})})).sort((a,b)=>String(a.displayName||a.name||'').localeCompare(String(b.displayName||b.name||''),'ar'));
-    $('v20DirectoryCount').textContent=`${users.length} حساب`;
-    grid.innerHTML=users.length?users.map(u=>{const n=u.displayName||u.name||'مستخدم',photo=u.photoURL||u.photoUrl||u.photo||'';return `<button type="button" class="v20-dir-card" data-v20-uid="${escV20(u.id)}"><span class="v20-dir-avatar">${photo?`<img src="${escV20(photo)}" alt="">`:escV20(n.slice(0,1))}</span><span class="v20-dir-copy"><strong>${escV20(n)}</strong><small>${u.id===currentUser.uid?'حسابي':u.profilePublic===false?'حساب خاص':'حساب عام'}</small></span><i class="fas fa-chevron-left"></i></button>`}).join(''):'<div class="ananas-v10-empty">لا توجد حسابات.</div>';
-    grid.querySelectorAll('[data-v20-uid]').forEach(b=>b.onclick=async()=>{const uid=b.dataset.v20Uid;await window.__openV20Profile(uid,uid===currentUser.uid);});
-  }catch(e){console.error(e);grid.innerHTML='<div class="ananas-v10-empty">تعذر تحميل قائمة الحسابات.</div>';}
-}
-
-/* ---------- C. Every navigation starts from the top; each profile is independent. ---------- */
-history.scrollRestoration='manual';
-function resetAllV20Scroll(){
-  resetV20Scroll();
-  document.querySelectorAll('#coursesPage,#courseDetailView,#courseDashboard,#courseOverviewContainer,#courseLessonsPage,#courseLessonPlayerPage,#courseQuizzesPage,#courseAssignmentsPage,#courseAssignmentDetailPage,#courseChatPage,#courseFilesPage,#fullChatPage,#courseLearningView,#userProfilePage,#ananasCanonicalProfilePage').forEach(el=>{try{el.scrollTop=0}catch(_){}});
-}
-['switchCoursePage','mobileNavigate','openCourse','openCourseContent','openAssignmentDetail'].forEach(name=>{
-  const fn=window[name];if(typeof fn!=='function'||fn.__v20)return;
-  const wrapped=function(){const out=fn.apply(this,arguments);if(out&&typeof out.finally==='function')return out.finally(()=>{resetAllV20Scroll();requestAnimationFrame(resetAllV20Scroll)});resetAllV20Scroll();requestAnimationFrame(resetAllV20Scroll);return out};wrapped.__v20=true;window[name]=wrapped;
-});
-document.addEventListener('click',e=>{if(e.target.closest?.('.nav-btn,.mobile-nav-item,[data-page],[data-profile-page-link]'))setTimeout(resetAllV20Scroll,0)},true);
-window.addEventListener('load',()=>setTimeout(resetAllV20Scroll,0));window.addEventListener('pageshow',()=>setTimeout(resetAllV20Scroll,0));
-
-/* ---------- D. Gallery preview for personal + assignment work images. ---------- */
-function getV20Viewer(){
- let m=$('v20GalleryViewer');if(m)return m;
- m=document.createElement('div');m.id='v20GalleryViewer';m.className='v20-gallery-viewer';m.innerHTML='<button class="v20-gallery-close" type="button">×</button><div class="v20-gallery-frame"><img id="v20GalleryImage" alt="معاينة العمل"><div id="v20GalleryCaption" class="v20-gallery-caption"></div></div>';
- document.body.appendChild(m);m.querySelector('.v20-gallery-close').onclick=()=>m.classList.remove('active');m.onclick=e=>{if(e.target===m)m.classList.remove('active')};return m;
-}
-window.openV20GalleryImage=(url,caption)=>{if(!url)return;const m=getV20Viewer();$('v20GalleryImage').src=url;$('v20GalleryCaption').textContent=caption||'';m.classList.add('active');};
-function bindV10Gallery(){
- const grid=$('v10PortfolioGrid');if(!grid)return;
- grid.querySelectorAll('.ananas-v10-work').forEach(card=>{const img=card.querySelector('.ananas-v10-work-cover img');if(!img||img.dataset.v20)return;img.dataset.v20='1';img.style.cursor='zoom-in';img.onclick=e=>{e.preventDefault();e.stopPropagation();window.openV20GalleryImage(img.currentSrc||img.src,card.querySelector('.ananas-v10-work-title')?.textContent||'معرض الأعمال')}});
-}
-new MutationObserver(()=>{bindV10Gallery();configureOldProfileBack()}).observe(document.body,{subtree:true,childList:true});
-
-/* ---------- E. Chat identity + click-through profile + auto-scroll. ---------- */
-const v20ChatCache=window.__v20ChatCache=window.__v20ChatCache||{};
-async function hydrateV20Chat(){
- const list=$('chatPageMessagesList');if(!list||!currentUser||!activeCourseId)return;
- const msgs=[...list.querySelectorAll('.chat-msg')];
- for(const msg of msgs){
-   let uid=msg.dataset.v20UserId||'';
-   if(!uid&&msg.dataset.messageId){try{const s=await db.collection('courses').doc(activeCourseId).collection('chat').doc(msg.dataset.messageId).get();uid=s.data()?.userId||'';msg.dataset.v20UserId=uid}catch(_){}}
-   if(!uid)continue;
-   let p=v20ChatCache[uid];if(!p){try{const s=await db.collection('users').doc(uid).get();const d=s.exists?(s.data()||{}):{};p={name:d.displayName||d.name||'مستخدم',photo:d.photoURL||d.photoUrl||d.photo||''};v20ChatCache[uid]=p}catch(_){continue}}
-   let head=msg.querySelector('.v20-chat-author');if(!head){head=document.createElement('div');head.className='v20-chat-author';msg.prepend(head)}
-   head.dataset.profileUid=uid;head.innerHTML=`<span class="chat-profile-avatar" data-profile-uid="${escV20(uid)}">${p.photo?`<img src="${escV20(p.photo)}" alt="">`:'<i class="fas fa-user"></i>'}</span><span class="chat-profile-name" data-profile-uid="${escV20(uid)}">${escV20(p.name)}</span>`;
- }
-}
-const v20ChatStyle=document.createElement('style');v20ChatStyle.textContent='.v20-chat-author{display:flex;align-items:center;gap:8px;margin-bottom:7px;cursor:pointer}.chat-msg.sent .v20-chat-author{justify-content:flex-end}.chat-msg.sent .v20-chat-author .chat-profile-name{order:1}.chat-msg.sent .v20-chat-author .chat-profile-avatar{order:2}';document.head.appendChild(v20ChatStyle);
-const v20ChatObserver=new MutationObserver(()=>setTimeout(hydrateV20Chat,0));v20ChatObserver.observe(document.body,{subtree:true,childList:true});setInterval(hydrateV20Chat,1000);
-document.addEventListener('click',async e=>{
- const author=e.target.closest?.('.v20-chat-author,.chat-profile-avatar,.chat-profile-name,.chat-msg .msg-header .u');if(!author)return;
- const msg=author.closest('.chat-msg');let uid=author.dataset.profileUid||msg?.dataset.v20UserId||'';
- if(!uid&&msg?.dataset.messageId&&activeCourseId){try{const s=await db.collection('courses').doc(activeCourseId).collection('chat').doc(msg.dataset.messageId).get();uid=s.data()?.userId||''}catch(_){} }
- if(uid){e.preventDefault();e.stopImmediatePropagation();await window.__openV20Profile(uid,uid===currentUser?.uid)}
-},true);
-function scrollChatBottom(){const list=$('chatPageMessagesList');if(!list)return;requestAnimationFrame(()=>{list.scrollTop=list.scrollHeight;setTimeout(()=>{list.scrollTop=list.scrollHeight},50)})}
-const chatSendNames=['sendFullPageChatMessage','sendChatMessage','sendMessageToChat'];
-chatSendNames.forEach(name=>{const fn=window[name];if(typeof fn!=='function'||fn.__v20)return;const w=async function(){const r=await fn.apply(this,arguments);scrollChatBottom();return r};w.__v20=true;window[name]=w});
-document.addEventListener('keydown',e=>{if(e.key==='Enter'&&e.target.matches?.('#fullChatPageInput,#fullPageChatInput'))setTimeout(scrollChatBottom,120)},true);
-const chatListObserver=new MutationObserver(()=>{const list=$('chatPageMessagesList');if(!list)return;const last=list.querySelector('.chat-msg:last-of-type');if(last?.classList.contains('sent'))scrollChatBottom()});
-chatListObserver.observe(document.body,{subtree:true,childList:true});
-
-/* ---------- F. Reply preview: click quoted reply -> original message + temporary highlight. ---------- */
-document.addEventListener('click',async e=>{
- const rb=e.target.closest?.('.reply-block');if(!rb)return;
- const msg=rb.closest('.chat-msg');if(!msg||!activeCourseId)return;
- e.preventDefault();e.stopImmediatePropagation();
- try{
-   const id=msg.dataset.messageId;if(!id)return;const s=await db.collection('courses').doc(activeCourseId).collection('chat').doc(id).get();const targetId=s.data()?.replyToId||s.data()?.replyToMessageId||'';if(!targetId)return;
-   const target=$(`#chatPageMessagesList .chat-msg[data-message-id="${CSS.escape(String(targetId))}"]`);if(!target)return;
-   target.scrollIntoView({behavior:'smooth',block:'center'});target.classList.remove('v20-reply-highlight');void target.offsetWidth;target.classList.add('v20-reply-highlight');setTimeout(()=>target.classList.remove('v20-reply-highlight'),1600);
- }catch(err){console.error(err)}
-},true);
-
-/* ---------- G. Final account/profile setup after auth data is loaded. ---------- */
-const bootObs=new MutationObserver(()=>{syncAccountButton();configureOldProfileBack();bindV10Gallery()});bootObs.observe(document.body,{subtree:true,childList:true});
-setTimeout(()=>{syncAccountButton();configureOldProfileBack();bindV10Gallery();resetAllV20Scroll();hydrateV20Chat()},200);
 })();
 </script>
