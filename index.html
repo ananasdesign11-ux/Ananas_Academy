@@ -12420,5 +12420,194 @@ if(typeof originalLoadCodes==='function' && !originalLoadCodes.__finalV11){
 
 })();
 </script>
+
+<!-- ===== FINAL UX REPAIR V12: avatar fallback, modal body lock, work viewer/edit/delete, required-field validation ===== -->
+<style id="final-ux-repair-v12-css">
+:root{--required-error:#ef4444;--required-error-bg:rgba(239,68,68,.07)}
+/* Keep the background page completely still while any popup is open. */
+html.aa-modal-body-lock,body.aa-modal-body-lock{overflow:hidden!important;height:100%!important;overscroll-behavior:none!important}
+body.aa-modal-body-fixed{position:fixed!important;left:0!important;right:0!important;width:100%!important}
+.edit-modal.active,.auth-popup.active,.custom-alert-modal.active,#quizOverlay.active,.ananas-modal-overlay.active{overscroll-behavior:contain}
+.edit-modal.active,.auth-popup.active,.custom-alert-modal.active,.ananas-modal-overlay.active{touch-action:auto}
+/* Required fields. */
+.aa-required-invalid{border-color:var(--required-error)!important;box-shadow:0 0 0 3px rgba(239,68,68,.13)!important;background:var(--required-error-bg)!important}
+.aa-required-label-invalid{color:var(--required-error)!important}
+.aa-required-message{color:var(--required-error);font-size:.76rem;font-weight:800;margin-top:3px}
+/* Universal avatar fallback. */
+.aa-v12-avatar{display:inline-grid;place-items:center;overflow:hidden;border-radius:inherit;color:#fff;font-weight:900;background:var(--aa-v12-avatar-bg,var(--accent1));line-height:1}
+.aa-v12-avatar img{width:100%;height:100%;object-fit:cover;display:block}
+/* Large work viewer. */
+#aaV12WorkViewer{position:fixed;inset:0;z-index:140000;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,.88);backdrop-filter:blur(8px);padding:20px}
+#aaV12WorkViewer.active{display:flex}
+#aaV12WorkViewer .aa-v12-work-viewer-card{position:relative;width:min(1200px,100%);height:min(92dvh,900px);background:var(--bg-card);border:1px solid var(--border);border-radius:24px;box-shadow:0 30px 100px rgba(0,0,0,.45);display:flex;flex-direction:column;overflow:hidden}
+#aaV12WorkViewer .aa-v12-work-viewer-head{display:flex;align-items:center;gap:10px;justify-content:space-between;padding:12px 16px;border-bottom:1px solid var(--border);flex:0 0 auto}
+#aaV12WorkViewer .aa-v12-work-viewer-title{min-width:0;font-weight:900;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#aaV12WorkViewer .aa-v12-work-viewer-close{width:42px;height:42px;border-radius:50%;border:1px solid var(--border);background:var(--bg-secondary);color:var(--text-primary);cursor:pointer;font-size:1.35rem;flex:0 0 42px}
+#aaV12WorkViewer .aa-v12-work-viewer-body{flex:1;min-height:0;overflow:auto;display:grid;grid-template-columns:1fr;gap:12px;padding:14px;align-content:center;justify-items:center}
+#aaV12WorkViewer .aa-v12-work-viewer-body img{display:block;max-width:100%;max-height:78dvh;width:auto;height:auto;object-fit:contain;border-radius:14px;box-shadow:0 12px 35px rgba(0,0,0,.3);background:#111}
+#aaV12WorkViewer .aa-v12-work-viewer-caption{padding:0 16px 12px;text-align:center;color:var(--text-muted);font-size:.82rem}
+/* Work action rows in profile/assignment cards. */
+.aa-v12-work-actions{display:flex;gap:7px;flex-wrap:wrap;margin-top:9px}
+.aa-v12-work-actions button{border:1px solid var(--border);background:var(--bg-secondary);color:var(--text-primary);padding:8px 11px;border-radius:12px;cursor:pointer;font-family:inherit;font-weight:800}
+.aa-v12-work-actions button:hover{border-color:var(--accent1);color:var(--accent1)}
+.aa-v12-work-actions button.danger{color:#ef4444}
+@media(max-width:768px){
+  #aaV12WorkViewer{padding:8px}
+  #aaV12WorkViewer .aa-v12-work-viewer-card{width:100%;height:96dvh;border-radius:18px}
+  #aaV12WorkViewer .aa-v12-work-viewer-body img{max-height:82dvh}
+}
+</style>
+<script id="final-ux-repair-v12-script">
+(function(){
+'use strict';
+const $=id=>document.getElementById(id);
+const escV12=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const avatarColors=['#6c5ce7','#0984e3','#00b894','#e17055','#d63031','#fdcb6e','#e84393','#00cec9','#a29bfe','#2d3436','#16a085','#8e44ad','#5f27cd','#1abc9c','#8e44ad'];
+function v12Initial(name){const s=String(name||'مستخدم').trim();return s?Array.from(s)[0]:'م';}
+function v12Color(uid,name,usedMap){const initial=v12Initial(name),key=String(uid||name||initial);let idx=0;for(let i=0;i<key.length;i++)idx=(idx+key.charCodeAt(i)*31)%avatarColors.length;const used=usedMap?.get(initial)||new Set();let tries=0;while(used.has(avatarColors[idx])&&tries<avatarColors.length){idx=(idx+1)%avatarColors.length;tries++;}used.add(avatarColors[idx]);usedMap?.set(initial,used);return avatarColors[idx];}
+function v12AvatarHtml(name,photo,uid,extraClass='',usedMap){if(photo)return `<span class="aa-v12-avatar ${extraClass}"><img src="${escV12(photo)}" alt="${escV12(name||'مستخدم')}"></span>`;return `<span class="aa-v12-avatar ${extraClass}" style="--aa-v12-avatar-bg:${v12Color(uid,name,usedMap)}">${escV12(v12Initial(name))}</span>`;}
+window.__aaV12AvatarHtml=v12AvatarHtml;
+
+/* ---------- Strong modal/body scroll lock ---------- */
+let lockDepth=0,lockedScrollY=0;
+function realModalOpen(){return !!document.querySelector('.edit-modal.active,.auth-popup.active,.custom-alert-modal.active,#quizOverlay.active,.ananas-modal-overlay.active,[data-aa-popup-active="true"]');}
+function applyBodyLock(){
+  const open=realModalOpen();
+  if(open&&lockDepth===0){
+    lockedScrollY=window.scrollY||window.pageYOffset||0;
+    document.documentElement.classList.add('aa-modal-body-lock');
+    document.body.classList.add('aa-modal-body-lock','aa-modal-body-fixed');
+    document.body.style.top=`-${lockedScrollY}px`;
+  }
+  if(open)lockDepth=1;
+  else if(lockDepth){
+    lockDepth=0;
+    document.documentElement.classList.remove('aa-modal-body-lock');
+    document.body.classList.remove('aa-modal-body-lock','aa-modal-body-fixed');
+    document.body.style.top='';
+    window.scrollTo(0,lockedScrollY);
+  }
+}
+const modalObserver=new MutationObserver(applyBodyLock);
+modalObserver.observe(document.body,{subtree:true,childList:true,attributes:true,attributeFilter:['class','style','hidden']});
+window.addEventListener('resize',applyBodyLock,{passive:true});
+window.addEventListener('scroll',()=>{if(lockDepth&&window.scrollY!==lockedScrollY)window.scrollTo(0,lockedScrollY)},{passive:true});
+applyBodyLock();
+
+/* ---------- Required-field marking ---------- */
+function clearRequiredState(el){el.classList.remove('aa-required-invalid');const label=el.closest('label')||el.parentElement?.querySelector?.('label');if(label)label.classList.remove('aa-required-label-invalid');el.parentElement?.querySelector?.('.aa-required-message')?.remove();}
+function valueMissing(el){if(!el)return false; if(el.disabled||el.readOnly)return false; if((el.type||'').toLowerCase()==='file')return !(el.files&&el.files.length); return !String(el.value??'').trim();}
+function markRequiredIn(root){
+  if(!root)return true;
+  const fields=[...root.querySelectorAll('input[required],textarea[required],select[required],[data-required="true"]')];
+  let ok=true;
+  fields.forEach(el=>{clearRequiredState(el);if(valueMissing(el)){ok=false;el.classList.add('aa-required-invalid');const label=el.closest('.profile-self-field,.modal-form,.quiz-builder-grid,.quiz-builder-image')?.querySelector?.(`label[for="${el.id}"]`)||el.parentElement?.querySelector?.('label');if(label)label.classList.add('aa-required-label-invalid');const msg=document.createElement('div');msg.className='aa-required-message';msg.textContent='هذا الحقل مطلوب';el.insertAdjacentElement('afterend',msg);}});
+  return ok;
+}
+function markKnownRequired(){
+  const ids=['profileName','addCourseTitleAr','addCoursePrice','addLessonTitleAr','addLessonUrl','addLessonDuration','addLessonXP','addAssignmentTitleAr','addAssignmentXP','addQuizTitleAr','newCodeInput','codeStartDate','codeEndDate','aaPortfolioTitle','aaPortfolioType','aaPortfolioDescription','aaPortfolioFiles','v12WorkTitle','v12WorkType','v12WorkFiles','v10WorkTitle','v10WorkType','v10WorkFiles'];
+  ids.forEach(id=>{const el=$(id);if(el)el.dataset.required='true';});
+  ['aaProfileSelfName','aaProfileSelfPhone','aaPortfolioTitle','aaPortfolioType','aaPortfolioFiles','v12WorkTitle','v12WorkType','v12WorkFiles'].forEach(id=>{const el=$(id);if(el)el.dataset.required='true';});
+}
+markKnownRequired();
+document.addEventListener('input',e=>{if(e.target.matches('input,textarea,select')&&e.target.classList.contains('aa-required-invalid'))clearRequiredState(e.target);},true);
+document.addEventListener('change',e=>{if(e.target.matches('input,textarea,select')&&e.target.classList.contains('aa-required-invalid'))clearRequiredState(e.target);},true);
+document.addEventListener('click',e=>{
+  const b=e.target.closest('button'); if(!b)return;
+  const modal=b.closest('.edit-modal,.auth-popup,.custom-alert-modal,.ananas-modal-overlay,.profile-self-modal'); if(!modal)return;
+  const txt=(b.textContent||'').trim();
+  const looksSubmit=!/إلغاء|إغلاق|عودة|حذف|عرض|فتح|تعديل|التالي|السابق|×|✕/i.test(txt);
+  if(looksSubmit&&modal.matches('.edit-modal,.auth-popup,.ananas-modal-overlay,.profile-self-modal')){
+    if(!markRequiredIn(modal)){e.preventDefault();e.stopImmediatePropagation();}
+  }
+},true);
+
+/* ---------- Build/fix the large work viewer ---------- */
+function ensureV12Viewer(){
+  let v=$('aaV12WorkViewer');if(v)return v;
+  v=document.createElement('div');v.id='aaV12WorkViewer';v.innerHTML=`<div class="aa-v12-work-viewer-card" role="dialog" aria-modal="true"><div class="aa-v12-work-viewer-head"><div class="aa-v12-work-viewer-title" id="aaV12WorkViewerTitle">عرض العمل</div><button type="button" class="aa-v12-work-viewer-close" id="aaV12WorkViewerClose" aria-label="إغلاق">×</button></div><div class="aa-v12-work-viewer-body" id="aaV12WorkViewerBody"></div><div class="aa-v12-work-viewer-caption" id="aaV12WorkViewerCaption"></div></div>`;
+  document.body.appendChild(v);
+  $('aaV12WorkViewerClose').onclick=window.closeV12WorkViewer;
+  v.addEventListener('click',e=>{if(e.target===v)window.closeV12WorkViewer();});
+  return v;
+}
+window.closeV12WorkViewer=function(){const v=$('aaV12WorkViewer');if(!v)return;v.classList.remove('active');document.getElementById('aaV12WorkViewerBody').innerHTML='';applyBodyLock();};
+window.openV12WorkViewer=function(images,title){const list=Array.isArray(images)?images.filter(Boolean):[];if(!list.length)return showCustomAlert?.('لا توجد صور','هذا العمل لا يحتوي على صور قابلة للعرض.');const v=ensureV12Viewer();$('aaV12WorkViewerTitle').textContent=title||'عرض العمل';$('aaV12WorkViewerBody').innerHTML=list.map(u=>`<img src="${escV12(u)}" alt="عرض العمل">`).join('');$('aaV12WorkViewerCaption').textContent=list.length>1?`عدد الصور: ${list.length}`:'';v.classList.add('active');applyBodyLock();};
+
+/* Override assignment viewer with a reliable implementation. */
+window.openAssignmentWorkViewer=async function(courseId,assignmentId,workId){
+  try{
+    const result=await getAssignmentData(courseId,assignmentId);if(!result)return;
+    const submissions=Array.isArray(result.data.submissions)?result.data.submissions:[];
+    const index=submissions.findIndex((sub,i)=>String(typeof submissionWorkId==='function'?submissionWorkId(sub,i):(sub.workId||sub.id||`legacy_${assignmentId}_${i}`))===String(workId));
+    if(index<0)return showCustomAlert?.('غير متاح','العمل غير موجود.');
+    const sub=submissions[index];if(typeof canSeeSubmission==='function'&&!canSeeSubmission(sub))return showCustomAlert?.('غير متاح','هذا العمل لم تتم الموافقة عليه بعد.');
+    const imgs=typeof submissionImages==='function'?submissionImages(sub):(Array.isArray(sub.images)?sub.images:(sub.imageUrl?[sub.imageUrl]:[]));
+    openV12WorkViewer(imgs,`${sub.userName||'عمل مرفوع'}${sub.approved?' — معتمد':''}`);
+  }catch(err){console.error('v12 assignment viewer',err);showCustomAlert?.('خطأ','تعذر فتح معاينة العمل.');}
+};
+
+/* ---------- Fix portfolio cards: view/edit/delete ---------- */
+async function getCurrentPortfolioWorks(uid){try{const s=await db.collection('users').doc(uid).collection('portfolioWorks').get();return s.docs.map(d=>({id:d.id,...(d.data()||{})})).filter(x=>x.deleted!==true);}catch(e){return[];}}
+async function editV12PortfolioWork(id){
+  if(!currentUser)return triggerAuth?.();
+  const ref=db.collection('users').doc(currentUser.uid).collection('portfolioWorks').doc(id),snap=await ref.get();if(!snap.exists)return;
+  const x=snap.data()||{};
+  let modal=document.getElementById('aaV12PortfolioEditModal');
+  if(!modal){modal=document.createElement('div');modal.id='aaV12PortfolioEditModal';modal.className='edit-modal';modal.innerHTML=`<button type="button" class="modal-close" id="aaV12PortfolioEditClose">×</button><h3>تعديل عمل المعرض</h3><div class="profile-self-grid"><div class="profile-self-field aa-profile-self-full"><label for="aaV12PortfolioEditTitle">العنوان</label><input id="aaV12PortfolioEditTitle" class="profile-self-input" data-required="true"></div><div class="profile-self-field"><label for="aaV12PortfolioEditType">النوع</label><input id="aaV12PortfolioEditType" class="profile-self-input" data-required="true"></div><div class="profile-self-field aa-profile-self-full"><label for="aaV12PortfolioEditDesc">الوصف</label><textarea id="aaV12PortfolioEditDesc" class="profile-self-input" rows="4"></textarea></div><div class="profile-self-field aa-profile-self-full"><label>الصور الحالية</label><div id="aaV12PortfolioEditImages" class="work-edit-images"></div></div></div><input type="file" id="aaV12PortfolioEditFiles" accept="image/*" multiple style="display:none"><button type="button" id="aaV12PortfolioAddFiles" class="assignment-upload-btn"><i class="fas fa-plus"></i> إضافة صور</button><div id="aaV12PortfolioEditStatus" class="profile-self-status"></div><div class="profile-self-actions"><button type="button" id="aaV12PortfolioEditCancel" class="aa-profile-self-btn">إلغاء</button><button type="button" id="aaV12PortfolioEditSave" class="aa-profile-self-btn primary">حفظ</button></div>`;document.body.appendChild(modal);document.getElementById('aaV12PortfolioEditClose').onclick=()=>modal.classList.remove('active');document.getElementById('aaV12PortfolioEditCancel').onclick=()=>modal.classList.remove('active');}
+  modal.dataset.id=id;modal.dataset.images=JSON.stringify(Array.isArray(x.images)?x.images.filter(Boolean):(x.imageUrl?[x.imageUrl]:[]));$('aaV12PortfolioEditTitle').value=x.title||'';$('aaV12PortfolioEditType').value=x.type||'';$('aaV12PortfolioEditDesc').value=x.description||'';$('aaV12PortfolioEditStatus').textContent='';
+  const render=()=>{const imgs=JSON.parse(modal.dataset.images||'[]');$('aaV12PortfolioEditImages').innerHTML=imgs.map((u,i)=>`<div class="work-edit-image"><img src="${escV12(u)}" alt=""><button type="button" class="remove" data-i="${i}">×</button></div>`).join('')||'<div class="aa-profile-empty">لا توجد صور.</div>';};render();
+  $('aaV12PortfolioEditImages').onclick=e=>{const b=e.target.closest('.remove');if(!b)return;const imgs=JSON.parse(modal.dataset.images||'[]');imgs.splice(Number(b.dataset.i),1);modal.dataset.images=JSON.stringify(imgs);render();};
+  $('aaV12PortfolioAddFiles').onclick=()=>$('aaV12PortfolioEditFiles').click();
+  $('aaV12PortfolioEditFiles').onchange=async e=>{const imgs=JSON.parse(modal.dataset.images||'[]');for(const f of Array.from(e.target.files||[])){const u=await uploadImage(f);if(u)imgs.push(u);}modal.dataset.images=JSON.stringify(imgs);render();e.target.value='';};
+  $('aaV12PortfolioEditSave').onclick=async()=>{if(!markRequiredIn(modal))return;const imgs=JSON.parse(modal.dataset.images||'[]');if(!imgs.length)return showCustomAlert?.('تنبيه','يجب أن يحتوي العمل على صورة واحدة على الأقل.');const btn=$('aaV12PortfolioEditSave');btn.disabled=true;$('aaV12PortfolioEditStatus').textContent='جاري الحفظ...';try{await ref.update({title:$('aaV12PortfolioEditTitle').value.trim(),type:$('aaV12PortfolioEditType').value.trim(),description:$('aaV12PortfolioEditDesc').value.trim(),images:imgs,updatedAt:firebase.firestore.FieldValue.serverTimestamp()});modal.classList.remove('active');await window.__renderAuthoritativeProfile?.(currentUser.uid,true);showCustomAlert?.('تم الحفظ','تم تعديل العمل بنجاح.');}catch(err){console.error(err);$('aaV12PortfolioEditStatus').textContent='تعذر حفظ التعديل.';showCustomAlert?.('خطأ','تعذر حفظ تعديل العمل.');}finally{btn.disabled=false;}};
+  modal.classList.add('active');applyBodyLock();
+}
+async function deleteV12PortfolioWork(id){if(!currentUser)return;const ok=await new Promise(resolve=>showCustomConfirm('حذف العمل','هل تريد حذف هذا العمل من معرضك الشخصي؟',()=>resolve(true),()=>resolve(false)));if(!ok)return;try{await db.collection('users').doc(currentUser.uid).collection('portfolioWorks').doc(id).update({deleted:true,deletedAt:firebase.firestore.FieldValue.serverTimestamp()});await window.__renderAuthoritativeProfile?.(currentUser.uid,true);showCustomAlert?.('تم الحذف','تم حذف العمل من المعرض.');}catch(err){console.error(err);showCustomAlert?.('خطأ','تعذر حذف العمل.');}}
+
+/* Decorate assignment and portfolio work cards with a reliable large-view/edit/delete action set. */
+function decorateWorkCards(root=document){
+  root.querySelectorAll('.aa-profile-work').forEach(card=>{
+    if(card.querySelector('.aa-v12-work-actions'))return;
+    const view=card.querySelector('.aa-profile-view-work');
+    if(view){
+      const actions=document.createElement('div');actions.className='aa-v12-work-actions';
+      const v=view.cloneNode(true);v.className='aa-v12-view-btn';v.textContent='عرض العمل';v.onclick=async e=>{e.preventDefault();e.stopPropagation();await window.openAssignmentWorkViewer(view.dataset.course,view.dataset.assignment,view.dataset.work);};actions.appendChild(v);
+      if(view.dataset.assignment){
+        const ownUid=window.profileState?.uid||currentUser?.uid; const owner=card.dataset.userId||''; if(ownUid&&owner===currentUser?.uid){/* optional owner-only actions */}
+      }
+      view.remove();card.querySelector('.aa-profile-work-body')?.appendChild(actions);
+    } else {
+      const title=card.querySelector('strong')?.textContent||'';const works=[];
+      /* Locate portfolio work from title and render edit/delete only on the current user's own profile. */
+      const isSelf=currentUser&&window.profileState?.uid===currentUser.uid;
+      if(isSelf){
+        const edit=document.createElement('button');edit.type='button';edit.textContent='تعديل';
+        const del=document.createElement('button');del.type='button';del.textContent='حذف';del.className='danger';
+        const actions=document.createElement('div');actions.className='aa-v12-work-actions';actions.append(edit,del);card.querySelector('.aa-profile-work-body')?.appendChild(actions);
+        /* Map by visible title once against current portfolio collection. */
+        getCurrentPortfolioWorks(currentUser.uid).then(list=>{const match=list.find(x=>(x.title||'')===title);if(!match)return;edit.onclick=()=>editV12PortfolioWork(match.id);del.onclick=()=>deleteV12PortfolioWork(match.id);});
+      }
+    }
+  });
+  root.querySelectorAll('.assignment-work-card').forEach(card=>{
+    if(card.querySelector('.aa-v12-work-actions'))return;
+    const viewBtn=card.querySelector('button[onclick*="openAssignmentWorkViewer"]');
+    if(viewBtn){
+      const actions=document.createElement('div');actions.className='aa-v12-work-actions';const clone=viewBtn.cloneNode(true);clone.textContent='عرض العمل';clone.onclick=()=>window.openAssignmentWorkViewer(card.closest('#courseAssignmentDetailPage')?.dataset.courseId||window.activeCourseId,window.activeAssignmentDetailId||card.closest('#courseAssignmentDetailPage')?.dataset.assignmentId,card.dataset.workId);actions.appendChild(clone);card.appendChild(actions);
+    }
+  });
+}
+const workDecorObs=new MutationObserver(()=>decorateWorkCards(document));workDecorObs.observe(document.body,{subtree:true,childList:true});decorateWorkCards(document);
+
+/* ---------- Force profile and assignment avatars through the same fallback helper ---------- */
+function refreshV12Avatars(root=document){const used=new Map();root.querySelectorAll('.assignment-submitter[data-profile-uid]').forEach(b=>{const uid=b.dataset.profileUid,name=b.querySelector('.assignment-submitter-name')?.textContent||'مستخدم',holder=b.querySelector('.assignment-submitter-avatar');if(!holder)return;const img=holder.querySelector('img');if(img&&img.getAttribute('src'))return;holder.innerHTML=v12AvatarHtml(name,'',uid,'',used);});const profileAvatar=$('aaProfileAvatar');if(profileAvatar&&!profileAvatar.querySelector('img')){const name=$('aaProfileName')?.textContent||currentUser?.displayName||'مستخدم';profileAvatar.innerHTML=v12AvatarHtml(name,'',window.profileState?.uid||currentUser?.uid,'',new Map());}}
+const avObs=new MutationObserver(()=>refreshV12Avatars(document));avObs.observe(document.body,{subtree:true,childList:true});refreshV12Avatars(document);
+
+/* Viewer keyboard support. */
+document.addEventListener('keydown',e=>{if(e.key==='Escape'&&$('aaV12WorkViewer')?.classList.contains('active'))window.closeV12WorkViewer();});
+})();
+</script>
+
 </body>
 </html>
