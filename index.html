@@ -11108,4 +11108,241 @@ normalizeProfileControls();normalizeChatScroll();
 })();
 </script>
 
+
+<!-- ===== V19: PROFILE/CATALOG CLEANUP + CHAT SCROLL FINAL FIX ===== -->
+<style id="ananas-v19-final-css">
+/* One profile surface only. Legacy profile pages are never allowed to render. */
+#userProfilePage,#ananasV10ProfilePage,#ananasPrivateProfileOverlay{display:none!important;visibility:hidden!important;pointer-events:none!important}
+#ananasCanonicalProfilePage{display:none!important;visibility:hidden!important;position:fixed!important;inset:var(--nav-height-desktop,80px) 0 0!important;z-index:950!important;overflow-y:auto!important;overflow-x:hidden!important;background:var(--bg-primary)!important;overscroll-behavior:contain!important}
+#ananasCanonicalProfilePage.active{display:block!important;visibility:visible!important;pointer-events:auto!important}
+#ananasCanonicalProfilePage #acpHomeBtn,
+#ananasCanonicalProfilePage #acpHome,
+#ananasCanonicalProfilePage [data-acp-home],
+#ananasCanonicalProfilePage .acp-home-btn{display:none!important}
+#ananasCanonicalProfilePage #acpBack{display:none!important}
+#ananasCanonicalProfilePage #acpBack.acp-show-back{display:inline-flex!important;align-items:center;justify-content:center;width:44px!important;height:44px!important;min-width:44px!important;padding:0!important;border-radius:14px!important;font-size:1.35rem!important;line-height:1!important;background:var(--bg-primary)!important;border:1px solid var(--border)!important;color:var(--text-primary)!important;box-shadow:0 8px 20px rgba(0,0,0,.10)!important}
+#ananasCanonicalProfilePage #acpBack.acp-show-back:hover{border-color:var(--accent1)!important;color:var(--accent1)!important;transform:translateY(-1px)}
+#ananasCanonicalProfilePage #acpBack.acp-show-back i{margin:0!important}
+#ananasCanonicalProfilePage #acpBack.acp-show-back span{display:none!important}
+#ananasCanonicalProfilePage .acp-work{cursor:zoom-in!important}
+#ananasCanonicalProfilePage .acp-work-cover img{cursor:zoom-in!important}
+
+/* The courses icon is the only route back to the main courses view. */
+#coursesNavBtn,#mobileBottomNav [data-page="courses"]{cursor:pointer}
+
+/* Stable chat layout: header + controls + single real scroll viewport + composer. */
+#courseDetailView #courseChatPage{
+  height:100%!important;min-height:0!important;max-height:none!important;overflow:hidden!important;
+  display:grid!important;grid-template-rows:auto auto auto minmax(0,1fr) auto auto auto!important;
+  align-content:stretch!important;box-sizing:border-box!important;position:relative!important;
+}
+#courseDetailView #courseChatPage .page-title{min-height:0!important;margin:0!important}
+#courseDetailView #courseChatPage #chatLockBannerPage{min-height:0!important}
+#courseDetailView #courseChatPage #chatAdminToolsPage{min-height:0!important}
+#courseDetailView #courseChatPage #chatPageMessagesList{
+  grid-row:4!important;width:100%!important;height:auto!important;min-height:0!important;max-height:none!important;
+  overflow-y:auto!important;overflow-x:hidden!important;overscroll-behavior:contain!important;
+  -webkit-overflow-scrolling:touch!important;scroll-behavior:smooth!important;
+  display:flex!important;flex-direction:column!important;gap:6px!important;
+  margin:0!important;box-sizing:border-box!important;position:relative!important;z-index:1!important;
+}
+#courseDetailView #courseChatPage #chatReplyIndicatorPage{grid-row:5!important;min-height:0!important}
+#courseDetailView #courseChatPage #chatImagePreviewPage{grid-row:6!important;min-height:0!important;max-height:110px!important;overflow:auto!important}
+#courseDetailView #courseChatPage .chat-input-group{grid-row:7!important;min-height:0!important;flex:none!important;position:relative!important;z-index:4!important}
+#courseDetailView #courseChatPage .ananas-chat-end-btn{position:absolute!important;left:16px!important;bottom:82px!important;z-index:12!important;width:44px!important;height:44px!important;padding:0!important;border-radius:14px!important;border:1px solid var(--border)!important;background:var(--bg-card)!important;color:var(--text-primary)!important;display:grid!important;place-items:center!important;box-shadow:0 10px 28px rgba(0,0,0,.16)!important;cursor:pointer!important}
+#courseDetailView #courseChatPage .ananas-chat-end-btn:hover{color:var(--accent1)!important;border-color:var(--accent1)!important}
+#courseDetailView #courseChatPage .chat-msg{flex:0 0 auto!important}
+.ananas-v19-chat-highlight{animation:ananasV19Highlight 2.2s ease both!important;outline:2px solid var(--accent1)!important;outline-offset:2px!important}
+@keyframes ananasV19Highlight{0%,100%{box-shadow:0 0 0 0 rgba(108,92,231,0)}20%{box-shadow:0 0 0 7px rgba(108,92,231,.22)}55%{box-shadow:0 0 0 5px rgba(108,92,231,.15)}}
+@media(max-width:760px){
+ #ananasCanonicalProfilePage{inset:var(--nav-height-mobile,70px) 0 0!important}
+ #courseDetailView #courseChatPage .ananas-chat-end-btn{left:10px!important;bottom:76px!important}
+}
+</style>
+<script id="ananas-v19-final-js">
+(function(){
+'use strict';
+const $=id=>document.getElementById(id);
+const esc=window.escapeHtml||((v)=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])));
+
+/* ---------- PROFILE: one controller, no home button ---------- */
+function hideLegacyProfiles(){
+  ['userProfilePage','ananasV10ProfilePage','ananasPrivateProfileOverlay'].forEach(id=>{
+    const el=$(id); if(el){el.classList.remove('active');el.style.setProperty('display','none','important');el.style.setProperty('visibility','hidden','important');el.style.setProperty('pointer-events','none','important');}
+  });
+}
+function profileSelf(){
+  const p=$('ananasCanonicalProfilePage');
+  const uid=p?.dataset?.viewingUid||window.__ananasViewingProfileUid||'';
+  return !!uid && uid===currentUser?.uid;
+}
+function syncProfileChrome(){
+  const p=$('ananasCanonicalProfilePage'); if(!p)return;
+  hideLegacyProfiles();
+  p.classList.toggle('active',p.dataset.viewingUid?true:p.classList.contains('active'));
+  p.style.removeProperty('visibility');
+  const back=$('acpBack');
+  if(back){
+    back.classList.toggle('acp-show-back',!profileSelf());
+    back.style.display=profileSelf()?'none':'inline-flex';
+    back.innerHTML=profileSelf()?'':'<i class="fas fa-chevron-left" aria-hidden="true"></i>';
+    back.setAttribute('aria-label','العودة إلى حسابي');
+    back.title='العودة إلى حسابي';
+  }
+  /* Explicitly remove any old home button injected by previous patches. */
+  p.querySelectorAll('#acpHomeBtn,#acpHome,[data-acp-home],.acp-home-btn').forEach(x=>x.remove());
+}
+async function openOwnProfileClean(){
+  if(!currentUser)return window.triggerAuth?.();
+  window.__ananasViewingProfileUid=currentUser.uid;
+  if(typeof window.__openCanonicalProfile==='function')await window.__openCanonicalProfile(currentUser.uid,true);
+  else if(typeof window.openAnanasV10Profile==='function')await window.openAnanasV10Profile(currentUser.uid,true);
+  const p=$('ananasCanonicalProfilePage'); if(p){p.dataset.viewingUid=currentUser.uid;p.classList.add('active');p.scrollTop=0;}
+  hideLegacyProfiles();syncProfileChrome();
+  window.scrollTo(0,0);
+}
+async function openOtherProfileClean(uid){
+  if(!uid||!currentUser)return;
+  window.__ananasViewingProfileUid=uid;
+  if(typeof window.__openCanonicalProfile==='function')await window.__openCanonicalProfile(uid,uid===currentUser.uid);
+  else if(typeof window.openAnanasV10Profile==='function')await window.openAnanasV10Profile(uid,uid===currentUser.uid);
+  const p=$('ananasCanonicalProfilePage'); if(p){p.dataset.viewingUid=uid;p.classList.add('active');p.scrollTop=0;}
+  hideLegacyProfiles();syncProfileChrome();
+  window.scrollTo(0,0);
+}
+window.openUserProfilePage=openOwnProfileClean;
+window.openPublicProfileFinal=openOtherProfileClean;
+window.viewProfileByUserId=openOtherProfileClean;
+window.openChatProfileV13=openOtherProfileClean;
+window.openChatProfileV12=openOtherProfileClean;
+
+/* Back arrow from another profile -> own profile. No route to home here. */
+document.addEventListener('click',e=>{
+  const back=e.target.closest?.('#acpBack'); if(!back)return;
+  e.preventDefault();e.stopImmediatePropagation();
+  openOwnProfileClean();
+},true);
+
+/* Courses icon is the only way to leave the profile for the main courses page. */
+function closeProfileToCourses(e){
+  const p=$('ananasCanonicalProfilePage');
+  if(!p?.classList.contains('active'))return;
+  e?.preventDefault();e?.stopImmediatePropagation();
+  hideLegacyProfiles();
+  p.classList.remove('active');p.dataset.viewingUid='';p.style.setProperty('display','none','important');
+  window.__ananasViewingProfileUid=null;
+  try{if(typeof window.mobileNavigate==='function')window.mobileNavigate('courses');}catch(_){ }
+  setTimeout(()=>window.scrollTo(0,0),0);
+}
+$('coursesNavBtn')?.addEventListener('click',closeProfileToCourses,true);
+$('mobileBottomNav')?.addEventListener('click',e=>{if(e.target.closest?.('[data-page="courses"]'))closeProfileToCourses(e)},true);
+
+/* Keep all legacy profile-opening selectors on the same controller. */
+document.addEventListener('click',async e=>{
+  const n=e.target.closest?.('[data-profile-uid],[data-profile-target],[data-acp-uid],[data-acp-v17-uid]');
+  if(!n)return;
+  const uid=n.dataset.profileUid||n.dataset.profileTarget||n.dataset.acpUid||n.dataset.acpV17Uid;
+  if(!uid)return;
+  e.preventDefault();e.stopImmediatePropagation();
+  await (uid===currentUser?.uid?openOwnProfileClean():openOtherProfileClean(uid));
+},true);
+
+/* ---------- PORTFOLIO PREVIEW: works for every public profile ---------- */
+function profileCanSeeGallery(){
+  const p=$('ananasCanonicalProfilePage');const uid=p?.dataset?.viewingUid;return !!uid&&(uid===currentUser?.uid||isAdmin||p?.dataset?.profilePublic!=='false');
+}
+window.__ananasOpenProfileWorkPreview=function(images,title){
+  const list=Array.isArray(images)?images.filter(Boolean):[];if(!list.length)return;
+  if(typeof window.openPlatformGalleryViewer==='function'){window.openPlatformGalleryViewer(list,title||'معاينة العمل');return;}
+  let o=$('ananasV19PortfolioViewer');
+  if(!o){o=document.createElement('div');o.id='ananasV19PortfolioViewer';o.innerHTML='<button type="button" class="ananas-v19-pv-close">×</button><div class="ananas-v19-pv-stage"><img alt="معاينة العمل"><div></div></div>';o.style.cssText='position:fixed;inset:0;z-index:200000;background:rgba(0,0,0,.9);display:none;align-items:center;justify-content:center;padding:20px';document.body.appendChild(o);o.addEventListener('click',e=>{if(e.target===o||e.target.closest('.ananas-v19-pv-close'))o.style.display='none'})}
+  o.querySelector('img').src=list[0];o.querySelector('.ananas-v19-pv-stage div').textContent=title||'معاينة العمل';o.style.display='flex';
+};
+function bindProfileGallery(){
+  const g=$('acpGallery');if(!g)return;
+  g.querySelectorAll('.acp-work').forEach(card=>{
+    if(card.dataset.v19GalleryBound==='1')return;card.dataset.v19GalleryBound='1';
+    card.style.cursor='zoom-in';
+    card.addEventListener('click',e=>{
+      if(!profileCanSeeGallery()||e.target.closest('button,a,input'))return;
+      const imgs=[...card.querySelectorAll('img')].map(x=>x.currentSrc||x.src).filter(Boolean);
+      const title=card.querySelector('.acp-work-title')?.textContent?.trim()||'معاينة العمل';
+      window.__ananasOpenProfileWorkPreview(imgs,title);
+    });
+  });
+}
+new MutationObserver(bindProfileGallery).observe(document.body,{subtree:true,childList:true});
+setInterval(()=>{hideLegacyProfiles();syncProfileChrome();bindProfileGallery()},700);
+
+/* ---------- CHAT: one scroll container, robust end button, reply jump ---------- */
+function getChatList(){return $('chatPageMessagesList')}
+function forceChatLayout(){
+  const page=$('courseChatPage'),list=getChatList();if(!page||!list)return;
+  page.style.setProperty('height','100%','important');
+  page.style.setProperty('min-height','0','important');
+  page.style.setProperty('max-height','none','important');
+  page.style.setProperty('overflow','hidden','important');
+  page.style.setProperty('display','grid','important');
+  page.style.setProperty('grid-template-rows','auto auto auto minmax(0,1fr) auto auto auto','important');
+  list.style.setProperty('height','auto','important');
+  list.style.setProperty('min-height','0','important');
+  list.style.setProperty('max-height','none','important');
+  list.style.setProperty('overflow-y','auto','important');
+  list.style.setProperty('overflow-x','hidden','important');
+  list.style.setProperty('flex','none','important');
+  list.style.setProperty('grid-row','4','important');
+  list.style.setProperty('-webkit-overflow-scrolling','touch','important');
+  list.style.setProperty('overscroll-behavior','contain','important');
+  let b=page.querySelector('.ananas-chat-end-btn');
+  if(!b){b=document.createElement('button');b.type='button';b.className='ananas-chat-end-btn';b.innerHTML='<i class="fas fa-angle-down"></i>';b.title='الانتقال إلى نهاية الدردشة';b.setAttribute('aria-label','الانتقال إلى نهاية الدردشة');b.onclick=()=>scrollChatEnd(true);page.appendChild(b)}
+}
+function scrollChatEnd(smooth=false){const list=getChatList();if(!list)return;list.scrollTo({top:list.scrollHeight,behavior:smooth?'smooth':'auto'})}
+window.__ananasScrollChatEnd=scrollChatEnd;
+function isNearChatEnd(){const l=getChatList();if(!l)return true;return l.scrollHeight-l.scrollTop-l.clientHeight<120}
+
+/* Wrap the existing loader once, without replacing its Firestore implementation. */
+const originalLoadChatPageV19=window.loadChatPage;
+if(typeof originalLoadChatPageV19==='function'&&!originalLoadChatPageV19.__v19Wrapped){
+  const wrapped=async function(courseId){
+    const result=await originalLoadChatPageV19.apply(this,arguments);
+    forceChatLayout();
+    setTimeout(()=>scrollChatEnd(false),80);
+    setTimeout(()=>scrollChatEnd(false),350);
+    return result;
+  };wrapped.__v19Wrapped=true;window.loadChatPage=wrapped;
+}
+
+/* Any Firestore repaint that inserts new messages keeps the viewport moving to the newest message. */
+const chatListObserver=new MutationObserver(()=>{
+  forceChatLayout();
+  if(!window.__v19UserChatScroll){setTimeout(()=>scrollChatEnd(false),40)}
+});
+const startChatObserver=()=>{const l=getChatList();if(l&&!l.dataset.v19Observed){l.dataset.v19Observed='1';chatListObserver.observe(l,{childList:true,subtree:true})}};
+setInterval(startChatObserver,500);
+
+/* User scrolling is respected; only sending/loading a new message forces the bottom. */
+const markUserScroll=e=>{
+  const l=getChatList();if(!l||e.target!==l)return;
+  window.__v19UserChatScroll=true;clearTimeout(window.__v19ScrollTimer);window.__v19ScrollTimer=setTimeout(()=>window.__v19UserChatScroll=false,180);
+};
+document.addEventListener('wheel',markUserScroll,{passive:true});
+document.addEventListener('touchmove',markUserScroll,{passive:true});
+['fullChatPageSendBtn','fullSendChatBtn','fullPageSendBtn'].forEach(id=>$(id)?.addEventListener('click',()=>{window.__v19UserChatScroll=false;setTimeout(()=>scrollChatEnd(true),120);setTimeout(()=>scrollChatEnd(true),500)},true));
+
+/* Clicking a reply preview jumps to the original message and highlights it. */
+document.addEventListener('click',async e=>{
+  const block=e.target.closest?.('.reply-block');if(!block)return;
+  e.preventDefault();e.stopImmediatePropagation();
+  const wrapper=block.closest('.chat-msg');if(!wrapper||!currentUser)return;
+  let targetId=wrapper.dataset.replyToId||'';
+  if(!targetId&&activeCourseId){try{const s=await db.collection('courses').doc(activeCourseId).collection('chat').doc(wrapper.dataset.messageId).get();targetId=s.data()?.replyToId||s.data()?.replyToMessageId||''}catch(_){}}
+  if(!targetId)return;
+  const target=document.querySelector(`.chat-msg[data-message-id="${CSS.escape(targetId)}"]`);if(!target)return;
+  target.scrollIntoView({behavior:'smooth',block:'center'});target.classList.remove('ananas-v19-chat-highlight');void target.offsetWidth;target.classList.add('ananas-v19-chat-highlight');setTimeout(()=>target.classList.remove('ananas-v19-chat-highlight'),2300);
+},true);
+
+forceChatLayout();startChatObserver();
+window.addEventListener('resize',forceChatLayout);
+})();
+</script>
 </html>
