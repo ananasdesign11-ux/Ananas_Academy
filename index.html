@@ -11349,3 +11349,290 @@ window.closeQuiz=async function(){
   return result;
 };
 </script>
+
+<!-- ===== ANANAS V19 REPAIR PATCH: chat layout/navigation/profiles/assignment students ===== -->
+<style id="ananas-v19-repair-css">
+/* Chat: WhatsApp-like stacking only; keep the platform's existing colors/background. */
+#chatPageMessagesList .v19-chat-msg,#fullChatMessagesList .v19-chat-msg{display:flex!important;width:100%!important;max-width:100%!important;margin:2px 0!important;padding:0!important;background:transparent!important;border:0!important;box-shadow:none!important}
+#chatPageMessagesList .v19-chat-msg.sent,#fullChatMessagesList .v19-chat-msg.sent{justify-content:flex-start!important}
+#chatPageMessagesList .v19-chat-msg.received,#fullChatMessagesList .v19-chat-msg.received{justify-content:flex-end!important}
+.v19-chat-card{display:flex;flex-direction:column;gap:0;width:min(76%,620px);padding:6px 8px 5px;border-radius:15px;border:1px solid var(--border);background:var(--bg-secondary);box-shadow:0 2px 8px rgba(0,0,0,.05)}
+.v19-chat-msg.sent .v19-chat-card{background:var(--chat-bubble-mine);color:var(--chat-bubble-mine-text);border-color:transparent}
+.v19-chat-msg.received .v19-chat-card{background:var(--chat-bubble-others);color:var(--chat-bubble-others-text)}
+.v19-person-line{display:flex;align-items:center;gap:7px;min-width:0;margin-bottom:3px}
+.v19-person-button{display:flex;align-items:center;gap:7px;border:0;background:transparent;color:inherit;padding:0;cursor:pointer;font:inherit;min-width:0;max-width:100%}
+.v19-person-avatar{width:25px;height:25px;border-radius:50%;overflow:hidden;display:grid;place-items:center;flex:0 0 25px;background:var(--accent-gradient);color:#fff;font-size:.64rem;font-weight:900}
+.v19-person-avatar img{width:100%;height:100%;object-fit:cover;display:block}
+.v19-person-name{font-size:.72rem;font-weight:900;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:200px}
+.v19-chat-text{font-size:.86rem!important;line-height:1.5!important;white-space:pre-wrap;word-break:break-word}
+.v19-reply{display:block;width:100%;padding:4px 7px;margin:2px 0 5px;border:0;border-inline-start:3px solid var(--accent1);border-radius:7px;background:rgba(108,92,231,.08);color:inherit;text-align:start;cursor:pointer;font:inherit}
+.v19-reply .name{display:block;font-weight:900;font-size:.66rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.v19-reply .text{display:block;font-size:.67rem;opacity:.8;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.v19-chat-footer{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:3px}
+.v19-msg-time{font-size:.60rem;opacity:.58;white-space:nowrap}
+.v19-actions{display:flex;align-items:center;gap:2px}
+.v19-actions button{width:24px;height:24px;padding:0;border:0;border-radius:7px;background:transparent;color:inherit;display:grid;place-items:center;cursor:pointer;font-size:.66rem}
+.v19-actions button:hover{background:rgba(127,127,127,.14)}
+.v19-actions .pin-active{color:#f5a623}
+.v19-pinned{display:inline-flex;align-items:center;gap:4px;font-size:.62rem;font-weight:900;color:#f5a623;margin-bottom:3px}
+.v19-chat-date{margin:7px 0!important;text-align:center;font-size:.66rem;color:var(--text-muted)}
+.v19-chat-date span{display:inline-block;padding:3px 9px;border:1px solid var(--border);border-radius:999px;background:var(--bg-card)}
+.v19-highlight .v19-chat-card{animation:v19Flash 2s ease}
+@keyframes v19Flash{0%,100%{box-shadow:0 0 0 0 rgba(108,92,231,0)}15%,60%{box-shadow:0 0 0 6px rgba(108,92,231,.18),0 12px 30px rgba(108,92,231,.12)}}
+.ananas-chat-jump-last-v19{position:fixed;right:24px;bottom:90px;z-index:26000;display:none;align-items:center;gap:7px;padding:9px 13px;border:1px solid var(--border);background:var(--bg-card);color:var(--text-primary);border-radius:999px;box-shadow:0 12px 30px rgba(0,0,0,.18);cursor:pointer;font:inherit;font-weight:900}
+.ananas-chat-jump-last-v19.show{display:inline-flex}
+.ananas-chat-jump-last-v19 i{color:var(--accent1)}
+.v19-assignment-person{display:flex;align-items:center;gap:8px;width:100%;padding:0;border:0;background:transparent;color:inherit;cursor:pointer;text-align:start;font:inherit}
+.v19-assignment-avatar{width:30px;height:30px;border-radius:50%;overflow:hidden;display:grid;place-items:center;background:var(--accent-gradient);color:#fff;font-size:.67rem;font-weight:900;flex:0 0 30px}
+.v19-assignment-avatar img{width:100%;height:100%;object-fit:cover}
+.v19-assignment-name{font-weight:900;font-size:.83rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.v19-profile-v19{position:fixed;inset:0;z-index:32000;display:none;background:var(--bg-primary);overflow:auto;padding:26px}
+.v19-profile-v19.active{display:block}
+.v19-profile-shell{max-width:1150px;margin:auto}
+.v19-profile-top{display:flex;align-items:center;gap:18px;padding:20px;border:1px solid var(--border);border-radius:24px;background:var(--bg-card);box-shadow:var(--shadow);position:sticky;top:0;z-index:2}
+.v19-profile-avatar{width:82px;height:82px;border-radius:24px;overflow:hidden;display:grid;place-items:center;background:var(--accent-gradient);color:#fff;font-size:2rem;font-weight:900;flex:0 0 82px}
+.v19-profile-avatar img{width:100%;height:100%;object-fit:cover;display:block}
+.v19-profile-name{font-size:1.45rem;font-weight:900}
+.v19-profile-sub{color:var(--text-muted);font-size:.82rem;margin-top:4px}
+.v19-profile-actions{margin-inline-start:auto;display:flex;gap:8px;flex-wrap:wrap}
+.v19-profile-btn{min-height:40px;padding:8px 13px;border-radius:12px;border:1px solid var(--border);background:var(--bg-primary);color:var(--text-primary);cursor:pointer;font:inherit;font-weight:900}
+.v19-profile-btn:hover{border-color:var(--accent1);color:var(--accent1)}
+.v19-profile-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:14px}
+.v19-profile-panel{border:1px solid var(--border);border-radius:20px;background:var(--bg-card);padding:18px}
+.v19-profile-panel.full{grid-column:1/-1}
+.v19-profile-panel h3{margin:0 0 12px;font-size:1rem}
+.v19-profile-data{display:grid;gap:8px}
+.v19-profile-data .row{padding:10px 12px;border:1px solid var(--border);border-radius:13px;background:var(--bg-primary);display:flex;justify-content:space-between;gap:12px}
+.v19-profile-data .row strong{font-size:.78rem}.v19-profile-data .row span{color:var(--text-muted);font-size:.78rem;overflow-wrap:anywhere}
+.v19-profile-gallery{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px}
+.v19-work{overflow:hidden;border:1px solid var(--border);border-radius:17px;background:var(--bg-primary)}
+.v19-work-cover{aspect-ratio:4/3;background:var(--bg-card)}.v19-work-cover img{width:100%;height:100%;object-fit:cover;display:block}
+.v19-work-body{padding:11px}.v19-work-title{font-weight:900}.v19-work-meta{margin-top:3px;font-size:.73rem;color:var(--text-muted);line-height:1.6}
+.v19-work-actions{display:flex;gap:7px;margin-top:9px;flex-wrap:wrap}.v19-work-actions button{min-height:34px;padding:6px 10px;border:1px solid var(--border);border-radius:10px;background:var(--bg-secondary);color:var(--text-primary);cursor:pointer;font:inherit;font-size:.72rem;font-weight:900}.v19-work-actions button:hover{border-color:var(--accent1);color:var(--accent1)}.v19-work-actions button:disabled{opacity:.45;cursor:not-allowed}
+.v19-private{padding:35px 20px;text-align:center;border:1px dashed var(--border);border-radius:18px;background:var(--bg-primary);color:var(--text-muted);line-height:1.9}
+.v19-private i{font-size:1.5rem;color:var(--accent1);display:block;margin-bottom:7px}
+@media(max-width:760px){.v19-chat-card{width:86%}.v19-profile-v19{padding:12px}.v19-profile-top{align-items:flex-start;flex-wrap:wrap}.v19-profile-actions{width:100%;margin-inline-start:0}.v19-profile-grid{grid-template-columns:1fr}.v19-profile-panel.full{grid-column:auto}.ananas-chat-jump-last-v19{right:14px;bottom:86px}.v19-person-name{max-width:130px}}
+</style>
+<script id="ananas-v19-repair-js">
+(function(){
+'use strict';
+const $=id=>document.getElementById(id);
+const esc=v=>String(v??'').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+const safeName=(m,profile)=>String(profile?.displayName||profile?.name||m?.userName||'زائر').trim()||'زائر';
+const safePhoto=profile=>profile?.photoURL||profile?.photoUrl||profile?.photo||'';
+let chatUnsubV19=null, chatActiveContainerV19=null, chatWasInitializedV19=false, profileCacheV19=Object.create(null);
+let profileReturnV19={type:'none'};
+
+function chatVisibleV19(){
+  const a=$('courseChatPage'),b=$('fullChatPage');
+  return !!((a&&getComputedStyle(a).display!=='none'&&(a.classList.contains('active')||a.offsetParent!==null))||(b&&b.classList.contains('active')));
+}
+function ensureJumpV19(){
+  let b=$('ananasChatJumpLastV19');
+  if(!b){b=document.createElement('button');b.id='ananasChatJumpLastV19';b.type='button';b.className='ananas-chat-jump-last-v19';b.innerHTML='<i class="fas fa-arrow-down"></i><span>آخر رسالة</span>';document.body.appendChild(b);}
+  b.onclick=()=>{if(chatActiveContainerV19){chatActiveContainerV19.scrollTo({top:chatActiveContainerV19.scrollHeight,behavior:'smooth'});setTimeout(()=>updateJumpV19(),250);}};
+  return b;
+}
+function updateJumpV19(){
+  const b=ensureJumpV19(), c=chatActiveContainerV19;
+  const show=!!c&&chatVisibleV19()&&(c.scrollHeight-c.scrollTop-c.clientHeight>80);
+  b.classList.toggle('show',show);
+  if(!show && b.classList.contains('show'))b.classList.remove('show');
+}
+function goBottomV19(c,force){if(!c)return;chatActiveContainerV19=c;requestAnimationFrame(()=>requestAnimationFrame(()=>{if(force||chatWasInitializedV19||c.scrollHeight-c.scrollTop-c.clientHeight<100){c.scrollTop=c.scrollHeight;}updateJumpV19();}));}
+function bindScrollV19(c){if(!c||c.dataset.v19Bound==='1')return;c.dataset.v19Bound='1';c.addEventListener('scroll',()=>{chatActiveContainerV19=c;updateJumpV19();},{passive:true});}
+async function getChatProfileV19(uid,fallback){
+  if(!uid)return {displayName:fallback||'زائر',photoURL:''};
+  if(profileCacheV19[uid])return profileCacheV19[uid];
+  try{const s=await db.collection('users').doc(uid).get();const p=s.exists?s.data()||{}:{};const out={displayName:p.displayName||p.name||fallback||'زائر',photoURL:safePhoto(p)};profileCacheV19[uid]=out;return out;}catch(e){return {displayName:fallback||'زائر',photoURL:''};}
+}
+function personHtmlV19(uid,name,photo,courseId){
+  return `<button type="button" class="v19-person-button" data-profile-uid="${esc(uid||'')}" onclick="window.openChatProfileV19('${esc(uid||'')}')"><span class="v19-person-avatar">${photo?`<img src="${esc(photo)}" alt="">`:esc((name||'زائر').slice(0,1))}</span><span class="v19-person-name">${esc(name||'زائر')}</span></button>`;
+}
+function bodyHtmlV19(courseId,doc,m,profile){
+  const deleted=!!m.deleted, mine=m.userId===currentUser?.uid;
+  if(deleted&&!isAdmin)return '<div class="v19-chat-text" style="font-style:italic;opacity:.7"><i class="fas fa-ban"></i> هذه الرسالة محذوفة</div>';
+  const imgs=Array.isArray(m.imageUrls)?m.imageUrls:(m.imageUrl?[m.imageUrl]:[]);
+  const gallery=(!deleted&&imgs.length)?`<div class="message-gallery">${imgs.map(u=>`<img src="${esc(u)}" alt="صورة" onclick="openChatMessageGallery('${esc(courseId)}','${esc(doc.id)}')">`).join('')}</div>`:'';
+  return `${deleted?'<div style="font-size:.68rem;color:#e74c3c;font-weight:900;margin-bottom:3px"><i class="fas fa-trash"></i> تم حذف هذه الرسالة</div>':''}<div class="v19-chat-text">${esc(m.message||'')}${m.edited?'<span class="edited-label"> (معدلة)</span>':''}</div>${gallery}`;
+}
+function renderChatV19(container,snapshot,courseId){
+  if(!container)return Promise.resolve();
+  if(snapshot.empty){container.innerHTML='<div class="v18-chat-empty">لا توجد رسائل حتى الآن.</div>';chatWasInitializedV19=true;goBottomV19(container,true);return Promise.resolve();}
+  const docs=snapshot.docs||[];
+  const ids=[...new Set(docs.map(d=>(d.data()||{}).userId).filter(Boolean))];
+  return Promise.all(ids.map(async uid=>[uid,await getChatProfileV19(uid,docs.find(d=>(d.data()||{}).userId===uid)?.data()?.userName)])).then(pairs=>{
+    const profiles=Object.fromEntries(pairs),prevCount=Number(container.dataset.v19Count||0);let html='',lastDate='';
+    docs.forEach(doc=>{
+      const m=doc.data()||{},p=profiles[m.userId]||{displayName:m.userName||'زائر',photoURL:''};
+      const d=m.createdAt?.toDate?m.createdAt.toDate():(m.createdAt?.seconds?new Date(m.createdAt.seconds*1000):new Date());
+      const dateKey=d.toLocaleDateString('ar-SA',{year:'numeric',month:'long',day:'numeric'}),time=d.toLocaleTimeString('ar-SA',{hour:'2-digit',minute:'2-digit'});
+      if(dateKey!==lastDate){html+=`<div class="v19-chat-date"><span>${esc(dateKey)}</span></div>`;lastDate=dateKey;}
+      const mine=m.userId===currentUser?.uid,pinned=!!m.pinned;let actions=`<button type="button" onclick='replyTo(${JSON.stringify(doc.id)},${JSON.stringify(p.displayName)},${JSON.stringify((m.message||'').slice(0,120))})' title="رد"><i class="fas fa-reply"></i></button>`;
+      if(mine)actions+=`<button type="button" onclick="editChatMessage('${esc(courseId)}','${esc(doc.id)}')" title="تعديل"><i class="fas fa-edit"></i></button>`;
+      if(mine||isAdmin)actions+=`<button type="button" onclick="deleteChatMessage('${esc(courseId)}','${esc(doc.id)}')" title="حذف"><i class="fas fa-trash"></i></button>`;
+      if(isAdmin)actions+=`<button type="button" class="${pinned?'pin-active':''}" onclick="togglePinChatMessageV18('${esc(courseId)}','${esc(doc.id)}',${pinned?'false':'true'})" title="${pinned?'إلغاء التثبيت':'تثبيت الرسالة'}"><i class="fas fa-thumbtack"></i></button>`;
+      const reply=m.replyToId||m.replyToText?`<button type="button" class="v19-reply" onclick="window.goToChatMessageV19('${esc(m.replyToId||'')}')" title="الانتقال إلى الرسالة الأصلية"><span class="name">${esc(m.replyToName||'زائر')}</span><span class="text">${esc(m.replyToText||'')}</span></button>`:'';
+      html+=`<article class="chat-msg v19-chat-msg ${mine?'sent':'received'} ${pinned?'is-pinned':''}" data-message-id="${esc(doc.id)}"><div class="v19-chat-card">${pinned?'<div class="v19-pinned"><i class="fas fa-thumbtack"></i> مثبتة</div>':''}<div class="v19-person-line">${personHtmlV19(m.userId,p.displayName,p.photoURL,courseId)}</div>${reply}${bodyHtmlV19(courseId,doc,m,p)}<div class="v19-chat-footer"><span class="v19-msg-time">${esc(time)}</span><span class="v19-actions">${actions}</span></div></div></article>`;
+    });
+    const newestId=docs[docs.length-1]?.id||'';
+    const newOwnMessage=docs.length>prevCount && docs[docs.length-1]?.data()?.userId===currentUser?.uid;
+    const atBottom=container.scrollHeight-container.scrollTop-container.clientHeight<100;
+    container.innerHTML=html;container.dataset.v19Count=String(docs.length);container.dataset.v19LastId=newestId;bindScrollV19(container);
+    chatWasInitializedV19=true;
+    goBottomV19(container,newOwnMessage||atBottom||container.dataset.v19Open==='1');container.dataset.v19Open='0';
+  });
+}
+function subscribeV19(container,courseId){
+  if(!container)return;
+  if(chatUnsubV19){try{chatUnsubV19()}catch(_){}chatUnsubV19=null;}
+  container.dataset.v19Open='1';container.dataset.v19Count='0';chatActiveContainerV19=container;chatWasInitializedV19=false;bindScrollV19(container);ensureJumpV19();updateJumpV19();
+  container.innerHTML='<div class="v18-chat-loading">جاري تحميل الرسائل...</div>';
+  chatUnsubV19=db.collection('courses').doc(courseId).collection('chat').orderBy('createdAt','asc').onSnapshot(s=>renderChatV19(container,s,courseId).catch(e=>{console.error(e);container.innerHTML='<div class="v18-chat-error">حدث خطأ في تحميل الدردشة.</div>';}),e=>{console.error(e);container.innerHTML='<div class="v18-chat-error">حدث خطأ في تحميل الدردشة.</div>';});
+}
+window.loadChatPage=courseId=>subscribeV19($('chatPageMessagesList'),courseId);
+window.loadFullChatForCourse=courseId=>subscribeV19($('fullChatMessagesList'),courseId);
+window.goToChatMessageV19=function(id){const node=document.querySelector(`.chat-msg[data-message-id="${CSS.escape(String(id||''))}"]`);if(!node)return;node.scrollIntoView({behavior:'smooth',block:'center'});node.classList.remove('v19-highlight');void node.offsetWidth;node.classList.add('v19-highlight');setTimeout(()=>node.classList.remove('v19-highlight'),2000);};
+window.openChatProfileV19=function(uid){
+  if(!uid)return;
+  profileReturnV19={type:'chat',courseId:activeCourseId||null};
+  if(uid===currentUser?.uid)return window.openUserProfilePage?.();
+  return window.openPublicProfileFinal?.(uid);
+};
+
+/* Button lifecycle: it exists only in chat and only when the user is away from the bottom. */
+const currentSwitchV19=window.switchCoursePage;
+if(currentSwitchV19&&!currentSwitchV19.__v19){
+  const sw=async function(page){
+    if(page!=='chat'){chatActiveContainerV19=null;ensureJumpV19().classList.remove('show');}
+    const r=currentSwitchV19.apply(this,arguments);if(r?.then)await r;
+    setTimeout(()=>{if(page==='chat'){const c=$('chatPageMessagesList');if(c){chatActiveContainerV19=c;bindScrollV19(c);goBottomV19(c,true);}updateJumpV19();}},80);
+    return r;
+  };sw.__v19=true;window.switchCoursePage=sw;
+}
+
+/* Profile page: lightweight, permission-safe renderer. It does not require reading all course stats. */
+function ensureProfileV19(){
+  let p=$('ananasProfileV19');if(p)return p;
+  p=document.createElement('div');p.id='ananasProfileV19';p.className='v19-profile-v19';p.innerHTML=`<div class="v19-profile-shell"><div class="v19-profile-top"><div class="v19-profile-avatar" id="v19Avatar"></div><div><div class="v19-profile-name" id="v19Name"></div><div class="v19-profile-sub" id="v19Sub"></div></div><div class="v19-profile-actions"><button type="button" class="v19-profile-btn" id="v19Back"><i class="fas fa-arrow-right"></i> العودة</button></div></div><div class="v19-profile-grid"><section class="v19-profile-panel" id="v19DataPanel"><h3>البيانات الشخصية</h3><div class="v19-profile-data" id="v19Data"></div></section><section class="v19-profile-panel"><h3>الحالة</h3><div id="v19Status"></div></section><section class="v19-profile-panel full"><h3>معرض الأعمال</h3><div class="v19-profile-gallery" id="v19Gallery"></div></section></div></div>`;document.body.appendChild(p);return p;
+}
+function hideProfileV19(){ensureProfileV19().classList.remove('active');}
+function renderPrivateProfileV19(p){
+  $('v19Status').innerHTML='<div class="v19-private"><i class="fas fa-lock"></i><strong style="color:var(--text-primary);display:block;margin-bottom:3px">الحساب خاص</strong><span>لا يمكن للطلاب الآخرين رؤية بيانات الحساب أو نشاطه أو أعماله.</span></div>';
+  $('v19Data').innerHTML=`<div class="row"><strong>الاسم</strong><span>${esc(p.displayName||p.name||'زائر')}</span></div>`;
+  $('v19Gallery').innerHTML='<div class="v19-private" style="grid-column:1/-1">لا يمكن رؤية الأعمال لأن الحساب خاص.</div>';
+}
+async function fetchPublicWorksV19(uid){try{const s=await db.collection('users').doc(uid).collection('portfolioWorks').get();return s.docs.map(d=>({id:d.id,...(d.data()||{})})).filter(x=>!x.deleted);}catch(e){console.warn('portfolio v19',e);return[]}}
+async function openProfileReliableV19(uid){
+  if(!currentUser||!uid)return;
+  if(profileReturnV19.type==='none'){
+    const chatPage=$('courseChatPage'),assignPage=$('courseAssignmentDetailPage'),selfPage=$('userProfilePage'),canonPage=$('ananasCanonicalProfilePage');
+    if(currentCoursePage==='chat'||(chatPage&&getComputedStyle(chatPage).display!=='none')) profileReturnV19={type:'chat',courseId:activeCourseId||null};
+    else if(window.activeAssignmentDetailId&&assignPage&&(assignPage.classList.contains('active')||getComputedStyle(assignPage).display!=='none')) profileReturnV19={type:'assignment',courseId:activeCourseId||null,assignmentId:window.activeAssignmentDetailId};
+    else if((selfPage&&selfPage.classList.contains('active'))||(canonPage&&canonPage.classList.contains('active'))) profileReturnV19={type:'self'};
+    else profileReturnV19={type:'page',page:currentCoursePage};
+  }
+  const target=String(uid);const self=target===currentUser.uid; if(self){profileReturnV19={type:'none'};hideProfileV19();return window.openUserProfilePage?.();}
+  const page=ensureProfileV19();page.classList.add('active');$('v19Name').textContent='جاري التحميل...';$('v19Sub').textContent='';$('v19Data').innerHTML='';$('v19Gallery').innerHTML='';$('v19Status').innerHTML='';
+  try{
+    const snap=await db.collection('users').doc(target).get();
+    if(!snap.exists){hideProfileV19();return showCustomAlert?.('غير متاح','الحساب غير موجود.');}
+    const p=snap.data()||{},admin=!!isAdmin,privateProfile=!admin&&p.profilePublic===false,name=p.displayName||p.name||'زائر',photo=safePhoto(p);
+    $('v19Avatar').innerHTML=photo?`<img src="${esc(photo)}" alt="">`:esc(name.slice(0,1));$('v19Name').textContent=name;$('v19Sub').textContent=privateProfile?'حساب خاص':'حساب طالب';$('v19Back').onclick=()=>goBackFromProfileV19();
+    if(privateProfile){renderPrivateProfileV19({displayName:name});return;}
+    $('v19Data').innerHTML=`<div class="row"><strong>الاسم</strong><span>${esc(name)}</span></div>${admin?`<div class="row"><strong>البريد الإلكتروني</strong><span>${esc(p.email||'غير متوفر')}</span></div><div class="row"><strong>رقم الهاتف</strong><span>${esc(p.phone||'غير مضاف')}</span></div>`:''}<div class="row"><strong>الحالة</strong><span>عام</span></div>`;
+    const works=await fetchPublicWorksV19(target);
+    $('v19Status').innerHTML=works.length?`<div class="v19-profile-data"><div class="row"><strong>الأعمال المنشورة</strong><span>${works.length}</span></div></div>`:'<div class="v19-private" style="text-align:start">هذا الحساب لا يحتوي على أعمال في المعرض الشخصي حتى الآن.</div>';
+    if(!works.length){$('v19Gallery').innerHTML='<div class="v19-private" style="grid-column:1/-1">لا توجد أعمال منشورة حاليًا.</div>';return;}
+    $('v19Gallery').innerHTML=works.map(w=>{const img=Array.isArray(w.images)?w.images[0]||'':'';const canOpen=admin||w.allowZoom!==false;return `<article class="v19-work"><div class="v19-work-cover">${img?`<img src="${esc(img)}" alt="">`:''}</div><div class="v19-work-body"><div class="v19-work-title">${esc(w.title||'عمل')}</div><div class="v19-work-meta">${esc(w.type||'عمل شخصي')}${w.description?`<br>${esc(w.description)}`:''}${w.allowZoom===false&&!admin?'<br><i class="fas fa-lock"></i> التكبير مغلق':''}</div><div class="v19-work-actions"><button type="button" ${canOpen?'':'disabled'} onclick="window.openPublicProfileWorkV19('${esc(target)}','${esc(w.id)}')"><i class="fas fa-expand"></i> ${canOpen?'عرض العمل':'التكبير مقفل'}</button></div></div></article>`;}).join('');
+  }catch(e){console.error('profile v19',e);hideProfileV19();showCustomAlert?.('خطأ','تعذر تحميل بيانات الحساب.');}
+}
+window.openPublicProfileWorkV19=async function(uid,workId){try{const s=await db.collection('users').doc(uid).collection('portfolioWorks').doc(workId).get();if(!s.exists)return;const w=s.data()||{};if(uid!==currentUser?.uid&&!isAdmin&&w.allowZoom===false)return;const imgs=Array.isArray(w.images)?w.images.filter(Boolean):[];if(imgs.length)window.openPlatformGalleryViewer(imgs,w.title||'عمل');}catch(e){console.error(e)}};
+function goBackFromProfileV19(){
+  const r=profileReturnV19;hideProfileV19();
+  if(r.type==='chat'){activeCourseId=r.courseId||activeCourseId;return window.switchCoursePage?.('chat');}
+  if(r.type==='assignment'){activeCourseId=r.courseId||activeCourseId;return window.openAssignmentDetail?.(r.courseId,r.assignmentId);}
+  if(r.type==='self')return window.openUserProfilePage?.();
+  if(r.type==='page'&&r.page)return window.switchCoursePage?.(r.page);
+}
+/* Account lists: stop the old heavy profile loader and use the safe renderer. */
+document.addEventListener('click',e=>{
+  const account=e.target.closest?.('[data-acp-v17-uid],[data-acp-uid],[data-profile-target],.profile-directory-card');
+  if(!account)return;const uid=account.dataset.acpV17Uid||account.dataset.acpUid||account.dataset.profileTarget; if(!uid)return;
+  e.preventDefault();e.stopImmediatePropagation();profileReturnV19={type:$('ananasCanonicalProfilePage')?.classList.contains('active')||$('userProfilePage')?.classList.contains('active')?'self':'page',page:currentCoursePage};openProfileReliableV19(uid);
+},true);
+window.openPublicProfileFinal=openProfileReliableV19;window.viewProfileByUserId=openProfileReliableV19;window.openAnanasV10Profile=openProfileReliableV19;
+/* Existing chat click handlers call these too. */
+window.openChatProfileV12=window.openChatProfileV19;window.openChatProfileV13=window.openChatProfileV19;
+
+/* Assignment detail v19: show avatar + name and make the student clickable. */
+const oldAssignmentV19=window.openAssignmentDetail;
+window.openAssignmentDetail=async function(courseId,assignmentId){
+  const page=$('courseAssignmentDetailPage');if(!page||!courseId||!assignmentId)return;
+  currentCoursePage='assignments';window.activeAssignmentDetailId=assignmentId;
+  const result=await getAssignmentData(courseId,assignmentId).catch(e=>{console.error(e);return null;});
+  if(!result){return oldAssignmentV19?oldAssignmentV19(courseId,assignmentId):undefined;}
+  const a=result.data||{},subs=Array.isArray(a.submissions)?a.submissions:[],visible=subs.filter(s=>s&&!s.deleted&&(isAdmin||s.approved||s.userId===currentUser?.uid));
+  ['courseOverviewContainer','courseDashboard','courseLessonsPage','courseLessonPlayerPage','courseQuizzesPage','courseAssignmentsPage','courseChatPage','courseFilesPage','courseLearningView','fullChatPage'].forEach(id=>{const el=$(id);if(el){el.classList.remove('active');el.style.display='none';}});
+  page.classList.add('active');page.style.display='block';page.style.position='absolute';page.style.inset='0';page.style.zIndex='1200';page.style.overflowY='auto';
+  page.innerHTML=`<div class="assignment-v2-shell"><div class="assignment-v2-head"><div><span class="assignment-v2-kicker"><i class="fas fa-paintbrush"></i> واجب</span><h2>${esc(a.titleAr||'واجب')}</h2><p>${esc(a.descAr||'')}</p></div><button type="button" class="ananas-secondary-btn" id="assignmentV19Back"><i class="fas fa-arrow-right"></i> العودة</button></div><div class="assignment-v2-meta"><span><i class="fas fa-star"></i> ${Number(a.xpReward)||0} XP</span><span><i class="fas fa-images"></i> ${subs.length} أعمال</span></div><div id="assignmentV19Content" class="assignment-v2-content"></div></div>`;
+  $('assignmentV19Back').onclick=()=>{page.classList.remove('active');page.style.display='none';window.switchCoursePage?.('assignments');};
+  const content=$('assignmentV19Content');let html='';
+  if(currentUser)html+=`<div class="assignment-v2-upload-card"><div><strong>رفع عملك</strong><p>أضف صورًا متعددة للعمل ليظهر هنا بعد الرفع.</p></div><label class="ananas-primary-btn"><i class="fas fa-cloud-arrow-up"></i> رفع صور العمل<input id="assignmentV19Upload" type="file" accept="image/*" multiple hidden></label><span id="assignmentV19Status"></span></div>`;
+  html+='<div class="assignment-v2-grid">';
+  if(!visible.length)html+='<div class="assignment-v2-empty"><i class="fas fa-images"></i><h3>لا توجد أعمال للعرض</h3><p>ابدأ برفع عملك ليظهر هنا.</p></div>';
+  const people=await Promise.all(visible.map(async(s,i)=>{const p=await getChatProfileV19(s.userId,s.userName||'طالب');return {s,i,p};}));
+  people.forEach(({s,i,p})=>{const workId=typeof submissionWorkId==='function'?submissionWorkId(s,i):(s.workId||s.id||`work_${i}`),imgs=typeof submissionImages==='function'?submissionImages(s):(Array.isArray(s.images)?s.images:[]);if(!imgs.length)return;html+=`<article class="assignment-v2-card" data-user="${esc(s.userId||'')}"><div class="assignment-v2-cover"><img src="${esc(imgs[0])}" alt="${esc(p.displayName||s.userName||'عمل')}">${imgs.length>1?`<span>${imgs.length} صور</span>`:''}</div><div class="assignment-v2-body"><button type="button" class="v19-assignment-person" data-profile-uid="${esc(s.userId||'')}" onclick="window.openAssignmentStudentProfileV19('${esc(s.userId||'')}')"><span class="v19-assignment-avatar">${p.photoURL?`<img src="${esc(p.photoURL)}" alt="">`:esc((p.displayName||s.userName||'طالب').slice(0,1))}</span><span class="v19-assignment-name">${esc(p.displayName||s.userName||'طالب')}</span></button><small>${s.approved?'معتمد':'قيد المراجعة'}</small><div class="assignment-v2-actions"><button type="button" class="ananas-primary-btn" data-work-view="${esc(workId)}"><i class="fas fa-images"></i> عرض</button>${isAdmin&&!s.approved?`<button type="button" class="ananas-secondary-btn" data-work-approve="${esc(workId)}"><i class="fas fa-check"></i> اعتماد</button>`:''}${s.userId===currentUser?.uid||isAdmin?`<button type="button" class="ananas-danger-btn" data-work-delete="${esc(workId)}"><i class="fas fa-trash"></i> حذف</button>`:''}</div></div></article>`;});
+  html+='</div>';content.innerHTML=html;
+  content.querySelectorAll('[data-work-view]').forEach(b=>b.onclick=()=>window.openAssignmentWorkViewer?.(courseId,assignmentId,b.dataset.workView));
+  content.querySelectorAll('[data-work-approve]').forEach(b=>b.onclick=()=>window.approveSubmission?.(courseId,assignmentId,b.dataset.workApprove).then(()=>window.openAssignmentDetail(courseId,assignmentId)));
+  content.querySelectorAll('[data-work-delete]').forEach(b=>b.onclick=()=>window.deleteAssignmentWork?.(courseId,assignmentId,b.dataset.workDelete).then(()=>window.openAssignmentDetail(courseId,assignmentId)));
+  $('assignmentV19Upload')?.addEventListener('change',async e=>{const files=[...(e.target.files||[])];if(!files.length||!currentUser)return;const st=$('assignmentV19Status');st.textContent='جاري رفع الصور...';try{const urls=[];for(const f of files){const u=await uploadImage(f);if(!u)throw Error('upload');urls.push(u);}const latest=await getAssignmentData(courseId,assignmentId);if(!latest)throw Error('missing');const arr=Array.isArray(latest.data.submissions)?[...latest.data.submissions]:[];arr.push({workId:crypto.randomUUID?crypto.randomUUID():`work_${Date.now()}`,userId:currentUser.uid,userName:currentUser.displayName||'طالب',images:urls,approved:false,xpGranted:false,allowZoom:true,uploadedAt:new Date().toISOString()});await latest.ref.update({submissions:arr});await window.openAssignmentDetail(courseId,assignmentId);}catch(err){console.error(err);st.textContent='تعذر رفع العمل.'}finally{e.target.value=''};});
+};
+window.openAssignmentStudentProfileV19=function(uid){profileReturnV19={type:'assignment',courseId:activeCourseId,assignmentId:window.activeAssignmentDetailId};openProfileReliableV19(uid);};
+
+/* Make assignment back-from-profile return to the exact assignment. */
+window.closeV19Profile=goBackFromProfileV19;
+
+/* Hide global jump button whenever the user leaves the chat/profile context. */
+const obsV19=new MutationObserver(()=>{if(!chatVisibleV19()){$('ananasChatJumpLastV19')?.classList.remove('show');}else updateJumpV19();});
+['courseChatPage','fullChatPage'].forEach(id=>{const n=$(id);if(n)obsV19.observe(n,{attributes:true,attributeFilter:['class','style']});});
+window.addEventListener('beforeunload',()=>{try{chatUnsubV19?.()}catch(_){} });
+
+})();
+</script>
+
+
+<script id="ananas-v19-directory-repair">
+(function(){
+'use strict';
+const $=id=>document.getElementById(id),esc=v=>String(v??'').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+async function loadAccountDirectoryV19(){
+  if(!currentUser||!isAdmin)return;
+  const grids=[$('acpDirectory'),$('profileDirectoryGrid')].filter(Boolean);if(!grids.length)return;
+  grids.forEach(g=>g.innerHTML='<div class="acp-empty">جاري تحميل الحسابات...</div>');
+  const key='ananas.userDirectoryCache.v19';let cached=[];try{cached=JSON.parse(localStorage.getItem(key)||'[]')||[];}catch(_){cached=[];}
+  try{
+    let snap=null,lastErr=null;
+    for(let i=0;i<2&&!snap;i++){try{snap=await db.collection('users').get();}catch(e){lastErr=e;await new Promise(r=>setTimeout(r,350));}}
+    const users=snap?snap.docs.map(d=>({id:d.id,...(d.data()||{})})):cached;
+    if(snap){try{localStorage.setItem(key,JSON.stringify(users.map(u=>({id:u.id,displayName:u.displayName||u.name||'زائر',photoURL:u.photoURL||u.photoUrl||u.photo||'',profilePublic:u.profilePublic!==false}))));}catch(_){} }
+    if(!users.length){grids.forEach(g=>g.innerHTML='<div class="acp-empty">لا توجد حسابات.</div>');return;}
+    users.sort((a,b)=>String(a.displayName||a.name||'').localeCompare(String(b.displayName||b.name||''),'ar'));
+    grids.forEach(g=>{
+      const html=users.map(u=>{const n=u.displayName||u.name||'زائر',ph=u.photoURL||u.photoUrl||u.photo||'',uid=esc(u.id);return `<button type="button" class="acp-person" data-acp-v19-uid="${uid}"><div class="acp-person-avatar">${ph?`<img src="${esc(ph)}" alt="">`:esc(n.slice(0,1))}</div><div class="acp-person-copy"><strong>${esc(n)}</strong><span>${u.id===currentUser.uid?'حسابي':(u.profilePublic===false?'حساب خاص':'حساب عام')}</span></div><i class="fas fa-chevron-left"></i></button>`}).join('');
+      g.innerHTML=html;
+      g.querySelectorAll('[data-acp-v19-uid]').forEach(b=>b.addEventListener('click',e=>{e.preventDefault();e.stopImmediatePropagation();profileReturnV19={type:'self'};openProfileReliableV19(b.dataset.acpV19Uid);},true));
+    });
+    const dc=$('acpDirectoryCount'); if(dc) dc.textContent=`${users.length} حساب`;
+    const pdc=$('profileDirectoryCount'); if(pdc) pdc.textContent=`${users.length} حساب`;
+  }catch(e){console.error('directory v19',e);if(cached.length){grids.forEach(g=>g.innerHTML=`<div class="acp-empty" style="margin-bottom:8px">تعذر تحديث القائمة، وتم عرض آخر نسخة محفوظة.</div>`+cached.map(u=>`<button type="button" class="acp-person" data-acp-v19-uid="${esc(u.id)}"><div class="acp-person-avatar">${u.photoURL?`<img src="${esc(u.photoURL)}" alt="">`:esc((u.displayName||'زائر').slice(0,1))}</div><div class="acp-person-copy"><strong>${esc(u.displayName||'زائر')}</strong><span>${u.profilePublic===false?'حساب خاص':'حساب عام'}</span></div><i class="fas fa-chevron-left"></i></button>`).join(''));grids.forEach(g=>g.querySelectorAll('[data-acp-v19-uid]').forEach(b=>b.onclick=()=>{profileReturnV19={type:'self'};openProfileReliableV19(b.dataset.acpV19Uid);}));}else grids.forEach(g=>g.innerHTML='<div class="acp-empty">تعذر تحميل الحسابات حاليًا.</div>');}
+}
+const oldOwn=window.openUserProfilePage;
+if(oldOwn&&!oldOwn.__v19DirectoryWrapped){
+  const wrapped=async function(){const r=await oldOwn.apply(this,arguments);setTimeout(loadAccountDirectoryV19,120);return r;};wrapped.__v19DirectoryWrapped=true;window.openUserProfilePage=wrapped;
+}
+window.loadAccountDirectoryV19=loadAccountDirectoryV19;
+setTimeout(()=>{if($('ananasCanonicalProfilePage')?.classList.contains('active'))loadAccountDirectoryV19();},250);
+})();
+</script>
