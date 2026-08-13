@@ -9342,6 +9342,119 @@ window.__openCanonicalProfile=openCanonicalV17;window.openUserProfilePage=()=>cu
 document.addEventListener('click',async e=>{const n=e.target.closest?.('.chat-msg .chat-profile-avatar,.chat-msg .chat-profile-name,.chat-msg .msg-header .u,[data-profile-uid]');if(!n)return;const msg=n.closest('.chat-msg');let uid=n.dataset.profileUid||n.closest('[data-profile-uid]')?.dataset.profileUid;if(!uid&&msg?.dataset.messageId&&typeof activeCourseId!=='undefined'&&activeCourseId){try{const s=await db.collection('courses').doc(activeCourseId).collection('chat').doc(msg.dataset.messageId).get();uid=s.data()?.userId||''}catch(_){}}if(uid){e.preventDefault();e.stopImmediatePropagation();await openCanonicalV17(uid,uid===currentUser?.uid);}},true);
 })();
 </script>
+
+
+<!-- FINAL V19 UX PATCH: legacy profile look, strict mobile viewport, independent scroll, chat UX, gallery preview -->
+<style id="ananas-v19-final-css">
+/* Restore the older profile visual language while keeping the current data/permissions engine. */
+#ananasCanonicalProfilePage .acp-shell{width:min(1100px,100%);padding:24px 20px 32px}
+#ananasCanonicalProfilePage .acp-hero{background:linear-gradient(145deg,var(--bg-card),rgba(108,92,231,.045));border:1px solid var(--surface-border,var(--border));border-radius:24px;padding:20px;box-shadow:var(--surface-shadow,0 18px 42px rgba(0,0,0,.06));display:grid;grid-template-columns:auto 1fr auto;gap:16px;align-items:center}
+#ananasCanonicalProfilePage .acp-avatar{width:82px;height:82px;border-radius:24px;font-size:1.8rem}
+#ananasCanonicalProfilePage .acp-name{font-size:1.55rem}
+#ananasCanonicalProfilePage .acp-actions{display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-end}
+#ananasCanonicalProfilePage .acp-btn{border:1px solid var(--border);background:var(--bg-card);color:var(--text-primary);min-height:44px;padding:10px 14px;border-radius:13px;font:inherit;font-weight:900;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:8px}
+#ananasCanonicalProfilePage .acp-stats{grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-top:14px}
+#ananasCanonicalProfilePage .acp-stat{background:var(--bg-card);border:1px solid var(--surface-border,var(--border));border-radius:18px;padding:16px;box-shadow:var(--surface-shadow,0 10px 30px rgba(0,0,0,.04));text-align:center}
+#ananasCanonicalProfilePage .acp-stat b{font-size:1.35rem}
+#ananasCanonicalProfilePage .acp-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;margin-top:14px}
+#ananasCanonicalProfilePage .acp-panel{background:var(--bg-card);border:1px solid var(--surface-border,var(--border));border-radius:20px;padding:18px;box-shadow:var(--surface-shadow,0 10px 30px rgba(0,0,0,.04))}
+#ananasCanonicalProfilePage .acp-panel.full{grid-column:1/-1}
+#ananasCanonicalProfilePage .acp-panel h3{margin:0 0 12px}
+#ananasCanonicalProfilePage .acp-gallery{grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:12px}
+#ananasCanonicalProfilePage .acp-work{background:var(--bg-primary);border:1px solid var(--border);border-radius:18px;overflow:hidden}
+#ananasCanonicalProfilePage .acp-work-cover{aspect-ratio:4/3;height:auto}
+#ananasCanonicalProfilePage .acp-work-cover img{cursor:zoom-in!important}
+.v19-back-only{width:44px!important;min-width:44px!important;height:44px!important;min-height:44px!important;padding:0!important;border-radius:13px!important;font-size:1.1rem!important}
+#ananasV19GalleryViewer{position:fixed;inset:0;z-index:150000;display:none;align-items:center;justify-content:center;padding:22px;background:rgba(5,7,12,.84);backdrop-filter:blur(10px)}
+#ananasV19GalleryViewer.active{display:flex}
+#ananasV19GalleryViewer .v19-gallery-inner{max-width:min(1200px,96vw);max-height:92vh;display:flex;flex-direction:column;align-items:center;gap:10px}
+#ananasV19GalleryViewer img{max-width:96vw;max-height:82vh;object-fit:contain;border-radius:18px;box-shadow:0 30px 90px rgba(0,0,0,.55)}
+#ananasV19GalleryViewer .v19-gallery-caption{color:#fff;text-align:center;font-weight:900}
+#ananasV19GalleryViewer .v19-gallery-close{position:absolute;top:16px;inset-inline-end:16px;width:46px;height:46px;border:1px solid rgba(255,255,255,.25);border-radius:14px;background:rgba(255,255,255,.1);color:#fff;font-size:1.8rem;cursor:pointer}
+.auth-btn.v19-account-auth{padding:6px 10px!important;display:inline-flex!important;align-items:center!important;gap:8px!important}
+.auth-btn.v19-account-auth .v19-account-avatar{width:32px;height:32px;border-radius:50%;overflow:hidden;display:inline-grid;place-items:center;background:var(--accent-gradient);color:#fff;font-weight:900;flex:0 0 auto}
+.auth-btn.v19-account-auth .v19-account-avatar img{width:100%;height:100%;object-fit:cover}
+.auth-btn.v19-account-auth .v19-account-name{max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.chat-reply-target-v19{outline:3px solid var(--accent1)!important;box-shadow:0 0 0 8px rgba(108,92,231,.12)!important;transition:box-shadow .2s ease,outline .2s ease!important}
+.chat-profile-head.v19-chat-head{display:flex!important;align-items:center!important;gap:9px!important;margin-bottom:7px!important;min-height:34px!important}
+@media(max-width:760px){
+ #ananasCanonicalProfilePage .acp-shell{padding:12px 10px 22px}
+ #ananasCanonicalProfilePage .acp-hero{grid-template-columns:auto 1fr;align-items:start}
+ #ananasCanonicalProfilePage .acp-actions{grid-column:1/-1;justify-content:stretch}
+ #ananasCanonicalProfilePage .acp-actions .acp-btn{flex:1}
+ #ananasCanonicalProfilePage .acp-stats{grid-template-columns:repeat(2,minmax(0,1fr))}
+ #ananasCanonicalProfilePage .acp-grid{grid-template-columns:1fr}
+ #ananasCanonicalProfilePage .acp-panel.full{grid-column:auto}
+ #ananasCanonicalProfilePage .acp-gallery{grid-template-columns:repeat(2,minmax(0,1fr))}
+ .auth-btn.v19-account-auth .v19-account-name{max-width:100px}
+}
+/* Strict mobile viewport: content starts below top bar and ends above bottom bar. */
+@media(max-width:768px){
+ :root{--v19-top:var(--nav-height-mobile,62px);--v19-bottom:calc(var(--mobile-bottom-nav-content-height,66px) + env(safe-area-inset-bottom))}
+ #coursesPage,#courseDashboard,#courseOverviewContainer,#courseLessonsPage,#courseLessonPlayerPage,#courseQuizzesPage,#courseAssignmentsPage,#courseAssignmentDetailPage,#courseChatPage,#courseFilesPage,#fullChatPage,#courseLearningView{position:fixed!important;top:var(--v19-top)!important;bottom:var(--v19-bottom)!important;left:0!important;right:0!important;width:auto!important;height:auto!important;max-height:none!important;overflow-y:auto!important;overflow-x:hidden!important;overscroll-behavior:contain!important;padding-bottom:20px!important;box-sizing:border-box!important}
+ #ananasV19GalleryViewer{padding:14px}
+}
+</style>
+<script id="ananas-v19-final-js">
+(function(){
+'use strict';
+const q=id=>document.getElementById(id);
+function ownProfile(){return !!window.__v18ViewingProfileUid && window.__v18ViewingProfileUid===currentUser?.uid}
+function setBackState(){const b=q('acpBack');if(!b)return;const isSelf=ownProfile();b.classList.add('v19-back-only');b.innerHTML='<i class="fas fa-chevron-left" aria-hidden="true"></i>';b.title='العودة إلى حسابي';b.setAttribute('aria-label','العودة إلى حسابي');b.style.display=isSelf?'none':'inline-flex';b.onclick=async e=>{e.preventDefault();e.stopImmediatePropagation();window.__openCanonicalProfile?.(currentUser.uid,true)};}
+function setProfileVisual(uid){window.__v18ViewingProfileUid=uid;setBackState();}
+/* Every profile transition starts at the top; returning from another profile always returns to own profile. */
+const originalCanonical=window.__openCanonicalProfile;
+if(originalCanonical&&!window.__v19CanonicalWrapped){
+ window.__v19CanonicalWrapped=true;
+ window.__openCanonicalProfile=async function(uid,isSelf){window.__v18ViewingProfileUid=uid;const r=await originalCanonical.apply(this,arguments);setBackState();const p=q('ananasCanonicalProfilePage');if(p)p.scrollTop=0;window.scrollTo(0,0);requestAnimationFrame(()=>{if(p)p.scrollTop=0;window.scrollTo(0,0)});return r;};
+ window.openUserProfilePage=()=>currentUser?window.__openCanonicalProfile(currentUser.uid,true):undefined;
+ window.openPublicProfileFinal=uid=>window.__openCanonicalProfile(uid,uid===currentUser?.uid);
+ window.openAnanasV10Profile=window.openPublicProfileFinal;
+ window.viewProfileByUserId=window.openPublicProfileFinal;
+ window.openChatProfileV13=window.openPublicProfileFinal;
+ window.openChatProfileV12=window.openPublicProfileFinal;
+}
+setBackState();
+/* Restore old V10-like profile proportions without changing the data engine. */
+function restyleProfile(){const p=q('ananasCanonicalProfilePage');if(!p)return;setBackState();const shell=p.querySelector('.acp-shell');if(shell){shell.style.width='min(1100px,100%)';shell.style.padding='24px 20px 32px'}p.scrollTop=0;}
+new MutationObserver(()=>setTimeout(restyleProfile,0)).observe(document.body,{subtree:true,childList:true,attributes:true,attributeFilter:['class','style']});
+
+/* Account button after sign-in: avatar + saved display name. */
+async function refreshAccountButton(){const b=q('authToggleBtn');if(!b)return;if(!currentUser){b.classList.remove('v19-account-auth');b.innerHTML='<i class="fas fa-user"></i> <span id="authLabel">تسجيل الدخول</span>';return;}let name=currentUserProfile?.displayName||currentUser.displayName||'حسابي',photo=currentUserProfile?.photoURL||currentUserProfile?.photoUrl||currentUser.photoURL||'';b.classList.add('v19-account-auth');b.innerHTML=`<span class="v19-account-avatar">${photo?`<img src="${escapeHtml(photo)}" alt="">`:'<i class="fas fa-user"></i>'}</span><span class="v19-account-name">${escapeHtml(name)}</span>`;}
+refreshAccountButton();
+const authObserver=new MutationObserver(()=>refreshAccountButton());authObserver.observe(document.body,{subtree:true,childList:true});
+
+/* Independent page start: whenever a different page/profile becomes active, reset only that page. */
+history.scrollRestoration='manual';
+function topOnly(el){if(!el)return;try{el.scrollTop=0;el.querySelector?.('.page-content')?.scrollTo(0,0);el.querySelector?.('.course-page-content')?.scrollTo(0,0);el.querySelector?.('.acp-shell')?.scrollTo(0,0)}catch(_){}}
+function resetActivePage(){window.scrollTo(0,0);document.scrollingElement.scrollTop=0;document.querySelectorAll('#coursesPage,#courseDashboard,#courseOverviewContainer,#courseLessonsPage,#courseLessonPlayerPage,#courseQuizzesPage,#courseAssignmentsPage,#courseAssignmentDetailPage,#courseChatPage,#courseFilesPage,#fullChatPage,#courseLearningView,#ananasCanonicalProfilePage,#ananasV10ProfilePage').forEach(el=>{if(el.classList.contains('active')||getComputedStyle(el).display!=='none')topOnly(el)})}
+const activeObserver=new MutationObserver(m=>{for(const x of m){if(x.type==='attributes'&&x.attributeName==='class'){setTimeout(resetActivePage,0);setTimeout(resetActivePage,80);break}}});activeObserver.observe(document.body,{subtree:true,attributes:true,attributeFilter:['class']});
+window.addEventListener('pageshow',()=>{resetActivePage();setTimeout(resetActivePage,150)});window.addEventListener('load',()=>{resetActivePage();setTimeout(resetActivePage,250)});
+
+/* Gallery preview for the actual profile cards, including current user and public student profiles. */
+function ensureGalleryViewer(){let m=q('ananasV19GalleryViewer');if(m)return m;m=document.createElement('div');m.id='ananasV19GalleryViewer';m.innerHTML='<button type="button" class="v19-gallery-close" aria-label="إغلاق">×</button><div class="v19-gallery-inner"><img id="ananasV19GalleryImage" alt="معاينة العمل"><div class="v19-gallery-caption" id="ananasV19GalleryCaption"></div></div>';document.body.appendChild(m);m.querySelector('.v19-gallery-close').onclick=()=>m.classList.remove('active');m.addEventListener('click',e=>{if(e.target===m)m.classList.remove('active')});return m;}
+function profileMayView(uid){return !!currentUser&&(uid===currentUser.uid||isAdmin||true)}
+function showGalleryImage(url,caption){if(!url)return;const m=ensureGalleryViewer();q('ananasV19GalleryImage').src=url;q('ananasV19GalleryCaption').textContent=caption||'معرض الأعمال';m.classList.add('active');}
+window.openProfileGalleryImageV19=showGalleryImage;
+function bindGallery(){const roots=['#ananasCanonicalProfilePage .acp-gallery','#ananasV10ProfilePage .ananas-v10-gallery'];document.querySelectorAll(roots.join(',')).forEach(g=>{g.querySelectorAll('img').forEach(img=>{if(img.dataset.v19Gallery==='1')return;img.dataset.v19Gallery='1';img.style.cursor='zoom-in';img.addEventListener('click',e=>{e.preventDefault();e.stopImmediatePropagation();const card=img.closest('.acp-work,.ananas-v10-work');const caption=card?.querySelector('.acp-work-title,.ananas-v10-work-title')?.textContent||'معرض الأعمال';showGalleryImage(img.currentSrc||img.src,caption)},true)})})}
+new MutationObserver(()=>setTimeout(bindGallery,0)).observe(document.body,{subtree:true,childList:true});setTimeout(bindGallery,200);
+
+/* Chat: own and other messages show the registered profile name/photo. */
+const v19ChatCache=window.__v19ChatCache=window.__v19ChatCache||{};
+async function hydrateChatIdentityV19(){const list=q('chatPageMessagesList');if(!list)return;const msgs=[...list.querySelectorAll('.chat-msg')];for(const msg of msgs){let uid=msg.dataset.userId||msg.querySelector('[data-profile-uid]')?.dataset.profileUid||'';if(!uid&&msg.dataset.messageId&&activeCourseId){try{const s=await db.collection('courses').doc(activeCourseId).collection('chat').doc(msg.dataset.messageId).get();uid=s.data()?.userId||'';msg.dataset.userId=uid}catch(_){}}if(!uid)continue;let p=v19ChatCache[uid];if(!p){try{const s=await db.collection('users').doc(uid).get();const d=s.exists?(s.data()||{}):{};p={name:d.displayName||d.name||'مستخدم',photo:d.photoURL||d.photoUrl||d.photo||''};v19ChatCache[uid]=p}catch(_){continue}}let head=msg.querySelector('.chat-profile-head');if(!head){head=document.createElement('div');head.className='chat-profile-head';msg.prepend(head)}head.classList.add('v19-chat-head');head.dataset.profileUid=uid;head.innerHTML=`<span class="chat-profile-avatar" data-profile-uid="${escapeHtml(uid)}">${p.photo?`<img src="${escapeHtml(p.photo)}" alt="">`:'<i class="fas fa-user"></i>'}</span><span class="chat-profile-name" data-profile-uid="${escapeHtml(uid)}">${escapeHtml(p.name)}</span>`;msg.querySelector('.msg-header')?.remove();}}
+window.hydrateChatIdentityV19=hydrateChatIdentityV19;setInterval(hydrateChatIdentityV19,800);new MutationObserver(()=>setTimeout(hydrateChatIdentityV19,0)).observe(document.body,{subtree:true,childList:true});
+
+/* Scroll chat to the newest message after sending. */
+function scrollChatBottom(){const ids=['chatPageMessagesList','fullChatPageMessagesList','fullChatMessagesList'];ids.forEach(id=>{const el=q(id);if(el){el.scrollTop=el.scrollHeight;requestAnimationFrame(()=>el.scrollTop=el.scrollHeight)}})}
+['fullPageSendBtn','fullChatPageSendBtn','fullChatSendBtn'].forEach(id=>q(id)?.addEventListener('click',()=>setTimeout(scrollChatBottom,120)));
+['fullChatPageInput','fullChatInput'].forEach(id=>q(id)?.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey)setTimeout(scrollChatBottom,150)}));
+if(typeof window.sendFullPageChatMessage==='function'&&!window.sendFullPageChatMessage.__v19Wrapped){const oldSend=window.sendFullPageChatMessage;window.sendFullPageChatMessage=async function(){const r=await oldSend.apply(this,arguments);setTimeout(scrollChatBottom,80);setTimeout(scrollChatBottom,300);return r};}
+
+/* Reply preview: jump to the original message and highlight it briefly. */
+async function bindReplyTargets(){const list=q('chatPageMessagesList');if(!list)return;for(const msg of list.querySelectorAll('.chat-msg')){if(msg.dataset.v19ReplyBound==='1')continue;const id=msg.dataset.messageId;if(!id||!activeCourseId)continue;try{const s=await db.collection('courses').doc(activeCourseId).collection('chat').doc(id).get();const d=s.data()||{};msg.dataset.replyToId=d.replyToId||'';const block=msg.querySelector('.reply-block');if(block&&d.replyToId){block.dataset.replyTargetId=d.replyToId;block.dataset.v19ReplyBound='1';block.style.cursor='pointer';block.title='عرض الرسالة الأصلية';block.addEventListener('click',async e=>{e.preventDefault();e.stopPropagation();const target=list.querySelector(`.chat-msg[data-message-id="${CSS.escape(d.replyToId)}"]`);if(target){target.scrollIntoView({behavior:'smooth',block:'center'});target.classList.remove('chat-reply-target-v19');void target.offsetWidth;target.classList.add('chat-reply-target-v19');setTimeout(()=>target.classList.remove('chat-reply-target-v19'),1600);}})}}catch(_){ }msg.dataset.v19ReplyBound='1';}}
+setInterval(bindReplyTargets,900);setTimeout(bindReplyTargets,400);
+})();
+</script>
 </body>
 </html>
 
