@@ -4198,7 +4198,7 @@ label[for*="En"], input[id*="En"], textarea[id*="En"] { display:none !important;
                     const urls=[]; for(const file of files){const url=await uploadImage(file); if(!url)throw Error('upload'); urls.push(url);}
                     const latest=await getAssignmentData(courseId,assignmentId); if(!latest)return;
                     const submissions=Array.isArray(latest.data.submissions)?[...latest.data.submissions]:[];
-                    submissions.push({workId:(crypto.randomUUID?crypto.randomUUID():`work_${Date.now()}_${Math.random().toString(36).slice(2)}`),userId:currentUser.uid,userName:currentUser.displayName||'طالب',images:urls,approved:false,xpGranted:false,uploadedAt:new Date().toISOString()});
+                    submissions.push({workId:(crypto.randomUUID?crypto.randomUUID():`work_${Date.now()}_${Math.random().toString(36).slice(2)}`),userId:currentUser.uid,userName:currentUser.displayName||'طالب',images:urls,approved:false,xpGranted:false,allowZoom:true,uploadedAt:new Date().toISOString()});
                     await latest.ref.update({submissions});
                     await refreshAssignmentDetail(courseId,assignmentId); loadAssignmentsPage(courseId);
                 }catch(err){console.error(err);st.textContent='فشل رفع الصور.';}
@@ -7336,7 +7336,7 @@ label[for*="En"], input[id*="En"], textarea[id*="En"] { display:none !important;
   let __courseStateWriting=false;
   let __courseStateQueued=false;
   function __stateRef(courseId){
-    if(!window.db || !window.currentUser || !courseId) return null;
+    if(!window.db || !currentUser || !courseId) return null;
     return db.collection('users').doc(currentUser.uid).collection('courseState').doc(courseId);
   }
   function __buildCourseState(){
@@ -8216,7 +8216,7 @@ body.light-mode .logo-img{content:url('https://i.postimg.cc/q7Frnj7k/image.png')
       const workId=card.dataset.workId, assignmentId=card.closest?.('[data-assignment-id]')?.dataset.assignmentId;
       const courseId=window.activeCourseId||'';
       const uid=card.dataset.userId;
-      if(!isAdmin && uid!==window.currentUser?.uid)return;
+      if(!isAdmin && uid!==currentUser?.uid)return;
       if(actions.querySelector('[data-unified-edit-work]'))return;
       const btn=document.createElement('button');btn.type='button';btn.dataset.unifiedEditWork='1';btn.innerHTML='<i class="fas fa-pen"></i> تعديل';
       btn.onclick=()=>{if(typeof window.editAssignmentWork==='function'&&courseId&&assignmentId&&workId)window.editAssignmentWork(courseId,assignmentId,workId);};
@@ -8239,7 +8239,7 @@ body.light-mode .logo-img{content:url('https://i.postimg.cc/q7Frnj7k/image.png')
 
   /* Direct work upload from own profile, without adding a new subsystem. */
   window.openProfileWorkUpload=function(){
-    if(!window.currentUser){window.triggerAuth?.();return;}
+    if(!currentUser){window.triggerAuth?.();return;}
     if(!window.activeCourseId){window.mobileNavigate?.('courses');return;}
     if(typeof window.openAssignmentDetail==='function'){
       const message='لإضافة عمل، افتح الواجب المطلوب من صفحة الواجبات ثم استخدم زر إضافة صور العمل.';
@@ -8316,7 +8316,7 @@ body.light-mode .logo-img{content:url('https://i.postimg.cc/q7Frnj7k/image.png')
      const ref=db.collection('courses').doc(courseId).collection('assignments').doc(assignmentId),snap=await ref.get();if(!snap.exists)throw Error('assignment-missing');
      const a=snap.data()||{},urls=[];for(const f of files){const u=await uploadImage(f);if(!u)throw Error('upload');urls.push(u);}
      const submissions=Array.isArray(a.submissions)?[...a.submissions]:[];
-     submissions.push({workId:(crypto.randomUUID?crypto.randomUUID():`work_${Date.now()}_${Math.random().toString(36).slice(2)}`),userId:currentUser.uid,userName:currentUser.displayName||'طالب',images:urls,approved:false,xpGranted:false,uploadedAt:new Date().toISOString()});
+     submissions.push({workId:(crypto.randomUUID?crypto.randomUUID():`work_${Date.now()}_${Math.random().toString(36).slice(2)}`),userId:currentUser.uid,userName:currentUser.displayName||'طالب',images:urls,approved:false,xpGranted:false,allowZoom:true,uploadedAt:new Date().toISOString()});
      await ref.update({submissions});
      m.classList.remove('active');await window.openUserProfilePage?.();showCustomAlert('تم الرفع','تمت إضافة العمل إلى الواجب بنجاح.');
    }catch(e){console.error(e);status.textContent='تعذر رفع العمل.';showCustomAlert('خطأ','تعذر رفع العمل.');}
@@ -8608,7 +8608,7 @@ async function savePersonalWork(){
  const title=$('v10WorkTitle').value.trim(),desc=$('v10WorkDescription').value.trim(),type=$('v10WorkType').value,files=[...($('v10WorkFiles').files||[])],btn=$('v10WorkSave'),status=$('v10WorkStatus');
  if(!title)return showCustomAlert('تنبيه','اكتب عنوان العمل.');if(!files.length)return showCustomAlert('تنبيه','اختر صورة واحدة على الأقل.');
  btn.disabled=true;status.textContent='جاري رفع العمل...';
- try{const images=[];for(const file of files){const u=await uploadImage(file);if(!u)throw Error('upload');images.push(u)}await db.collection('users').doc(currentUser.uid).collection('portfolioWorks').add({title,description:desc,type,images,createdAt:firebase.firestore.FieldValue.serverTimestamp(),deleted:false});$('ananasV10PortfolioModal').classList.remove('active');showCustomAlert('تمت الإضافة','تمت إضافة العمل إلى معرضك الشخصي.');if(window.refreshAnanasV10Profile)await window.refreshAnanasV10Profile(currentUser.uid,true);}catch(e){console.error(e);status.textContent='تعذر إضافة العمل.';showCustomAlert('خطأ','تعذر إضافة العمل.')}finally{btn.disabled=false}
+ try{const images=[];for(const file of files){const u=await uploadImage(file);if(!u)throw Error('upload');images.push(u)}await db.collection('users').doc(currentUser.uid).collection('portfolioWorks').add({title,description:desc,type,images,allowZoom:true,createdAt:firebase.firestore.FieldValue.serverTimestamp(),deleted:false});$('ananasV10PortfolioModal').classList.remove('active');showCustomAlert('تمت الإضافة','تمت إضافة العمل إلى معرضك الشخصي.');if(window.refreshAnanasV10Profile)await window.refreshAnanasV10Profile(currentUser.uid,true);}catch(e){console.error(e);status.textContent='تعذر إضافة العمل.';showCustomAlert('خطأ','تعذر إضافة العمل.')}finally{btn.disabled=false}
 }
 window.openPersonalPortfolioAdd=()=>{if(!currentUser)return triggerAuth?.();const m=ensurePortfolioModal();$('v10WorkTitle').value='';$('v10WorkType').value='تصميم';$('v10WorkDescription').value='';$('v10WorkFiles').value='';$('v10WorkFilesName').textContent='لم يتم اختيار صور';$('v10WorkStatus').textContent='';m.classList.add('active')};
 
@@ -9245,7 +9245,7 @@ const $=id=>document.getElementById(id);
 const esc2=window.escapeHtml||((v)=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])));
 const fmt2=v=>{try{const d=v?.toDate?v.toDate():(v?new Date(v):null);return d&&!isNaN(d)?d.toLocaleDateString('ar-SA',{year:'numeric',month:'long',day:'numeric'}):'—'}catch(_){return '—'}};
 let __adminResolved=null;
-async function resolveAdmin(){if(__adminResolved!==null)return __adminResolved;try{const s=await db.collection('admins').doc('main').get();const emails=(s.data()?.adminEmails||[]).map(x=>String(x).trim().toLowerCase());__adminResolved=!!currentUser&&emails.includes(String(currentUser.email||'').trim().toLowerCase());if(__adminResolved)window.isAdmin=true;return __adminResolved}catch(_){__adminResolved=!!window.isAdmin;return __adminResolved}}
+async function resolveAdmin(){if(__adminResolved!==null)return __adminResolved;try{const s=await db.collection('admins').doc('main').get();const emails=(s.data()?.adminEmails||[]).map(x=>String(x).trim().toLowerCase());__adminResolved=!!currentUser&&emails.includes(String(currentUser.email||'').trim().toLowerCase());if(__adminResolved)isAdmin=true;return __adminResolved}catch(_){__adminResolved=!!isAdmin;return __adminResolved}}
 function hideLegacyProfiles(){['userProfilePage','ananasV10ProfilePage','ananasPrivateProfileOverlay'].forEach(id=>{const el=$(id);if(el){el.classList.remove('active');el.style.setProperty('display','none','important')}})}
 function ensureCanonical(){
  let p=$('ananasCanonicalProfilePage');if(p)return p;p=document.createElement('div');p.id='ananasCanonicalProfilePage';
@@ -9270,8 +9270,8 @@ const account=document.getElementById('authToggleBtn');if(account)account.addEve
 const $=id=>document.getElementById(id);
 const escV17=window.escapeHtml||((v)=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])));
 const fmtV17=v=>{try{const d=v?.toDate?v.toDate():(v?new Date(v):null);return d&&!isNaN(d)?d.toLocaleDateString('ar-SA',{year:'numeric',month:'long',day:'numeric'}):'—'}catch(_){return '—'}};
-function adminFlag(){return (typeof window.isAdmin!=='undefined'&&window.isAdmin===true)||(typeof isAdmin!=='undefined'&&isAdmin===true);}
-async function isCurrentAdmin(){if(adminFlag())return true;try{if(!currentUser)return false;const s=await db.collection('admins').doc('main').get();const emails=(s.data()?.adminEmails||[]).map(x=>String(x).trim().toLowerCase());const ok=emails.includes(String(currentUser.email||'').trim().toLowerCase());if(ok)window.isAdmin=true;return ok;}catch(_){return false;}}
+function adminFlag(){return (typeof isAdmin!=='undefined'&&isAdmin===true)||(typeof isAdmin!=='undefined'&&isAdmin===true);}
+async function isCurrentAdmin(){if(adminFlag())return true;try{if(!currentUser)return false;const s=await db.collection('admins').doc('main').get();const emails=(s.data()?.adminEmails||[]).map(x=>String(x).trim().toLowerCase());const ok=emails.includes(String(currentUser.email||'').trim().toLowerCase());if(ok)isAdmin=true;return ok;}catch(_){return false;}}
 function hideAllProfilesV17(){['userProfilePage','ananasV10ProfilePage','ananasPrivateProfileOverlay','ananasCanonicalProfilePage'].forEach(id=>{const e=$(id);if(e){e.classList.remove('active');if(id!=='ananasCanonicalProfilePage')e.style.setProperty('display','none','important')}})}
 function ensureV17Page(){
  let p=$('ananasCanonicalProfilePage');
@@ -9341,6 +9341,419 @@ window.__openCanonicalProfile=openCanonicalV17;window.openUserProfilePage=()=>cu
 // أي معالج دردشة قديم سيستدعي الدالة الجديدة، وأي عنصر يحمل UID يفتحها كذلك.
 document.addEventListener('click',async e=>{const n=e.target.closest?.('.chat-msg .chat-profile-avatar,.chat-msg .chat-profile-name,.chat-msg .msg-header .u,[data-profile-uid]');if(!n)return;const msg=n.closest('.chat-msg');let uid=n.dataset.profileUid||n.closest('[data-profile-uid]')?.dataset.profileUid;if(!uid&&msg?.dataset.messageId&&typeof activeCourseId!=='undefined'&&activeCourseId){try{const s=await db.collection('courses').doc(activeCourseId).collection('chat').doc(msg.dataset.messageId).get();uid=s.data()?.userId||''}catch(_){}}if(uid){e.preventDefault();e.stopImmediatePropagation();await openCanonicalV17(uid,uid===currentUser?.uid);}},true);
 })();
+</script>
+
+
+<style id="ananas-v18-final-css">
+#authToggleBtn.has-account-avatar{display:inline-flex!important;align-items:center!important;gap:8px!important;padding:7px 12px!important;min-height:44px!important}
+#authToggleBtn .v18-auth-avatar{width:32px;height:32px;border-radius:50%;overflow:hidden;display:grid;place-items:center;background:var(--accent-gradient);color:#fff;font-weight:900;flex:0 0 32px;border:1px solid rgba(255,255,255,.15);box-shadow:0 4px 14px rgba(0,0,0,.14)}
+#authToggleBtn .v18-auth-avatar img{width:100%;height:100%;object-fit:cover;display:block}
+#authToggleBtn .v18-auth-name{max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#chatPageMessagesList,#fullChatMessagesList{scroll-behavior:smooth;position:relative}
+.v18-chat-msg{display:flex!important;align-items:flex-start!important;gap:7px!important;margin:5px 8px!important;padding:0!important;background:transparent!important;border:0!important;box-shadow:none!important;width:auto!important;max-width:100%!important}
+.v18-chat-msg.sent{justify-content:flex-start!important}.v18-msg-profile.mine-profile{opacity:.82}
+.v18-chat-msg.received{justify-content:flex-end!important}
+.v18-chat-bubble{max-width:min(78%,720px);padding:7px 10px 6px!important;border-radius:15px!important;border:1px solid var(--border)!important;box-shadow:0 3px 12px rgba(0,0,0,.05)!important;background:var(--bg-secondary)!important;min-height:0!important}
+.v18-chat-msg.sent .v18-chat-bubble{background:var(--chat-bubble-mine)!important;color:var(--chat-bubble-mine-text)!important;border-color:transparent!important}
+.v18-chat-msg.received .v18-chat-bubble{background:var(--chat-bubble-others)!important;color:var(--chat-bubble-others-text)!important}
+.v18-chat-msg .t{font-size:.88rem!important;line-height:1.55!important;white-space:pre-wrap;word-break:break-word}
+.v18-msg-profile{display:flex!important;align-items:center!important;gap:6px!important;border:0!important;background:transparent!important;color:var(--text-primary)!important;padding:2px!important;cursor:pointer!important;font:inherit!important;max-width:180px!important;flex:0 0 auto!important}
+.v18-msg-avatar{width:32px;height:32px;border-radius:50%;overflow:hidden;display:grid;place-items:center;background:var(--accent-gradient);color:#fff;font-size:.72rem;font-weight:900;flex:0 0 32px;border:1px solid var(--border)}
+.v18-msg-avatar img{width:100%;height:100%;object-fit:cover;display:block}
+.v18-msg-profile .u{font-size:.74rem!important;font-weight:900!important;max-width:105px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.v18-msg-actions{display:flex!important;align-items:center!important;justify-content:flex-start!important;gap:3px!important;margin-top:3px!important;opacity:.76}
+.v18-msg-actions button{width:25px!important;height:25px!important;padding:0!important;border-radius:8px!important;border:0!important;background:transparent!important;color:inherit!important;display:grid!important;place-items:center!important;cursor:pointer!important;font-size:.7rem!important}
+.v18-msg-actions button:hover{background:rgba(127,127,127,.14)!important;opacity:1}
+.v18-pin-btn.active{color:#f5a623!important;background:rgba(245,166,35,.12)!important}
+.v18-chat-msg .msg-time{font-size:.62rem!important;opacity:.58!important;margin-top:2px!important}
+.v18-reply-block{display:flex!important;flex-direction:column!important;gap:1px!important;width:100%!important;min-height:0!important;padding:5px 7px!important;margin-bottom:5px!important;border:0!important;border-inline-start:3px solid var(--accent1)!important;border-radius:8px!important;background:rgba(108,92,231,.09)!important;color:inherit!important;text-align:start!important;cursor:pointer!important;font:inherit!important}
+.v18-reply-block .ru{font-weight:900!important;font-size:.69rem!important}
+.v18-reply-block .rt{font-size:.7rem!important;opacity:.78!important;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.v18-pinned-badge,.v18-work-lock{display:inline-flex;align-items:center;gap:5px;font-size:.66rem;font-weight:900;color:#f5a623;margin-bottom:4px}
+.v18-deleted-text{font-style:italic!important;color:var(--text-muted)!important}
+.v18-deleted-admin{font-size:.68rem;color:#e74c3c;font-weight:900;margin-bottom:4px}
+.v18-chat-msg.is-pinned .v18-chat-bubble{border-color:rgba(245,166,35,.5)!important;box-shadow:0 7px 18px rgba(245,166,35,.09)!important}
+.v18-highlight-message .v18-chat-bubble{animation:v18ChatHighlight 1.8s ease}
+@keyframes v18ChatHighlight{0%,100%{box-shadow:0 0 0 0 rgba(108,92,231,0)}15%,65%{box-shadow:0 0 0 6px rgba(108,92,231,.18),0 12px 35px rgba(108,92,231,.12)}}
+.v18-chat-date{text-align:center;margin:9px 0!important;font-size:.68rem!important;color:var(--text-muted)!important}.v18-chat-date span{display:inline-block;padding:4px 10px;border-radius:999px;background:var(--bg-card);border:1px solid var(--border)}
+.v18-chat-loading,.v18-chat-empty,.v18-chat-error{text-align:center;padding:28px;color:var(--text-muted);font-size:.82rem}
+.ananas-chat-jump-last-v18{position:fixed;right:24px;bottom:90px;z-index:24000;display:none;align-items:center;gap:7px;padding:9px 13px;border:1px solid var(--border);background:var(--bg-card);color:var(--text-primary);border-radius:999px;box-shadow:0 12px 30px rgba(0,0,0,.18);cursor:pointer;font:inherit;font-weight:900}
+.ananas-chat-jump-last-v18.show{display:inline-flex}.ananas-chat-jump-last-v18 i{color:var(--accent1)}
+.v18-work-actions{display:flex;gap:7px;flex-wrap:wrap;margin-top:10px}.v18-work-view-btn,.v18-work-lock-btn{border:1px solid var(--border);background:var(--bg-secondary);color:var(--text-primary);padding:8px 11px;border-radius:11px;cursor:pointer;font:inherit;font-weight:900;font-size:.76rem}.v18-work-view-btn:hover,.v18-work-lock-btn:hover{border-color:var(--accent1);color:var(--accent1)}.v18-work-view-btn:disabled{opacity:.48;cursor:not-allowed;border-style:dashed}.v18-work-lock-btn{background:rgba(108,92,231,.07)}
+.v18-work-card .acp-work-cover{height:160px!important}.v18-work-card .acp-work-body{padding:13px!important}.v18-work-card .acp-work-meta{font-size:.74rem!important}
+#ananasWorkZoomNoticeV18 .ananas-modal-card{max-width:520px}
+@media(max-width:700px){#authToggleBtn .v18-auth-name{max-width:90px}.v18-chat-bubble{max-width:84%}.v18-msg-profile .u{display:none}.ananas-chat-jump-last-v18{right:14px;bottom:86px}.v18-work-actions>*{flex:1 1 100%}}
+</style>
+
+<script id="ananas-v18-final-patch">
+/* ===== ANANAS ACADEMY V18 - FINAL USER REQUEST PATCH (10 ITEMS) ===== */
+(function(){
+'use strict';
+const $=id=>document.getElementById(id);
+const escV18=v=>String(v??'').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+
+/* -------------------------------------------------------------
+   1) Login button becomes avatar + account name after sign-in.
+   ------------------------------------------------------------- */
+function updateAuthAccountButtonV18(){
+  const btn=$('authToggleBtn');
+  if(!btn)return;
+  if(!currentUser){
+    btn.innerHTML=`<i class="fas fa-user"></i><span id="authLabel">تسجيل الدخول</span>`;
+    btn.classList.remove('has-account-avatar');
+    return;
+  }
+  const p=currentUserProfile||{};
+  const name=p.displayName||p.name||currentUser.displayName||'حسابي';
+  const photo=p.photoURL||p.photoUrl||p.photo||currentUser.photoURL||'';
+  btn.classList.add('has-account-avatar');
+  btn.innerHTML=`<span class="v18-auth-avatar">${photo?`<img src="${escV18(photo)}" alt="">`:`<span>${escV18(name.slice(0,1)||'م')}</span>`}</span><span id="authLabel" class="v18-auth-name">${escV18(name)}</span>`;
+}
+
+/* -------------------------------------------------------------
+   2) Smaller, cleaner chat cards with avatar + name.
+   3/6/7/8/9/10) Profile/chat navigation, reply jump, last-message
+   button, auto-bottom, and admin pinning.
+   ------------------------------------------------------------- */
+let v18ActiveChatContainer=null;
+let v18ChatProfilesCache=Object.create(null);
+let v18ChatLastCount=0;
+let v18ForceChatBottom=false;
+
+function ensureChatJumpButtonV18(){
+  let b=$('ananasChatJumpLastV18');
+  if(b)return b;
+  b=document.createElement('button');
+  b.id='ananasChatJumpLastV18';
+  b.type='button';
+  b.className='ananas-chat-jump-last-v18';
+  b.innerHTML='<i class="fas fa-arrow-down"></i><span>آخر رسالة</span>';
+  b.title='الانتقال إلى آخر رسالة';
+  b.onclick=()=>{
+    if(v18ActiveChatContainer){
+      v18ActiveChatContainer.scrollTo({top:v18ActiveChatContainer.scrollHeight,behavior:'smooth'});
+      b.classList.remove('show');
+    }
+  };
+  document.body.appendChild(b);
+  return b;
+}
+function chatNearBottomV18(el){return !!el && (el.scrollHeight-el.scrollTop-el.clientHeight)<90;}
+function bindChatScrollV18(container){
+  if(!container||container.dataset.v18ScrollBound==='1')return;
+  container.dataset.v18ScrollBound='1';
+  container.addEventListener('scroll',()=>{
+    v18ActiveChatContainer=container;
+    const b=ensureChatJumpButtonV18();
+    b.classList.toggle('show',!chatNearBottomV18(container) && container.scrollHeight>container.clientHeight+80);
+  },{passive:true});
+}
+function scrollChatBottomV18(container,force){
+  if(!container)return;
+  v18ActiveChatContainer=container;
+  bindChatScrollV18(container);
+  requestAnimationFrame(()=>{
+    if(force || chatNearBottomV18(container) || v18ForceChatBottom){
+      container.scrollTop=container.scrollHeight;
+      ensureChatJumpButtonV18().classList.remove('show');
+    }
+    v18ForceChatBottom=false;
+  });
+}
+async function chatProfileV18(uid,fallbackName){
+  if(!uid)return {name:fallbackName||'زائر',photo:''};
+  if(v18ChatProfilesCache[uid])return v18ChatProfilesCache[uid];
+  try{
+    const s=await db.collection('users').doc(uid).get();
+    const p=s.exists?(s.data()||{}):{};
+    const out={name:p.displayName||p.name||fallbackName||'زائر',photo:p.photoURL||p.photoUrl||p.photo||''};
+    v18ChatProfilesCache[uid]=out;return out;
+  }catch(e){return {name:fallbackName||'زائر',photo:''};}
+}
+function chatAvatarV18(profile){return profile.photo?`<img src="${escV18(profile.photo)}" alt="">`:`<span>${escV18((profile.name||'م').slice(0,1))}</span>`;}
+function formatChatDateV18(v){
+  try{
+    const d=v?.toDate?v.toDate():(v?.seconds?new Date(v.seconds*1000):(v?new Date(v):new Date()));
+    return {d,dateKey:d.toLocaleDateString('ar-SA',{year:'numeric',month:'long',day:'numeric'}),time:d.toLocaleTimeString('ar-SA',{hour:'2-digit',minute:'2-digit'})};
+  }catch(e){return {d:new Date(),dateKey:'اليوم',time:''};}
+}
+function replyBlockV18(m){
+  if(!m.replyToText && !m.replyToId)return '';
+  const target=m.replyToId||'';
+  return `<button type="button" class="v18-reply-block" ${target?`onclick="goToChatMessageV18('${escV18(target)}')"`:''} title="الانتقال إلى الرسالة الأصلية"><span class="ru">${escV18(m.replyToName||'زائر')}</span><span class="rt">${escV18(m.replyToText||'')}</span></button>`;
+}
+function chatActionsV18(){ return ''; }
+function messageUserNameCacheV18(){return '';}
+function buildChatMessageV18(courseId,doc,m,profiles,uid){
+  const mine=m.userId===uid;
+  const profile=profiles[m.userId]||{name:m.userName||'زائر',photo:''};
+  const deleted=!!m.deleted;
+  const {time}=formatChatDateV18(m.createdAt);
+  const images=Array.isArray(m.imageUrls)?m.imageUrls:(m.imageUrl?[m.imageUrl]:[]);
+  const pinned=!!m.pinned;
+  let body='';
+  if(deleted&&!isAdmin) body='<div class="t v18-deleted-text"><i class="fas fa-ban"></i> هذه الرسالة محذوفة</div>';
+  else body=`${deleted?'<div class="v18-deleted-admin"><i class="fas fa-trash"></i> تم حذف هذه الرسالة</div>':''}<div class="t">${escV18(m.message||'')}${m.edited?'<span class="edited-label">(معدلة)</span>':''}</div>${images.length&&!deleted?`<div class="message-gallery">${images.map(u=>`<img src="${escV18(u)}" alt="صورة" onclick="openChatMessageGallery('${escV18(courseId)}','${escV18(doc.id)}')">`).join('')}</div>`:''}`;
+  const actions=[];
+  actions.push(`<button type="button" onclick='replyTo(${JSON.stringify(doc.id)},${JSON.stringify(profile.name)},${JSON.stringify((m.message||'').slice(0,120))})' title="رد"><i class="fas fa-reply"></i></button>`);
+  if(mine) actions.push(`<button type="button" onclick="editChatMessage('${escV18(courseId)}','${escV18(doc.id)}')" title="تعديل"><i class="fas fa-edit"></i></button>`);
+  if(mine||isAdmin) actions.push(`<button type="button" onclick="deleteChatMessage('${escV18(courseId)}','${escV18(doc.id)}')" title="حذف"><i class="fas fa-trash"></i></button>`);
+  if(isAdmin) actions.push(`<button type="button" class="v18-pin-btn ${pinned?'active':''}" onclick="togglePinChatMessageV18('${escV18(courseId)}','${escV18(doc.id)}',${pinned?'false':'true'})" title="${pinned?'إلغاء التثبيت':'تثبيت الرسالة'}"><i class="fas fa-thumbtack"></i></button>`);
+  return `<article class="chat-msg v18-chat-msg ${mine?'sent':'received'} ${deleted?'deleted-message':''} ${pinned?'is-pinned':''}" data-message-id="${escV18(doc.id)}"><button type="button" class="v18-msg-profile ${mine?'mine-profile':''}" data-profile-uid="${escV18(m.userId||'')}" title="فتح ملف ${escV18(profile.name)}"><span class="v18-msg-avatar">${chatAvatarV18(profile)}</span><span class="u">${escV18(mine?'أنت':profile.name)}</span></button><div class="v18-chat-bubble">${pinned?'<div class="v18-pinned-badge"><i class="fas fa-thumbtack"></i> مثبتة</div>':''}${replyBlockV18(m)}${body}<div class="msg-time">${escV18(time)}</div><div class="msg-actions v18-msg-actions">${actions.join('')}</div></div></article>`;
+}
+async function renderChatSnapshotV18(container,snapshot,courseId){
+  if(!container)return;
+  if(snapshot.empty){container.innerHTML='<div class="v18-chat-empty">لا توجد رسائل حتى الآن.</div>';scrollChatBottomV18(container,true);return;}
+  const uid=currentUser?.uid||null;
+  const docs=snapshot.docs||[];
+  const profiles={};
+  const ids=[...new Set(docs.map(d=>(d.data()||{}).userId).filter(Boolean))];
+  await Promise.all(ids.map(async id=>{profiles[id]=await chatProfileV18(id,docs.find(d=>(d.data()||{}).userId===id)?.data()?.userName)}));
+  let html='',lastDate='';
+  docs.forEach(doc=>{
+    const m=doc.data()||{},f=formatChatDateV18(m.createdAt); 
+    if(f.dateKey!==lastDate){html+=`<div class="v18-chat-date"><span>${escV18(f.dateKey)}</span></div>`;lastDate=f.dateKey;}
+    html+=buildChatMessageV18(courseId,doc,m,profiles,uid);
+  });
+  const wasNear=chatNearBottomV18(container);
+  const shouldBottom=v18ForceChatBottom || container.dataset.v18InitialOpen==='1' || wasNear || docs.length>v18ChatLastCount;
+  v18ChatLastCount=docs.length;
+  container.innerHTML=html;
+  bindChatScrollV18(container);
+  if(container.dataset.v18InitialOpen==='1')container.dataset.v18InitialOpen='0';
+  scrollChatBottomV18(container,shouldBottom);
+}
+function subscribeChatContainerV18(container,courseId){
+  if(!container)return;
+  if(chatUnsubscribe){try{chatUnsubscribe()}catch(e){} chatUnsubscribe=null;}
+  container.dataset.v18InitialOpen='1';
+  v18ActiveChatContainer=container;
+  container.innerHTML='<div class="v18-chat-loading">جاري تحميل الرسائل...</div>';
+  chatUnsubscribe=db.collection('courses').doc(courseId).collection('chat').orderBy('createdAt','asc').onSnapshot(s=>renderChatSnapshotV18(container,s,courseId),err=>{console.error(err);container.innerHTML='<div class="v18-chat-error">حدث خطأ في تحميل الدردشة.</div>';});
+}
+window.loadChatPage=function(courseId){subscribeChatContainerV18($('chatPageMessagesList'),courseId)};
+window.loadFullChatForCourse=function(courseId){subscribeChatContainerV18($('fullChatMessagesList'),courseId)};
+window.goToChatMessageV18=function(msgId){
+  const id=String(msgId||'');if(!id)return;
+  const node=document.querySelector(`.chat-msg[data-message-id="${CSS.escape(id)}"]`);
+  if(!node)return;
+  node.scrollIntoView({behavior:'smooth',block:'center'});
+  node.classList.remove('v18-highlight-message');
+  void node.offsetWidth;
+  node.classList.add('v18-highlight-message');
+  setTimeout(()=>node.classList.remove('v18-highlight-message'),1800);
+};
+window.togglePinChatMessageV18=async function(courseId,msgId,pin){
+  if(!isAdmin)return showCustomAlert('غير مسموح','تثبيت الرسائل متاح للمشرف فقط.');
+  try{await db.collection('courses').doc(courseId).collection('chat').doc(msgId).set({pinned:!!pin,pinnedAt:pin?firebase.firestore.FieldValue.serverTimestamp():null,pinnedBy:pin?currentUser?.uid||'':null},{merge:true});}
+  catch(e){console.error(e);showCustomAlert('خطأ','تعذر تحديث تثبيت الرسالة.');}
+};
+
+/* -------------------------------------------------------------
+   3) Profile navigation: from another profile always return to own
+   profile when that profile was opened from the account directory.
+   ------------------------------------------------------------- */
+window.__ananasProfileReturnToSelf=false;
+const baseOpenCanonicalV18=window.__openCanonicalProfile||window.openAnanasV10Profile||window.openPublicProfileFinal;
+if(baseOpenCanonicalV18){
+  window.__openCanonicalProfileV18=async function(uid,isSelf){
+    const target=String(uid||'');
+    if(target && target!==currentUser?.uid){window.__ananasProfileReturnToSelf=true;}
+    else if(target===currentUser?.uid){window.__ananasProfileReturnToSelf=false;}
+    return await baseOpenCanonicalV18.apply(this,arguments);
+  };
+  window.openAnanasV10Profile=window.__openCanonicalProfileV18;
+  window.openPublicProfileFinal=window.__openCanonicalProfileV18;
+  window.viewProfileByUserId=window.__openCanonicalProfileV18;
+  window.__openCanonicalProfile=window.__openCanonicalProfileV18;
+}
+function patchProfileBackV18(){
+  const back=$('acpBack');if(!back)return;
+  const self=String(currentUser?.uid||'');
+  const page=$('ananasCanonicalProfilePage');
+  const name=$('acpName')?.textContent||'';
+  const viewingOther=!!page&&!!name&&name!==(currentUserProfile?.displayName||currentUser?.displayName||'');
+  if(window.__ananasProfileReturnToSelf && viewingOther){
+    back.style.display='inline-flex';back.innerHTML='<i class="fas fa-arrow-right"></i> العودة إلى ملفي';back.title='العودة إلى ملفي الشخصي';back.onclick=async e=>{e.preventDefault();window.__ananasProfileReturnToSelf=false;await (window.openUserProfilePage?.()||window.__openCanonicalProfileV18?.(self,true));};
+  }
+}
+document.addEventListener('click',e=>{if(e.target.closest?.('[data-acp-v17-uid],[data-acp-uid],[data-profile-target]'))setTimeout(patchProfileBackV18,150)},true);
+
+/* -------------------------------------------------------------
+   4) Work viewer + per-work zoom lock; admin can always zoom.
+   ------------------------------------------------------------- */
+function ensureWorkViewerNoticeV18(){
+  let m=$('ananasWorkZoomNoticeV18');if(m)return m;
+  m=document.createElement('div');m.id='ananasWorkZoomNoticeV18';m.className='ananas-modal-overlay';
+  m.innerHTML='<div class="ananas-modal-card" style="max-width:500px;text-align:center"><div class="ananas-modal-heading" style="justify-content:center;padding:0"><div class="ananas-modal-heading-icon"><i class="fas fa-lock"></i></div><div><h3>تكبير العمل مقفل</h3><p>صاحب هذا العمل أغلق إمكانية تكبيره. يمكنك رؤيته من المعرض المصغر فقط.</p></div></div><button type="button" class="ananas-primary-btn" id="ananasWorkZoomNoticeClose">فهمت</button></div>';
+  document.body.appendChild(m);$('ananasWorkZoomNoticeClose').onclick=()=>m.classList.remove('active');return m;
+}
+async function openPersonalWorkV18(uid,workId,ownerOnly){
+  const s=await db.collection('users').doc(uid).collection('portfolioWorks').doc(workId).get();if(!s.exists)return;
+  const w=s.data()||{},owner=uid===currentUser?.uid,admin=!!isAdmin;
+  if(!owner&&!admin&&w.allowZoom===false)return ensureWorkViewerNoticeV18().classList.add('active');
+  const images=Array.isArray(w.images)?w.images.filter(Boolean):(w.imageUrl?[w.imageUrl]:[]);
+  if(images.length)window.openPlatformGalleryViewer(images,w.title||'عمل');
+}
+async function openAssignmentWorkV18(courseId,assignmentId,workId){
+  const result=await getAssignmentData(courseId,assignmentId);if(!result)return;
+  const subs=Array.isArray(result.data.submissions)?result.data.submissions:[];
+  const idx=subs.findIndex((s,i)=>submissionWorkId(s,i)===workId);if(idx<0)return;
+  const sub=subs[idx]||{},owner=sub.userId===currentUser?.uid,admin=!!isAdmin;
+  if(!owner&&!admin){
+    if(!sub.approved)return showCustomAlert('غير متاح','هذا العمل قيد المراجعة ولا يمكن فتحه بالحجم الكبير للطلاب.');
+    if(sub.allowZoom===false)return ensureWorkViewerNoticeV18().classList.add('active');
+  }
+  const images=submissionImages(sub);if(images.length)window.openPlatformGalleryViewer(images,`${sub.userName||'عمل مرفوع'}${sub.approved?' — معتمد':' — قيد المراجعة'}`);
+}
+window.openAssignmentWorkViewer=window.openAssignmentWorkViewer||openAssignmentWorkV18;
+window.openPersonalPortfolioViewerV18=openPersonalWorkV18;
+window.openAssignmentWorkViewerV18=openAssignmentWorkV18;
+async function togglePersonalWorkZoomV18(uid,workId){
+  if(uid!==currentUser?.uid)return showCustomAlert('غير مسموح','يمكن لصاحب العمل فقط تغيير إعداد التكبير.');
+  const ref=db.collection('users').doc(uid).collection('portfolioWorks').doc(workId),s=await ref.get();if(!s.exists)return;
+  await ref.set({allowZoom:s.data()?.allowZoom===false?true:false,updatedAt:firebase.firestore.FieldValue.serverTimestamp()},{merge:true});
+  await window.openUserProfilePage?.();
+}
+async function toggleAssignmentWorkZoomV18(courseId,assignmentId,workId){
+  if(!currentUser)return;
+  const result=await getAssignmentData(courseId,assignmentId);if(!result)return;
+  const subs=Array.isArray(result.data.submissions)?[...result.data.submissions]:[];const idx=subs.findIndex((s,i)=>submissionWorkId(s,i)===workId);if(idx<0)return;
+  if(subs[idx].userId!==currentUser.uid)return showCustomAlert('غير مسموح','يمكن لصاحب العمل فقط تغيير إعداد التكبير.');
+  subs[idx]={...subs[idx],allowZoom:subs[idx].allowZoom===false?true:false};await result.ref.update({submissions:subs});await window.openUserProfilePage?.();
+}
+async function renderProfileWorksV18(uid){
+  const g=$('acpGallery');if(!g)return;
+  const self=uid===currentUser?.uid,admin=!!isAdmin;
+  try{
+    const [ps,pd]=await Promise.all([getPortfolioV17(uid),getProfileDataV17(uid)]);
+    const cards=[];
+    const assignmentZoomMap=Object.create(null);
+    await Promise.all((pd.works||[]).map(async w=>{try{const r=await getAssignmentData(w.courseId,w.assignmentId);const subs=Array.isArray(r?.data?.submissions)?r.data.submissions:[];const sub=subs.find((s,i)=>submissionWorkId(s,i)===w.workId);assignmentZoomMap[w.courseId+'__'+w.assignmentId+'__'+w.workId]=sub?.allowZoom!==false;}catch(_){assignmentZoomMap[w.courseId+'__'+w.assignmentId+'__'+w.workId]=true;}}));
+    ps.forEach(w=>cards.push({kind:'personal',id:w.id,uid,title:w.title||'عمل شخصي',type:w.type||'عمل شخصي',description:w.description||'',images:w.images||[],allowZoom:w.allowZoom!==false,approved:true,owner:self,admin}));
+    (pd.works||[]).forEach(w=>cards.push({kind:'assignment',courseId:w.courseId,assignmentId:w.assignmentId,id:w.workId,title:w.assignmentTitle||'واجب',type:w.courseTitle||'عمل مرفوع',description:w.approved?'معتمد':'قيد المراجعة',images:w.images||[],allowZoom:assignmentZoomMap[w.courseId+'__'+w.assignmentId+'__'+w.workId]!==false,approved:!!w.approved,owner:self,admin}));
+    if(!cards.length){g.innerHTML='<div class="acp-empty">لا توجد أعمال منشورة حاليًا.</div>';return;}
+    g.innerHTML=cards.map(w=>{
+      const img=w.images?.[0]||'';
+      const canOpen=self||admin||(w.approved&&w.allowZoom);
+      const viewBtn=w.kind==='personal'
+        ?`<button type="button" class="v18-work-view-btn" onclick="openPersonalPortfolioViewerV18('${escV18(w.uid)}','${escV18(w.id)}')" ${!canOpen?'disabled':''}><i class="fas fa-expand"></i> ${canOpen?'عرض العمل':'التكبير مقفل'}</button>`
+        :`<button type="button" class="v18-work-view-btn" onclick="openAssignmentWorkViewerV18('${escV18(w.courseId)}','${escV18(w.assignmentId)}','${escV18(w.id)}')" ${!canOpen?'disabled':''}><i class="fas fa-expand"></i> ${canOpen?'عرض العمل':'غير متاح الآن'}</button>`;
+      const lock=w.allowZoom?'':`<span class="v18-work-lock"><i class="fas fa-lock"></i> التكبير مغلق</span>`;
+      let ownerBtn='';
+      if(self){ownerBtn=w.kind==='personal'?`<button type="button" class="v18-work-lock-btn" onclick="togglePersonalWorkZoomV18('${escV18(w.uid)}','${escV18(w.id)}')"><i class="fas ${w.allowZoom?'fa-lock':'fa-lock-open'}"></i> ${w.allowZoom?'قفل التكبير':'فتح التكبير'}</button>`:`<button type="button" class="v18-work-lock-btn" onclick="toggleAssignmentWorkZoomV18('${escV18(w.courseId)}','${escV18(w.assignmentId)}','${escV18(w.id)}')"><i class="fas ${w.allowZoom?'fa-lock':'fa-lock-open'}"></i> ${w.allowZoom?'قفل التكبير':'فتح التكبير'}</button>`;}
+      return `<article class="acp-work v18-work-card"><div class="acp-work-cover">${img?`<img src="${escV18(img)}" alt="">`:'<i class="fas fa-images" style="font-size:2rem;color:var(--accent1)"></i>'}</div><div class="acp-work-body"><div class="acp-work-title">${escV18(w.title)}</div><div class="acp-work-meta">${escV18(w.type)}${w.description?`<br>${escV18(w.description)}`:''}<br>${w.approved?'✅ معتمد':'⏳ قيد المراجعة'} ${lock}</div><div class="v18-work-actions">${viewBtn}${ownerBtn}</div></div></article>`;
+    }).join('');
+  }catch(e){console.error('profile works v18',e);g.innerHTML='<div class="acp-empty">تعذر تحميل معرض الأعمال.</div>'}
+}
+
+/* Patch portfolio creation so new personal works default to zoom enabled. */
+const oldPortfolioModalSaveV18=window.openPersonalPortfolioWorkModalV16;
+/* New direct viewer wrappers do not rely on the old modal implementation. Existing records default to enabled. */
+
+/* -------------------------------------------------------------
+   5) Strict private-profile shell already exists, but reinforce it
+   whenever canonical profile is opened.
+   ------------------------------------------------------------- */
+async function openCanonicalFinalV18(uid,isSelf){
+  const target=String(uid||'');
+  if(!target||!currentUser)return;
+  const old=window.__openCanonicalProfileV18;
+  if(old && old!==openCanonicalFinalV18){
+    if(target!==currentUser.uid)window.__ananasProfileReturnToSelf=true;
+    const result=await old(target,isSelf);
+    setTimeout(async()=>{
+      try{
+        const s=await db.collection('users').doc(target).get();if(!s.exists)return;
+        const p=s.data()||{},self=target===currentUser.uid,admin=!!isAdmin;
+        if(!self&&!admin&&p.profilePublic===false){
+          const name=p.displayName||p.name||'مستخدم',photo=p.photoURL||p.photoUrl||p.photo||'';
+          $('acpEmail').textContent='حساب خاص';
+          $('acpBadge').innerHTML='<i class="fas fa-lock"></i> حساب خاص';
+          $('acpData').innerHTML=`<div class="acp-row"><strong>الاسم</strong><small>${escV18(name)}</small></div>`;
+        }else{
+          await renderProfileWorksV18(target);
+        }
+        patchProfileBackV18();
+      }catch(e){console.warn('canonical v18 enrich',e)}
+    },80);
+    return result;
+  }
+}
+/* Do not replace the canonical opener here; wrapping in click handlers below avoids recursion. */
+
+/* -------------------------------------------------------------
+   7/8) Make chat opening always land at the last message.
+   ------------------------------------------------------------- */
+document.addEventListener('click',e=>{
+  const send=e.target.closest?.('#fullChatPageSendBtn,#fullPageSendBtn,#fullSendChatBtn');
+  if(send){v18ForceChatBottom=true;setTimeout(()=>{if(v18ActiveChatContainer)scrollChatBottomV18(v18ActiveChatContainer,true)},250);setTimeout(()=>{if(v18ActiveChatContainer)scrollChatBottomV18(v18ActiveChatContainer,true)},800);}
+},true);
+document.addEventListener('click',e=>{
+  const profile=e.target.closest?.('.v18-msg-profile,.chat-msg .msg-header .u,.chat-profile-head');
+  if(!profile)return;
+  const uid=profile.dataset.profileUid||profile.closest('[data-profile-uid]')?.dataset.profileUid;
+  if(uid){e.preventDefault();e.stopImmediatePropagation();window.openPublicProfileFinal?.(uid,uid===currentUser?.uid)}
+},true);
+
+/* -------------------------------------------------------------
+   10) Pinned indicator and admin-only pin styling.
+   ------------------------------------------------------------- */
+
+/* -------------------------------------------------------------
+   Profile gallery refresh: hook the final canonical profile call.
+   ------------------------------------------------------------- */
+(function hookCanonicalProfileV18(){
+  const candidate=window.__openCanonicalProfile;
+  if(!candidate||candidate.__v18Wrapped)return;
+  const wrapped=async function(uid,isSelf){
+    const target=String(uid||'');
+    if(target && target!==currentUser?.uid)window.__ananasProfileReturnToSelf=true;
+    else if(target===currentUser?.uid)window.__ananasProfileReturnToSelf=false;
+    const res=await candidate.apply(this,arguments);
+    try{
+      const s=await db.collection('users').doc(target).get();
+      const p=s.exists?(s.data()||{}):{},self=target===currentUser?.uid,admin=!!isAdmin;
+      const page=$('ananasCanonicalProfilePage');
+      if(page){
+        const back=$('acpBack');
+        if(back){
+          if(!self){
+            back.style.display='inline-flex';
+            back.innerHTML='<i class="fas fa-arrow-right"></i> العودة إلى ملفي';
+            back.title='العودة إلى ملفي الشخصي';
+            back.onclick=async e=>{e.preventDefault();window.__ananasProfileReturnToSelf=false;await window.openUserProfilePage?.();};
+          }else back.style.display='none';
+        }
+      }
+      if(!self&&!admin&&p.profilePublic===false)return res;
+      await renderProfileWorksV18(target);
+    }catch(e){console.warn('profile v18 hook',e)}
+    return res;
+  };
+  wrapped.__v18Wrapped=true;
+  window.__openCanonicalProfile=wrapped;
+  window.openAnanasV10Profile=wrapped;
+  window.openPublicProfileFinal=wrapped;
+  window.viewProfileByUserId=wrapped;
+  window.openChatProfileV13=wrapped;
+  window.openChatProfileV12=wrapped;
+  window.openUserProfilePage=()=>currentUser&&wrapped(currentUser.uid,true);
+})();
+
+/* CSS and first-pass auth sync */
+ensureChatJumpButtonV18();
+updateAuthAccountButtonV18();
+try{
+  if(auth&&auth.onAuthStateChanged) auth.onAuthStateChanged(()=>setTimeout(updateAuthAccountButtonV18,300));
+}catch(e){}
+try{if(currentUserProfile)updateAuthAccountButtonV18()}catch(e){}
+
+/* Initial chat containers: ensure scroll button exists even before first render. */
+['chatPageMessagesList','fullChatMessagesList'].forEach(id=>{const c=$(id);if(c)bindChatScrollV18(c)});
+
+})();
+
 </script>
 </body>
 </html>
@@ -10387,7 +10800,7 @@ function ensureProfileEditorModal(){
  let m=$('ananasProfileEditor');if(m)return m;m=document.createElement('div');m.id='ananasProfileEditor';m.className='ananas-modal-overlay';m.innerHTML=`<div class="ananas-modal-card"><button type="button" class="ananas-modal-close" id="profileEditorClose"><i class="fas fa-xmark"></i></button><div class="ananas-modal-heading"><div class="ananas-modal-heading-icon"><i class="fas fa-user-pen"></i></div><div><h3>تعديل الملف الشخصي</h3><p>غيّر الصورة والاسم ورقم الهاتف وخصوصية ملفك.</p></div></div><div class="profile-edit-avatar"><div id="profileEditPreview">م</div><label class="ananas-primary-btn" for="profileEditPhoto"><i class="fas fa-camera"></i> تغيير الصورة</label><input id="profileEditPhoto" type="file" accept="image/*" hidden></div><div class="ananas-form-grid"><label class="ananas-field"><span>الاسم</span><input id="profileEditName" type="text"></label><label class="ananas-field"><span>رقم الهاتف</span><input id="profileEditPhone" type="text"></label></div><label class="ananas-toggle-row"><span><strong>إظهار ملفي للطلاب</strong><small>عند الإلغاء لا يستطيع الطلاب فتح ملفك، بينما يبقى ظاهرًا للمشرف.</small></span><input id="profileEditPublic" type="checkbox" checked><i></i></label><div class="ananas-modal-actions"><button type="button" class="ananas-secondary-btn" id="profileEditorCancel">إلغاء</button><button type="button" class="ananas-primary-btn" id="profileEditorSave"><i class="fas fa-check"></i> حفظ التعديلات</button></div></div>`;document.body.appendChild(m);
  $('profileEditorClose').onclick=()=>m.classList.remove('active');$('profileEditorCancel').onclick=()=>m.classList.remove('active');m.addEventListener('click',e=>{if(e.target===m)m.classList.remove('active')});
  $('profileEditPhoto').addEventListener('change',()=>{const f=$('profileEditPhoto').files?.[0];if(f){const u=URL.createObjectURL(f);$('profileEditPreview').innerHTML=`<img src="${u}" alt="">`;}});
- $('profileEditorSave').onclick=async()=>{if(!currentUser)return;const btn=$('profileEditorSave');btn.disabled=true;try{const name=$('profileEditName').value.trim(),phone=$('profileEditPhone').value.trim(),pub=$('profileEditPublic').checked;if(!name)return showCustomAlert('تنبيه','اكتب الاسم.');let photo=currentUserProfile?.photoURL||currentUserProfile?.photoUrl||currentUserProfile?.photo||'';const f=$('profileEditPhoto').files?.[0];if(f){photo=await uploadImage(f);if(!photo)throw Error('photo');}await currentUser.updateProfile({displayName:name,photoURL:photo||null});await db.collection('users').doc(currentUser.uid).set({uid:currentUser.uid,email:currentUser.email||'',displayName:name,phone,photoURL:photo||'',profilePublic:pub,updatedAt:firebase.firestore.FieldValue.serverTimestamp()},{merge:true});currentUserProfile={...(currentUserProfile||{}),displayName:name,phone,photoURL:photo||'',profilePublic:pub};if($('authLabel'))$('authLabel').textContent=name;m.classList.remove('active');await window.openUserProfilePage();showCustomAlert('تم الحفظ','تم تحديث ملفك الشخصي.');}catch(e){console.error(e);showCustomAlert('خطأ','تعذر حفظ بيانات الملف الشخصي.');}finally{btn.disabled=false;}};
+ $('profileEditorSave').onclick=async()=>{if(!currentUser)return;const btn=$('profileEditorSave');btn.disabled=true;try{const name=$('profileEditName').value.trim(),phone=$('profileEditPhone').value.trim(),pub=$('profileEditPublic').checked;if(!name)return showCustomAlert('تنبيه','اكتب الاسم.');let photo=currentUserProfile?.photoURL||currentUserProfile?.photoUrl||currentUserProfile?.photo||'';const f=$('profileEditPhoto').files?.[0];if(f){photo=await uploadImage(f);if(!photo)throw Error('photo');}await currentUser.updateProfile({displayName:name,photoURL:photo||null});await db.collection('users').doc(currentUser.uid).set({uid:currentUser.uid,email:currentUser.email||'',displayName:name,phone,photoURL:photo||'',profilePublic:pub,updatedAt:firebase.firestore.FieldValue.serverTimestamp()},{merge:true});currentUserProfile={...(currentUserProfile||{}),displayName:name,phone,photoURL:photo||'',profilePublic:pub};if(typeof updateAuthAccountButtonV18==='function')updateAuthAccountButtonV18();m.classList.remove('active');await window.openUserProfilePage();showCustomAlert('تم الحفظ','تم تحديث ملفك الشخصي.');}catch(e){console.error(e);showCustomAlert('خطأ','تعذر حفظ بيانات الملف الشخصي.');}finally{btn.disabled=false;}};
  return m;
 }
 function openProfileEditorFinal(uid){if(uid!==currentUser?.uid)return;const p=currentUserProfile||{},m=ensureProfileEditorModal(),photo=p.photoURL||p.photoUrl||p.photo||'',name=p.displayName||currentUser.displayName||'',phone=p.phone||'';$('profileEditName').value=name;$('profileEditPhone').value=phone;$('profileEditPublic').checked=p.profilePublic!==false;$('profileEditPreview').innerHTML=photo?`<img src="${esc(photo)}" alt="">`:esc(name.slice(0,1)||'م');$('profileEditPhoto').value='';m.classList.add('active');}
@@ -10459,7 +10872,7 @@ window.getEffectiveProfileData=oldGetEffective||getActiveCatalog;
 'use strict';
 const $=id=>document.getElementById(id), esc=window.escapeHtml||((v)=>String(v??''));
 const oldOpenProfile=window.openUserProfilePage;
-if(oldOpenProfile&&!window.__profileActivityEnriched){window.__profileActivityEnriched=true;window.openUserProfilePage=async function(){await oldOpenProfile.apply(this,arguments);if(!window.currentUser&&!currentUser)return;try{const uid=currentUser.uid;const cat=await getActiveCatalog();const acts=[];for(const [courseId,c] of cat.courses.entries?[]:[]){void courseId;void c;}for(const c of cat.courses){const fs=await db.collection('courses').doc(c.id).collection('files').where('uploadedBy','==',uid).get();fs.forEach(d=>{const f=d.data()||{};if(f.deleted===true)return;acts.push({t:`رفع ملف: ${f.name||'ملف'}`,d:fmtDate(f.uploadedAt)});});}const a=$('profileActivityList');if(a){const base=[...a.querySelectorAll('.profile-list-item')].map(x=>x.outerHTML);const fileItems=acts.slice(0,20).map(x=>`<div class="profile-list-item"><strong>${esc(x.t)}</strong><small>${esc(x.d)}</small></div>`);if(fileItems.length)a.innerHTML=fileItems.join('')+base.join('');}}catch(e){console.warn('profile activity enrichment',e);}};}
+if(oldOpenProfile&&!window.__profileActivityEnriched){window.__profileActivityEnriched=true;window.openUserProfilePage=async function(){await oldOpenProfile.apply(this,arguments);if(!currentUser&&!currentUser)return;try{const uid=currentUser.uid;const cat=await getActiveCatalog();const acts=[];for(const [courseId,c] of cat.courses.entries?[]:[]){void courseId;void c;}for(const c of cat.courses){const fs=await db.collection('courses').doc(c.id).collection('files').where('uploadedBy','==',uid).get();fs.forEach(d=>{const f=d.data()||{};if(f.deleted===true)return;acts.push({t:`رفع ملف: ${f.name||'ملف'}`,d:fmtDate(f.uploadedAt)});});}const a=$('profileActivityList');if(a){const base=[...a.querySelectorAll('.profile-list-item')].map(x=>x.outerHTML);const fileItems=acts.slice(0,20).map(x=>`<div class="profile-list-item"><strong>${esc(x.t)}</strong><small>${esc(x.d)}</small></div>`);if(fileItems.length)a.innerHTML=fileItems.join('')+base.join('');}}catch(e){console.warn('profile activity enrichment',e);}};}
 })();
 
 </script>
@@ -10509,7 +10922,7 @@ async function openAssignmentDetailV2(courseId,assignmentId){
   content.querySelectorAll('[data-work-approve]').forEach(b=>b.onclick=()=>window.approveSubmission(courseId,assignmentId,b.dataset.workApprove).then(()=>openAssignmentDetailV2(courseId,assignmentId)));
   content.querySelectorAll('[data-work-delete]').forEach(b=>b.onclick=()=>window.deleteAssignmentWork(courseId,assignmentId,b.dataset.workDelete).then(()=>openAssignmentDetailV2(courseId,assignmentId)));
   content.querySelectorAll('.assignment-filter').forEach(b=>b.onclick=()=>{content.querySelectorAll('.assignment-filter').forEach(x=>x.classList.toggle('active',x===b));content.querySelectorAll('.assignment-v2-card').forEach(c=>c.style.display=(!b.dataset.u||c.dataset.user===b.dataset.u)?'':'none');});
-  $('assignmentV2Upload')?.addEventListener('change',async e=>{const files=[...(e.target.files||[])];if(!files.length||!currentUser)return;const st=$('assignmentV2Status');st.textContent='جاري رفع الصور...';try{const urls=[];for(const f of files){const u=await uploadImage(f);if(!u)throw Error('upload');urls.push(u);}const latest=await getAssignmentData(courseId,assignmentId);if(!latest)throw Error('missing');const arr=Array.isArray(latest.data.submissions)?[...latest.data.submissions]:[];arr.push({workId:crypto.randomUUID?crypto.randomUUID():`work_${Date.now()}`,userId:currentUser.uid,userName:currentUser.displayName||'طالب',images:urls,approved:false,xpGranted:false,uploadedAt:new Date().toISOString()});await latest.ref.update({submissions:arr});await openAssignmentDetailV2(courseId,assignmentId);}catch(err){console.error(err);st.textContent='تعذر رفع العمل.'}finally{e.target.value=''}});
+  $('assignmentV2Upload')?.addEventListener('change',async e=>{const files=[...(e.target.files||[])];if(!files.length||!currentUser)return;const st=$('assignmentV2Status');st.textContent='جاري رفع الصور...';try{const urls=[];for(const f of files){const u=await uploadImage(f);if(!u)throw Error('upload');urls.push(u);}const latest=await getAssignmentData(courseId,assignmentId);if(!latest)throw Error('missing');const arr=Array.isArray(latest.data.submissions)?[...latest.data.submissions]:[];arr.push({workId:crypto.randomUUID?crypto.randomUUID():`work_${Date.now()}`,userId:currentUser.uid,userName:currentUser.displayName||'طالب',images:urls,approved:false,xpGranted:false,allowZoom:true,uploadedAt:new Date().toISOString()});await latest.ref.update({submissions:arr});await openAssignmentDetailV2(courseId,assignmentId);}catch(err){console.error(err);st.textContent='تعذر رفع العمل.'}finally{e.target.value=''}});
 }
 window.openAssignmentDetail=openAssignmentDetailV2;
 
@@ -10831,7 +11244,7 @@ function ensurePortfolioWorkV12(){
     btn.disabled=true;status.textContent='جاري رفع صور العمل...';
     try{
       const urls=[];for(const f of files){const u=await uploadImage(f);if(!u)throw Error('upload');urls.push(u);}
-      await db.collection('users').doc(currentUser.uid).collection('portfolioWorks').add({title,type,description,images:urls,createdAt:firebase.firestore.FieldValue.serverTimestamp(),updatedAt:firebase.firestore.FieldValue.serverTimestamp(),deleted:false});
+      await db.collection('users').doc(currentUser.uid).collection('portfolioWorks').add({title,type,description,images:urls,allowZoom:true,createdAt:firebase.firestore.FieldValue.serverTimestamp(),updatedAt:firebase.firestore.FieldValue.serverTimestamp(),deleted:false});
       m.classList.remove('active');await window.openUserProfilePage?.();showCustomAlert('تمت الإضافة','تمت إضافة العمل إلى معرضك الشخصي.');
       }
     catch(err){console.error(err);status.textContent='تعذر إضافة العمل.';showCustomAlert('خطأ','تعذر إضافة العمل إلى المعرض.')}
