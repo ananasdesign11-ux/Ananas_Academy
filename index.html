@@ -11662,5 +11662,208 @@ const assignmentObserver=new MutationObserver(()=>refreshAssignmentSubmitterAvat
 })();
 
 </script>
+
+<script id="final-v9-comprehensive-mobile-directory-modal-patch">
+(function(){
+'use strict';
+const $=id=>document.getElementById(id);
+const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+/* ============================================================
+   FINAL V9: MOBILE LAYOUT + ADMIN DIRECTORY + ACCESS + MODALS
+   ============================================================ */
+
+/* ---------- One authoritative viewed-profile state ---------- */
+window.__aaViewedProfileUid='';
+function getViewedUid(){return String(window.__aaViewedProfileUid||window.profileState?.uid||'');}
+function hideViewedDirectoryCard(){
+  const uid=getViewedUid();
+  document.querySelectorAll('#aaProfileDirectory [data-aa-uid]').forEach(card=>{
+    const same=uid && String(card.dataset.aaUid)===uid;
+    card.style.display=same?'none':'';
+  });
+}
+
+/* Wrap the authoritative profile opener without changing its original behavior. */
+const __aaOpenProfileOriginal=window.aaOpenProfile;
+if(typeof __aaOpenProfileOriginal==='function'&&!__aaOpenProfileOriginal.__v9Wrapped){
+  const wrapped=async function(uid,opts){
+    if(!currentUser||!uid)return __aaOpenProfileOriginal.apply(this,arguments);
+    window.__aaViewedProfileUid=String(uid);
+    const result=await __aaOpenProfileOriginal.apply(this,arguments);
+    if(isAdmin) setTimeout(hideViewedDirectoryCard,0);
+    return result;
+  };
+  wrapped.__v9Wrapped=true;
+  wrapped.__original=__aaOpenProfileOriginal;
+  window.aaOpenProfile=wrapped;
+}
+
+/* Any click from admin directory records the viewed uid immediately. */
+document.addEventListener('click',e=>{
+  const card=e.target.closest?.('#aaProfileDirectory [data-aa-uid]');
+  if(card){window.__aaViewedProfileUid=String(card.dataset.aaUid||'');setTimeout(hideViewedDirectoryCard,0);}
+},true);
+
+/* When returning to the admin profile, show all other accounts again. */
+document.addEventListener('click',e=>{
+  const back=e.target.closest?.('#aaProfileBack,#acpBack');
+  if(back){window.__aaViewedProfileUid=String(currentUser?.uid||'');setTimeout(()=>{
+    document.querySelectorAll('#aaProfileDirectory [data-aa-uid]').forEach(card=>card.style.display='');
+  },100);}
+},true);
+
+/* Re-render directory after profile transitions without removing the active student's state. */
+const __oldLoadDir=window.loadDirectory;
+if(typeof __oldLoadDir==='function'&&!__oldLoadDir.__v9Wrapped){
+  const wrapped=async function(){
+    const r=await __oldLoadDir.apply(this,arguments);
+    setTimeout(hideViewedDirectoryCard,0);
+    return r;
+  };
+  wrapped.__v9Wrapped=true;
+  window.loadDirectory=wrapped;
+}
+
+/* ---------- Current-account exclusion + filters are always admin-only ---------- */
+function enforceDirectoryAdmin(){
+  const panel=$('aaProfileDirectoryPanel');
+  if(panel) panel.style.display=isAdmin?'block':'none';
+  if(isAdmin) hideViewedDirectoryCard();
+}
+setInterval(enforceDirectoryAdmin,1000);
+
+/* ---------- Deterministic unique fallback initials ---------- */
+function v9Avatar(name,photo,uid,used){
+  if(photo)return `<span class="aa-v9-avatar aa-v9-avatar-photo"><img src="${esc(photo)}" alt="${esc(name)}"></span>`;
+  const initial=String(name||'مستخدم').trim().charAt(0)||'م';
+  const palette=['#6c5ce7','#0984e3','#00b894','#e17055','#d63031','#e84393','#00cec9','#a29bfe','#16a085','#8e44ad','#2d3436','#c0392b'];
+  let idx=0; for(const ch of String(uid||initial)) idx=(idx+ch.charCodeAt(0)*31)%palette.length;
+  if(used){const set=used.get(initial)||new Set();let guard=0;while(set.has(palette[idx])&&guard<palette.length){idx=(idx+1)%palette.length;guard++;}set.add(palette[idx]);used.set(initial,set);}
+  return `<span class="aa-v9-avatar aa-v9-avatar-fallback" style="--aa-v9-avatar-bg:${palette[idx]}">${esc(initial)}</span>`;
+}
+window.__aaV9Avatar=v9Avatar;
+
+/* ---------- Directory renderer: no admin card, no viewed card, filter/search/course ---------- */
+function renderV9Directory(){
+  const panel=$('aaProfileDirectoryPanel'),box=$('aaProfileDirectory');
+  if(!panel||!box)return;
+  if(!isAdmin){panel.style.display='none';return;}
+  panel.style.display='block';
+  const cache=window.__directoryCache?.users;
+  if(!Array.isArray(cache))return;
+  const membership=$('aaDirMembershipFilter')?.value||'all';
+  const courseId=$('aaDirCourseFilter')?.value||'all';
+  const q=String($('aaDirNameSearch')?.value||'').trim().toLocaleLowerCase('ar');
+  const viewed=getViewedUid();
+  let users=cache.filter(u=>String(u.id)!==String(currentUser?.uid)&&String(u.id)!==viewed);
+  if(membership==='none')users=users.filter(u=>!Array.isArray(u.enrolledCourseIds)||u.enrolledCourseIds.length===0);
+  if(membership==='enrolled')users=users.filter(u=>Array.isArray(u.enrolledCourseIds)&&u.enrolledCourseIds.length>0);
+  if(courseId!=='all')users=users.filter(u=>(u.enrolledCourseIds||[]).map(String).includes(String(courseId)));
+  if(q)users=users.filter(u=>String(u.displayName||u.name||'').toLocaleLowerCase('ar').includes(q));
+  users.sort((a,b)=>String(a.displayName||a.name||'').localeCompare(String(b.displayName||b.name||''),'ar'));
+  const count=$('aaProfileDirectoryCount');if(count)count.textContent=`${users.length} حساب`;
+  const used=new Map();
+  box.innerHTML=users.length?users.map(u=>{
+    const name=u.displayName||u.name||'مستخدم';
+    const photo=u.photoURL||u.photoUrl||u.photo||'';
+    return `<button type="button" class="aa-profile-directory-card" data-aa-uid="${esc(u.id)}"><span class="aa-profile-directory-avatar">${v9Avatar(name,photo,u.id,used)}</span><span class="aa-profile-directory-copy"><strong>${esc(name)}</strong><small>${u.profilePublic===false?'حساب خاص':'حساب عام'} · ${(u.enrolledCourseIds||[]).length?`مشترك في ${(u.enrolledCourseIds||[]).length} دورة`:'غير مشترك'}</small></span><i class="fas fa-chevron-left"></i></button>`;
+  }).join(''):'<div class="aa-profile-empty">لا توجد حسابات مطابقة للفلاتر الحالية.</div>';
+  box.querySelectorAll('[data-aa-uid]').forEach(b=>b.onclick=()=>window.aaOpenProfile?.(b.dataset.aaUid,{kind:'admin-directory'}));
+}
+window.renderV9Directory=renderV9Directory;
+
+['aaDirMembershipFilter','aaDirCourseFilter','aaDirNameSearch'].forEach(id=>$(id)?.addEventListener('input',renderV9Directory));
+['aaDirMembershipFilter','aaDirCourseFilter','aaDirNameSearch'].forEach(id=>$(id)?.addEventListener('change',renderV9Directory));
+
+/* ---------- Enforce immediate ejection when an account logs out directly through auth.signOut ---------- */
+const __originalAuthSignOut=auth?.signOut?.bind(auth);
+if(__originalAuthSignOut&&!auth.signOut.__v9Wrapped){
+  const signOutWrapped=async function(){
+    try{if(activeCourseId&&!isAdmin&&typeof aaEjectFromCourse==='function')aaEjectFromCourse('تم تسجيل الخروج من الدورة.');}catch(_){}
+    return __originalAuthSignOut();
+  };
+  signOutWrapped.__v9Wrapped=true;
+  auth.signOut=signOutWrapped;
+}
+
+/* ---------- Ensure course-access watcher is attached after every course entry ---------- */
+const __oldSwitchCoursePage=window.switchCoursePage;
+if(typeof __oldSwitchCoursePage==='function'&&!__oldSwitchCoursePage.__v9Wrapped){
+  const wrapped=async function(page){
+    const r=await __oldSwitchCoursePage.apply(this,arguments);
+    try{if(activeCourseId&&!isAdmin)window.watchCourseAccess?.(activeCourseId);}catch(_){}
+    return r;
+  };
+  wrapped.__v9Wrapped=true;
+  window.switchCoursePage=wrapped;
+}
+
+/* ---------- Mobile: content is strictly between top and bottom bars ---------- */
+const mobileCSS=document.createElement('style');
+mobileCSS.id='final-v9-mobile-everywhere';
+mobileCSS.textContent=`
+:root{--v9-mobile-top:var(--nav-height-mobile,70px);--v9-mobile-bottom:calc(var(--mobile-bottom-nav-content-height,66px) + env(safe-area-inset-bottom));}
+html,body{max-width:100%;overflow-x:hidden;}
+@media(max-width:768px){
+  body{padding-top:var(--v9-mobile-top)!important;padding-bottom:var(--v9-mobile-bottom)!important;overscroll-behavior-x:none;}
+  .navbar{position:fixed!important;top:0!important;height:var(--v9-mobile-top)!important;z-index:100000!important;}
+  .mobile-bottom-nav{position:fixed!important;left:0!important;right:0!important;bottom:0!important;height:var(--v9-mobile-bottom)!important;z-index:100001!important;}
+  #coursesPage{position:fixed!important;top:var(--v9-mobile-top)!important;bottom:var(--v9-mobile-bottom)!important;left:0!important;right:0!important;width:auto!important;height:auto!important;min-height:0!important;max-height:none!important;padding:0 0 18px!important;overflow-y:auto!important;overflow-x:hidden!important;}
+  #courseDetailView{position:fixed!important;top:var(--v9-mobile-top)!important;bottom:var(--v9-mobile-bottom)!important;left:0!important;right:0!important;width:auto!important;height:auto!important;min-height:0!important;max-height:none!important;overflow:hidden!important;z-index:900!important;}
+  #courseDetailView>.course-overview,#courseDetailView>#courseDashboard,#courseDetailView>#courseLessonsPage,#courseDetailView>#courseLessonPlayerPage,#courseDetailView>#courseQuizzesPage,#courseDetailView>#courseAssignmentsPage,#courseDetailView>#courseAssignmentDetailPage,#courseDetailView>#courseFilesPage,#courseDetailView>#courseChatPage,#courseDetailView>#fullChatPage{height:100%!important;min-height:0!important;max-height:none!important;overflow-y:auto!important;overflow-x:hidden!important;padding:12px!important;}
+  #courseDetailView>#courseLearningView{height:100%!important;min-height:0!important;max-height:none!important;overflow:hidden!important;}
+  .footer{margin:0!important;padding-bottom:18px!important;}
+  .container{max-width:none!important;width:100%!important;padding-left:12px!important;padding-right:12px!important;}
+  .courses-grid{grid-template-columns:1fr!important;gap:12px!important;}
+  .quiz-page-grid,.assignment-page-grid,.files-page-grid{grid-template-columns:1fr!important;gap:12px!important;}
+  .page-title,.full-page-actions{align-items:flex-start!important;gap:8px!important;}
+  .page-title h2{font-size:1.15rem!important;line-height:1.55!important;}
+  h1,h2,h3,h4,h5,h6,p,span,label,strong,small,button,.btn,.aa-profile-row,.aa-profile-directory-copy,.course-card,.course-card .course-body,.full-page-card,.assignment-work-card,.assignment-submitter,.aa-profile-panel{overflow-wrap:normal!important;word-break:normal!important;white-space:normal;line-height:1.65!important;}
+  .course-card .course-body h3{font-size:1.15rem!important;line-height:1.45!important;}
+  .course-card .course-body p{font-size:.9rem!important;line-height:1.7!important;}
+  .auth-btn,.nav-btn,button.code-action-btn,button.full-page-back-btn{white-space:nowrap!important;}
+  #aaRebuiltProfilePage{position:fixed!important;top:var(--v9-mobile-top)!important;bottom:var(--v9-mobile-bottom)!important;left:0!important;right:0!important;width:auto!important;height:auto!important;min-height:0!important;max-height:none!important;overflow-y:auto!important;overflow-x:hidden!important;padding:12px!important;z-index:130000!important;box-sizing:border-box!important;}
+  #aaRebuiltProfilePage .aa-profile-hero{grid-template-columns:1fr!important;text-align:center!important;gap:11px!important;padding:15px!important;}
+  #aaRebuiltProfilePage .aa-profile-actions{display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:7px!important;}
+  #aaRebuiltProfilePage .aa-profile-stats{grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:7px!important;}
+  #aaRebuiltProfilePage .aa-profile-grid{grid-template-columns:1fr!important;gap:9px!important;}
+  #aaRebuiltProfilePage .aa-profile-gallery{grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:7px!important;}
+  #aaRebuiltProfilePage .aa-profile-directory{grid-template-columns:1fr!important;gap:7px!important;}
+  .aa-dir-filter-row{grid-template-columns:1fr!important;gap:8px!important;}
+  .aa-dir-field select,.aa-dir-field input{font-size:16px!important;min-height:44px!important;}
+  #courseAssignmentDetailPage{position:absolute!important;inset:0!important;z-index:35!important;}
+  .assignment-work-grid{grid-template-columns:1fr!important;}
+  .assignment-work-card img{width:100%!important;height:auto!important;max-height:340px!important;object-fit:contain!important;}
+  #quizOverlay{position:fixed!important;top:var(--v9-mobile-top)!important;bottom:var(--v9-mobile-bottom)!important;height:auto!important;overflow:hidden!important;padding:0!important;z-index:140000!important;}
+  #quizOverlay .quiz-container{height:100%!important;max-height:100%!important;overflow-y:auto!important;border-radius:0!important;padding:16px!important;}
+}
+
+/* Generic modal/popup background lock: never scroll the page behind an open dialog. */
+body.aa-v9-modal-locked{overflow:hidden!important;touch-action:none!important;}
+html.aa-v9-modal-locked{overflow:hidden!important;}
+.edit-modal.active,.auth-popup.active,.custom-alert-modal.active,#quizOverlay.active{overscroll-behavior:contain;}
+.edit-modal.active,.auth-popup.active{overflow-y:auto!important;}
+.custom-alert-modal.active{overflow:auto!important;}
+#aaRebuiltProfilePage .aa-profile-directory [data-aa-uid][style*="display: none"]{display:none!important;}
+.aa-v9-avatar{width:100%;height:100%;display:grid;place-items:center;border-radius:inherit;overflow:hidden;font-weight:900;color:#fff;}
+.aa-v9-avatar-fallback{background:var(--aa-v9-avatar-bg,var(--accent1));}
+.aa-v9-avatar-photo{background:var(--bg-secondary);}
+.aa-v9-avatar-photo img{width:100%;height:100%;object-fit:cover;display:block;}
+`;
+document.head.appendChild(mobileCSS);
+
+/* ---------- Lock the background while ANY actual popup/modal is open ---------- */
+function modalIsOpen(){return !!document.querySelector('.edit-modal.active,.auth-popup.active,.custom-alert-modal.active,#quizOverlay.active');}
+function syncModalLock(){document.body.classList.toggle('aa-v9-modal-locked',modalIsOpen());document.documentElement.classList.toggle('aa-v9-modal-locked',modalIsOpen());}
+const modalObs=new MutationObserver(syncModalLock);modalObs.observe(document.body,{subtree:true,attributes:true,attributeFilter:['class','style','hidden']});
+syncModalLock();
+
+/* ---------- If profile page becomes visible, always keep directory admin-only and hide viewed card. ---------- */nsetInterval;
+const v9Tick=setInterval(()=>{enforceDirectoryAdmin();hideViewedDirectoryCard();syncModalLock();},700);
+window.__aaV9Cleanup=()=>clearInterval(v9Tick);
+
+})();
+</script>
 </body>
 </html>
