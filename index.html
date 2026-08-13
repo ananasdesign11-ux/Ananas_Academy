@@ -11553,3 +11553,217 @@ setInterval(syncExistingProfile,1000);
 resetPlatformScroll();
 })();
 </script>
+<style id="ananas-final-unification-css">
+/* ===== FINAL PROFILE + CHAT UNIFICATION ===== */
+#userProfilePage,#ananasV10ProfilePage,#ananasPrivateProfileOverlay{display:none!important}
+#ananasCanonicalProfilePage{display:none!important;position:fixed!important;inset:var(--nav-height-desktop,80px) 0 0!important;padding:0!important;overflow-y:auto!important;overscroll-behavior:contain!important;background:var(--bg-primary)!important;z-index:950!important}
+#ananasCanonicalProfilePage.active{display:block!important}
+#ananasCanonicalProfilePage .acp-shell{width:min(1240px,100%);margin:0 auto;padding:24px clamp(14px,3vw,32px) 40px}
+#ananasCanonicalProfilePage .acp-actions #acpBack{display:none!important}
+#ananasCanonicalProfilePage .acp-actions #acpBack.acp-show-back{display:inline-flex!important;align-items:center;justify-content:center;width:46px;min-width:46px;height:46px;padding:0;border-radius:15px;font-size:1.45rem;line-height:1}
+#ananasCanonicalProfilePage .acp-actions #acpBack.acp-show-back i{margin:0!important}
+#ananasCanonicalProfilePage .acp-actions #acpBack.acp-show-back span{display:none!important}
+/* Profile works are buttons so every preview is clickable. */
+#ananasCanonicalProfilePage .acp-work{cursor:pointer;transition:.2s ease}
+#ananasCanonicalProfilePage .acp-work:hover{transform:translateY(-2px);border-color:var(--accent1)}
+#ananasCanonicalProfilePage .acp-work-cover img{cursor:zoom-in}
+/* Only the courses icon closes the profile; no home/return button inside own profile. */
+#ananasCanonicalProfilePage #acpHome{display:none!important}
+/* Chat must have one real scrolling viewport. */
+#courseChatPage{min-height:0!important;height:100%!important;display:flex!important;flex-direction:column!important;overflow:hidden!important}
+#courseChatPage .chat-shell{display:flex!important;flex-direction:column!important;min-height:0!important;flex:1 1 auto!important;overflow:hidden!important}
+#courseChatPage #chatPageMessagesList{height:auto!important;min-height:180px!important;flex:1 1 auto!important;overflow-y:auto!important;overflow-x:hidden!important;scroll-behavior:smooth!important;overscroll-behavior:contain!important;display:flex!important;flex-direction:column!important;padding:14px!important}
+#courseChatPage .ananas-chat-end-btn{position:absolute!important;left:18px!important;bottom:96px!important;z-index:8!important;width:42px!important;height:42px!important;border-radius:50%!important;border:1px solid var(--border)!important;background:var(--bg-card)!important;color:var(--text-primary)!important;box-shadow:0 10px 28px rgba(0,0,0,.18)!important;display:grid!important;place-items:center!important;cursor:pointer!important}
+#courseChatPage .ananas-chat-end-btn:hover{border-color:var(--accent1)!important;color:var(--accent1)!important;transform:translateY(-1px)}
+#courseChatPage .ananas-chat-redesign{position:relative!important;display:flex!important;flex-direction:column!important;min-height:0!important;flex:1 1 auto!important}
+#courseChatPage .chat-input-group{flex:0 0 auto!important}
+.ananas-chat-reply-target-highlight{animation:ananasReplyFlash 2.3s ease both!important;outline:2px solid var(--accent1)!important;outline-offset:3px!important}
+@keyframes ananasReplyFlash{0%,100%{background:inherit!important}15%,55%{box-shadow:0 0 0 6px rgba(108,92,231,.18)!important}}
+@media(max-width:760px){#ananasCanonicalProfilePage{inset:var(--nav-height-mobile,70px) 0 0!important}#ananasCanonicalProfilePage .acp-shell{padding:12px 10px 30px}#courseChatPage .ananas-chat-end-btn{left:12px!important;bottom:88px!important}}
+</style>
+<script>
+(function(){'use strict';
+const $=id=>document.getElementById(id);
+const escLocal=window.escapeHtml||((v)=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])));
+
+/* ---------------- ONE PROFILE CONTROLLER ---------------- */
+function hideAllProfileViews(){
+  ['userProfilePage','ananasV10ProfilePage','ananasPrivateProfileOverlay'].forEach(id=>{const e=$(id);if(e){e.classList.remove('active');e.style.setProperty('display','none','important')}});
+}
+function setProfileVisible(uid){
+  const p=$('ananasCanonicalProfilePage');
+  if(!p)return null;
+  hideAllProfileViews();
+  document.querySelectorAll('.nav-btn,.auth-btn').forEach(x=>x.classList.remove('active'));
+  p.classList.add('active');
+  p.dataset.viewingUid=uid||'';
+  p.scrollTop=0;
+  window.scrollTo(0,0);
+  return p;
+}
+function setupUnifiedProfile(){
+  const p=$('ananasCanonicalProfilePage'); if(!p)return;
+  const back=$('acpBack');
+  if(back){
+    back.classList.remove('acp-show-back');
+    back.replaceWith(back.cloneNode(true));
+    const b=$('acpBack');
+    b.classList.add('acp-show-back');
+    b.setAttribute('aria-label','العودة إلى حسابي'); b.title='العودة إلى حسابي';
+    b.innerHTML='<i class="fas fa-chevron-left" aria-hidden="true"></i>';
+    b.onclick=async(e)=>{
+      e.preventDefault();e.stopPropagation();
+      const my=currentUser?.uid;if(!my)return;
+      p.dataset.viewingUid=my;
+      await window.__finalOpenProfile(my,true);
+      p.scrollTop=0;window.scrollTo(0,0);
+    };
+  }
+  /* no home button inside profile */
+  const hero=p.querySelector('.acp-actions');
+  if(hero)hero.querySelectorAll('[data-acp-home],#acpHome,.acp-home-btn').forEach(x=>x.remove());
+}
+function normalizeProfileControls(){
+  const p=$('ananasCanonicalProfilePage');if(!p)return;
+  const uid=p.dataset.viewingUid||window.__ananasViewingProfileUid||'';
+  const self=!!uid&&uid===currentUser?.uid;
+  const back=$('acpBack');if(back)back.classList.toggle('acp-show-back',!self);
+  ['acpEdit','acpAddWork','acpLogout'].forEach(id=>{const e=$(id);if(e)e.style.display=self?'inline-flex':'none'});
+  setupUnifiedProfile();
+}
+async function finalLoadGalleryForProfile(uid){
+  const g=$('acpGallery');if(!g)return;
+  try{
+    const personal=await db.collection('users').doc(uid).collection('portfolioWorks').get();
+    const personalItems=personal.docs.map(d=>({id:d.id,...(d.data()||{})})).filter(x=>!x.deleted);
+    let items=[...personalItems];
+    if(typeof getEffectiveProfileData==='function'){
+      const data=await getEffectiveProfileData(uid);
+      items.push(...(data.assignmentWorks||[]).map(x=>({title:x.assignmentTitle,type:x.courseTitle,description:x.approved?'معتمد':'قيد المراجعة',images:x.images||[]})));
+    }
+    if(!items.length){g.innerHTML='<div class="acp-empty">لا توجد أعمال منشورة حاليًا.</div>';return}
+    g.innerHTML=items.map((x,i)=>{
+      const imgs=Array.isArray(x.images)?x.images:(x.imageUrl?[x.imageUrl]:[]);const img=imgs[0]||'';
+      return `<article class="acp-work" data-final-gallery="${i}"><div class="acp-work-cover">${img?`<img src="${escLocal(img)}" alt="${escLocal(x.title||x.name||'عمل')}" loading="lazy">`:'<i class="fas fa-images" style="font-size:2rem;color:var(--accent1)"></i>'}</div><div class="acp-work-body"><div class="acp-work-title">${escLocal(x.title||x.name||'عمل')}</div><div class="acp-work-meta">${escLocal(x.type||'عمل شخصي')}${x.description?'<br>'+escLocal(x.description):''}</div></div></article>`;
+    }).join('');
+    g.querySelectorAll('.acp-work').forEach((card,i)=>card.addEventListener('click',async()=>{
+      const x=items[i];const imgs=Array.isArray(x.images)?x.images:(x.imageUrl?[x.imageUrl]:[]);if(!imgs.length)return;
+      if(typeof window.openPlatformGalleryViewer==='function')window.openPlatformGalleryViewer(imgs,x.title||x.name||'معاينة العمل');
+      else if(typeof window.__ananasOpenLargeImage==='function')window.__ananasOpenLargeImage(imgs[0],x.title||x.name||'معاينة العمل');
+    },{once:true}));
+  }catch(e){console.error('profile gallery',e);g.innerHTML='<div class="acp-empty">تعذر تحميل معرض الأعمال.</div>';}
+}
+async function finalOpenProfile(uid,isSelf){
+  if(!currentUser||!uid)return;
+  const p=$('ananasCanonicalProfilePage');if(!p)return;
+  const targetSelf=uid===currentUser.uid;
+  setProfileVisible(uid);normalizeProfileControls();
+  try{
+    const snap=await db.collection('users').doc(uid).get();
+    if(!snap.exists){showCustomAlert?.('غير متاح','الحساب غير موجود.');return}
+    const data=snap.data()||{};const admin=!!isAdmin;const privateProfile=!targetSelf&&!admin&&data.profilePublic===false;
+    const name=data.displayName||data.name||'مستخدم',photo=data.photoURL||data.photoUrl||data.photo||'';
+    if($('acpAvatar'))$('acpAvatar').innerHTML=photo?`<img src="${escLocal(photo)}" alt="">`:escLocal(name.slice(0,1));
+    if($('acpName'))$('acpName').textContent=name;
+    if($('acpEmail'))$('acpEmail').textContent=privateProfile?'حساب خاص':(data.email||'—');
+    if($('acpBadge'))$('acpBadge').innerHTML=privateProfile?'<i class="fas fa-lock"></i> حساب خاص':'<i class="fas fa-eye"></i> ملف عام';
+    if(privateProfile){
+      ['acpXP','acpLessons','acpQuizzes','acpWorks'].forEach(id=>{if($(id))$(id).textContent='—'});
+      if($('acpData'))$('acpData').innerHTML=`<div class="acp-row"><strong>الاسم</strong><small>${escLocal(name)}</small></div>`;
+      const hidden='<div class="acp-private"><div class="acp-private-center"><div class="acp-private-card"><i class="fas fa-lock" style="font-size:1.5rem;color:var(--accent1)"></i><h3>الحساب خاص</h3><p style="margin:0;color:var(--text-muted);line-height:1.9">صاحب الحساب جعل ملفه الشخصي خاصًا، لذلك لا يظهر محتوى الحساب إلا لصاحبه والمشرف.</p></div></div></div>';
+      ['acpCourses','acpLessonList','acpQuizList','acpActivity','acpGallery'].forEach(id=>{if($(id))$(id).innerHTML=hidden});
+      normalizeProfileControls();p.scrollTop=0;return;
+    }
+    if(typeof getEffectiveProfileData==='function'){
+      const d=await getEffectiveProfileData(uid);
+      if($('acpXP'))$('acpXP').textContent=Number(d.effectiveXP||0).toLocaleString('ar-SA');
+      if($('acpLessons'))$('acpLessons').textContent=(d.activeLessons||[]).length;
+      if($('acpQuizzes'))$('acpQuizzes').textContent=(d.activeQuizzes||[]).length;
+      if($('acpWorks'))$('acpWorks').textContent=(d.assignmentWorks||[]).length;
+      if($('acpData'))$('acpData').innerHTML=[['الاسم',name],['البريد الإلكتروني',data.email||'غير متوفر'],['رقم الهاتف',targetSelf?(data.phone||'غير مضاف'):'غير متاح'],['الحالة',data.profilePublic===false?'خاص':'عام']].map(a=>`<div class="acp-row"><strong>${escLocal(a[0])}</strong><small>${escLocal(a[1])}</small></div>`).join('');
+      if($('acpLessonList'))$('acpLessonList').innerHTML=(d.activeLessons||[]).length?d.activeLessons.slice().reverse().slice(0,50).map(x=>`<div class="acp-row"><strong>${escLocal(x.titleAr||'حصة')}</strong><small>${escLocal(x.courseTitle||'')} · +${Number(x.xpEarned)||0} XP</small></div>`).join(''):'<div class="acp-empty">لا توجد حصص مكتملة حاليًا.</div>';
+      if($('acpQuizList'))$('acpQuizList').innerHTML=(d.activeQuizzes||[]).length?d.activeQuizzes.slice().reverse().slice(0,50).map(x=>`<div class="acp-row"><strong>${escLocal(x.titleAr||'اختبار')}</strong><small>${Number(x.score)||0}% · +${Number(x.xpEarned)||0} XP</small></div>`).join(''):'<div class="acp-empty">لا توجد اختبارات مكتملة حاليًا.</div>';
+      if($('acpActivity'))$('acpActivity').innerHTML='<div class="acp-row"><strong>الحساب</strong><small>نشط</small></div>';
+    }
+    await finalLoadGalleryForProfile(uid);
+    normalizeProfileControls();p.scrollTop=0;window.scrollTo(0,0);
+  }catch(e){console.error('final profile',e);showCustomAlert?.('خطأ','تعذر تحميل الملف الشخصي.');}
+}
+window.__finalOpenProfile=finalOpenProfile;
+window.__openCanonicalProfile=finalOpenProfile;
+window.openUserProfilePage=function(){return currentUser?finalOpenProfile(currentUser.uid,true):triggerAuth?.()};
+window.openPublicProfileFinal=function(uid){return uid?finalOpenProfile(uid,uid===currentUser?.uid):null};
+window.openAnanasV10Profile=window.openPublicProfileFinal;
+window.viewProfileByUserId=window.openPublicProfileFinal;
+window.openChatProfileV13=window.openPublicProfileFinal;
+window.openChatProfileV12=window.openPublicProfileFinal;
+
+/* Clicking the courses icon is the only way to leave a profile for the main courses page. */
+$('coursesNavBtn')?.addEventListener('click',e=>{
+  const p=$('ananasCanonicalProfilePage');if(!p?.classList.contains('active'))return;
+  e.preventDefault();e.stopImmediatePropagation();
+  hideAllProfileViews();p.classList.remove('active');p.dataset.viewingUid='';
+  try{window.mobileNavigate?.('courses')}catch(_){}
+  window.scrollTo(0,0);p.scrollTop=0;
+},true);
+
+/* Profile clicks always go to the single controller. */
+document.addEventListener('click',async e=>{
+  const n=e.target.closest?.('[data-profile-uid],[data-profile-target],[data-acp-uid],[data-acp-v17-uid]');if(!n)return;
+  const uid=n.dataset.profileUid||n.dataset.profileTarget||n.dataset.acpUid||n.dataset.acpV17Uid;if(!uid)return;
+  e.preventDefault();e.stopImmediatePropagation();await finalOpenProfile(uid,uid===currentUser?.uid);
+},true);
+
+/* ---------------- ONE CHAT VIEWPORT ---------------- */
+function ensureChatEndButton(){
+  const list=$('chatPageMessagesList');if(!list)return;
+  const parent=list.parentElement;if(!parent)return;
+  parent.classList.add('ananas-chat-redesign');
+  let b=parent.querySelector('.ananas-chat-end-btn');
+  if(!b){b=document.createElement('button');b.type='button';b.className='ananas-chat-end-btn';b.title='الانتقال إلى نهاية الدردشة';b.setAttribute('aria-label','الانتقال إلى نهاية الدردشة');b.innerHTML='<i class="fas fa-angle-down"></i>';b.onclick=()=>{list.scrollTo({top:list.scrollHeight,behavior:'smooth'})};parent.appendChild(b)}
+}
+function normalizeChatScroll(){
+  const list=$('chatPageMessagesList');if(!list)return;
+  list.style.overflowY='auto';list.style.overflowX='hidden';list.style.flex='1 1 auto';list.style.minHeight='0';
+  ensureChatEndButton();
+}
+window.__finalScrollChat=()=>{const l=$('chatPageMessagesList');if(l)l.scrollTo({top:l.scrollHeight,behavior:'smooth'})};
+/* After a live snapshot, force the same single scroll viewport. */
+const chatObs=new MutationObserver(()=>{normalizeChatScroll()});
+chatObs.observe(document.body,{subtree:true,childList:true});
+setInterval(normalizeChatScroll,600);
+
+/* Reply target support, including replyToId saved on Firestore. */
+document.addEventListener('click',async e=>{
+  const block=e.target.closest?.('.reply-block');if(!block)return;
+  e.preventDefault();e.stopPropagation();const msg=block.closest('.chat-msg');if(!msg||!activeCourseId)return;
+  let id=msg.dataset.replyToId||'';if(!id){try{const s=await db.collection('courses').doc(activeCourseId).collection('chat').doc(msg.dataset.messageId).get();id=s.data()?.replyToId||''}catch(_){} }
+  if(!id)return;const target=document.querySelector(`.chat-msg[data-message-id="${CSS.escape(id)}"]`);if(!target)return;
+  target.scrollIntoView({behavior:'smooth',block:'center'});target.classList.remove('ananas-chat-reply-target-highlight');void target.offsetWidth;target.classList.add('ananas-chat-reply-target-highlight');setTimeout(()=>target.classList.remove('ananas-chat-reply-target-highlight'),2300);
+},true);
+
+/* Sending always ends at the new message. */
+['fullChatPageSendBtn','fullSendChatBtn','fullPageSendBtn'].forEach(id=>$(id)?.addEventListener('click',()=>setTimeout(()=>window.__finalScrollChat(),300),true));
+
+/* Rebuild the visual shell without changing the existing IDs/handlers. */
+function ensureChatVisualShell(){
+  const page=$('courseChatPage'),list=$('chatPageMessagesList');if(!page||!list)return;
+  page.classList.add('ananas-chat-final-page');
+  normalizeChatScroll();
+  /* Ensure list itself is never blocked by accidental parent overflow. */
+  let p=list.parentElement;while(p&&p!==page){p.style.minHeight='0';p=p.parentElement}
+}
+setTimeout(ensureChatVisualShell,50);setInterval(ensureChatVisualShell,800);
+
+/* Start every opened profile/chat at a clean scroll position. */
+document.addEventListener('click',e=>{
+  const x=e.target.closest?.('.nav-btn,.course-card,[data-profile-uid],[data-acp-uid],[data-acp-v17-uid]');if(!x)return;
+  setTimeout(()=>{window.scrollTo(0,0);const p=$('ananasCanonicalProfilePage');if(p?.classList.contains('active')&&x.matches('[data-profile-uid],[data-acp-uid],[data-acp-v17-uid]'))p.scrollTop=0},0);
+},true);
+
+/* On auth refresh always paint the new single controller only. */
+const oldSet=window.setProfileBackState;window.setProfileBackState=function(){normalizeProfileControls()};
+window.addEventListener('resize',normalizeChatScroll);
+normalizeProfileControls();normalizeChatScroll();
+})();
+</script>
