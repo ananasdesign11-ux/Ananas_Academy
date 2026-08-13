@@ -13266,5 +13266,231 @@ const s=document.createElement('style');s.textContent=`
 })();
 </script>
 
+
+<!-- ===== FINAL NOTIFICATIONS + CODE ACCESS / EJECTION PATCH ===== -->
+<style id="aa-final-notifications-style">
+  .aa-notifications-wrap{position:relative;display:inline-flex;align-items:center;}
+  .aa-notifications-btn{position:relative;display:flex;align-items:center;justify-content:center;width:40px;height:40px;border:0;border-radius:50%;background:transparent;color:var(--text-muted);cursor:pointer;transition:.2s;font:inherit;}
+  .aa-notifications-btn:hover,.aa-notifications-btn.active{color:var(--accent1);background:rgba(108,92,231,.1);}
+  .aa-notification-badge{position:absolute;top:-2px;inset-inline-end:-3px;min-width:18px;height:18px;padding:0 5px;border-radius:999px;background:#e74c3c;color:#fff;font-size:.68rem;font-weight:900;display:none;align-items:center;justify-content:center;border:2px solid var(--bg-secondary);box-shadow:0 4px 12px rgba(231,76,60,.3);}
+  .aa-notification-badge.show{display:flex;}
+  .aa-notification-dot{width:7px;height:7px;border-radius:50%;background:#e74c3c;display:inline-block;flex:0 0 7px;box-shadow:0 0 0 4px rgba(231,76,60,.12);}
+  .aa-notifications-dropdown{position:absolute;top:calc(100% + 10px);inset-inline-end:0;width:min(390px,calc(100vw - 24px));background:var(--bg-card);border:1px solid var(--border);border-radius:20px;box-shadow:0 20px 60px rgba(0,0,0,.18);z-index:10050;display:none;overflow:hidden;backdrop-filter:blur(16px);}
+  .aa-notifications-dropdown.active{display:block;}
+  .aa-notif-head{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:14px 16px;border-bottom:1px solid var(--border);}
+  .aa-notif-head strong{font-size:.96rem;}
+  .aa-notif-head button{border:1px solid var(--border);background:var(--bg-secondary);color:var(--text-primary);border-radius:999px;padding:6px 10px;font:inherit;font-size:.75rem;font-weight:800;cursor:pointer;}
+  .aa-notif-list{max-height:360px;overflow:auto;padding:8px;}
+  .aa-notif-item{display:flex;gap:10px;align-items:flex-start;padding:11px 10px;border-radius:14px;cursor:pointer;transition:.18s;background:transparent;}
+  .aa-notif-item:hover{background:rgba(108,92,231,.07);}
+  .aa-notif-item.unread{background:rgba(108,92,231,.08);}
+  .aa-notif-icon{width:36px;height:36px;flex:0 0 36px;border-radius:12px;display:grid;place-items:center;background:rgba(108,92,231,.12);color:var(--accent1);}
+  .aa-notif-copy{min-width:0;flex:1;}
+  .aa-notif-title{font-weight:900;font-size:.84rem;display:flex;align-items:center;gap:7px;line-height:1.45;}
+  .aa-notif-preview{font-size:.78rem;color:var(--text-muted);line-height:1.55;margin-top:3px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;}
+  .aa-notif-time{font-size:.68rem;color:var(--text-muted);margin-top:4px;}
+  .aa-notif-footer{padding:10px;border-top:1px solid var(--border);}
+  .aa-notif-open-all{width:100%;min-height:42px;border-radius:12px;border:0;background:var(--accent-gradient);color:#fff;font:inherit;font-weight:900;cursor:pointer;}
+  .aa-notif-empty{padding:30px 16px;text-align:center;color:var(--text-muted);font-size:.84rem;}
+  #aaNotificationsPage{position:fixed;inset:var(--nav-height-mobile,70px) 0 calc(66px + env(safe-area-inset-bottom)) 0;z-index:10020;background:var(--bg-primary);display:none;overflow:hidden;}
+  #aaNotificationsPage.active{display:block;}
+  .aa-notifications-page-inner{height:100%;overflow:auto;padding:18px max(16px,4vw) 28px;}
+  .aa-notifications-page-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:16px;padding-bottom:14px;border-bottom:1px solid var(--border);}
+  .aa-notifications-page-head h2{margin:0;color:var(--accent1);font-size:1.5rem;}
+  .aa-notifications-page-head button{width:42px;height:42px;border:1px solid var(--border);background:var(--bg-card);color:var(--text-muted);border-radius:50%;cursor:pointer;font-size:1rem;}
+  .aa-notifications-all-list{display:flex;flex-direction:column;gap:10px;max-width:850px;margin:0 auto;}
+  .aa-notifications-all-list .aa-notif-item{background:var(--bg-card);border:1px solid var(--border);padding:14px;border-radius:18px;}
+  #aaNotificationDetailModal{position:fixed;inset:0;z-index:11000;background:rgba(0,0,0,.58);display:none;align-items:center;justify-content:center;padding:18px;backdrop-filter:blur(5px);}
+  #aaNotificationDetailModal.active{display:flex;}
+  .aa-notification-detail-box{width:min(620px,94vw);max-height:min(80vh,720px);overflow:auto;background:var(--bg-card);border:1px solid var(--border);border-radius:24px;box-shadow:0 30px 90px rgba(0,0,0,.28);padding:22px;}
+  .aa-notification-detail-top{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding-bottom:14px;border-bottom:1px solid var(--border);}
+  .aa-notification-detail-title{font-size:1.15rem;font-weight:900;line-height:1.6;}
+  .aa-notification-detail-close{width:38px;height:38px;border:1px solid var(--border);background:var(--bg-secondary);color:var(--text-muted);border-radius:50%;cursor:pointer;}
+  .aa-notification-detail-body{padding-top:16px;line-height:2;font-size:.95rem;white-space:pre-wrap;word-break:normal;overflow-wrap:anywhere;}
+  .aa-notification-detail-meta{display:flex;gap:8px;flex-wrap:wrap;color:var(--text-muted);font-size:.76rem;margin-top:10px;}
+  .aa-notification-detail-reason{margin-top:15px;padding:13px 14px;border:1px solid rgba(231,76,60,.18);background:rgba(231,76,60,.06);border-radius:15px;color:var(--text-primary);}
+  .aa-code-reason-modal{position:fixed;inset:0;z-index:10990;background:rgba(0,0,0,.58);display:none;align-items:center;justify-content:center;padding:18px;backdrop-filter:blur(5px);}
+  .aa-code-reason-modal.active{display:flex;}
+  .aa-code-reason-box{width:min(620px,94vw);background:var(--bg-card);border:1px solid var(--border);border-radius:24px;padding:22px;box-shadow:0 30px 90px rgba(0,0,0,.28);}
+  .aa-code-reason-box h3{margin:0 0 8px;color:var(--accent1);}
+  .aa-code-reason-box p{margin:0 0 14px;color:var(--text-muted);line-height:1.7;font-size:.86rem;}
+  .aa-code-reason-box textarea{width:100%;min-height:130px;resize:vertical;padding:12px;border:1px solid var(--border);border-radius:14px;background:var(--bg-secondary);color:var(--text-primary);font:inherit;outline:none;}
+  .aa-code-reason-box textarea:focus{border-color:var(--accent1);box-shadow:0 0 0 3px rgba(108,92,231,.1);}
+  .aa-code-reason-actions{display:flex;gap:9px;margin-top:14px;}
+  .aa-code-reason-actions button{flex:1;min-height:44px;border-radius:12px;border:1px solid var(--border);font:inherit;font-weight:900;cursor:pointer;}
+  .aa-code-reason-cancel{background:var(--bg-secondary);color:var(--text-primary);}
+  .aa-code-reason-confirm{background:var(--accent-gradient);color:#fff;border-color:transparent!important;}
+  @media(max-width:768px){
+    .aa-notifications-wrap{width:40px;}
+    .aa-notifications-dropdown{position:fixed;top:calc(var(--nav-height-mobile,70px) + 8px);inset-inline:12px auto;inset-inline-end:12px;width:calc(100vw - 24px);}
+    #aaNotificationsPage{inset:var(--nav-height-mobile,70px) 0 calc(66px + env(safe-area-inset-bottom)) 0;}
+    .aa-notifications-page-inner{padding:14px 12px 24px;}
+    .aa-notifications-page-head h2{font-size:1.25rem;}
+    .aa-notification-detail-box{max-height:calc(100dvh - 110px);padding:18px;}
+  }
+</style>
+
+<!-- Notifications UI -->
+<div class="aa-notifications-wrap" id="aaNotificationsWrap">
+  <button type="button" class="aa-notifications-btn" id="aaNotificationsBtn" aria-label="الإشعارات" title="الإشعارات">
+    <i class="fas fa-bell"></i><span class="aa-notification-badge" id="aaNotificationBadge">0</span>
+  </button>
+  <div class="aa-notifications-dropdown" id="aaNotificationsDropdown">
+    <div class="aa-notif-head"><strong>الإشعارات الجديدة</strong><button type="button" id="aaMarkAllReadBtn">تحديد الكل كمقروء</button></div>
+    <div class="aa-notif-list" id="aaNotifDropdownList"><div class="aa-notif-empty">لا توجد إشعارات جديدة.</div></div>
+    <div class="aa-notif-footer"><button type="button" class="aa-notif-open-all" id="aaOpenAllNotificationsBtn">عرض كل الإشعارات</button></div>
+  </div>
+</div>
+
+<div id="aaNotificationsPage" aria-hidden="true">
+  <div class="aa-notifications-page-inner">
+    <div class="aa-notifications-page-head"><h2>كل الإشعارات</h2><button type="button" id="aaCloseNotificationsPage" aria-label="إغلاق"><i class="fas fa-xmark"></i></button></div>
+    <div class="aa-notifications-all-list" id="aaNotificationsAllList"><div class="aa-notif-empty">جاري تحميل الإشعارات...</div></div>
+  </div>
+</div>
+
+<div id="aaNotificationDetailModal" aria-hidden="true">
+  <div class="aa-notification-detail-box">
+    <div class="aa-notification-detail-top"><div><div class="aa-notification-detail-title" id="aaNotificationDetailTitle"></div><div class="aa-notification-detail-meta" id="aaNotificationDetailMeta"></div></div><button type="button" class="aa-notification-detail-close" id="aaNotificationDetailClose"><i class="fas fa-xmark"></i></button></div>
+    <div class="aa-notification-detail-body" id="aaNotificationDetailBody"></div>
+    <div class="aa-notification-detail-reason" id="aaNotificationDetailReason" style="display:none"></div>
+  </div>
+</div>
+
+<div class="aa-code-reason-modal" id="aaCodeReasonModal" aria-hidden="true">
+  <div class="aa-code-reason-box">
+    <h3 id="aaCodeReasonTitle">سبب الإجراء</h3>
+    <p id="aaCodeReasonText">اكتب السبب الذي سيصل إلى الحساب في الإشعارات.</p>
+    <textarea id="aaCodeReasonInput" placeholder="اكتب السبب هنا..."></textarea>
+    <div class="aa-code-reason-actions"><button type="button" class="aa-code-reason-cancel" id="aaCodeReasonCancel">إلغاء</button><button type="button" class="aa-code-reason-confirm" id="aaCodeReasonConfirm">متابعة</button></div>
+  </div>
+</div>
+
+<script>
+(function(){
+  'use strict';
+  const $=id=>document.getElementById(id);
+  const esc=v=>String(v??'').replace(/[&<>'"]/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[m]));
+  let aaNotificationUnsub=null, aaNotificationsCache=[], aaReasonResolver=null;
+  function aaDate(v){try{return v?.toDate?v.toDate():(v?new Date(v):null)}catch(_){return null}}
+  function aaTime(v){const d=aaDate(v);return d&&!isNaN(d.getTime())?d.toLocaleString('ar-SA',{dateStyle:'medium',timeStyle:'short'}):'—'}
+  function aaGoCourses(){try{window.aaEjectFromCourse?.();}catch(_){try{window.mobileNavigate?.('courses')}catch(__){}}}
+  function aaRenderNotificationItem(n,all=false){
+    const icon=n.type==='code_deleted'?'fa-user-slash':n.type==='code_suspended'?'fa-pause-circle':'fa-bell';
+    return `<div class="aa-notif-item ${n.read?'':'unread'}" data-notification-id="${esc(n.id)}"><div class="aa-notif-icon"><i class="fas ${icon}"></i></div><div class="aa-notif-copy"><div class="aa-notif-title">${!n.read?'<span class="aa-notification-dot"></span>':''}<span>${esc(n.title||'إشعار')}</span></div><div class="aa-notif-preview">${esc(n.body||'')}</div><div class="aa-notif-time">${esc(aaTime(n.createdAt))}</div></div></div>`;
+  }
+  function aaRenderNotifications(){
+    const sorted=[...aaNotificationsCache].sort((a,b)=>{const da=aaDate(a.createdAt)?.getTime()||0,db=aaDate(b.createdAt)?.getTime()||0;return db-da});
+    const unread=sorted.filter(x=>!x.read);
+    const badge=$('aaNotificationBadge');if(badge){badge.textContent=unread.length>99?'99+':String(unread.length);badge.classList.toggle('show',unread.length>0)}
+    const drop=$('aaNotifDropdownList');if(drop)drop.innerHTML=unread.length?unread.slice(0,8).map(x=>aaRenderNotificationItem(x)).join(''):'<div class="aa-notif-empty">لا توجد إشعارات جديدة.</div>';
+    const all=$('aaNotificationsAllList');if(all)all.innerHTML=sorted.length?sorted.map(x=>aaRenderNotificationItem(x,true)).join(''):'<div class="aa-notif-empty">لا توجد إشعارات.</div>';
+    document.querySelectorAll('#aaNotifDropdownList .aa-notif-item,#aaNotificationsAllList .aa-notif-item').forEach(el=>{if(!el.dataset.bound){el.dataset.bound='1';el.addEventListener('click',()=>aaOpenNotification(el.dataset.notificationId));}});
+  }
+  async function aaStartNotificationListener(uid){
+    aaNotificationUnsub?.();aaNotificationUnsub=null;aaNotificationsCache=[];aaRenderNotifications();if(!uid)return;
+    try{aaNotificationUnsub=db.collection('users').doc(uid).collection('notifications').onSnapshot(snap=>{aaNotificationsCache=snap.docs.map(d=>({id:d.id,...(d.data()||{})}));aaRenderNotifications()},e=>console.warn('notifications listener',e))}catch(e){console.warn('notifications',e)}
+  }
+  async function aaMarkNotificationRead(id){if(!currentUser||!id)return;try{await db.collection('users').doc(currentUser.uid).collection('notifications').doc(id).set({read:true,readAt:firebase.firestore.FieldValue.serverTimestamp()},{merge:true})}catch(e){console.warn(e)}}
+  async function aaOpenNotification(id){const n=aaNotificationsCache.find(x=>x.id===id);if(!n)return;await aaMarkNotificationRead(id);$('aaNotificationDetailTitle').textContent=n.title||'إشعار';$('aaNotificationDetailBody').textContent=n.body||'';const meta=$('aaNotificationDetailMeta');meta.innerHTML=`<span>${esc(n.type==='code_deleted'?'إزالة اشتراك':n.type==='code_suspended'?'إيقاف اشتراك':'إشعار')}</span><span>${esc(aaTime(n.createdAt))}</span>`;const reason=$('aaNotificationDetailReason');if(n.reason){reason.style.display='block';reason.innerHTML=`<strong>السبب</strong><div style="margin-top:5px;line-height:1.8;">${esc(n.reason)}</div>`}else{reason.style.display='none';reason.innerHTML=''}$('aaNotificationDetailModal').classList.add('active')}
+  async function aaMarkAllRead(){if(!currentUser)return;const unread=aaNotificationsCache.filter(x=>!x.read);if(!unread.length)return;const batch=db.batch();unread.forEach(n=>batch.set(db.collection('users').doc(currentUser.uid).collection('notifications').doc(n.id),{read:true,readAt:firebase.firestore.FieldValue.serverTimestamp()},{merge:true}));try{await batch.commit()}catch(e){console.warn(e)}}
+  function aaOpenAll(){ $('aaNotificationsDropdown')?.classList.remove('active');$('aaNotificationsBtn')?.classList.remove('active');$('aaNotificationsPage')?.classList.add('active');aaRenderNotifications();}
+  async function aaAddNotification(uid,{title,body,reason='',type='general',data={}}){if(!uid)return;try{await db.collection('users').doc(String(uid)).collection('notifications').add({title,body,reason,type,data,read:false,createdAt:firebase.firestore.FieldValue.serverTimestamp()})}catch(e){console.warn('add notification',uid,e)}}
+  async function aaNotifyUsers(uids,payload){const list=[...new Set((uids||[]).map(x=>String(typeof x==='string'?x:x?.uid||'')).filter(Boolean))];for(const uid of list)await aaAddNotification(uid,payload)}
+  function aaAskReason(action,codeLabel){return new Promise(resolve=>{aaReasonResolver=resolve;$('aaCodeReasonTitle').textContent=action==='delete'?'سبب حذف الاشتراك':'سبب إيقاف الاشتراك';$('aaCodeReasonText').textContent=`سيتم إرسال السبب إلى الحساب المرتبط بالكود: ${codeLabel||'الكود'}.`;$('aaCodeReasonInput').value='';$('aaCodeReasonModal').classList.add('active');setTimeout(()=>$('aaCodeReasonInput')?.focus(),50)})}
+  function aaCloseReason(result){$('aaCodeReasonModal').classList.remove('active');const r=aaReasonResolver;aaReasonResolver=null;if(r)r(result)}
+  $('aaCodeReasonCancel')?.addEventListener('click',()=>aaCloseReason(null));$('aaCodeReasonConfirm')?.addEventListener('click',()=>{const reason=$('aaCodeReasonInput').value.trim();if(!reason)return showCustomAlert?.('تنبيه','اكتب سبب الإجراء قبل المتابعة.');aaCloseReason(reason)});
+  $('aaNotificationDetailClose')?.addEventListener('click',()=>$('aaNotificationDetailModal').classList.remove('active'));
+  $('aaOpenAllNotificationsBtn')?.addEventListener('click',aaOpenAll);
+  $('aaCloseNotificationsPage')?.addEventListener('click',()=>$('aaNotificationsPage').classList.remove('active'));
+  $('aaMarkAllReadBtn')?.addEventListener('click',aaMarkAllRead);
+  $('aaNotificationsBtn')?.addEventListener('click',e=>{e.stopPropagation();$('aaNotificationsDropdown').classList.toggle('active');$('aaNotificationsBtn').classList.toggle('active')});
+  document.addEventListener('click',e=>{const w=$('aaNotificationsWrap');if(w&&!w.contains(e.target)){$('aaNotificationsDropdown')?.classList.remove('active');$('aaNotificationsBtn')?.classList.remove('active')}});
+
+  // Inject notification button next to theme/light-dark button without changing the existing navbar.
+  const navTop=document.querySelector('.nav-actions-top');
+  if(navTop&&!$('aaNotificationsWrap').parentElement){const theme=$('themeToggle');if(theme)theme.insertAdjacentElement('afterend',$('aaNotificationsWrap'));else navTop.appendChild($('aaNotificationsWrap'));}
+
+  // Keep the current course access listener, but also react to the enrollment flags used by code deletion/blocking.
+  const oldWatch=window.watchCourseAccess;
+  if(oldWatch&&!oldWatch.__aaNotifAccessPatch){
+    const wrap=function(courseId){const out=oldWatch.apply(this,arguments);try{if(currentUser&&!isAdmin&&courseId){window.__aaNotifEnrollUnsub?.();const er=db.collection('users').doc(currentUser.uid).collection('enrolledCourses').doc(courseId);window.__aaNotifEnrollUnsub=er.onSnapshot(s=>{if(!s.exists)return aaEjectFromCourse('تم إلغاء اشتراكك في هذه الدورة.');const d=s.data()||{};if(d.codeDeleted===true)return aaEjectFromCourse(d.accessBlockReason||'تم حذف اشتراكك من هذه الدورة.');if(d.accessBlocked===true){const bu=aaDate(d.blockedUntil);if(!bu||bu.getTime()>Date.now())return aaEjectFromCourse(d.accessBlockReason||d.blockReason||'تم إيقاف دخولك إلى هذه الدورة.')}})}}catch(e){console.warn('enrollment access guard',e)}return out};wrap.__aaNotifAccessPatch=true;window.watchCourseAccess=wrap;
+  }
+
+  // Delete code: ask for reason, notify all users, flag enrollment, then delete code.
+  window.__aaFinalDeleteEnrollmentCode=async function(codeId){
+    if(!isAdmin||!activeCourseId)return showCustomAlert?.('غير مسموح','هذه العملية للمشرف فقط.');
+    const ref=db.collection('courses').doc(activeCourseId).collection('codes').doc(codeId);const snap=await ref.get();if(!snap.exists)return showCustomAlert?.('خطأ','الكود غير موجود.');const c=snap.data()||{};const users=[...(Array.isArray(c.usedBy)?c.usedBy:[]),...(Array.isArray(c.usedByInfo)?c.usedByInfo:[])].map(x=>typeof x==='string'?x:x?.uid).filter(Boolean);const codeLabel=c.code||codeId;const reason=await aaAskReason('delete',codeLabel);if(!reason)return;
+    try{
+      const batch=db.batch();for(const uid of [...new Set(users.map(String))]){const er=db.collection('users').doc(uid).collection('enrolledCourses').doc(activeCourseId);batch.set(er,{codeDeleted:true,accessBlocked:true,accessBlockReason:reason,blockReason:reason,accessUpdatedAt:firebase.firestore.FieldValue.serverTimestamp()},{merge:true});}
+      if(users.length)await batch.commit();
+      await aaNotifyUsers(users,{title:'تم حذف اشتراكك',body:'تم حذف اشتراكك في الدورة المرتبط بهذا الكود، وتم إخراجك من الدورة.',reason,type:'code_deleted',data:{courseId:activeCourseId,codeId,code:codeLabel}});
+      await ref.delete();await window.loadCodesForCourse?.(activeCourseId);showCustomAlert?.('تم الحذف','تم حذف الكود وإلغاء اشتراكات الحسابات المرتبطة به وإرسال إشعار لهم.');
+      if(currentUser&&!isAdmin&&users.some(u=>String(u)===String(currentUser.uid)))aaEjectFromCourse('تم حذف اشتراكك من الدورة.');
+    }catch(e){console.error(e);showCustomAlert?.('خطأ','تعذر حذف الكود: '+e.message)}
+  };
+
+  // Replace all inline delete-code actions with the final function.
+  const oldDelete=window.deleteEnrollmentCode;
+  window.deleteEnrollmentCode=window.__aaFinalDeleteEnrollmentCode;
+  document.addEventListener('click',e=>{const b=e.target.closest('button[onclick*="deleteEnrollmentCode"]');if(!b)return;const m=b.getAttribute('onclick')?.match(/deleteEnrollmentCode\(['"]([^'"]+)/);if(!m)return;e.preventDefault();e.stopImmediatePropagation();window.__aaFinalDeleteEnrollmentCode(m[1])},true);
+
+  // Suspension confirmation: notify affected users with the reason, and write access flags.
+  const suspendBtn=$('confirmCourseSuspendBtn');
+  if(suspendBtn&&!suspendBtn.dataset.aaNotifPatch){
+    suspendBtn.dataset.aaNotifPatch='1';
+    const original=suspendBtn.onclick;
+    suspendBtn.onclick=async function(e){
+      if(original&&this.dataset.aaOriginalHandled==='1')return original.call(this,e);
+      if(!isAdmin||!activeCourseId||!window.__aaCodeSuspendTarget)return;
+      const mode=$('courseSuspendDuration').value,reason=$('courseSuspendReason').value.trim();let until=null;
+      if(mode==='custom'){const raw=$('courseSuspendUntil').value;const m=raw&&raw.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/);if(!m)return showCustomAlert?.('تنبيه','حدد تاريخ ووقت صحيحين.');until=new Date(`${m[1]}-${m[2]}-${m[3]}T${m[4]}:00+03:00`);if(isNaN(until.getTime())||until.getTime()<=Date.now())return showCustomAlert?.('تنبيه','وقت الانتهاء يجب أن يكون في المستقبل.')}
+      else if(mode!=='permanent'){const days=({ '1d':1,'3d':3,'7d':7,'14d':14,'30d':30})[mode];if(!days)return showCustomAlert?.('تنبيه','اختر مدة صحيحة.');until=new Date(Date.now()+days*86400000)}
+      const id=window.__aaCodeSuspendTarget,ref=db.collection('courses').doc(activeCourseId).collection('codes').doc(id);this.disabled=true;try{const ss=await ref.get();if(!ss.exists)throw Error('الكود غير موجود');const c=ss.data()||{};const users=[...new Set((Array.isArray(c.usedBy)?c.usedBy:[]).map(String).filter(Boolean))];const payload={disabled:true,isSuspended:true,status:'suspended',state:'suspended',suspensionStatus:'suspended',suspendedUntil:until?firebase.firestore.Timestamp.fromDate(until):null,suspensionReason:reason||'تم إيقاف الاشتراك من قبل المشرف.',suspensionMode:mode,suspensionUpdatedAt:firebase.firestore.FieldValue.serverTimestamp(),suspensionUpdatedBy:currentUser?.uid||null};await ref.update(payload);const batch=db.batch();for(const uid of users)batch.set(db.collection('users').doc(uid).collection('enrolledCourses').doc(activeCourseId),{accessBlocked:true,blockedUntil:until?firebase.firestore.Timestamp.fromDate(until):null,accessBlockReason:reason||'تم إيقاف الاشتراك من قبل المشرف.',blockReason:reason||'تم إيقاف الاشتراك من قبل المشرف.',accessUpdatedAt:firebase.firestore.FieldValue.serverTimestamp()},{merge:true});if(users.length)await batch.commit();await aaNotifyUsers(users,{title:'تم إيقاف اشتراكك',body:until?'تم إيقاف اشتراكك في الدورة مؤقتًا حتى الموعد المحدد.':'تم إيقاف اشتراكك في الدورة حتى يتم إلغاء الإيقاف من المشرف.',reason:reason||'تم إيقاف الاشتراك من قبل المشرف.',type:'code_suspended',data:{courseId:activeCourseId,codeId:id,code:c.code||id,suspendedUntil:until?until.toISOString():null}});$('courseAccessSuspendModal')?.classList.remove('active');await window.loadCodesForCourse?.(activeCourseId);showCustomAlert?.('تم الإيقاف',until?`تم إيقاف الاشتراك حتى ${until.toLocaleString('ar-SA',{timeZone:'Asia/Riyadh'})}.`:'تم إيقاف الاشتراك حتى إلغائه يدويًا.')}catch(err){console.error(err);showCustomAlert?.('خطأ','تعذر إيقاف الكود: '+err.message)}finally{this.disabled=false}
+    }
+  }
+
+  // Capture the suspend action at the document level so older click handlers cannot bypass notifications/ejection.
+  const suspendCapture=(e)=>{
+    const btn=e.target.closest?.('#confirmCourseSuspendBtn');
+    if(!btn||btn.dataset.aaFinalCapture==='1')return;
+    e.preventDefault();e.stopImmediatePropagation();
+    btn.dataset.aaFinalCapture='1';
+    (async()=>{
+      if(!isAdmin||!activeCourseId||!window.__aaCodeSuspendTarget)return;
+      const mode=$('courseSuspendDuration')?.value||'1d',reason=($('courseSuspendReason')?.value||'').trim();let until=null;
+      if(mode==='custom'){const raw=$('courseSuspendUntil')?.value||'',m=raw.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/);if(!m)return showCustomAlert?.('تنبيه','حدد تاريخ ووقت صحيحين.');until=new Date(`${m[1]}-${m[2]}-${m[3]}T${m[4]}:00+03:00`);if(isNaN(until.getTime())||until.getTime()<=Date.now())return showCustomAlert?.('تنبيه','وقت الانتهاء يجب أن يكون في المستقبل.')}
+      else if(mode!=='permanent'){const days=({'1d':1,'3d':3,'7d':7,'14d':14,'30d':30})[mode];if(!days)return showCustomAlert?.('تنبيه','اختر مدة صحيحة.');until=new Date(Date.now()+days*86400000)}
+      const id=window.__aaCodeSuspendTarget,ref=db.collection('courses').doc(activeCourseId).collection('codes').doc(id);
+      btn.disabled=true;const old=btn.innerHTML;btn.innerHTML='<i class="fas fa-spinner fa-spin"></i> جاري الإيقاف...';
+      try{
+        const ss=await ref.get();if(!ss.exists)throw Error('الكود غير موجود');
+        const c=ss.data()||{},users=[...new Set((Array.isArray(c.usedBy)?c.usedBy:[]).map(String).filter(Boolean))],rs=reason||'تم إيقاف الاشتراك من قبل المشرف.';
+        await ref.update({disabled:true,isSuspended:true,status:'suspended',state:'suspended',suspensionStatus:'suspended',suspendedUntil:until?firebase.firestore.Timestamp.fromDate(until):null,suspensionReason:rs,suspensionMode:mode,suspensionUpdatedAt:firebase.firestore.FieldValue.serverTimestamp(),suspensionUpdatedBy:currentUser?.uid||null});
+        const batch=db.batch();for(const uid of users)batch.set(db.collection('users').doc(uid).collection('enrolledCourses').doc(activeCourseId),{accessBlocked:true,blockedUntil:until?firebase.firestore.Timestamp.fromDate(until):null,accessBlockReason:rs,blockReason:rs,accessUpdatedAt:firebase.firestore.FieldValue.serverTimestamp()},{merge:true});if(users.length)await batch.commit();
+        await aaNotifyUsers(users,{title:'تم إيقاف اشتراكك',body:until?'تم إيقاف اشتراكك في الدورة مؤقتًا حتى الموعد المحدد.':'تم إيقاف اشتراكك في الدورة حتى إلغاء الإيقاف من المشرف.',reason:rs,type:'code_suspended',data:{courseId:activeCourseId,codeId:id,code:c.code||id,suspendedUntil:until?until.toISOString():null}});
+        $('courseAccessSuspendModal')?.classList.remove('active');await window.loadCodesForCourse?.(activeCourseId);showCustomAlert?.('تم الإيقاف',until?`تم إيقاف الاشتراك حتى ${until.toLocaleString('ar-SA',{timeZone:'Asia/Riyadh'})}.`:'تم إيقاف الاشتراك حتى إلغائه يدويًا.');
+      }catch(err){console.error(err);showCustomAlert?.('خطأ','تعذر إيقاف الكود: '+err.message)}finally{btn.disabled=false;btn.innerHTML=old;btn.dataset.aaFinalCapture='0'}
+    })();
+  };
+  if(!window.__aaSuspendCaptureBound){window.__aaSuspendCaptureBound=true;document.addEventListener('click',suspendCapture,true)}
+
+  // Remove stale access-block flags when a suspension is cancelled so old codes can be restored normally.
+  const oldToggle=window.toggleEnrollmentCode;
+  if(oldToggle&&!oldToggle.__aaNotifPatch){
+    const wrap=async function(codeId,currentSuspended){const r=await oldToggle.apply(this,arguments);if(currentSuspended&&activeCourseId){try{const s=await db.collection('courses').doc(activeCourseId).collection('codes').doc(codeId).get();const c=s.exists?s.data()||{}:{};const users=[...new Set((Array.isArray(c.usedBy)?c.usedBy:[]).map(String).filter(Boolean))];const batch=db.batch();for(const uid of users){const er=db.collection('users').doc(uid).collection('enrolledCourses').doc(activeCourseId);batch.set(er,{accessBlocked:false,blockedUntil:null,accessBlockReason:null,blockReason:null,codeDeleted:false,accessUpdatedAt:firebase.firestore.FieldValue.serverTimestamp()},{merge:true})}if(users.length)await batch.commit()}catch(e){console.warn(e)}}return r};wrap.__aaNotifPatch=true;window.toggleEnrollmentCode=wrap;
+  }
+
+  // Start notifications when auth state changes; wrap only once and preserve the platform's own handler.
+  const oldAuthHandler=auth.onAuthStateChanged;
+  if(!window.__aaNotifAuthBound){window.__aaNotifAuthBound=true;auth.onAuthStateChanged(user=>{if(user)aaStartNotificationListener(user.uid);else{aaNotificationUnsub?.();aaNotificationUnsub=null;aaNotificationsCache=[];aaRenderNotifications();$('aaNotificationsPage')?.classList.remove('active')}})}
+
+  // Move/keep the bell beside the theme switch after navbar initialization finishes.
+  const relocate=()=>{const theme=$('themeToggle'),wrap=$('aaNotificationsWrap');if(theme&&wrap&&wrap.parentElement!==theme.parentElement)theme.insertAdjacentElement('afterend',wrap)};relocate();setTimeout(relocate,1000);setTimeout(relocate,2500);
+
+  // Ensure ejection checks also react to a deleted enrollment flag/code deletion for the active course.
+  if(!window.__aaNotifVisibilityGuard){window.__aaNotifVisibilityGuard=true;document.addEventListener('visibilitychange',()=>{if(!document.hidden&&currentUser&&window.activeCourseId&&!isAdmin)window.aaInspectEnrollment?.(window.activeCourseId).catch(()=>{})})}
+})();
+</script>
 </body>
 </html>
