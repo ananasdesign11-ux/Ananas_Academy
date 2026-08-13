@@ -3555,8 +3555,9 @@ label[for*="En"], input[id*="En"], textarea[id*="En"] { display:none !important;
 
         async function refreshAssignmentDetail(courseId,assignmentId){
             const result=await getAssignmentData(courseId,assignmentId); if(!result)return;
+            const detailPage=document.getElementById('courseAssignmentDetailPage');if(detailPage)detailPage.dataset.assignmentId=assignmentId;
             document.getElementById('assignmentDetailContent').innerHTML=renderAssignmentDetailHtml(courseId,assignmentId,result.data);
-            hydrateAssignmentSubmitterProfiles();
+            await hydrateAssignmentSubmitterProfiles();
             if(isAdmin){
                 const content=document.getElementById('assignmentDetailContent');
                 const subs=Array.isArray(result.data.submissions)?result.data.submissions:[];
@@ -8685,15 +8686,44 @@ function rememberProfileReturnPoint(){
  window.__ananasProfileReturnPoint=point;return point;
 }
 function restoreProfileReturnPoint(){
- const point=window.__ananasProfileReturnPoint;if(!point){window.mobileNavigate?.('courses');return;}
- const cid=point.courseId||window.activeCourseId;window.__ananasProfileReturnPoint=null;hideAllProfilesV17();$('ananasCanonicalProfilePage')?.classList.remove('active');
+ const point=window.__ananasProfileReturnPoint;
+ window.__ananasProfileReturnPoint=null;
+ hideAllProfilesV17();
+ $('ananasCanonicalProfilePage')?.classList.remove('active');
+ if(!point){
+   if(currentUser?.uid){openCanonicalV17(currentUser.uid,true,true);}
+   return;
+ }
  if(point.type==='profile'&&point.uid){openCanonicalV17(point.uid,true,true);return;}
- if(point.type==='courses'||!cid){window.mobileNavigate?.('courses');$('coursesNavBtn')?.classList.add('active');return;}
- window.activeCourseId=cid;
- if(point.type==='assignment-detail'&&point.assignmentId){window.openAssignmentDetail?.(cid,point.assignmentId);return;}
- const routeMap={dashboard:'dashboard',assignments:'assignments',quizzes:'quizzes',lessons:'lessons',learning:'learning',chat:'chat',overview:'overview','full-chat':'chat'};
- const target=routeMap[point.type]||'dashboard';window.switchCoursePage?.(target);
- if(point.type==='learning'&&point.lessonId)setTimeout(()=>window.openLessonPlayer?.(cid,point.lessonId),60);
+ const cid=point.courseId||window.activeCourseId;
+ if(point.type==='assignment-detail'&&cid&&point.assignmentId){
+   window.activeCourseId=cid;
+   window.activeAssignmentDetailId=point.assignmentId;
+   window.openAssignmentDetail?.(cid,point.assignmentId);
+   return;
+ }
+ if(point.type==='chat'&&cid){
+   window.activeCourseId=cid;
+   window.switchCoursePage?.('chat');
+   return;
+ }
+ if(point.type==='full-chat'&&cid){
+   window.activeCourseId=cid;
+   window.switchCoursePage?.('chat');
+   return;
+ }
+ if(point.type==='learning'&&cid){
+   window.activeCourseId=cid;
+   window.switchCoursePage?.('learning');
+   if(point.lessonId)setTimeout(()=>window.openLessonPlayer?.(cid,point.lessonId),60);
+   return;
+ }
+ if(point.type==='lessons'&&cid){window.activeCourseId=cid;window.switchCoursePage?.('lessons');return;}
+ if(point.type==='quizzes'&&cid){window.activeCourseId=cid;window.switchCoursePage?.('quizzes');return;}
+ if(point.type==='assignments'&&cid){window.activeCourseId=cid;window.switchCoursePage?.('assignments');return;}
+ if(point.type==='dashboard'&&cid){window.activeCourseId=cid;window.switchCoursePage?.('dashboard');return;}
+ if(point.type==='overview'&&cid){window.activeCourseId=cid;window.switchCoursePage?.('overview');return;}
+ if(currentUser?.uid){openCanonicalV17(currentUser.uid,true,true);}
 }
 function ensureV17Page(){
  let p=$('ananasCanonicalProfilePage');
@@ -8736,7 +8766,7 @@ async function getProfileDataV17(uid){
 }
 async function getPortfolioV17(uid){const s=await safeGet(db.collection('users').doc(uid).collection('portfolioWorks'));return s?s.docs.map(d=>({id:d.id,...(d.data()||{})})).filter(x=>!x.deleted):[]}
 async function getSubsV17(uid){const s=await safeGet(db.collection('users').doc(uid).collection('enrolledCourses'));if(!s)return[];const out=[];for(const d of s.docs){const c=await safeGet(db.collection('courses').doc(d.id));if(c?.exists)out.push({title:c.data()?.titleAr||'دورة',enrolledAt:d.data()?.enrolledAt})}return out}
-function renderDirectoryV17(users){const g=$('acpDirectory'),c=$('acpDirectoryCount');if(!g)return;c.textContent=`${users.length} حساب`;g.innerHTML=users.length?users.map(u=>{const n=u.displayName||u.name||'مستخدم',ph=u.photoURL||u.photoUrl||u.photo||'';return `<button type="button" class="acp-person" data-acp-v17-uid="${escV17(u.id)}"><div class="acp-person-avatar">${ph?`<img src="${escV17(ph)}" alt="">`:escV17(n.slice(0,1))}</div><div class="acp-person-copy"><strong>${escV17(n)}</strong><span>${u.id===currentUser.uid?'حسابي':(u.profilePublic===false?'حساب خاص':'حساب عام')}</span></div><i class="fas fa-chevron-left"></i></button>`}).join(''):'<div class="acp-empty">لا توجد حسابات.</div>';g.querySelectorAll('[data-acp-v17-uid]').forEach(b=>b.onclick=()=>openCanonicalV17(b.dataset.acpV17Uid,false));}
+function renderDirectoryV17(users){const g=$('acpDirectory'),c=$('acpDirectoryCount');if(!g)return;c.textContent=`${users.length} حساب`;g.innerHTML=users.length?users.map(u=>{const n=u.displayName||u.name||'مستخدم',ph=u.photoURL||u.photoUrl||u.photo||'';return `<button type="button" class="acp-person" data-acp-v17-uid="${escV17(u.id)}"><div class="acp-person-avatar">${ph?`<img src="${escV17(ph)}" alt="">`:escV17(n.slice(0,1))}</div><div class="acp-person-copy"><strong>${escV17(n)}</strong><span>${u.id===currentUser.uid?'حسابي':(u.profilePublic===false?'حساب خاص':'حساب عام')}</span></div><i class="fas fa-chevron-left"></i></button>`}).join(''):'<div class="acp-empty">لا توجد حسابات.</div>';g.querySelectorAll('[data-acp-v17-uid]').forEach(b=>b.onclick=()=>{window.__ananasProfileReturnPoint={type:'profile',uid:currentUser?.uid||''};openCanonicalV17(b.dataset.acpV17Uid,false,true);});}
 async function loadDirectoryV17(admin){const panel=$('acpAdminDirectoryPanel');if(!panel||!admin)return;panel.style.display='block';const g=$('acpDirectory');g.innerHTML='<div class="acp-empty">جاري تحميل الحسابات…</div>';try{const s=await db.collection('users').get();renderDirectoryV17(s.docs.map(d=>({id:d.id,...(d.data()||{})})));}catch(e){console.error('directory',e);g.innerHTML='<div class="acp-empty">تعذر تحميل قائمة الحسابات. تحقق من صلاحيات قراءة users.</div>';}}
 function showPrivateV17(name,photo){$('acpXP').textContent='—';$('acpLessons').textContent='—';$('acpQuizzes').textContent='—';$('acpWorks').textContent='—';$('acpData').innerHTML=`<div class="acp-row"><strong>الاسم</strong><small>${escV17(name)}</small></div>`;const hidden=`<div class="acp-private"><div class="acp-private-blur"></div><div class="acp-private-center"><div class="acp-private-card"><i class="fas fa-lock" style="font-size:1.5rem;color:var(--accent1)"></i><h3>الحساب خاص</h3><p style="margin:0;color:var(--text-muted);line-height:1.9">صاحب الحساب جعل ملفه الشخصي خاصًا، لذلك تظهر لك صورة الحساب واسمه فقط.</p></div></div></div>`;['acpCourses','acpLessonList','acpQuizList','acpActivity','acpGallery'].forEach(id=>$(id).innerHTML=hidden);}
 async function openCanonicalV17(uid,isSelf,skipReturnCapture=false){
@@ -8762,7 +8792,7 @@ async function openCanonicalV17(uid,isSelf,skipReturnCapture=false){
 }
 window.__openCanonicalProfile=openCanonicalV17;window.openUserProfilePage=()=>currentUser&&openCanonicalV17(currentUser.uid,true);window.openPublicProfileFinal=uid=>openCanonicalV17(uid,uid===currentUser?.uid);window.openAnanasV10Profile=openCanonicalV17;window.viewProfileByUserId=uid=>openCanonicalV17(uid,uid===currentUser?.uid);window.openChatProfileV13=uid=>openCanonicalV17(uid,uid===currentUser?.uid);window.openChatProfileV12=window.openChatProfileV13;
 // أي معالج دردشة قديم سيستدعي الدالة الجديدة، وأي عنصر يحمل UID يفتحها كذلك.
-document.addEventListener('click',async e=>{const n=e.target.closest?.('.chat-msg .chat-profile-avatar,.chat-msg .chat-profile-name,.chat-msg .msg-header .u,.assignment-submitter,[data-profile-uid]');if(!n)return;const msg=n.closest('.chat-msg');const assignmentSubmitter=n.closest?.('.assignment-submitter');if(assignmentSubmitter){const assignmentPage=document.getElementById('courseAssignmentDetailPage');window.__ananasProfileReturnPoint={type:'assignment-detail',courseId:window.activeCourseId||activeCourseId||null,assignmentId:window.activeAssignmentDetailId||assignmentPage?.dataset.assignmentId||null};}else if(msg){window.__ananasProfileReturnPoint={type:'chat',courseId:window.activeCourseId||activeCourseId||null};}let uid=n.dataset.profileUid||n.closest('[data-profile-uid]')?.dataset.profileUid;if(!uid&&msg?.dataset.messageId&&typeof activeCourseId!=='undefined'&&activeCourseId){try{const ss=await db.collection('courses').doc(activeCourseId).collection('chat').doc(msg.dataset.messageId).get();uid=ss.data()?.userId||''}catch(_){}}if(uid){e.preventDefault();e.stopImmediatePropagation();await openCanonicalV17(uid,uid===currentUser?.uid);}},true);
+document.addEventListener('click',async e=>{const n=e.target.closest?.('.chat-msg .chat-profile-avatar,.chat-msg .chat-profile-name,.chat-msg .msg-header .u,.assignment-submitter,[data-profile-uid]');if(!n)return;const msg=n.closest('.chat-msg');const assignmentSubmitter=n.closest?.('.assignment-submitter');if(assignmentSubmitter){const assignmentPage=document.getElementById('courseAssignmentDetailPage');window.__ananasProfileReturnPoint={type:'assignment-detail',courseId:window.activeCourseId||activeCourseId||null,assignmentId:window.activeAssignmentDetailId||assignmentPage?.dataset.assignmentId||null};}else if(msg){window.__ananasProfileReturnPoint={type:'chat',courseId:window.activeCourseId||activeCourseId||null};}let uid=n.dataset.profileUid||n.closest('[data-profile-uid]')?.dataset.profileUid;if(!uid&&msg?.dataset.messageId&&typeof activeCourseId!=='undefined'&&activeCourseId){try{const ss=await db.collection('courses').doc(activeCourseId).collection('chat').doc(msg.dataset.messageId).get();uid=ss.data()?.userId||''}catch(_){}}if(uid){e.preventDefault();e.stopImmediatePropagation();await openCanonicalV17(uid,uid===currentUser?.uid,true);}},true);
 })();
 </script>
 <!-- ===== FINAL PATCH 27: lesson progress + code lifecycle/tabs + standalone terms + mobile viewport ===== -->
@@ -9979,7 +10009,7 @@ const oldRenderProfile=window.renderProfileForUidFinal;
 window.renderProfileForUidFinal=async function(uid,isSelf){await oldRenderProfile?.(uid,isSelf);try{const data=await getEffectiveProfileData(uid);$('profileXP').textContent=Number(data.effectiveXP||0).toLocaleString('ar-SA');$('profileLessons').textContent=data.activeLessons.length;$('profileQuizzes').textContent=data.activeQuizzes.length;$('profileAssignments').textContent=data.assignmentWorks.length;const extra=[];for(const c of data.cat.courses){const fs=await db.collection('courses').doc(c.id).collection('files').get().catch(()=>null);fs?.forEach(d=>{const f=d.data()||{};if(f.deleted||f.uploadedBy!==uid)return;extra.push({t:`رفع ملف: ${f.name||'ملف'}`,d:fmtDate(f.uploadedAt)})})}if(extra.length){$('profileActivityList').innerHTML=extra.concat([...data.activeLessons.map(x=>({t:`أكمل الحصة: ${x.titleAr||'حصة'}`,d:fmtDate(x.completedAt)})),...data.activeQuizzes.map(x=>({t:`أكمل الاختبار: ${x.titleAr||'اختبار'}`,d:fmtDate(x.passedAt)})),...data.assignmentWorks.map(x=>({t:`رفع عملًا في: ${x.assignmentTitle}`,d:fmtDate(x.uploadedAt)}))]).slice(0,60).map(x=>`<div class="profile-list-item"><strong>${esc(x.t)}</strong><small>${esc(x.d)}</small></div>`).join('')}}catch(e){console.warn('profile v2 live refresh',e)}};
 
 /* ---------- 8) Profile avatar/name/email links can later call this function ---------- */
-window.viewProfileByUserId=async uid=>{if(!uid)return;if(uid===currentUser?.uid)return window.openUserProfilePage();return window.openPublicProfileFinal(uid)};
+window.viewProfileByUserId=async uid=>{if(!uid)return;return uid===currentUser?.uid?window.openUserProfilePage?.():window.openPublicProfileFinal?.(uid,false);};
 
 })();
 
@@ -10031,7 +10061,7 @@ document.addEventListener('click',e=>{const node=e.target.closest?.('[data-profi
 document.addEventListener('click',e=>{const t=e.target.closest?.('.assignment-v2-body strong[data-profile-uid]');if(!t)return;window.viewProfileByUserId?.(t.dataset.profileUid)},true);
 
 /* Keep the dashboard/course navigation consistent from profile pages. */
-window.closeUserProfileAndGo=function(page){$('userProfilePage')?.classList.remove('active');document.querySelectorAll('.nav-btn,.auth-btn').forEach(x=>x.classList.remove('active'));if(page==='courses')return window.mobileNavigate?.('courses');if(page&&window.switchCoursePage)return window.switchCoursePage(page)};
+window.closeUserProfileAndGo=function(){if(typeof restoreProfileReturnPoint==='function')return restoreProfileReturnPoint();$('userProfilePage')?.classList.remove('active');};
 
 })();
 
@@ -10354,6 +10384,115 @@ window.closeQuiz=async function(){
   }
   return result;
 };
+</script>
+
+<script id="ananas-final-profile-routing">
+(function(){
+'use strict';
+const $=id=>document.getElementById(id);
+const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+/* The only allowed profile-return destinations are: admin profile, chat, or assignment detail. */
+window.__ananasProfileReturnPoint=window.__ananasProfileReturnPoint||null;
+function captureProfileSource(kind,courseId,assignmentId){
+  if(kind==='profile')window.__ananasProfileReturnPoint={type:'profile',uid:currentUser?.uid||''};
+  else if(kind==='chat')window.__ananasProfileReturnPoint={type:'chat',courseId:courseId||window.activeCourseId||activeCourseId||null};
+  else if(kind==='assignment-detail')window.__ananasProfileReturnPoint={type:'assignment-detail',courseId:courseId||window.activeCourseId||activeCourseId||null,assignmentId:assignmentId||window.activeAssignmentDetailId||document.getElementById('courseAssignmentDetailPage')?.dataset.assignmentId||null};
+}
+
+function openProfileWithSource(uid,source){
+  if(!uid)return;
+  if(source?.type==='profile')captureProfileSource('profile');
+  else if(source?.type==='chat')captureProfileSource('chat',source.courseId);
+  else if(source?.type==='assignment-detail')captureProfileSource('assignment-detail',source.courseId,source.assignmentId);
+  return window.openAnanasV10Profile?.(uid,uid===currentUser?.uid);
+}
+window.openUserProfilePage=()=>currentUser&&openProfileWithSource(currentUser.uid,{type:'self'});
+window.openPublicProfileFinal=uid=>openProfileWithSource(uid,window.__ananasProfileReturnPoint);
+window.viewProfileByUserId=uid=>uid&&(uid===currentUser?.uid?window.openUserProfilePage?.():window.openPublicProfileFinal?.(uid));
+window.openChatProfileV13=uid=>openProfileWithSource(uid,{type:'chat',courseId:window.activeCourseId||activeCourseId});
+window.openChatProfileV12=window.openChatProfileV13;
+
+function restoreStrictProfileReturn(){
+  const point=window.__ananasProfileReturnPoint;
+  window.__ananasProfileReturnPoint=null;
+  document.getElementById('ananasCanonicalProfilePage')?.classList.remove('active');
+  ['userProfilePage','ananasV10ProfilePage','ananasPrivateProfileOverlay'].forEach(id=>$(id)?.classList.remove('active'));
+  if(point?.type==='profile'&&point.uid){return window.openAnanasV10Profile?.(point.uid,true);}
+  const cid=point?.courseId||window.activeCourseId||activeCourseId;
+  if(point?.type==='chat'&&cid){window.activeCourseId=cid;return window.switchCoursePage?.('chat');}
+  if(point?.type==='assignment-detail'&&cid&&point.assignmentId){window.activeCourseId=cid;window.activeAssignmentDetailId=point.assignmentId;return window.openAssignmentDetail?.(cid,point.assignmentId);}
+  /* No generic course fallback. A profile opened without a valid source returns only to the current account. */
+  if(currentUser?.uid)return window.openAnanasV10Profile?.(currentUser.uid,true);
+}
+window.restoreProfileReturnPoint=restoreStrictProfileReturn;
+
+const back=$('acpBack');
+if(back)back.onclick=()=>restoreStrictProfileReturn();
+
+/* Account button: replace its old listeners, then always open the canonical profile page. */
+const account=$('authToggleBtn');
+if(account){
+  const clean=account.cloneNode(true);
+  account.replaceWith(clean);
+  clean.id='authToggleBtn';
+  clean.addEventListener('click',e=>{
+    if(!currentUser)return;
+    e.preventDefault();e.stopImmediatePropagation();
+    captureProfileSource('self');
+    window.openAnanasV10Profile?.(currentUser.uid,true);
+  },true);
+  const name=currentUserProfile?.displayName||currentUserProfile?.name||currentUser?.displayName||'حسابي';
+  const photo=currentUserProfile?.photoURL||currentUserProfile?.photoUrl||currentUserProfile?.photo||currentUser?.photoURL||'';
+  clean.innerHTML=photo?`<img src="${esc(photo)}" alt="" style="width:34px;height:34px;border-radius:50%;object-fit:cover;display:block;flex:0 0 34px"><span id="authLabel" style="font-weight:900">${esc(name)}</span>`:`<span style="width:34px;height:34px;border-radius:50%;display:inline-grid;place-items:center;background:rgba(255,255,255,.16);font-weight:900;flex:0 0 34px">${esc(name.slice(0,1))}</span><span id="authLabel" style="font-weight:900">${esc(name)}</span>`;
+}
+
+/* Assignment submitter: bind the exact source before any generic profile handler can inspect it. */
+function bindAssignmentSubmitters(){
+  document.querySelectorAll('.assignment-submitter[data-profile-uid]').forEach(btn=>{
+    if(btn.dataset.strictProfileBound==='1')return;
+    btn.dataset.strictProfileBound='1';
+    btn.addEventListener('click',e=>{
+      e.preventDefault();e.stopImmediatePropagation();
+      captureProfileSource('assignment-detail',window.activeCourseId||activeCourseId,window.activeAssignmentDetailId||document.getElementById('courseAssignmentDetailPage')?.dataset.assignmentId);
+      window.openAnanasV10Profile?.(btn.dataset.profileUid,btn.dataset.profileUid===currentUser?.uid);
+    },true);
+  });
+}
+bindAssignmentSubmitters();
+new MutationObserver(bindAssignmentSubmitters).observe(document.body,{subtree:true,childList:true});
+
+/* Chat profile click: source is always the current chat, never courses. */
+function bindChatProfiles(){
+  document.querySelectorAll('.chat-msg .chat-profile-avatar[data-profile-uid],.chat-msg .chat-profile-name[data-profile-uid],.chat-msg .msg-header [data-profile-uid]').forEach(node=>{
+    if(node.dataset.strictProfileBound==='1')return;
+    node.dataset.strictProfileBound='1';
+    node.addEventListener('click',e=>{
+      e.preventDefault();e.stopImmediatePropagation();
+      captureProfileSource('chat',window.activeCourseId||activeCourseId);
+      window.openAnanasV10Profile?.(node.dataset.profileUid,node.dataset.profileUid===currentUser?.uid);
+    },true);
+  });
+}
+bindChatProfiles();
+new MutationObserver(bindChatProfiles).observe(document.body,{subtree:true,childList:true});
+
+/* Admin directory: source is the admin profile. Students never receive this panel. */
+function bindAdminDirectory(){
+  document.querySelectorAll('[data-acp-uid],[data-acp-v17-uid]').forEach(btn=>{
+    if(btn.dataset.strictDirectoryBound==='1')return;
+    btn.dataset.strictDirectoryBound='1';
+    btn.addEventListener('click',e=>{
+      const uid=btn.dataset.acpUid||btn.dataset.acpV17Uid;if(!uid)return;
+      e.preventDefault();e.stopImmediatePropagation();
+      captureProfileSource('profile');
+      window.openAnanasV10Profile?.(uid,false);
+    },true);
+  });
+}
+bindAdminDirectory();
+new MutationObserver(bindAdminDirectory).observe(document.body,{subtree:true,childList:true});
+})();
 </script>
 </body>
 </html>
