@@ -12609,5 +12609,337 @@ document.addEventListener('keydown',e=>{if(e.key==='Escape'&&$('aaV12WorkViewer'
 })();
 </script>
 
+<script id="final-code-manager-v13">
+(function(){
+  'use strict';
+  const $=id=>document.getElementById(id);
+  const asDate=v=>{try{if(!v)return null;const d=v?.toDate?v.toDate():new Date(v);return isNaN(d.getTime())?null:d;}catch(_){return null}};
+  const codeRef=(courseId,codeId)=>db.collection('courses').doc(courseId).collection('codes').doc(codeId);
+
+  let globalSuspendMode=false;
+
+  function isSuspendedForAdmin(code){
+    if(!code) return false;
+    // Legacy records may use any of these flags. A disabled/stopped code must remain cancellable.
+    if(code.disabled===true || code.suspended===true || code.isSuspended===true || code.suspensionActive===true || code.revoked===true) return true;
+    const until=asDate(code.suspendedUntil||code.suspensionExpiresAt||code.suspensionEndAt);
+    return !!until && until.getTime()>Date.now();
+  }
+
+  function setGlobalSuspendModal(codeId,code){
+    globalSuspendMode=true;
+    window.__globalSuspendMode=true;
+    window.__globalSuspendTargetCodeId=codeId;
+    const title=$('courseSuspendTitle');
+    const label=$('suspendCodeLabel');
+    const users=$('codeSuspendUsersList');
+    const count=$('codeSuspendSelectedCount');
+    const confirm=$('confirmCourseSuspendBtn');
+    if(title) title.textContent='إيقاف الكود بالكامل';
+    if(label) label.textContent=`الكود: ${code.code||codeId} — سيتم تطبيق الإيقاف على جميع الحسابات التي استخدمت هذا الكود`;
+    if(users) users.innerHTML='<div style="padding:12px;text-align:center;color:var(--text-muted)">سيتم إيقاف جميع الحسابات التي استخدمت هذا الكود، ولا يلزم تحديد حسابات بشكل يدوي.</div>';
+    if(count) count.textContent='الإيقاف: لجميع مستخدمي الكود';
+    if(confirm) confirm.textContent='تأكيد إيقاف الكود بالكامل';
+    $('courseSuspendDuration').value='1d';
+    document.querySelectorAll('.suspend-duration-choice').forEach(b=>b.classList.toggle('active',b.dataset.duration==='1d'));
+    $('courseSuspendCustomWrap').style.display='none';
+    $('courseSuspendUntil').value='';
+    $('courseSuspendReason').value=code.suspensionReason||'';
+    $('courseAccessSuspendModal').classList.add('active');
+  }
+
+  function resetGlobalSuspendModal(){
+    globalSuspendMode=false;
+    window.__globalSuspendMode=false;
+    window.__globalSuspendTargetCodeId=null;
+    const title=$('courseSuspendTitle');
+    const confirm=$('confirmCourseSuspendBtn');
+    if(title) title.textContent='إيقاف الكود عن الدخول إلى الدورة';
+    if(confirm) confirm.textContent='إيقاف الكود';
+  }
+
+  // Final authoritative renderer for the code table. Disabled/stopped legacy codes always get a cancel button.
+  window.loadCodesForCourse=async function(courseId){
+    if(!isAdmin || !courseId) return;
+    const tbody=$('codesTableBody'); if(!tbody) return;
+    try{
+      const snap=await db.collection('courses').doc(courseId).collection('codes').orderBy('createdAt','desc').get();
+      if(snap.empty){tbody.innerHTML='<tr><td colspan="6" style="text-align:center;color:var(--text-muted)">لا توجد أكواد بعد.</td></tr>';return;}
+      tbody.innerHTML=snap.docs.map(doc=>{
+        const c=doc.data()||{};
+        const start=asDate(c.startTime),end=asDate(c.endTime),until=asDate(c.suspendedUntil||c.suspensionExpiresAt||c.suspensionEndAt);
+        const expired=!!end&&end.getTime()<Date.now();
+        const suspended=isSuspendedForAdmin(c);
+        const blockedUsers=Array.isArray(c.blockedUsers)?c.blockedUsers.filter(x=>x).length:0;
+        let status='';
+        if(suspended) status=`<span style="color:#e74c3c;font-weight:700">موقوف${until&&until.getTime()>Date.now()?' حتى '+until.toLocaleString('ar-SA'):''}</span>`;
+        else if(blockedUsers) status=`<span style="color:#e67e22;font-weight:700">موقوف جزئيًا (${blockedUsers})</span>`;
+        else if(expired) status='<span style="color:#e67e22">منتهي</span>';
+        else if((c.usedCount||0)>=(c.maxUses||1)) status='<span style="color:#e67e22">مكتمل الاستخدام</span>';
+        else status='<span style="color:#16a085">نشط</span>';
+        const toggleLabel=suspended?'إلغاء الإيقاف':'إيقاف';
+        const toggleClass=suspended?'success':'danger';
+        return `<tr data-code-row="${doc.id}">
+          <td><strong>${String(c.code||'').replace(/</g,'&lt;')}</strong></td>
+          <td>${start?start.toLocaleString('ar-SA'):'-'}</td>
+          <td>${end?end.toLocaleString('ar-SA'):'-'}</td>
+          <td>${c.usedCount||0}/${c.maxUses||1}</td>
+          <td>${status}</td>
+          <td><div class="code-actions">
+            <button class="code-action-btn ${toggleClass}" onclick="toggleEnrollmentCode('${doc.id}', ${suspended})">${toggleLabel}</button>
+            ${(c.usedBy&&c.usedBy.length)?`<button class="code-action-btn" onclick="manageCodeUsers('${doc.id}')">المستخدمون (${c.usedBy.length})</button>`:''}
+            <button class="code-action-btn danger" onclick="deleteEnrollmentCode('${doc.id}')">حذف</button>
+          </div></td>
+        </tr>`;
+      }).join('');
+    }catch(e){console.error('loadCodesForCourse v13',e);showCustomAlert?.('خطأ','تعذر تحميل الأكواد: '+e.message);}
+  };
+
+  window.toggleEnrollmentCode=async function(codeId,currentlySuspended){
+    if(!isAdmin||!activeCourseId) return showCustomAlert?.('غير مسموح','هذه العملية للمشرف فقط.');
+    const ref=codeRef(activeCourseId,codeId);
+    try{
+      const snap=await ref.get();
+      if(!snap.exists) return showCustomAlert?.('خطأ','الكود غير موجود.');
+      const code=snap.data()||{};
+      const suspended=isSuspendedForAdmin(code)||!!currentlySuspended;
+      if(suspended){
+        showCustomConfirm?.('إلغاء إيقاف الكود','هل تريد إلغاء إيقاف هذا الكود والسماح باستخدامه مرة أخرى لجميع الحسابات المرتبطة به؟',async()=>{
+          try{
+            await ref.update({
+              disabled:false,suspended:false,isSuspended:false,suspensionActive:false,revoked:false,
+              suspendedUntil:null,suspensionExpiresAt:null,suspensionEndAt:null,
+              suspensionReason:null,suspensionUpdatedAt:firebase.firestore.FieldValue.serverTimestamp(),updatedAt:firebase.firestore.FieldValue.serverTimestamp()
+            });
+            await window.loadCodesForCourse(activeCourseId);
+            showCustomAlert?.('تم الإلغاء','تم إلغاء إيقاف الكود وأصبح نشطًا من جديد.');
+          }catch(e){showCustomAlert?.('خطأ','تعذر إلغاء إيقاف الكود: '+e.message);}
+        });
+        return;
+      }
+      setGlobalSuspendModal(codeId,code);
+    }catch(e){showCustomAlert?.('خطأ','تعذر قراءة حالة الكود: '+e.message);}
+  };
+
+  // Replace the submit action with one that supports global suspension and the manual-cancel option.
+  const suspendBtn=$('confirmCourseSuspendBtn');
+  if(suspendBtn){
+    suspendBtn.onclick=async function(){
+      if(!isAdmin||!activeCourseId||!window.__globalSuspendMode||!window.__globalSuspendTargetCodeId) return;
+      const btn=this;
+      const mode=$('courseSuspendDuration').value;
+      const reason=$('courseSuspendReason').value.trim();
+      let until=null;
+      if(mode==='custom'){
+        const raw=$('courseSuspendUntil').value;
+        if(!raw){$('courseSuspendUntil').focus();return showCustomAlert('تنبيه','حدد تاريخ ووقت انتهاء الإيقاف.');}
+        const m=raw.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/);
+        if(!m)return showCustomAlert('تنبيه','أدخل تاريخًا ووقتًا صحيحين.');
+        until=new Date(`${m[1]}-${m[2]}-${m[3]}T${m[4]}:${m[5]}:00+03:00`);
+        if(isNaN(until.getTime())||until.getTime()<=Date.now())return showCustomAlert('تنبيه','وقت الانتهاء يجب أن يكون في المستقبل.');
+      }else if(mode!=='permanent'){
+        const days=({ '1d':1,'3d':3,'7d':7,'30d':30 })[mode]||1;
+        until=new Date(Date.now()+days*86400000);
+      }
+      try{
+        btn.disabled=true;btn.textContent='جاري حفظ الإيقاف...';
+        const ref=codeRef(activeCourseId,window.__globalSuspendTargetCodeId);
+        await ref.update({
+          disabled:true,suspended:true,isSuspended:true,suspensionActive:true,
+          suspendedUntil:until?firebase.firestore.Timestamp.fromDate(until):null,
+          suspensionExpiresAt:until?firebase.firestore.Timestamp.fromDate(until):null,
+          suspensionEndAt:until?firebase.firestore.Timestamp.fromDate(until):null,
+          suspensionReason:reason||'تم إيقاف الكود من إدارة الأكواد.',
+          suspensionUpdatedAt:firebase.firestore.FieldValue.serverTimestamp(),updatedAt:firebase.firestore.FieldValue.serverTimestamp()
+        });
+        $('courseAccessSuspendModal').classList.remove('active');
+        resetGlobalSuspendModal();
+        await window.loadCodesForCourse(activeCourseId);
+        showCustomAlert?.('تم الإيقاف','تم إيقاف الكود بالكامل. سيتم إخراج الحسابات الموجودة داخل الدورة مباشرةً.');
+      }catch(e){showCustomAlert?.('خطأ','تعذر إيقاف الكود: '+e.message);}
+      finally{btn.disabled=false;if(!window.__globalSuspendMode)btn.textContent='إيقاف الكود';}
+    };
+  }
+
+  // Make the last duration option explicit.
+  const permanent=$('suspendChoicePermanent');
+  if(permanent) permanent.textContent='حتى ألغي الإيقاف بنفسي';
+
+  // Reset mode whenever modal is closed manually.
+  document.querySelectorAll('#courseAccessSuspendModal [onclick*="courseAccessSuspendModal"]').forEach(b=>b.addEventListener('click',resetGlobalSuspendModal));
+  window.addEventListener('aa:closeSuspendModal',resetGlobalSuspendModal);
+})();
+
+</script>
+<script id="final-v14-fixes">
+// FINAL V14 PATCH
+(function(){
+  'use strict';
+  const $=id=>document.getElementById(id);
+  const esc=v=>(window.escapeHtml?window.escapeHtml(v):String(v??'').replace(/[&<>\"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',"'":'&#39;'}[c])));
+
+  /* 1) Prevent profile-button hangs caused by chained/recursive openers. */
+  const renderProfile = window.__renderAuthoritativeProfile;
+  if(typeof renderProfile==='function'){
+    let profileBusy=false;
+    window.aaOpenProfile = async function(uid, opts={}){
+      if(!currentUser || !uid || profileBusy) return;
+      profileBusy=true;
+      try{
+        const kind=opts.kind||'public';
+        const isSelf=String(uid)===String(currentUser.uid);
+        let returnPoint=opts.returnPoint||null;
+        if(kind==='self') returnPoint=null;
+        if(kind==='admin-directory'){
+          window.profileState={uid:String(uid),isSelf:false,source:{kind:'admin-directory'},returnPoint:null,busy:false};
+        }else{
+          window.profileState={uid:String(uid),isSelf,source:{kind},returnPoint};
+        }
+        window.__aaViewedProfileUid=String(uid);
+        const page=$('aaRebuiltProfilePage');
+        if(page) page.classList.add('active');
+        document.body.classList.add('aa-profile-open');
+        await renderProfile(String(uid),isSelf);
+      }catch(err){
+        console.error('FINAL profile open',err);
+        showCustomAlert?.('خطأ','تعذر فتح الملف الشخصي.');
+      }finally{ profileBusy=false; }
+    };
+    window.openUserProfilePage=()=>currentUser&&window.aaOpenProfile(currentUser.uid,{kind:'self'});
+    window.openPublicProfileFinal=uid=>uid&&window.aaOpenProfile(uid,{kind:uid===currentUser?.uid?'self':'public',returnPoint:typeof profileReturnPoint==='function'?profileReturnPoint():null});
+    window.viewProfileByUserId=window.openPublicProfileFinal;
+    window.openStudentProfile=window.openPublicProfileFinal;
+    window.openAnanasV10Profile=window.openPublicProfileFinal;
+    window.openChatProfileV13=uid=>window.aaOpenProfile(uid,{kind:'chat',returnPoint:typeof profileReturnPoint==='function'?profileReturnPoint():null});
+    window.openChatProfileV12=window.openChatProfileV13;
+  }
+
+  /* 2) Portfolio gallery: explicit viewer/edit/delete actions. */
+  function normalizeImages(x){return Array.isArray(x)?x.filter(Boolean):(x?.imageUrl?[x.imageUrl]:[])}
+  function ensurePortfolioActions(){
+    const g=$('aaProfileGallery'); if(!g || !currentUser) return;
+    g.querySelectorAll('.aa-profile-work').forEach(card=>{
+      const old=card.querySelector('.aa-v14-work-actions'); if(old)old.remove();
+      const title=card.querySelector('.aa-profile-work-body strong')?.textContent?.trim()||'عمل';
+      const kind=card.dataset.workKind||'portfolio';
+      const workId=card.dataset.workId||'';
+      const actions=document.createElement('div'); actions.className='aa-v14-work-actions';
+      const view=document.createElement('button'); view.type='button'; view.className='aa-v14-work-btn'; view.textContent='عرض العمل';
+      view.onclick=async e=>{
+        e.preventDefault(); e.stopPropagation();
+        if(kind==='assignment'){
+          await window.openAssignmentWorkViewer?.(card.dataset.course||window.activeCourseId,card.dataset.assignment||'',workId);
+        }else{
+          const imgs=JSON.parse(card.dataset.images||'[]');
+          if(window.openV12WorkViewer) window.openV12WorkViewer(imgs,title);
+          else if(window.openPlatformGalleryViewer){ window.openPlatformGalleryViewer(imgs,title); }
+        }
+      };
+      actions.appendChild(view);
+      if(kind==='portfolio' && String(window.profileState?.uid||'')===String(currentUser.uid)){
+        const edit=document.createElement('button'); edit.type='button'; edit.className='aa-v14-work-btn'; edit.textContent='تعديل';
+        edit.onclick=()=>window.__v14EditPortfolioWork?.(workId);
+        const del=document.createElement('button'); del.type='button'; del.className='aa-v14-work-btn danger'; del.textContent='حذف';
+        del.onclick=()=>window.__v14DeletePortfolioWork?.(workId);
+        actions.append(edit,del);
+      }
+      card.querySelector('.aa-profile-work-body')?.appendChild(actions);
+    });
+  }
+
+  window.__v14EditPortfolioWork=async function(id){
+    if(!currentUser||!id)return;
+    const ref=db.collection('users').doc(currentUser.uid).collection('portfolioWorks').doc(id);
+    const snap=await ref.get(); if(!snap.exists)return showCustomAlert?.('غير متاح','العمل غير موجود.');
+    const x=snap.data()||{}; const imgs=normalizeImages(x);
+    let modal=$('aaV14PortfolioEditModal');
+    if(!modal){
+      modal=document.createElement('div'); modal.id='aaV14PortfolioEditModal'; modal.className='profile-self-modal';
+      modal.innerHTML=`<div class="profile-self-card" style="max-width:760px"><div class="profile-self-head"><div><h3>تعديل العمل</h3><div class="aa-profile-subtle">عدّل بيانات العمل والصور ثم احفظ.</div></div><button type="button" class="profile-self-close" id="aaV14WorkClose">×</button></div>
+      <label class="profile-self-field"><span>عنوان العمل</span><input id="aaV14WorkTitle" data-required="true"></label>
+      <label class="profile-self-field"><span>نوع العمل</span><input id="aaV14WorkType" data-required="true"></label>
+      <label class="profile-self-field"><span>الوصف</span><textarea id="aaV14WorkDesc" rows="4"></textarea></label>
+      <div class="profile-self-field"><span>الصور الحالية</span><div id="aaV14WorkImages" class="work-edit-images"></div></div>
+      <input type="file" id="aaV14WorkNewFiles" accept="image/*" multiple hidden>
+      <button type="button" class="assignment-upload-btn" id="aaV14WorkAddFiles"><i class="fas fa-plus"></i> إضافة صور</button>
+      <div id="aaV14WorkStatus" class="profile-self-status"></div>
+      <div class="profile-self-actions"><button type="button" id="aaV14WorkCancel" class="aa-profile-self-btn">إلغاء</button><button type="button" id="aaV14WorkSave" class="aa-profile-self-btn primary">حفظ</button></div></div>`;
+      document.body.appendChild(modal);
+      $('aaV14WorkClose').onclick=()=>modal.classList.remove('active');$('aaV14WorkCancel').onclick=()=>modal.classList.remove('active');$('aaV14WorkAddFiles').onclick=()=>$('aaV14WorkNewFiles').click();
+    }
+    modal.dataset.images=JSON.stringify(imgs); $('aaV14WorkTitle').value=x.title||''; $('aaV14WorkType').value=x.type||''; $('aaV14WorkDesc').value=x.description||''; $('aaV14WorkStatus').textContent='';$('aaV14WorkNewFiles').value='';
+    const render=()=>{const arr=JSON.parse(modal.dataset.images||'[]');$('aaV14WorkImages').innerHTML=arr.map((u,i)=>`<div class="work-edit-image"><img src="${esc(u)}" alt=""><button type="button" class="remove" data-i="${i}">×</button></div>`).join('')||'<div class="aa-profile-empty">لا توجد صور.</div>';};
+    $('aaV14WorkImages').onclick=e=>{const b=e.target.closest('[data-i]');if(!b)return;const arr=JSON.parse(modal.dataset.images||'[]');arr.splice(Number(b.dataset.i),1);modal.dataset.images=JSON.stringify(arr);render();};
+    $('aaV14WorkNewFiles').onchange=async()=>{const files=[...$('aaV14WorkNewFiles').files||[]];if(!files.length)return; $('aaV14WorkStatus').textContent='جاري رفع الصور...';try{const arr=JSON.parse(modal.dataset.images||'[]');for(const f of files){const u=await uploadImage(f);if(u)arr.push(u);}modal.dataset.images=JSON.stringify(arr);render();$('aaV14WorkStatus').textContent='تمت إضافة الصور.';}catch(e){$('aaV14WorkStatus').textContent='تعذر رفع الصور.';}};
+    $('aaV14WorkSave').onclick=async()=>{if(typeof markRequiredIn==='function'&&!markRequiredIn(modal))return;const arr=JSON.parse(modal.dataset.images||'[]');if(!arr.length)return showCustomAlert?.('تنبيه','يجب أن يحتوي العمل على صورة واحدة على الأقل.');const btn=$('aaV14WorkSave');btn.disabled=true;try{await ref.update({title:$('aaV14WorkTitle').value.trim(),type:$('aaV14WorkType').value.trim(),description:$('aaV14WorkDesc').value.trim(),images:arr,updatedAt:firebase.firestore.FieldValue.serverTimestamp()});modal.classList.remove('active');await window.__renderAuthoritativeProfile?.(currentUser.uid,true);ensurePortfolioActions();showCustomAlert?.('تم الحفظ','تم تعديل العمل بنجاح.');}catch(e){console.error(e);$('aaV14WorkStatus').textContent='تعذر حفظ التعديل.';}finally{btn.disabled=false;}};
+    render(); modal.classList.add('active');
+  };
+
+  window.__v14DeletePortfolioWork=async function(id){
+    if(!currentUser||!id)return;
+    showCustomConfirm?.('حذف العمل','هل تريد حذف هذا العمل من معرضك الشخصي؟',async()=>{
+      try{await db.collection('users').doc(currentUser.uid).collection('portfolioWorks').doc(id).update({deleted:true,deletedAt:firebase.firestore.FieldValue.serverTimestamp()});await window.__renderAuthoritativeProfile?.(currentUser.uid,true);ensurePortfolioActions();showCustomAlert?.('تم الحذف','تم حذف العمل من المعرض.');}
+      catch(e){console.error(e);showCustomAlert?.('خطأ','تعذر حذف العمل.');}
+    });
+  };
+
+  /* Patch final authoritative renderer gallery cards with stable IDs and actions. */
+  const originalRender=window.__renderAuthoritativeProfile;
+  if(typeof originalRender==='function'&&!originalRender.__v14Wrapped){
+    const wrapped=async function(uid,isSelf){
+      const r=await originalRender(uid,isSelf);
+      const g=$('aaProfileGallery');
+      if(g){
+        // Legacy renderer loses IDs; reconstruct portfolio IDs from live data when possible.
+        try{
+          const snap=await db.collection('users').doc(uid).collection('portfolioWorks').get();
+          const map=new Map();snap.docs.forEach(d=>{const x=d.data()||{};if(x.deleted!==true)map.set(x.title||'',{id:d.id,images:normalizeImages(x)});});
+          g.querySelectorAll('.aa-profile-work').forEach(card=>{
+            const title=card.querySelector('.aa-profile-work-body strong')?.textContent?.trim()||'';
+            const m=map.get(title);if(m){card.dataset.workKind='portfolio';card.dataset.workId=m.id;card.dataset.images=JSON.stringify(m.images);}
+            const v=card.querySelector('.aa-profile-view-work');if(v){card.dataset.workKind='assignment';card.dataset.course=v.dataset.course||'';card.dataset.assignment=v.dataset.assignment||'';card.dataset.workId=v.dataset.work||'';card.dataset.images=JSON.stringify([]);}
+          });
+          ensurePortfolioActions();
+        }catch(e){ensurePortfolioActions();}
+      }
+      return r;
+    };
+    wrapped.__v14Wrapped=true;window.__renderAuthoritativeProfile=wrapped;
+  }
+
+  /* 3) Robust legacy code cancellation + explicit suspend dialog every time. */
+  const asDate=v=>{try{if(!v)return null;const d=v?.toDate?v.toDate():new Date(v);return isNaN(d.getTime())?null:d}catch(_){return null}};
+  function legacySuspended(c){
+    if(!c)return false;
+    if(c.disabled===true||c.suspended===true||c.isSuspended===true||c.suspensionActive===true||c.revoked===true||c.blocked===true||c.manualSuspension===true)return true;
+    const status=String(c.status||c.state||'').toLowerCase();
+    if(['suspended','blocked','disabled','revoked','stopped','موقوف'].includes(status))return true;
+    const until=asDate(c.suspendedUntil||c.suspensionExpiresAt||c.suspensionEndAt||c.blockedUntil||c.disabledUntil);
+    return !!until&&until.getTime()>Date.now();
+  }
+  const oldToggle=window.toggleEnrollmentCode;
+  window.toggleEnrollmentCode=async function(codeId,currentlySuspended){
+    if(!isAdmin||!activeCourseId)return showCustomAlert?.('غير مسموح','هذه العملية للمشرف فقط.');
+    const ref=db.collection('courses').doc(activeCourseId).collection('codes').doc(codeId);
+    const snap=await ref.get();if(!snap.exists)return showCustomAlert?.('خطأ','الكود غير موجود.');
+    const code=snap.data()||{};const suspended=legacySuspended(code)||!!currentlySuspended;
+    if(suspended){
+      showCustomConfirm?.('إلغاء إيقاف الكود','هل تريد إلغاء الإيقاف وجعل الكود قابلًا للاستخدام من جديد؟',async()=>{
+        try{
+          await ref.update({disabled:false,suspended:false,isSuspended:false,suspensionActive:false,revoked:false,blocked:false,manualSuspension:false,status:'active',state:'active',suspendedUntil:null,suspensionExpiresAt:null,suspensionEndAt:null,blockedUntil:null,disabledUntil:null,suspensionReason:null,updatedAt:firebase.firestore.FieldValue.serverTimestamp()});
+          await window.loadCodesForCourse?.(activeCourseId);showCustomAlert?.('تم الإلغاء','تم إلغاء إيقاف الكود وأصبح نشطًا من جديد.');
+        }catch(e){console.error(e);showCustomAlert?.('خطأ','تعذر إلغاء إيقاف الكود: '+e.message);}
+      });
+      return;
+    }
+    // Always open the duration dialog instead of immediate suspension.
+    const modal=$('courseAccessSuspendModal');if(!modal)return;
+    window.__globalSuspendMode=true;window.__globalSuspendTargetCodeId=codeId;
+    $('courseSuspendTitle').textContent='إيقاف الكود بالكامل';$('suspendCodeLabel').textContent=`الكود: ${code.code||codeId}`;$('confirmCourseSuspendBtn').textContent='تأكيد إيقاف الكود';
+    $('courseSuspendDuration').value='1d';document.querySelectorAll('.suspend-duration-choice').forEach(b=>b.classList.toggle('active',b.dataset.duration==='1d'));$('courseSuspendCustomWrap').style.display='none';$('courseSuspendUntil').value='';$('courseSuspendReason').value='';modal.classList.add('active');
+  };
+})();
+
+</script>
 </body>
 </html>
