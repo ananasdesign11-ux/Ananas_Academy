@@ -9196,6 +9196,118 @@ if(!window.__v14ChatEnricher){window.__v14ChatEnricher=setInterval(()=>{document
 });},700)}
 })();
 </script>
+
+<!-- FINAL CHAT PROFILE FIX: reliable name/avatar click + strict privacy -->
+<style id="final-chat-profile-fix-css">
+#ananasChatPrivateProfile{position:fixed;inset:0;z-index:200000;background:rgba(10,12,20,.58);backdrop-filter:blur(14px);display:none;align-items:center;justify-content:center;padding:16px}
+#ananasChatPrivateProfile.active{display:flex}
+#ananasChatPrivateProfile .chat-private-card{width:min(720px,100%);max-height:min(88vh,760px);overflow:auto;background:var(--bg-card);border:1px solid var(--surface-border,var(--border));border-radius:26px;box-shadow:0 36px 100px rgba(0,0,0,.3);padding:20px}
+.chat-private-head{display:flex;align-items:center;gap:12px;padding-bottom:16px;border-bottom:1px solid var(--border)}
+.chat-private-avatar{width:68px;height:68px;border-radius:20px;overflow:hidden;display:grid;place-items:center;background:var(--accent-gradient);color:#fff;font-size:1.45rem;font-weight:900;flex:0 0 auto}
+.chat-private-avatar img{width:100%;height:100%;object-fit:cover}
+.chat-private-title{font-size:1.2rem;font-weight:950;margin:0}.chat-private-sub{margin:4px 0 0;color:var(--text-muted);font-size:.82rem}
+.chat-private-preview{position:relative;margin-top:18px;min-height:280px;border:1px solid var(--border);border-radius:20px;overflow:hidden;background:var(--bg-primary)}
+.chat-private-preview::before{content:"";position:absolute;inset:0;background:linear-gradient(180deg,rgba(108,92,231,.08),transparent)}
+.chat-private-blur{position:absolute;inset:16px;display:grid;gap:12px;filter:blur(9px);opacity:.55;pointer-events:none}
+.chat-private-blur .blk{height:56px;border-radius:14px;background:linear-gradient(100deg,var(--bg-secondary),var(--bg-card));border:1px solid var(--border)}
+.chat-private-message{position:absolute;inset:0;display:grid;place-items:center;padding:24px;text-align:center;background:radial-gradient(circle at center,rgba(255,255,255,.55),rgba(255,255,255,.18));}
+.dark-mode .chat-private-message{background:radial-gradient(circle at center,rgba(20,22,35,.72),rgba(20,22,35,.38))}
+.chat-private-message-box{width:min(430px,100%);padding:22px;border:1px solid rgba(108,92,231,.18);border-radius:20px;background:color-mix(in srgb,var(--bg-card) 88%, transparent);box-shadow:0 14px 36px rgba(0,0,0,.08)}
+.chat-private-message-box i{font-size:1.45rem;color:var(--accent1)}
+.chat-private-message-box h3{margin:8px 0 5px}.chat-private-message-box p{margin:0;color:var(--text-muted);line-height:1.8}
+.chat-private-actions{display:flex;justify-content:flex-end;margin-top:14px}.chat-private-actions button{min-height:44px;padding:0 18px;border-radius:14px;border:1px solid var(--border);background:var(--bg-secondary);color:var(--text-primary);font:inherit;font-weight:900;cursor:pointer}
+.chat-profile-head,.chat-profile-avatar,.chat-profile-name,.chat-msg .msg-header .u{cursor:pointer!important}
+@media(max-width:680px){.chat-private-card{padding:15px}.chat-private-head{align-items:flex-start}.chat-private-avatar{width:58px;height:58px;border-radius:17px}.chat-private-preview{min-height:240px}}
+</style>
+<script id="final-chat-profile-fix-script">
+(function(){
+'use strict';
+const $=id=>document.getElementById(id);
+const esc=v=>String(v??'').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+function getChatPrivateModal(){
+ let m=$('ananasChatPrivateProfile');
+ if(m)return m;
+ m=document.createElement('div');m.id='ananasChatPrivateProfile';
+ m.innerHTML=`<div class="chat-private-card" dir="rtl">
+   <div class="chat-private-head">
+     <div class="chat-private-avatar" id="chatPrivateAvatar"></div>
+     <div style="min-width:0;flex:1"><h3 class="chat-private-title" id="chatPrivateName"></h3><p class="chat-private-sub">الملف الشخصي</p></div>
+     <button type="button" id="chatPrivateClose" aria-label="إغلاق" style="width:42px;height:42px;border-radius:13px;border:1px solid var(--border);background:var(--bg-secondary);color:var(--text-primary);cursor:pointer"><i class="fas fa-xmark"></i></button>
+   </div>
+   <div class="chat-private-preview">
+     <div class="chat-private-blur"><div class="blk"></div><div class="blk"></div><div class="blk"></div><div class="blk"></div></div>
+     <div class="chat-private-message"><div class="chat-private-message-box"><i class="fas fa-lock"></i><h3>الحساب خاص</h3><p>صاحب الحساب جعل ملفه الشخصي خاصًا، لذلك يمكنك مشاهدة الاسم والصورة فقط ولا تظهر بياناته أو نشاطه أو أعماله.</p></div></div>
+   </div>
+   <div class="chat-private-actions"><button type="button" id="chatPrivateClose2">إغلاق</button></div>
+ </div>`;
+ document.body.appendChild(m);
+ $('chatPrivateClose').onclick=()=>m.classList.remove('active');
+ $('chatPrivateClose2').onclick=()=>m.classList.remove('active');
+ m.addEventListener('click',e=>{if(e.target===m)m.classList.remove('active')});
+ return m;
+}
+async function resolveChatUid(node){
+ const direct=node?.dataset?.profileUid||node?.closest?.('[data-profile-uid]')?.dataset?.profileUid;
+ if(direct)return direct;
+ const msg=node?.closest?.('.chat-msg');
+ const messageId=msg?.dataset?.messageId||msg?.getAttribute?.('data-message-id');
+ if(messageId&&activeCourseId){
+   try{const snap=await db.collection('courses').doc(activeCourseId).collection('chat').doc(messageId).get();return snap.exists?snap.data()?.userId:null}catch(e){return null}
+ }
+ return null;
+}
+async function openChatProfileReliable(uid){
+ if(!uid||!currentUser)return;
+ try{
+   const snap=await db.collection('users').doc(uid).get();
+   if(!snap.exists)return showCustomAlert?.('غير متاح','الحساب غير موجود.');
+   const p=snap.data()||{};
+   const self=uid===currentUser.uid;
+   if(!self&&!isAdmin&&p.profilePublic===false){
+      const m=getChatPrivateModal();
+      const name=p.displayName||p.name||'مستخدم';
+      const photo=p.photoURL||p.photoUrl||p.photo||'';
+      $('chatPrivateName').textContent=name;
+      $('chatPrivateAvatar').innerHTML=photo?`<img src="${esc(photo)}" alt="">`:esc(name.slice(0,1));
+      m.classList.add('active');
+      return;
+   }
+   // Public profile, owner's profile, or admin view: open the full profile page.
+   if(typeof window.refreshAnanasV10Profile==='function'){
+      await window.refreshAnanasV10Profile(uid,self);
+      const page=$('ananasV10ProfilePage'); if(page)page.classList.add('active');
+      const finalPage=$('userProfilePage'); if(finalPage)finalPage.classList.remove('active');
+      window.__v10ViewingUid=uid;
+      return;
+   }
+   if(typeof window.openPublicProfileFinal==='function')return window.openPublicProfileFinal(uid);
+   if(typeof window.openUserProfilePage==='function'&&self)return window.openUserProfilePage();
+ }catch(err){console.error('openChatProfileReliable',err);showCustomAlert?.('خطأ','تعذر فتح الملف الشخصي.');}
+}
+window.openChatProfileReliable=openChatProfileReliable;
+window.openChatProfileV13=openChatProfileReliable;
+window.openChatProfileV12=openChatProfileReliable;
+window.viewProfileByUserId=openChatProfileReliable;
+window.openStudentProfile=openChatProfileReliable;
+// Capture before legacy document handlers. This guarantees clicks from dynamically rendered chat messages work.
+window.addEventListener('click',async e=>{
+ const node=e.target?.closest?.('.chat-msg .msg-header,.chat-msg .msg-header .u,.chat-profile-head,.chat-profile-avatar,.chat-profile-name');
+ if(!node)return;
+ e.preventDefault();e.stopImmediatePropagation();
+ const uid=await resolveChatUid(node);
+ if(uid)await openChatProfileReliable(uid);
+},true);
+// Also make the header/name/avatar directly clickable once the message has rendered.
+function hydrateChatClickTargets(root=document){
+ root.querySelectorAll?.('.chat-msg').forEach(msg=>{
+   const nodes=msg.querySelectorAll('.msg-header,.msg-header .u,.chat-profile-head,.chat-profile-avatar,.chat-profile-name');
+   nodes.forEach(n=>{n.style.cursor='pointer';n.setAttribute('role','button');});
+ });
+}
+hydrateChatClickTargets();
+new MutationObserver(m=>m.forEach(x=>x.addedNodes?.forEach(n=>{if(n.nodeType===1)hydrateChatClickTargets(n.parentElement||n)}))).observe(document.body,{subtree:true,childList:true});
+})();
+</script>
 </body>
 </html>
 
