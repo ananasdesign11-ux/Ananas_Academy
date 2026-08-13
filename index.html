@@ -9262,6 +9262,86 @@ document.addEventListener('click',async e=>{const n=e.target.closest?.('.chat-ms
 const account=document.getElementById('authToggleBtn');if(account)account.addEventListener('click',e=>{if(currentUser){e.preventDefault();e.stopImmediatePropagation();openCanonical(currentUser.uid,true)}},true);
 })();
 </script>
+
+<!-- V17: resilient profile/data loader. Prevent one restricted subcollection from breaking the whole profile. -->
+<script id="ananas-v17-profile-repair">
+(function(){
+'use strict';
+const $=id=>document.getElementById(id);
+const escV17=window.escapeHtml||((v)=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])));
+const fmtV17=v=>{try{const d=v?.toDate?v.toDate():(v?new Date(v):null);return d&&!isNaN(d)?d.toLocaleDateString('ar-SA',{year:'numeric',month:'long',day:'numeric'}):'—'}catch(_){return '—'}};
+function adminFlag(){return (typeof window.isAdmin!=='undefined'&&window.isAdmin===true)||(typeof isAdmin!=='undefined'&&isAdmin===true);}
+async function isCurrentAdmin(){if(adminFlag())return true;try{if(!currentUser)return false;const s=await db.collection('admins').doc('main').get();const emails=(s.data()?.adminEmails||[]).map(x=>String(x).trim().toLowerCase());const ok=emails.includes(String(currentUser.email||'').trim().toLowerCase());if(ok)window.isAdmin=true;return ok;}catch(_){return false;}}
+function hideAllProfilesV17(){['userProfilePage','ananasV10ProfilePage','ananasPrivateProfileOverlay','ananasCanonicalProfilePage'].forEach(id=>{const e=$(id);if(e){e.classList.remove('active');if(id!=='ananasCanonicalProfilePage')e.style.setProperty('display','none','important')}})}
+function ensureV17Page(){
+ let p=$('ananasCanonicalProfilePage');
+ if(p)return p;
+ p=document.createElement('div');p.id='ananasCanonicalProfilePage';
+ p.innerHTML='<div class="acp-shell"><div class="acp-hero"><div class="acp-avatar" id="acpAvatar">م</div><div><div class="acp-name" id="acpName">مستخدم</div><div class="acp-email" id="acpEmail">—</div><div class="acp-badge" id="acpBadge"></div></div><div class="acp-actions"><button class="acp-btn" id="acpBack"><i class="fas fa-arrow-right"></i> العودة</button><button class="acp-btn primary" id="acpEdit"><i class="fas fa-user-pen"></i> تعديل الملف</button><button class="acp-btn primary" id="acpAddWork"><i class="fas fa-plus"></i> إضافة عمل</button><button class="acp-btn danger" id="acpLogout"><i class="fas fa-right-from-bracket"></i> تسجيل الخروج</button></div></div><div class="acp-stats"><div class="acp-stat"><b id="acpXP">—</b><span>نقاط الخبرة المحتسبة</span></div><div class="acp-stat"><b id="acpLessons">—</b><span>حصص مكتملة</span></div><div class="acp-stat"><b id="acpQuizzes">—</b><span>اختبارات مكتملة</span></div><div class="acp-stat"><b id="acpWorks">—</b><span>أعمال منشورة</span></div></div><div class="acp-grid"><section class="acp-panel"><h3>البيانات الشخصية</h3><div class="acp-list" id="acpData"></div></section><section class="acp-panel"><h3>الدورات المشتركة</h3><div class="acp-list" id="acpCourses"></div></section><section class="acp-panel"><h3>إنجازات الحصص</h3><div class="acp-list" id="acpLessonList"></div></section><section class="acp-panel"><h3>نتائج الاختبارات</h3><div class="acp-list" id="acpQuizList"></div></section><section class="acp-panel full"><h3>سجل النشاط</h3><div class="acp-list" id="acpActivity"></div></section><section class="acp-panel full"><h3>معرض الأعمال</h3><div class="acp-gallery" id="acpGallery"></div></section><section class="acp-panel full" id="acpAdminDirectoryPanel"><div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:13px"><h3 style="margin:0">الحسابات والطلاب</h3><span id="acpDirectoryCount" style="color:var(--text-muted);font-size:.8rem"></span></div><div class="acp-directory" id="acpDirectory"></div></section></div></div>';
+ document.body.appendChild(p);
+ $('acpBack').onclick=()=>{hideAllProfilesV17();p.classList.remove('active');$('coursesNavBtn')?.classList.add('active');};
+ $('acpEdit').onclick=()=>window.openProfileEditorFinal?.(currentUser?.uid);
+ $('acpAddWork').onclick=()=>window.openPersonalPortfolioWorkModalV16?.();
+ $('acpLogout').onclick=()=>auth?.signOut?.();
+ return p;
+}
+function loadingV17(){['acpXP','acpLessons','acpQuizzes','acpWorks'].forEach(id=>{const e=$(id);if(e)e.textContent='…'});['acpData','acpCourses','acpLessonList','acpQuizList','acpActivity','acpGallery'].forEach(id=>{const e=$(id);if(e)e.innerHTML='<div class="acp-empty">جاري تحميل البيانات…</div>'});}
+async function safeGet(path){try{return await path.get()}catch(e){console.warn('profile read denied',e);return null}}
+async function getCatalogV17(){
+ const cSnap=await db.collection('courses').get();
+ const lessons=new Map(),quizzes=new Map(),assignments=new Map(),courses=[];
+ cSnap.forEach(c=>courses.push({id:c.id,...(c.data()||{})}));
+ for(const c of cSnap.docs){
+   const base=c.data()||{};
+   const r=await Promise.allSettled([c.ref.collection('lessons').get(),c.ref.collection('quizzes').get(),c.ref.collection('assignments').get()]);
+   if(r[0].status==='fulfilled')r[0].value.forEach(d=>lessons.set(d.id,{id:d.id,courseId:c.id,courseTitle:base.titleAr||'دورة',...d.data()}));
+   if(r[1].status==='fulfilled')r[1].value.forEach(d=>quizzes.set(d.id,{id:d.id,courseId:c.id,courseTitle:base.titleAr||'دورة',...d.data()}));
+   if(r[2].status==='fulfilled')r[2].value.forEach(d=>assignments.set(d.id,{id:d.id,courseId:c.id,courseTitle:base.titleAr||'دورة',...d.data()}));
+ }
+ return {courses,lessons,quizzes,assignments};
+}
+async function getProfileDataV17(uid){
+ const result={lessons:[],quizzes:[],works:[],xp:0,partial:false};
+ let cat;try{cat=await getCatalogV17()}catch(e){console.warn('catalog',e);return {...result,partial:true}};
+ const l=await safeGet(db.collection('users').doc(uid).collection('completedLessons'));const q=await safeGet(db.collection('userStats').doc(uid).collection('completedQuizzes'));
+ if(!l||!q)result.partial=true;
+ l?.forEach(d=>{if(cat.lessons.has(d.id)){const x=cat.lessons.get(d.id),v=d.data()||{};result.lessons.push({...x,completedAt:v.completedAt,xpEarned:Number(v.xpEarned)||0});result.xp+=Number(v.xpEarned)||0;}});
+ q?.forEach(d=>{if(cat.quizzes.has(d.id)){const x=cat.quizzes.get(d.id),v=d.data()||{};result.quizzes.push({...x,passedAt:v.passedAt,score:Number(v.score)||0,xpEarned:Number(v.xpEarned)||0});result.xp+=Number(v.xpEarned)||0;}});
+ for(const a of cat.assignments.values()){
+   (Array.isArray(a.submissions)?a.submissions:[]).forEach((sub,i)=>{if(sub?.userId!==uid||sub.deleted===true)return;const images=Array.isArray(sub.images)?sub.images.filter(Boolean):(sub.imageUrl?[sub.imageUrl]:[]);result.works.push({assignmentId:a.id,courseId:a.courseId,assignmentTitle:a.titleAr||'واجب',courseTitle:a.courseTitle,approved:!!sub.approved,images,uploadedAt:sub.uploadedAt,workId:sub.workId||sub.id||`legacy_${a.id}_${i}`});if(sub.approved&&sub.xpGranted)result.xp+=Number(a.xpReward)||0;});
+ }
+ return result;
+}
+async function getPortfolioV17(uid){const s=await safeGet(db.collection('users').doc(uid).collection('portfolioWorks'));return s?s.docs.map(d=>({id:d.id,...(d.data()||{})})).filter(x=>!x.deleted):[]}
+async function getSubsV17(uid){const s=await safeGet(db.collection('users').doc(uid).collection('enrolledCourses'));if(!s)return[];const out=[];for(const d of s.docs){const c=await safeGet(db.collection('courses').doc(d.id));if(c?.exists)out.push({title:c.data()?.titleAr||'دورة',enrolledAt:d.data()?.enrolledAt})}return out}
+function renderDirectoryV17(users){const g=$('acpDirectory'),c=$('acpDirectoryCount');if(!g)return;c.textContent=`${users.length} حساب`;g.innerHTML=users.length?users.map(u=>{const n=u.displayName||u.name||'مستخدم',ph=u.photoURL||u.photoUrl||u.photo||'';return `<button type="button" class="acp-person" data-acp-v17-uid="${escV17(u.id)}"><div class="acp-person-avatar">${ph?`<img src="${escV17(ph)}" alt="">`:escV17(n.slice(0,1))}</div><div class="acp-person-copy"><strong>${escV17(n)}</strong><span>${u.id===currentUser.uid?'حسابي':(u.profilePublic===false?'حساب خاص':'حساب عام')}</span></div><i class="fas fa-chevron-left"></i></button>`}).join(''):'<div class="acp-empty">لا توجد حسابات.</div>';g.querySelectorAll('[data-acp-v17-uid]').forEach(b=>b.onclick=()=>openCanonicalV17(b.dataset.acpV17Uid,false));}
+async function loadDirectoryV17(admin){const panel=$('acpAdminDirectoryPanel');if(!panel||!admin)return;panel.style.display='block';const g=$('acpDirectory');g.innerHTML='<div class="acp-empty">جاري تحميل الحسابات…</div>';try{const s=await db.collection('users').get();renderDirectoryV17(s.docs.map(d=>({id:d.id,...(d.data()||{})})));}catch(e){console.error('directory',e);g.innerHTML='<div class="acp-empty">تعذر تحميل قائمة الحسابات. تحقق من صلاحيات قراءة users.</div>';}}
+function showPrivateV17(name,photo){$('acpXP').textContent='—';$('acpLessons').textContent='—';$('acpQuizzes').textContent='—';$('acpWorks').textContent='—';$('acpData').innerHTML=`<div class="acp-row"><strong>الاسم</strong><small>${escV17(name)}</small></div>`;const hidden=`<div class="acp-private"><div class="acp-private-blur"></div><div class="acp-private-center"><div class="acp-private-card"><i class="fas fa-lock" style="font-size:1.5rem;color:var(--accent1)"></i><h3>الحساب خاص</h3><p style="margin:0;color:var(--text-muted);line-height:1.9">صاحب الحساب جعل ملفه الشخصي خاصًا، لذلك تظهر لك صورة الحساب واسمه فقط.</p></div></div></div>`;['acpCourses','acpLessonList','acpQuizList','acpActivity','acpGallery'].forEach(id=>$(id).innerHTML=hidden);}
+async function openCanonicalV17(uid,isSelf){
+ if(!currentUser||!uid)return;
+ const page=ensureV17Page();hideAllProfilesV17();page.classList.add('active');loadingV17();
+ const admin=await isCurrentAdmin();
+ try{
+   const snap=await db.collection('users').doc(uid).get();if(!snap.exists){showCustomAlert?.('غير متاح','الحساب غير موجود.');return;}
+   const p=snap.data()||{},self=uid===currentUser.uid,priv=!self&&!admin&&p.profilePublic===false,name=p.displayName||p.name||'مستخدم',photo=p.photoURL||p.photoUrl||p.photo||'';
+   $('acpAvatar').innerHTML=photo?`<img src="${escV17(photo)}" alt="">`:escV17(name.slice(0,1));$('acpName').textContent=name;$('acpEmail').textContent=priv?'حساب خاص':(p.email||currentUser.email||'—');$('acpBadge').innerHTML=priv?'<i class="fas fa-lock"></i> حساب خاص':'<i class="fas fa-eye"></i> ملف عام';$('acpEdit').style.display=self?'inline-flex':'none';$('acpAddWork').style.display=self?'inline-flex':'none';$('acpLogout').style.display=self?'inline-flex':'none';$('acpBack').style.display=admin&&!self?'inline-flex':'none';
+   if(priv){showPrivateV17(name,photo);$('acpAdminDirectoryPanel').style.display='none';return;}
+   $('acpData').innerHTML=[['الاسم',name],['البريد الإلكتروني',p.email||currentUser.email||'غير متوفر'],['رقم الهاتف',p.phone||'غير مضاف'],['الحالة',p.profilePublic===false?'خاص':'عام'],['تاريخ التسجيل',fmtV17(p.createdAt)]].map(a=>`<div class="acp-row"><strong>${escV17(a[0])}</strong><small>${escV17(a[1])}</small></div>`).join('');
+   const [data,subs,portfolio]=await Promise.all([getProfileDataV17(uid),getSubsV17(uid),getPortfolioV17(uid)]);
+   $('acpXP').textContent=data.partial?'—':Number(data.xp||0).toLocaleString('ar-SA');$('acpLessons').textContent=data.partial?'—':data.lessons.length;$('acpQuizzes').textContent=data.partial?'—':data.quizzes.length;$('acpWorks').textContent=portfolio.length+data.works.length;
+   $('acpCourses').innerHTML=subs.length?subs.map(x=>`<div class="acp-row"><div><strong>${escV17(x.title)}</strong><small>تاريخ الاشتراك: ${escV17(fmtV17(x.enrolledAt))}</small></div><i class="fas fa-circle-check" style="color:#22c55e"></i></div>`).join(''):'<div class="acp-empty">لا توجد دورات مشتركة حاليًا.</div>';
+   $('acpLessonList').innerHTML=data.partial?'<div class="acp-empty">لا يمكن قراءة سجل الحصص لهذا الحساب وفق صلاحيات قاعدة البيانات الحالية.</div>':(data.lessons.length?data.lessons.map(x=>`<div class="acp-row"><strong>${escV17(x.titleAr||'حصة')}</strong><small>${escV17(x.courseTitle)} · +${Number(x.xpEarned)||0} XP</small></div>`).join(''):'<div class="acp-empty">لا توجد حصص مكتملة حاليًا.</div>');
+   $('acpQuizList').innerHTML=data.partial?'<div class="acp-empty">لا يمكن قراءة سجل الاختبارات لهذا الحساب وفق صلاحيات قاعدة البيانات الحالية.</div>':(data.quizzes.length?data.quizzes.map(x=>`<div class="acp-row"><strong>${escV17(x.titleAr||'اختبار')}</strong><small>${Number(x.score)||0}% · +${Number(x.xpEarned)||0} XP</small></div>`).join(''):'<div class="acp-empty">لا توجد اختبارات مكتملة حاليًا.</div>');
+   const acts=[];if(!data.partial){data.lessons.forEach(x=>acts.push({t:`أكمل الحصة: ${x.titleAr||'حصة'}`,d:fmtV17(x.completedAt)}));data.quizzes.forEach(x=>acts.push({t:`أكمل الاختبار: ${x.titleAr||'اختبار'}`,d:fmtV17(x.passedAt)}));data.works.forEach(x=>acts.push({t:`رفع عملًا في: ${x.assignmentTitle}`,d:fmtV17(x.uploadedAt)}));}portfolio.forEach(x=>acts.push({t:`أضاف عملًا للمعرض: ${x.title||'عمل'}`,d:fmtV17(x.createdAt||x.uploadedAt)}));if(data.partial)acts.unshift({t:'بعض سجلات الإنجاز غير متاحة بسبب صلاحيات Firestore.',d:''});$('acpActivity').innerHTML=acts.length?acts.slice(0,80).map(x=>`<div class="acp-row"><strong>${escV17(x.t)}</strong><small>${escV17(x.d)}</small></div>`).join(''):'<div class="acp-empty">لا يوجد نشاط حالي.</div>';
+   const gallery=[...portfolio,...data.works.map(x=>({title:x.assignmentTitle,type:x.courseTitle,description:x.approved?'معتمد':'قيد المراجعة',images:x.images}))];$('acpGallery').innerHTML=gallery.length?gallery.map(x=>{const imgs=Array.isArray(x.images)?x.images:(x.imageUrl?[x.imageUrl]:[]),img=imgs[0]||'';return `<article class="acp-work"><div class="acp-work-cover">${img?`<img src="${escV17(img)}" alt="">`:'<i class="fas fa-images" style="font-size:2rem;color:var(--accent1)"></i>'}</div><div class="acp-work-body"><div class="acp-work-title">${escV17(x.title||x.name||'عمل')}</div><div class="acp-work-meta">${escV17(x.type||'عمل شخصي')}${x.description?`<br>${escV17(x.description)}`:''}</div></div></article>`}).join(''):'<div class="acp-empty">لا توجد أعمال منشورة حاليًا.</div>';
+   if(admin)await loadDirectoryV17(true);else $('acpAdminDirectoryPanel').style.display='none';
+ }catch(err){console.error('V17 profile',err);$('acpData').innerHTML='<div class="acp-empty">تعذر تحميل بيانات الحساب الأساسية.</div>';['acpCourses','acpLessonList','acpQuizList','acpActivity','acpGallery'].forEach(id=>$(id).innerHTML='<div class="acp-empty">تعذر تحميل هذه البيانات.</div>');if(admin)await loadDirectoryV17(true);showCustomAlert?.('خطأ','تعذر تحميل الملف الشخصي بالكامل. تم عرض البيانات التي تسمح بها الصلاحيات.');}
+}
+window.__openCanonicalProfile=openCanonicalV17;window.openUserProfilePage=()=>currentUser&&openCanonicalV17(currentUser.uid,true);window.openPublicProfileFinal=uid=>openCanonicalV17(uid,uid===currentUser?.uid);window.openAnanasV10Profile=openCanonicalV17;window.viewProfileByUserId=uid=>openCanonicalV17(uid,uid===currentUser?.uid);window.openChatProfileV13=uid=>openCanonicalV17(uid,uid===currentUser?.uid);window.openChatProfileV12=window.openChatProfileV13;
+// أي معالج دردشة قديم سيستدعي الدالة الجديدة، وأي عنصر يحمل UID يفتحها كذلك.
+document.addEventListener('click',async e=>{const n=e.target.closest?.('.chat-msg .chat-profile-avatar,.chat-msg .chat-profile-name,.chat-msg .msg-header .u,[data-profile-uid]');if(!n)return;const msg=n.closest('.chat-msg');let uid=n.dataset.profileUid||n.closest('[data-profile-uid]')?.dataset.profileUid;if(!uid&&msg?.dataset.messageId&&typeof activeCourseId!=='undefined'&&activeCourseId){try{const s=await db.collection('courses').doc(activeCourseId).collection('chat').doc(msg.dataset.messageId).get();uid=s.data()?.userId||''}catch(_){}}if(uid){e.preventDefault();e.stopImmediatePropagation();await openCanonicalV17(uid,uid===currentUser?.uid);}},true);
+})();
+</script>
 </body>
 </html>
 
