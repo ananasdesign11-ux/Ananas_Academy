@@ -10545,5 +10545,283 @@ hideLegacy();
 })();
 </script>
 
+
+<script id="profile-data-reliable-final-fix">
+(function(){
+  'use strict';
+  const $ = id => document.getElementById(id);
+  const esc = window.escapeHtml || (v => String(v ?? '').replace(/[&<>\"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',"'":'&#39;'}[c])));
+  const dateText = v => {
+    try {
+      const d = v?.toDate ? v.toDate() : (v ? new Date(v) : null);
+      return d && !isNaN(d) ? d.toLocaleDateString('ar-SA',{year:'numeric',month:'long',day:'numeric'}) : '—';
+    } catch(_) { return '—'; }
+  };
+  const rowList = (items, empty='لا توجد بيانات حاليًا.') =>
+    items?.length ? items.join('') : `<div class="aa-profile-empty">${esc(empty)}</div>`;
+
+  async function safeGet(pathRef){
+    try { return await pathRef.get(); }
+    catch(e){ console.warn('profile read failed', e); return null; }
+  }
+
+  async function loadReliableProfile(uid){
+    const result = {
+      user:{}, stats:{xp:0}, lessons:[], quizzes:[], assignments:[], portfolio:[], courses:[], activities:[]
+    };
+
+    const userSnap = await safeGet(db.collection('users').doc(uid));
+    if(userSnap?.exists) result.user = userSnap.data() || {};
+
+    const statsSnap = await safeGet(db.collection('userStats').doc(uid));
+    if(statsSnap?.exists) {
+      const st = statsSnap.data() || {};
+      result.stats.xp = Number(st.xp ?? st.totalXP ?? st.experience ?? 0) || 0;
+    }
+
+    const [lessonSnap, quizSnap, assignmentLedgerSnap, portfolioSnap, enrolledSnap] = await Promise.all([
+      safeGet(db.collection('users').doc(uid).collection('completedLessons')),
+      safeGet(db.collection('userStats').doc(uid).collection('completedQuizzes')),
+      safeGet(db.collection('userStats').doc(uid).collection('completedAssignments')),
+      safeGet(db.collection('users').doc(uid).collection('portfolioWorks')),
+      safeGet(db.collection('users').doc(uid).collection('enrolledCourses'))
+    ]);
+
+    if(lessonSnap){
+      lessonSnap.forEach(d=>{
+        const x=d.data()||{};
+        result.lessons.push({id:d.id,title:x.titleAr||x.title||'',courseTitle:x.courseTitle||'',completedAt:x.completedAt,xpEarned:Number(x.xpEarned)||0});
+      });
+    }
+    if(quizSnap){
+      quizSnap.forEach(d=>{
+        const x=d.data()||{};
+        result.quizzes.push({id:d.id,title:x.titleAr||x.title||'',courseTitle:x.courseTitle||'',passedAt:x.passedAt,score:Number(x.score)||0,xpEarned:Number(x.xpEarned)||0});
+      });
+    }
+    if(assignmentLedgerSnap){
+      assignmentLedgerSnap.forEach(d=>{
+        const x=d.data()||{};
+        result.activities.push({t:`أكمل الواجب: ${x.assignmentTitle||x.titleAr||'واجب'}`,d:x.completedAt||x.approvedAt});
+      });
+    }
+    if(portfolioSnap){
+      result.portfolio = portfolioSnap.docs
+        .map(d=>({id:d.id,...(d.data()||{})}))
+        .filter(x=>x.deleted!==true);
+    }
+    if(enrolledSnap){
+      result.courses = enrolledSnap.docs.map(d=>({id:d.id,...(d.data()||{})}));
+    }
+
+    /* XP fallback: even when userStats.xp is absent, sum XP recorded in completion ledgers. */
+    if(!result.stats.xp){
+      result.stats.xp = result.lessons.reduce((n,x)=>n+(Number(x.xpEarned)||0),0)
+        + result.quizzes.reduce((n,x)=>n+(Number(x.xpEarned)||0),0);
+    }
+
+    /* Enrich titles/course names independently. Failure of one course must never stop the whole profile. */
+    try{
+      const courseSnap = await db.collection('courses').get();
+      const courseMap = new Map();
+      courseSnap.forEach(c=>courseMap.set(c.id,{id:c.id,...(c.data()||{})}));
+
+      const lessonIds = new Set(result.lessons.map(x=>x.id));
+      const quizIds = new Set(result.quizzes.map(x=>x.id));
+      const knownAssignmentIds = new Set();
+
+      for(const c of courseSnap.docs){
+        const cd = courseMap.get(c.id) || {};
+        const courseTitle = cd.titleAr || cd.title || 'دورة';
+
+        try{
+          const ls = await c.ref.collection('lessons').get();
+          ls.forEach(d=>{
+            if(!lessonIds.has(d.id)) return;
+            const x=d.data()||{}, item=result.lessons.find(v=>v.id===d.id);
+            if(item){ item.title=x.titleAr||x.title||item.title||'حصة'; item.courseTitle=courseTitle; item.xpEarned=Number(item.xpEarned||x.xp||0)||0; }
+          });
+        }catch(e){ console.warn('lesson catalog failed',c.id,e); }
+
+        try{
+          const qs = await c.ref.collection('quizzes').get();
+          qs.forEach(d=>{
+            if(!quizIds.has(d.id)) return;
+            const x=d.data()||{}, item=result.quizzes.find(v=>v.id===d.id);
+            if(item){ item.title=x.titleAr||x.title||item.title||'اختبار'; item.courseTitle=courseTitle; }
+          });
+        }catch(e){ console.warn('quiz catalog failed',c.id,e); }
+
+        try{
+          const as = await c.ref.collection('assignments').get();
+          as.forEach(d=>{
+            const a=d.data()||{};
+            knownAssignmentIds.add(d.id);
+            const subs=Array.isArray(a.submissions)?a.submissions:[];
+            subs.forEach((sub,i)=>{
+              if(!sub || sub.userId!==uid || sub.deleted===true) return;
+              const images=Array.isArray(sub.images)&&sub.images.length ? sub.images.filter(Boolean) : (sub.imageUrl?[sub.imageUrl]:[]);
+              if(!images.length) return;
+              result.assignments.push({
+                id:sub.workId||sub.id||`legacy_${d.id}_${i}`,
+                assignmentId:d.id,
+                courseId:c.id,
+                title:a.titleAr||a.title||'واجب',
+                courseTitle,
+                approved:!!sub.approved,
+                xpGranted:!!sub.xpGranted,
+                images,
+                uploadedAt:sub.uploadedAt
+              });
+            });
+          });
+        }catch(e){ console.warn('assignment catalog failed',c.id,e); }
+
+        try{
+          const fs = await c.ref.collection('files').where('uploadedBy','==',uid).get();
+          fs.forEach(d=>{
+            const f=d.data()||{};
+            if(f.deleted===true) return;
+            result.activities.push({t:`رفع ملف: ${f.name||'ملف'}`,d:f.uploadedAt});
+          });
+        }catch(e){ console.warn('file activity failed',c.id,e); }
+      }
+    }catch(e){
+      console.warn('course enrichment unavailable',e);
+    }
+
+    return result;
+  }
+
+  async function renderReliableProfile(uid,isSelf){
+    const host=$('aaRebuiltProfilePage');
+    if(!host)return;
+    host.classList.add('active');
+    document.body.classList.add('aa-profile-open');
+
+    ['aaProfileXP','aaProfileLessons','aaProfileQuizzes','aaProfileWorks'].forEach(id=>{if($(id))$(id).textContent='—';});
+    ['aaProfileData','aaProfileCourses','aaProfileLessonList','aaProfileQuizList','aaProfileActivity','aaProfileGallery'].forEach(id=>{if($(id))$(id).innerHTML='<div class="aa-profile-empty">جاري تحميل البيانات...</div>';});
+
+    const data = await loadReliableProfile(uid);
+    const p = data.user || {};
+    const name = p.displayName || p.name || (isSelf ? currentUser?.displayName : '') || 'مستخدم';
+    const photo = p.photoURL || p.photoUrl || p.photo || (isSelf ? currentUser?.photoURL : '') || '';
+
+    if($('aaProfileAvatar')) $('aaProfileAvatar').innerHTML = photo ? `<img src="${esc(photo)}" alt="">` : esc(name.slice(0,1));
+    if($('aaProfileName')) $('aaProfileName').textContent=name;
+    if($('aaProfileEmail')) $('aaProfileEmail').textContent=(p.email || (isSelf ? currentUser?.email : '') || '—');
+    if($('aaProfileBadge')) $('aaProfileBadge').innerHTML = p.profilePublic===false && !isSelf ? '<i class="fas fa-lock"></i> حساب خاص' : '<i class="fas fa-eye"></i> ملف عام';
+    if($('aaProfileEdit')) $('aaProfileEdit').style.display=isSelf?'inline-flex':'none';
+    if($('aaProfileAddWork')) $('aaProfileAddWork').style.display=isSelf?'inline-flex':'none';
+    if($('aaProfileLogout')) $('aaProfileLogout').style.display=isSelf?'inline-flex':'none';
+
+    if(p.profilePublic===false && !isSelf && !isAdmin){
+      ['aaProfileCourses','aaProfileLessonList','aaProfileQuizList','aaProfileActivity','aaProfileGallery'].forEach(id=>{if($(id))$(id).innerHTML='<div class="aa-profile-private"><i class="fas fa-lock"></i><strong>الحساب خاص</strong><span>صاحب الحساب أخفى تفاصيل ملفه.</span></div>';});
+      if($('aaProfileXP'))$('aaProfileXP').textContent='—';
+      if($('aaProfileLessons'))$('aaProfileLessons').textContent='—';
+      if($('aaProfileQuizzes'))$('aaProfileQuizzes').textContent='—';
+      if($('aaProfileWorks'))$('aaProfileWorks').textContent='—';
+      return;
+    }
+
+    const allWorks=[...data.portfolio.map(x=>({kind:'portfolio',...x})),...data.assignments.map(x=>({kind:'assignment',...x}))];
+    const activity=[
+      ...data.lessons.map(x=>({t:`أكمل الحصة: ${x.title||'حصة'}`,d:x.completedAt})),
+      ...data.quizzes.map(x=>({t:`أكمل الاختبار: ${x.title||'اختبار'}`,d:x.passedAt})),
+      ...data.activities,
+      ...data.portfolio.map(x=>({t:`أضاف عملًا للمعرض: ${x.title||'عمل'}`,d:x.createdAt||x.uploadedAt})),
+      ...data.assignments.map(x=>({t:`رفع عملًا في: ${x.title||'واجب'}`,d:x.uploadedAt}))
+    ].filter(x=>x.t).sort((a,b)=>{
+      const da=a.d?.toDate?a.d.toDate():new Date(a.d||0), db=b.d?.toDate?b.d.toDate():new Date(b.d||0);
+      return db-da;
+    });
+
+    if($('aaProfileXP'))$('aaProfileXP').textContent=Number(data.stats.xp||0).toLocaleString('ar-SA');
+    if($('aaProfileLessons'))$('aaProfileLessons').textContent=data.lessons.length;
+    if($('aaProfileQuizzes'))$('aaProfileQuizzes').textContent=data.quizzes.length;
+    if($('aaProfileWorks'))$('aaProfileWorks').textContent=allWorks.length;
+
+    if($('aaProfileData')){
+      $('aaProfileData').innerHTML=[
+        ['الاسم',name],
+        ['البريد الإلكتروني',p.email || (isSelf ? currentUser?.email : '') || 'غير متوفر'],
+        ['رقم الهاتف',p.phone || 'غير مضاف'],
+        ['الجنس',p.gender==='female'?'أنثى':p.gender==='male'?'ذكر':'غير محدد'],
+        ['الحالة',p.profilePublic===false?'خاص':'عام'],
+        ['تاريخ التسجيل',dateText(p.createdAt)]
+      ].map(x=>`<div class="aa-profile-row"><strong>${esc(x[0])}</strong><span>${esc(x[1])}</span></div>`).join('');
+    }
+
+    if($('aaProfileCourses')){
+      const courseRows=[];
+      for(const c of data.courses){
+        let title=c.titleAr||c.title||'';
+        if(!title){ const snap=await safeGet(db.collection('courses').doc(c.id)); title=snap?.exists?(snap.data()?.titleAr||snap.data()?.title||'دورة'):'دورة'; }
+        courseRows.push(`<div class="aa-profile-row"><div><strong>${esc(title)}</strong><small>تاريخ الاشتراك: ${esc(dateText(c.enrolledAt))}</small></div><i class="fas fa-circle-check" style="color:#22c55e"></i></div>`);
+      }
+      $('aaProfileCourses').innerHTML=rowList(courseRows,'لا توجد دورات مشتركة حاليًا.');
+    }
+
+    if($('aaProfileLessonList')){
+      $('aaProfileLessonList').innerHTML=rowList(data.lessons.slice().reverse().slice(0,60).map(x=>`<div class="aa-profile-row"><div><strong>${esc(x.title||'حصة')}</strong><small>${esc(x.courseTitle||'')} · +${Number(x.xpEarned||0)} XP · ${esc(dateText(x.completedAt))}</small></div></div>`),'لا توجد حصص مكتملة حاليًا.');
+    }
+
+    if($('aaProfileQuizList')){
+      $('aaProfileQuizList').innerHTML=rowList(data.quizzes.slice().reverse().slice(0,60).map(x=>`<div class="aa-profile-row"><div><strong>${esc(x.title||'اختبار')}</strong><small>${Number(x.score||0)}% · +${Number(x.xpEarned||0)} XP · ${esc(dateText(x.passedAt))}</small></div></div>`),'لا توجد اختبارات مكتملة حاليًا.');
+    }
+
+    if($('aaProfileActivity')){
+      $('aaProfileActivity').innerHTML=rowList(activity.slice(0,100).map(x=>`<div class="aa-profile-row"><strong>${esc(x.t)}</strong><small>${esc(dateText(x.d))}</small></div>`),'لا يوجد نشاط حالي.');
+    }
+
+    if($('aaProfileGallery')){
+      $('aaProfileGallery').innerHTML=rowList(allWorks.map(x=>{
+        const imgs=Array.isArray(x.images)?x.images:(x.imageUrl?[x.imageUrl]:[]), img=imgs[0]||'';
+        if(x.kind==='assignment'){
+          return `<article class="aa-profile-work"><div class="aa-profile-cover">${img?`<img src="${esc(img)}" alt="">`:'<i class="fas fa-images"></i>'}</div><div class="aa-profile-work-body"><strong>${esc(x.title||'واجب')}</strong><small>${esc(x.courseTitle||'')}<br>${x.approved?'✅ معتمد':'⏳ قيد المراجعة'}${imgs.length>1?` · ${imgs.length} صور`:''}</small><button type="button" class="aa-profile-view-work" data-course="${esc(x.courseId||'')}" data-assignment="${esc(x.assignmentId||'')}" data-work="${esc(x.id||'')}"><i class="fas fa-eye"></i> عرض العمل</button></div></article>`;
+        }
+        return `<article class="aa-profile-work"><div class="aa-profile-cover">${img?`<img src="${esc(img)}" alt="">`:'<i class="fas fa-images"></i>'}</div><div class="aa-profile-work-body"><strong>${esc(x.title||'عمل')}</strong><small>${esc(x.type||'عمل شخصي')}${x.description?`<br>${esc(x.description)}`:''}${imgs.length>1?`<br>${imgs.length} صور`:''}</small></div></article>`;
+      }),'لا توجد أعمال منشورة حاليًا.');
+      $('aaProfileGallery').querySelectorAll('.aa-profile-view-work').forEach(btn=>btn.addEventListener('click',()=>window.openAssignmentWorkViewer?.(btn.dataset.course,btn.dataset.assignment,btn.dataset.work)));
+    }
+  }
+
+  /* Replace the fragile all-or-nothing profile loader with independent, resilient reads. */
+  window.__loadReliableProfile = loadReliableProfile;
+  window.__renderReliableProfile = renderReliableProfile;
+
+  const oldAAOpen = window.aaOpenProfile;
+  window.aaOpenProfile = async function(uid,opts={}){
+    try{ await oldAAOpen?.apply(this,arguments); }catch(e){ console.warn('legacy profile open skipped',e); }
+    try{ await renderReliableProfile(uid,uid===currentUser?.uid); }
+    catch(e){ console.error('reliable profile render failed',e); showCustomAlert?.('خطأ','تعذر تحميل بيانات الملف الشخصي.'); }
+  };
+
+  window.openUserProfilePage = async function(){
+    if(!currentUser)return triggerAuth?.();
+    return window.aaOpenProfile(currentUser.uid,{kind:'self'});
+  };
+  window.openPublicProfileFinal = async function(uid){
+    if(!currentUser||!uid)return triggerAuth?.();
+    return window.aaOpenProfile(uid,{kind:uid===currentUser.uid?'self':'public'});
+  };
+  window.openChatProfileV13 = window.openPublicProfileFinal;
+  window.openChatProfileV12 = window.openChatProfileV13;
+  window.viewProfileByUserId = window.openPublicProfileFinal;
+  window.openStudentProfile = window.openPublicProfileFinal;
+
+  /* Rebind the account button once more so no older profile implementation wins. */
+  const account=$('authToggleBtn');
+  if(account){
+    account.onclick=null;
+    account.addEventListener('click',e=>{
+      if(!currentUser)return;
+      e.preventDefault();e.stopImmediatePropagation();
+      window.openUserProfilePage();
+    },true);
+  }
+})();
+</script>
+
 </body>
 </html>
