@@ -12397,5 +12397,203 @@ const s=document.createElement('style');s.textContent=`
 })();
 
 </script>
+
+<style id="aa-code-manager-v12-style">
+#codesTableWrapV12{margin-top:14px;}
+#codeLifecycleBoardV12{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;margin-top:14px;}
+.code-lifecycle-panel{background:var(--bg-card);border:1px solid var(--border);border-radius:18px;padding:14px;min-width:0;box-shadow:var(--shadow);}
+.code-lifecycle-panel h4{margin:0 0 12px;font-size:1rem;display:flex;align-items:center;justify-content:space-between;gap:8px;}
+.code-lifecycle-panel h4 small{font-size:.74rem;color:var(--text-muted);font-weight:700;}
+.code-lifecycle-list{display:grid;gap:9px;}
+.code-lifecycle-empty{padding:18px 10px;text-align:center;color:var(--text-muted);font-size:.82rem;border:1px dashed var(--border);border-radius:14px;}
+.code-card-v12{width:100%;display:flex;align-items:center;justify-content:space-between;gap:10px;padding:11px 12px;border:1px solid var(--border);border-radius:14px;background:var(--bg-secondary);color:var(--text-primary);font-family:inherit;cursor:pointer;text-align:right;transition:.18s ease;}
+.code-card-v12:hover{border-color:var(--accent1);transform:translateY(-1px);box-shadow:0 8px 20px rgba(108,92,231,.10);}
+.code-card-v12-main{min-width:0;display:grid;gap:3px;}
+.code-card-v12-main strong{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.code-card-v12-main small{color:var(--text-muted);font-size:.72rem;direction:ltr;text-align:right;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.code-card-v12-status{font-size:.7rem;font-weight:900;padding:4px 8px;border-radius:999px;background:rgba(108,92,231,.08);white-space:nowrap;}
+.code-card-v12.used .code-card-v12-status{color:#16a085;background:rgba(22,160,133,.10);}
+.code-card-v12.unused .code-card-v12-status{color:#6c5ce7;background:rgba(108,92,231,.10);}
+.code-card-v12.expired .code-card-v12-status{color:#e67e22;background:rgba(230,126,34,.10);}
+.code-card-v12.suspended .code-card-v12-status{color:#e74c3c;background:rgba(231,76,60,.10);}
+.code-card-v12-wrap{display:grid;gap:7px;}
+.code-card-v12-actions{display:flex;gap:6px;flex-wrap:wrap;}
+.code-card-v12-actions .code-action-btn{min-height:36px;}
+#codeDetailModalV12{width:min(720px,95vw);max-height:90vh;overflow-y:auto;}
+.code-detail-grid-v12{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;}
+.code-detail-item-v12{padding:12px;border:1px solid var(--border);border-radius:14px;background:var(--bg-secondary);min-width:0;}
+.code-detail-item-v12 strong{display:block;color:var(--text-muted);font-size:.75rem;margin-bottom:5px;}
+.code-detail-item-v12 span{display:block;font-weight:800;overflow-wrap:anywhere;}
+.code-detail-account-v12{display:flex;align-items:center;gap:10px;padding:12px;border:1px solid var(--border);border-radius:16px;background:var(--bg-card);margin-bottom:12px;}
+.code-detail-avatar-v12{width:46px;height:46px;border-radius:50%;display:grid;place-items:center;overflow:hidden;background:var(--accent-gradient);color:#fff;font-weight:900;flex:0 0 46px;}
+.code-detail-avatar-v12 img{width:100%;height:100%;object-fit:cover;display:block;}
+@media(max-width:900px){#codeLifecycleBoardV12{grid-template-columns:1fr;}.code-detail-grid-v12{grid-template-columns:1fr;}}
+@media(max-width:768px){#codeLifecycleBoardV12{gap:10px}.code-lifecycle-panel{padding:11px}#codeDetailModalV12{width:calc(100vw - 20px);max-width:none;max-height:calc(100dvh - 90px);padding:16px;}}
+</style>
+<script>
+(function(){
+  'use strict';
+  const $v12=id=>document.getElementById(id);
+  const escV12=v=>String(v??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+  const asDateV12=v=>{try{if(!v)return null;const d=v.toDate?v.toDate():new Date(v);return isNaN(d.getTime())?null:d}catch(_){return null}};
+  const codeRefV12=(courseId,codeId)=>db.collection('courses').doc(courseId).collection('codes').doc(codeId);
+  const usedInfoV12=c=>Array.isArray(c?.usedByInfo)?c.usedByInfo.filter(Boolean):[];
+  const usedCountV12=c=>Number(c?.usedCount||0);
+  const maxUsesV12=c=>Number(c?.maxUses||1);
+  function legacySuspendedV12(c){
+    const until=asDateV12(c?.suspendedUntil), now=Date.now();
+    if(until && until.getTime()<=now)return false;
+    return c?.disabled===true || c?.isSuspended===true || c?.status==='suspended' || c?.state==='suspended' || c?.suspensionStatus==='suspended';
+  }
+  function expiredV12(c){const end=asDateV12(c?.endTime);return !!end&&end.getTime()<=Date.now();}
+  function categoryV12(c){return expiredV12(c)?'expired':usedCountV12(c)>0?'used':'unused';}
+  function suspensionLabelV12(c){
+    const until=asDateV12(c?.suspendedUntil);
+    if(!legacySuspendedV12(c))return '';
+    return until?`موقوف حتى ${until.toLocaleString('ar-SA',{timeZone:'Asia/Riyadh'})}`:'موقوف';
+  }
+  async function normalizeLegacyCodeV12(courseId,codeId,c){
+    const now=Date.now();const until=asDateV12(c?.suspendedUntil);
+    if(legacySuspendedV12(c) && until && until.getTime()<=now){
+      const patch={disabled:false,isSuspended:false,status:'active',state:'active',suspensionStatus:'active',suspendedUntil:null,suspensionReason:null,suspensionMode:null,suspensionUpdatedAt:firebase.firestore.FieldValue.serverTimestamp()};
+      await codeRefV12(courseId,codeId).update(patch).catch(()=>{});
+      return {...c,...patch};
+    }
+    return c;
+  }
+  function ensureLifecycleBoardV12(){
+    let b=$v12('codeLifecycleBoardV12');
+    if(b)return b;
+    const table=$v12('codesTable');
+    if(!table)return null;
+    b=document.createElement('div');b.id='codeLifecycleBoardV12';
+    table.parentElement?.insertBefore(b,table);
+    table.style.display='none';
+    return b;
+  }
+  function ensureDetailModalV12(){
+    let m=$v12('codeDetailModalV12');if(m)return m;
+    m=document.createElement('div');m.id='codeDetailModalV12';m.className='edit-modal';
+    m.innerHTML='<button type="button" onclick="this.parentElement.classList.remove(\'active\')" style="position:static;float:left;font-size:1.5rem;background:none;border:none;color:var(--text-muted);cursor:pointer;">&times;</button><h3>تفاصيل الكود</h3><div id="codeDetailBodyV12"></div>';
+    document.body.appendChild(m);return m;
+  }
+  function dateTextV12(d,empty='—'){return d?d.toLocaleString('ar-SA',{timeZone:'Asia/Riyadh'}):empty;}
+
+  window.__codeDetail=async function(courseId,codeId){
+    if(!isAdmin||!courseId||!codeId)return;
+    const m=ensureDetailModalV12(),body=$v12('codeDetailBodyV12');
+    body.innerHTML='<div style="padding:24px;text-align:center;color:var(--text-muted)">جاري تحميل التفاصيل...</div>';m.classList.add('active');
+    try{
+      const snap=await codeRefV12(courseId,codeId).get();
+      if(!snap.exists){body.innerHTML='<div class="code-detail-empty">الكود غير موجود.</div>';return;}
+      const c=await normalizeLegacyCodeV12(courseId,codeId,snap.data()||{});
+      const users=usedInfoV12(c);
+      const account=users[0]||{};
+      let live={};
+      if(account.uid){try{const us=await db.collection('users').doc(String(account.uid)).get();if(us.exists)live=us.data()||{};}catch(_){}
+      }
+      let enrolled=null;
+      if(account.uid){try{const er=await db.collection('users').doc(String(account.uid)).collection('enrolledCourses').doc(courseId).get();if(er.exists)enrolled=er.data()||{};}catch(_){}
+      }
+      const name=live.displayName||live.name||account.name||'غير مستخدم';
+      const email=live.email||account.email||'—';
+      const phone=live.phone||account.phone||'—';
+      const photo=live.photoURL||live.photoUrl||live.photo||'';
+      const subscribedAt=asDateV12(enrolled?.enrolledAt)||asDateV12(account.usedAt)||asDateV12(account.subscriptionDate)||asDateV12(account.registeredAt)||asDateV12(c.usedAt);
+      const end=asDateV12(c.endTime);
+      const endStatus=expiredV12(c)?'منتهي':legacySuspendedV12(c)?suspensionLabelV12(c):'نشط فعال';
+      const avatar=photo?`<img src="${escV12(photo)}" alt="">`:escV12(name.slice(0,1)||'م');
+      body.innerHTML=`
+        <div class="code-detail-account-v12"><div class="code-detail-avatar-v12">${avatar}</div><div style="min-width:0"><strong style="display:block;font-size:1rem">${escV12(name)}</strong><small style="color:var(--text-muted)">${escV12(email)}</small></div></div>
+        <div class="code-detail-grid-v12">
+          <div class="code-detail-item-v12"><strong>اسم الحساب</strong><span>${escV12(name)}</span></div>
+          <div class="code-detail-item-v12"><strong>الكود</strong><span dir="ltr">${escV12(c.code||codeId)}</span></div>
+          <div class="code-detail-item-v12"><strong>البريد الإلكتروني</strong><span dir="ltr">${escV12(email)}</span></div>
+          <div class="code-detail-item-v12"><strong>رقم الهاتف</strong><span dir="ltr">${escV12(phone)}</span></div>
+          <div class="code-detail-item-v12"><strong>تاريخ الاشتراك</strong><span>${escV12(dateTextV12(subscribedAt))}</span></div>
+          <div class="code-detail-item-v12"><strong>تاريخ نهاية الاشتراك</strong><span>${escV12(dateTextV12(end,'لا يوجد تاريخ نهاية'))}</span></div>
+          <div class="code-detail-item-v12"><strong>حالة الكود</strong><span>${escV12(endStatus)}</span></div>
+          <div class="code-detail-item-v12"><strong>معرّف الحساب</strong><span dir="ltr">${escV12(account.uid||'—')}</span></div>
+        </div>`;
+    }catch(e){console.error(e);body.innerHTML='<div style="padding:20px;color:#e74c3c;text-align:center">تعذر تحميل تفاصيل الكود.</div>';}
+  };
+
+  async function clearLegacyAccessBlockV12(courseId,codeId,users){
+    const uids=(users||[]).map(x=>String(typeof x==='string'?x:x?.uid||'')).filter(Boolean);
+    if(!uids.length)return;
+    const batch=db.batch();let count=0;
+    for(const uid of uids){
+      const ref=db.collection('users').doc(uid).collection('enrolledCourses').doc(courseId);
+      try{
+        const s=await ref.get();if(!s.exists)continue;const e=s.data()||{};
+        if(e.codeId&&String(e.codeId)!==String(codeId))continue;
+        if(e.codeDeleted===true)continue;
+        if(e.accessBlocked===true){batch.update(ref,{accessBlocked:false,blockedUntil:null,blockReason:null,accessBlockReason:null,accessUpdatedAt:firebase.firestore.FieldValue.serverTimestamp()});count++;}
+      }catch(_){}
+    }
+    if(count)await batch.commit().catch(()=>{});
+  }
+
+  window.toggleEnrollmentCode=async function(codeId,currentlySuspended){
+    if(!isAdmin||!activeCourseId)return showCustomAlert?.('غير مسموح','هذه العملية للمشرف فقط.');
+    const ref=codeRefV12(activeCourseId,codeId);let snap=await ref.get();if(!snap.exists)return showCustomAlert?.('خطأ','الكود غير موجود.');
+    let c=await normalizeLegacyCodeV12(activeCourseId,codeId,snap.data()||{});
+    if(expiredV12(c))return showCustomAlert?.('الكود منتهي','هذا الكود منتهي ولا يمكن إيقافه أو إعادة تشغيله.');
+    const isSusp=legacySuspendedV12(c)||currentlySuspended===true;
+    if(isSusp){
+      try{
+        await ref.update({disabled:false,isSuspended:false,status:'active',state:'active',suspensionStatus:'active',suspendedUntil:null,suspensionReason:null,suspensionMode:null,suspensionUpdatedAt:firebase.firestore.FieldValue.serverTimestamp()});
+        await clearLegacyAccessBlockV12(activeCourseId,codeId,c.usedBy||[]);
+        await window.loadCodesForCourse(activeCourseId);
+        showCustomAlert?.('تم إلغاء الإيقاف','تم إلغاء إيقاف الكود وأصبح نشطًا من جديد.');
+      }catch(e){showCustomAlert?.('خطأ','تعذر إلغاء إيقاف الكود: '+e.message);}return;
+    }
+    window.__aaCodeSuspendTarget=codeId;
+    $v12('suspendCodeLabel').textContent=`الكود: ${c.code||codeId}`;
+    $v12('courseSuspendDuration').value='1d';
+    document.querySelectorAll('.suspend-duration-choice').forEach(b=>b.classList.toggle('active',b.dataset.duration==='1d'));
+    $v12('courseSuspendUntil').value='';$v12('courseSuspendReason').value='';$v12('courseSuspendCustomWrap').style.display='none';$v12('courseAccessSuspendModal').classList.add('active');
+  };
+
+  const oldConfirm=$v12('confirmCourseSuspendBtn');
+  if(oldConfirm){oldConfirm.onclick=async function(){
+    if(!isAdmin||!activeCourseId||!window.__aaCodeSuspendTarget)return;
+    const mode=$v12('courseSuspendDuration').value,reason=$v12('courseSuspendReason').value.trim();let until=null;
+    if(mode==='custom'){const raw=$v12('courseSuspendUntil').value;const m=raw&&raw.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/);if(!m)return showCustomAlert?.('تنبيه','حدد تاريخ ووقت صحيحين.');until=new Date(`${m[1]}-${m[2]}-${m[3]}T${m[4]}:00+03:00`);if(isNaN(until.getTime())||until.getTime()<=Date.now())return showCustomAlert?.('تنبيه','وقت الانتهاء يجب أن يكون في المستقبل.');}
+    else if(mode!=='permanent'){const days=({'1d':1,'3d':3,'7d':7,'14d':14,'30d':30})[mode];if(!days)return showCustomAlert?.('تنبيه','اختر مدة صحيحة.');until=new Date(Date.now()+days*86400000);}
+    const id=window.__aaCodeSuspendTarget;const ref=codeRefV12(activeCourseId,id);try{
+      this.disabled=true;this.textContent='جاري إيقاف الكود...';
+      const ss=await ref.get();if(!ss.exists)throw new Error('الكود غير موجود');
+      const c=ss.data()||{};
+      await ref.update({disabled:true,isSuspended:true,status:'suspended',state:'suspended',suspensionStatus:'suspended',suspendedUntil:until?firebase.firestore.Timestamp.fromDate(until):null,suspensionReason:reason||null,suspensionMode:mode,suspensionUpdatedAt:firebase.firestore.FieldValue.serverTimestamp(),suspensionUpdatedBy:currentUser?.uid||null});
+      // طرد الحسابات المرتبطة فعليًا بالكود مباشرةً، مع الإبقاء على codeId ليستطيع النظام السماح بالعودة بعد انتهاء الإيقاف.
+      const uids=(c.usedBy||[]).map(x=>String(x)).filter(Boolean);const batch=db.batch();
+      for(const uid of uids){const er=db.collection('users').doc(uid).collection('enrolledCourses').doc(activeCourseId);batch.set(er,{accessBlocked:true,blockedUntil:until?firebase.firestore.Timestamp.fromDate(until):null,blockReason:reason||'تم إيقاف كود الاشتراك.',accessBlockReason:reason||'تم إيقاف كود الاشتراك.',accessUpdatedAt:firebase.firestore.FieldValue.serverTimestamp()},{merge:true});}
+      if(uids.length)await batch.commit();
+      $v12('courseAccessSuspendModal').classList.remove('active');await window.loadCodesForCourse(activeCourseId);showCustomAlert?.('تم الإيقاف',until?`تم إيقاف الكود حتى ${until.toLocaleString('ar-SA',{timeZone:'Asia/Riyadh'})}.`:'تم إيقاف الكود حتى تلغي الإيقاف يدويًا.');
+    }catch(e){console.error(e);showCustomAlert?.('خطأ','تعذر إيقاف الكود: '+e.message);}finally{this.disabled=false;this.textContent='إيقاف الكود';}
+  };}
+
+  window.loadCodesForCourse=async function(courseId){
+    if(!isAdmin||!courseId)return;const oldTable=$v12('codesTable'),board=ensureLifecycleBoardV12();if(!board)return;
+    board.innerHTML='<div style="grid-column:1/-1;padding:22px;text-align:center;color:var(--text-muted)">جاري تحميل الأكواد...</div>';
+    try{
+      const snap=await db.collection('courses').doc(courseId).collection('codes').get();
+      const groups={unused:[],used:[],expired:[]};
+      for(const d of snap.docs){
+        const c=await normalizeLegacyCodeV12(courseId,d.id,d.data()||{});groups[categoryV12(c)].push({id:d.id,c});
+      }
+      const panel=(key,title)=>{const items=groups[key];return `<section class="code-lifecycle-panel"><h4><span>${title}</span><small>${items.length} كود</small></h4><div class="code-lifecycle-list">${items.length?items.map(({id,c})=>{
+        const info=usedInfoV12(c),u=info[0]||{},name=u.name||'مستخدم',label=key==='used'?name:(c.code||id),state=expiredV12(c)?'منتهي':legacySuspendedV12(c)?'موقوف':key==='used'?'مستخدم':'غير مستخدم';
+        const toggle=expiredV12(c)?'<button class="code-action-btn" disabled style="opacity:.55">منتهي</button>':legacySuspendedV12(c)?`<button class="code-action-btn success" onclick="toggleEnrollmentCode('${escV12(id)}',true);event.stopPropagation()">إلغاء الإيقاف</button>`:`<button class="code-action-btn danger" onclick="toggleEnrollmentCode('${escV12(id)}',false);event.stopPropagation()">إيقاف الكود</button>`;
+        return `<div class="code-card-v12-wrap"><button type="button" class="code-card-v12 ${key}${legacySuspendedV12(c)?' suspended':''}" onclick="__codeDetail('${escV12(courseId)}','${escV12(id)}')"><span class="code-card-v12-main"><strong>${escV12(label)}</strong><small>${escV12(c.code||id)}</small></span><span class="code-card-v12-status">${escV12(state)}</span></button><div class="code-card-v12-actions">${toggle}<button class="code-action-btn danger" onclick="deleteEnrollmentCode('${escV12(id)}');event.stopPropagation()">حذف</button></div></div>`;}).join(''):'<div class="code-lifecycle-empty">لا توجد أكواد في هذه الفئة.</div>'}</div></section>`};
+      board.innerHTML=panel('unused','غير مستخدمة')+panel('used','مستخدمة')+panel('expired','منتهية');
+      if(oldTable)oldTable.style.display='none';
+    }catch(e){console.error('code lifecycle v12',e);board.innerHTML='<div style="grid-column:1/-1;padding:22px;text-align:center;color:#e74c3c">تعذر تحميل الأكواد.</div>';}
+  };
+  window.manageCodeUsers=window.manageCodeUsers||function(){};
+})();
+</script>
+
 </body>
 </html>
