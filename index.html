@@ -10551,5 +10551,83 @@ if(account&&!account.dataset.profileNavV6){
 }
 })();
 </script>
+<script id="ananas-profile-navigation-final-v8">
+(function(){
+'use strict';
+const $=id=>document.getElementById(id);
+
+function capturePoint(){
+ const cid=window.activeCourseId||null;
+ const a=$('courseAssignmentDetailPage'),ch=$('courseChatPage'),fc=$('fullChatPage'),lp=$('courseLessonPlayerPage'),ls=$('courseLessonsPage'),q=$('courseQuizzesPage'),as=$('courseAssignmentsPage'),f=$('courseFilesPage'),d=$('courseDashboard'),ov=$('courseOverviewContainer'),det=$('courseDetailView');
+ const vis=e=>!!e&&(e.classList.contains('active')||e.style.display==='block'||e.style.display==='flex'||e.style.display==='grid');
+ const p={type:'courses',courseId:cid,assignmentId:window.activeAssignmentDetailId||a?.dataset.assignmentId||null,lessonId:window.activeLessonId||null};
+ if(vis(a))p.type='assignment-detail';
+ else if(vis(ch)||vis(fc))p.type='chat';
+ else if(vis(f))p.type='files';
+ else if(vis(lp))p.type='learning';
+ else if(vis(ls))p.type='lessons';
+ else if(vis(q))p.type='quizzes';
+ else if(vis(as))p.type='assignments';
+ else if(vis(d))p.type='dashboard';
+ else if(vis(ov)&&vis(det))p.type='overview';
+ return p;
+}
+function closeProfiles(){
+ ['userProfilePage','ananasV10ProfilePage','ananasPrivateProfileOverlay'].forEach(id=>{const e=$(id);if(e){e.classList.remove('active');e.style.setProperty('display','none','important')}});
+ $('ananasCanonicalProfilePage')?.classList.remove('active');
+}
+function go(point){
+ const p=point||{type:'courses',courseId:null};closeProfiles();const cid=p.courseId||window.activeCourseId||null;
+ if(p.type==='courses'||!cid){window.mobileNavigate?.('courses');$('coursesNavBtn')?.classList.add('active');return;}
+ window.activeCourseId=cid;
+ if(p.type==='assignment-detail'&&p.assignmentId){window.openAssignmentDetail?.(cid,p.assignmentId);return;}
+ const map={dashboard:'dashboard',assignments:'assignments',quizzes:'quizzes',lessons:'lessons',learning:'learning',chat:'chat',overview:'overview',files:'files'};
+ window.switchCoursePage?.(map[p.type]||'dashboard');
+ if(p.type==='learning'&&p.lessonId)setTimeout(()=>window.openLessonPlayer?.(cid,p.lessonId),80);
+}
+window.__profileNavV2=window.__profileNavV2||{selfReturn:null,currentReturn:null,currentUid:null,currentIsSelf:false};
+window.__profileNavV2BeforeOpen=function(uid,isSelf){
+ const n=window.__profileNavV2,ctx=window.__ananasProfileOpenContext||null,self=uid===window.currentUser?.uid||!!isSelf;
+ window.__ananasProfileOpenContext=null;
+ if(ctx==='admin-directory'&&!self){n.currentReturn={kind:'self-profile'};}
+ else if(ctx==='chat'){n.currentReturn={kind:'page',point:{type:'chat',courseId:window.activeCourseId||null}};}
+ else if(ctx==='assignment-detail'){n.currentReturn={kind:'page',point:{type:'assignment-detail',courseId:window.activeCourseId||null,assignmentId:window.activeAssignmentDetailId||$('courseAssignmentDetailPage')?.dataset.assignmentId||null}};}
+ else if(self){if(!$('ananasCanonicalProfilePage')?.classList.contains('active'))n.selfReturn=capturePoint();n.currentReturn={kind:'page',point:n.selfReturn||{type:'courses',courseId:null}};}
+ else {n.currentReturn={kind:'page',point:capturePoint()};}
+ n.currentUid=uid;n.currentIsSelf=self;
+};
+window.__profileNavV2Back=function(){
+ const n=window.__profileNavV2,r=n.currentReturn;
+ if(!r){go(n.selfReturn);n.currentUid=window.currentUser?.uid||null;n.currentIsSelf=true;return;}
+ if(r.kind==='self-profile'){
+   n.currentReturn={kind:'page',point:n.selfReturn||{type:'courses',courseId:null}};n.currentUid=window.currentUser?.uid||null;n.currentIsSelf=true;
+   window.__ananasProfileOpenContext='restore-self';window.__openCanonicalProfile?.(window.currentUser?.uid,true);window.__ananasProfileOpenContext=null;return;
+ }
+ const p=r.point||n.selfReturn||{type:'courses',courseId:null};n.currentReturn={kind:'page',point:n.selfReturn||p};n.currentUid=window.currentUser?.uid||null;n.currentIsSelf=true;go(p);
+};
+function forceAliases(){
+ const c=window.__openCanonicalProfile;if(!c)return;
+ window.openUserProfilePage=()=>window.currentUser?c(window.currentUser.uid,true):undefined;
+ window.openPublicProfileFinal=uid=>uid?c(uid,uid===window.currentUser?.uid):undefined;
+ window.openAnanasV10Profile=uid=>uid?c(uid,uid===window.currentUser?.uid):undefined;
+ window.viewProfileByUserId=uid=>uid?c(uid,uid===window.currentUser?.uid):undefined;
+ window.openStudentProfile=window.openPublicProfileFinal;
+ window.openChatProfileV13=uid=>uid?c(uid,uid===window.currentUser?.uid):undefined;
+ window.openChatProfileV12=window.openChatProfileV13;
+}
+forceAliases();
+function bindBack(){const b=$('acpBack');if(!b)return;b.onclick=e=>{e.preventDefault();e.stopImmediatePropagation();window.__profileNavV2Back();};}
+bindBack();new MutationObserver(bindBack).observe(document.documentElement,{childList:true,subtree:true});
+const account=$('authToggleBtn');if(account&&!account.dataset.profileNavV8){account.dataset.profileNavV8='1';account.addEventListener('click',e=>{if(!window.currentUser)return;e.preventDefault();e.stopImmediatePropagation();window.__ananasProfileOpenContext='self';window.openUserProfilePage?.();},true);}
+document.addEventListener('click',e=>{
+ const b=e.target.closest?.('.assignment-submitter[data-profile-uid],.assignment-v2-submitter[data-profile-uid],[data-assignment-profile-uid]');if(!b)return;const uid=b.dataset.profileUid||b.dataset.assignmentProfileUid;if(!uid)return;e.preventDefault();e.stopImmediatePropagation();window.__ananasProfileOpenContext='assignment-detail';window.openPublicProfileFinal?.(uid);
+},true);
+document.addEventListener('click',e=>{
+ const n=e.target.closest?.('.chat-msg .chat-profile-avatar,.chat-msg .chat-profile-name,.chat-msg .msg-header .u');if(!n)return;const msg=n.closest('.chat-msg');let uid=n.dataset.profileUid||n.closest('[data-profile-uid]')?.dataset.profileUid;const cid=window.activeCourseId||null;
+ if(!uid&&msg?.dataset.messageId&&cid){e.preventDefault();e.stopImmediatePropagation();db.collection('courses').doc(cid).collection('chat').doc(msg.dataset.messageId).get().then(s=>{const id=s.data()?.userId;if(!id)return;window.__ananasProfileOpenContext='chat';window.openPublicProfileFinal?.(id);}).catch(console.error);return;}
+ if(uid){e.preventDefault();e.stopImmediatePropagation();window.__ananasProfileOpenContext='chat';window.openPublicProfileFinal?.(uid);}
+},true);
+})();
+</script>
 </body>
 </html>
