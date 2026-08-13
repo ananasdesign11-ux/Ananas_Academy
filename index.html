@@ -4198,7 +4198,7 @@ label[for*="En"], input[id*="En"], textarea[id*="En"] { display:none !important;
                     const urls=[]; for(const file of files){const url=await uploadImage(file); if(!url)throw Error('upload'); urls.push(url);}
                     const latest=await getAssignmentData(courseId,assignmentId); if(!latest)return;
                     const submissions=Array.isArray(latest.data.submissions)?[...latest.data.submissions]:[];
-                    submissions.push({workId:(crypto.randomUUID?crypto.randomUUID():`work_${Date.now()}_${Math.random().toString(36).slice(2)}`),userId:currentUser.uid,userName:currentUser.displayName||'طالب',images:urls,approved:false,xpGranted:false,allowZoom:true,uploadedAt:new Date().toISOString()});
+                    submissions.push({workId:(crypto.randomUUID?crypto.randomUUID():`work_${Date.now()}_${Math.random().toString(36).slice(2)}`),userId:currentUser.uid,userName:currentUser.displayName||'طالب',images:urls,approved:false,xpGranted:false,uploadedAt:new Date().toISOString()});
                     await latest.ref.update({submissions});
                     await refreshAssignmentDetail(courseId,assignmentId); loadAssignmentsPage(courseId);
                 }catch(err){console.error(err);st.textContent='فشل رفع الصور.';}
@@ -7336,7 +7336,7 @@ label[for*="En"], input[id*="En"], textarea[id*="En"] { display:none !important;
   let __courseStateWriting=false;
   let __courseStateQueued=false;
   function __stateRef(courseId){
-    if(!window.db || !currentUser || !courseId) return null;
+    if(!window.db || !window.currentUser || !courseId) return null;
     return db.collection('users').doc(currentUser.uid).collection('courseState').doc(courseId);
   }
   function __buildCourseState(){
@@ -8216,7 +8216,7 @@ body.light-mode .logo-img{content:url('https://i.postimg.cc/q7Frnj7k/image.png')
       const workId=card.dataset.workId, assignmentId=card.closest?.('[data-assignment-id]')?.dataset.assignmentId;
       const courseId=window.activeCourseId||'';
       const uid=card.dataset.userId;
-      if(!isAdmin && uid!==currentUser?.uid)return;
+      if(!isAdmin && uid!==window.currentUser?.uid)return;
       if(actions.querySelector('[data-unified-edit-work]'))return;
       const btn=document.createElement('button');btn.type='button';btn.dataset.unifiedEditWork='1';btn.innerHTML='<i class="fas fa-pen"></i> تعديل';
       btn.onclick=()=>{if(typeof window.editAssignmentWork==='function'&&courseId&&assignmentId&&workId)window.editAssignmentWork(courseId,assignmentId,workId);};
@@ -8239,7 +8239,7 @@ body.light-mode .logo-img{content:url('https://i.postimg.cc/q7Frnj7k/image.png')
 
   /* Direct work upload from own profile, without adding a new subsystem. */
   window.openProfileWorkUpload=function(){
-    if(!currentUser){window.triggerAuth?.();return;}
+    if(!window.currentUser){window.triggerAuth?.();return;}
     if(!window.activeCourseId){window.mobileNavigate?.('courses');return;}
     if(typeof window.openAssignmentDetail==='function'){
       const message='لإضافة عمل، افتح الواجب المطلوب من صفحة الواجبات ثم استخدم زر إضافة صور العمل.';
@@ -8316,7 +8316,7 @@ body.light-mode .logo-img{content:url('https://i.postimg.cc/q7Frnj7k/image.png')
      const ref=db.collection('courses').doc(courseId).collection('assignments').doc(assignmentId),snap=await ref.get();if(!snap.exists)throw Error('assignment-missing');
      const a=snap.data()||{},urls=[];for(const f of files){const u=await uploadImage(f);if(!u)throw Error('upload');urls.push(u);}
      const submissions=Array.isArray(a.submissions)?[...a.submissions]:[];
-     submissions.push({workId:(crypto.randomUUID?crypto.randomUUID():`work_${Date.now()}_${Math.random().toString(36).slice(2)}`),userId:currentUser.uid,userName:currentUser.displayName||'طالب',images:urls,approved:false,xpGranted:false,allowZoom:true,uploadedAt:new Date().toISOString()});
+     submissions.push({workId:(crypto.randomUUID?crypto.randomUUID():`work_${Date.now()}_${Math.random().toString(36).slice(2)}`),userId:currentUser.uid,userName:currentUser.displayName||'طالب',images:urls,approved:false,xpGranted:false,uploadedAt:new Date().toISOString()});
      await ref.update({submissions});
      m.classList.remove('active');await window.openUserProfilePage?.();showCustomAlert('تم الرفع','تمت إضافة العمل إلى الواجب بنجاح.');
    }catch(e){console.error(e);status.textContent='تعذر رفع العمل.';showCustomAlert('خطأ','تعذر رفع العمل.');}
@@ -8608,7 +8608,7 @@ async function savePersonalWork(){
  const title=$('v10WorkTitle').value.trim(),desc=$('v10WorkDescription').value.trim(),type=$('v10WorkType').value,files=[...($('v10WorkFiles').files||[])],btn=$('v10WorkSave'),status=$('v10WorkStatus');
  if(!title)return showCustomAlert('تنبيه','اكتب عنوان العمل.');if(!files.length)return showCustomAlert('تنبيه','اختر صورة واحدة على الأقل.');
  btn.disabled=true;status.textContent='جاري رفع العمل...';
- try{const images=[];for(const file of files){const u=await uploadImage(file);if(!u)throw Error('upload');images.push(u)}await db.collection('users').doc(currentUser.uid).collection('portfolioWorks').add({title,description:desc,type,images,allowZoom:true,createdAt:firebase.firestore.FieldValue.serverTimestamp(),deleted:false});$('ananasV10PortfolioModal').classList.remove('active');showCustomAlert('تمت الإضافة','تمت إضافة العمل إلى معرضك الشخصي.');if(window.refreshAnanasV10Profile)await window.refreshAnanasV10Profile(currentUser.uid,true);}catch(e){console.error(e);status.textContent='تعذر إضافة العمل.';showCustomAlert('خطأ','تعذر إضافة العمل.')}finally{btn.disabled=false}
+ try{const images=[];for(const file of files){const u=await uploadImage(file);if(!u)throw Error('upload');images.push(u)}await db.collection('users').doc(currentUser.uid).collection('portfolioWorks').add({title,description:desc,type,images,createdAt:firebase.firestore.FieldValue.serverTimestamp(),deleted:false});$('ananasV10PortfolioModal').classList.remove('active');showCustomAlert('تمت الإضافة','تمت إضافة العمل إلى معرضك الشخصي.');if(window.refreshAnanasV10Profile)await window.refreshAnanasV10Profile(currentUser.uid,true);}catch(e){console.error(e);status.textContent='تعذر إضافة العمل.';showCustomAlert('خطأ','تعذر إضافة العمل.')}finally{btn.disabled=false}
 }
 window.openPersonalPortfolioAdd=()=>{if(!currentUser)return triggerAuth?.();const m=ensurePortfolioModal();$('v10WorkTitle').value='';$('v10WorkType').value='تصميم';$('v10WorkDescription').value='';$('v10WorkFiles').value='';$('v10WorkFilesName').textContent='لم يتم اختيار صور';$('v10WorkStatus').textContent='';m.classList.add('active')};
 
@@ -9245,7 +9245,7 @@ const $=id=>document.getElementById(id);
 const esc2=window.escapeHtml||((v)=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])));
 const fmt2=v=>{try{const d=v?.toDate?v.toDate():(v?new Date(v):null);return d&&!isNaN(d)?d.toLocaleDateString('ar-SA',{year:'numeric',month:'long',day:'numeric'}):'—'}catch(_){return '—'}};
 let __adminResolved=null;
-async function resolveAdmin(){if(__adminResolved!==null)return __adminResolved;try{const s=await db.collection('admins').doc('main').get();const emails=(s.data()?.adminEmails||[]).map(x=>String(x).trim().toLowerCase());__adminResolved=!!currentUser&&emails.includes(String(currentUser.email||'').trim().toLowerCase());if(__adminResolved)isAdmin=true;return __adminResolved}catch(_){__adminResolved=!!isAdmin;return __adminResolved}}
+async function resolveAdmin(){if(__adminResolved!==null)return __adminResolved;try{const s=await db.collection('admins').doc('main').get();const emails=(s.data()?.adminEmails||[]).map(x=>String(x).trim().toLowerCase());__adminResolved=!!currentUser&&emails.includes(String(currentUser.email||'').trim().toLowerCase());if(__adminResolved)window.isAdmin=true;return __adminResolved}catch(_){__adminResolved=!!window.isAdmin;return __adminResolved}}
 function hideLegacyProfiles(){['userProfilePage','ananasV10ProfilePage','ananasPrivateProfileOverlay'].forEach(id=>{const el=$(id);if(el){el.classList.remove('active');el.style.setProperty('display','none','important')}})}
 function ensureCanonical(){
  let p=$('ananasCanonicalProfilePage');if(p)return p;p=document.createElement('div');p.id='ananasCanonicalProfilePage';
@@ -9270,8 +9270,8 @@ const account=document.getElementById('authToggleBtn');if(account)account.addEve
 const $=id=>document.getElementById(id);
 const escV17=window.escapeHtml||((v)=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])));
 const fmtV17=v=>{try{const d=v?.toDate?v.toDate():(v?new Date(v):null);return d&&!isNaN(d)?d.toLocaleDateString('ar-SA',{year:'numeric',month:'long',day:'numeric'}):'—'}catch(_){return '—'}};
-function adminFlag(){return (typeof isAdmin!=='undefined'&&isAdmin===true)||(typeof isAdmin!=='undefined'&&isAdmin===true);}
-async function isCurrentAdmin(){if(adminFlag())return true;try{if(!currentUser)return false;const s=await db.collection('admins').doc('main').get();const emails=(s.data()?.adminEmails||[]).map(x=>String(x).trim().toLowerCase());const ok=emails.includes(String(currentUser.email||'').trim().toLowerCase());if(ok)isAdmin=true;return ok;}catch(_){return false;}}
+function adminFlag(){return (typeof window.isAdmin!=='undefined'&&window.isAdmin===true)||(typeof isAdmin!=='undefined'&&isAdmin===true);}
+async function isCurrentAdmin(){if(adminFlag())return true;try{if(!currentUser)return false;const s=await db.collection('admins').doc('main').get();const emails=(s.data()?.adminEmails||[]).map(x=>String(x).trim().toLowerCase());const ok=emails.includes(String(currentUser.email||'').trim().toLowerCase());if(ok)window.isAdmin=true;return ok;}catch(_){return false;}}
 function hideAllProfilesV17(){['userProfilePage','ananasV10ProfilePage','ananasPrivateProfileOverlay','ananasCanonicalProfilePage'].forEach(id=>{const e=$(id);if(e){e.classList.remove('active');if(id!=='ananasCanonicalProfilePage')e.style.setProperty('display','none','important')}})}
 function ensureV17Page(){
  let p=$('ananasCanonicalProfilePage');
@@ -9344,417 +9344,224 @@ document.addEventListener('click',async e=>{const n=e.target.closest?.('.chat-ms
 </script>
 
 
-<style id="ananas-v18-final-css">
-#authToggleBtn.has-account-avatar{display:inline-flex!important;align-items:center!important;gap:8px!important;padding:7px 12px!important;min-height:44px!important}
-#authToggleBtn .v18-auth-avatar{width:32px;height:32px;border-radius:50%;overflow:hidden;display:grid;place-items:center;background:var(--accent-gradient);color:#fff;font-weight:900;flex:0 0 32px;border:1px solid rgba(255,255,255,.15);box-shadow:0 4px 14px rgba(0,0,0,.14)}
-#authToggleBtn .v18-auth-avatar img{width:100%;height:100%;object-fit:cover;display:block}
-#authToggleBtn .v18-auth-name{max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-#chatPageMessagesList,#fullChatMessagesList{scroll-behavior:smooth;position:relative}
-.v18-chat-msg{display:flex!important;align-items:flex-start!important;gap:7px!important;margin:5px 8px!important;padding:0!important;background:transparent!important;border:0!important;box-shadow:none!important;width:auto!important;max-width:100%!important}
-.v18-chat-msg.sent{justify-content:flex-start!important}.v18-msg-profile.mine-profile{opacity:.82}
-.v18-chat-msg.received{justify-content:flex-end!important}
-.v18-chat-bubble{max-width:min(78%,720px);padding:7px 10px 6px!important;border-radius:15px!important;border:1px solid var(--border)!important;box-shadow:0 3px 12px rgba(0,0,0,.05)!important;background:var(--bg-secondary)!important;min-height:0!important}
-.v18-chat-msg.sent .v18-chat-bubble{background:var(--chat-bubble-mine)!important;color:var(--chat-bubble-mine-text)!important;border-color:transparent!important}
-.v18-chat-msg.received .v18-chat-bubble{background:var(--chat-bubble-others)!important;color:var(--chat-bubble-others-text)!important}
-.v18-chat-msg .t{font-size:.88rem!important;line-height:1.55!important;white-space:pre-wrap;word-break:break-word}
-.v18-msg-profile{display:flex!important;align-items:center!important;gap:6px!important;border:0!important;background:transparent!important;color:var(--text-primary)!important;padding:2px!important;cursor:pointer!important;font:inherit!important;max-width:180px!important;flex:0 0 auto!important}
-.v18-msg-avatar{width:32px;height:32px;border-radius:50%;overflow:hidden;display:grid;place-items:center;background:var(--accent-gradient);color:#fff;font-size:.72rem;font-weight:900;flex:0 0 32px;border:1px solid var(--border)}
-.v18-msg-avatar img{width:100%;height:100%;object-fit:cover;display:block}
-.v18-msg-profile .u{font-size:.74rem!important;font-weight:900!important;max-width:105px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.v18-msg-actions{display:flex!important;align-items:center!important;justify-content:flex-start!important;gap:3px!important;margin-top:3px!important;opacity:.76}
-.v18-msg-actions button{width:25px!important;height:25px!important;padding:0!important;border-radius:8px!important;border:0!important;background:transparent!important;color:inherit!important;display:grid!important;place-items:center!important;cursor:pointer!important;font-size:.7rem!important}
-.v18-msg-actions button:hover{background:rgba(127,127,127,.14)!important;opacity:1}
-.v18-pin-btn.active{color:#f5a623!important;background:rgba(245,166,35,.12)!important}
-.v18-chat-msg .msg-time{font-size:.62rem!important;opacity:.58!important;margin-top:2px!important}
-.v18-reply-block{display:flex!important;flex-direction:column!important;gap:1px!important;width:100%!important;min-height:0!important;padding:5px 7px!important;margin-bottom:5px!important;border:0!important;border-inline-start:3px solid var(--accent1)!important;border-radius:8px!important;background:rgba(108,92,231,.09)!important;color:inherit!important;text-align:start!important;cursor:pointer!important;font:inherit!important}
-.v18-reply-block .ru{font-weight:900!important;font-size:.69rem!important}
-.v18-reply-block .rt{font-size:.7rem!important;opacity:.78!important;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.v18-pinned-badge,.v18-work-lock{display:inline-flex;align-items:center;gap:5px;font-size:.66rem;font-weight:900;color:#f5a623;margin-bottom:4px}
-.v18-deleted-text{font-style:italic!important;color:var(--text-muted)!important}
-.v18-deleted-admin{font-size:.68rem;color:#e74c3c;font-weight:900;margin-bottom:4px}
-.v18-chat-msg.is-pinned .v18-chat-bubble{border-color:rgba(245,166,35,.5)!important;box-shadow:0 7px 18px rgba(245,166,35,.09)!important}
-.v18-highlight-message .v18-chat-bubble{animation:v18ChatHighlight 1.8s ease}
-@keyframes v18ChatHighlight{0%,100%{box-shadow:0 0 0 0 rgba(108,92,231,0)}15%,65%{box-shadow:0 0 0 6px rgba(108,92,231,.18),0 12px 35px rgba(108,92,231,.12)}}
-.v18-chat-date{text-align:center;margin:9px 0!important;font-size:.68rem!important;color:var(--text-muted)!important}.v18-chat-date span{display:inline-block;padding:4px 10px;border-radius:999px;background:var(--bg-card);border:1px solid var(--border)}
-.v18-chat-loading,.v18-chat-empty,.v18-chat-error{text-align:center;padding:28px;color:var(--text-muted);font-size:.82rem}
-.ananas-chat-jump-last-v18{position:fixed;right:24px;bottom:90px;z-index:24000;display:none;align-items:center;gap:7px;padding:9px 13px;border:1px solid var(--border);background:var(--bg-card);color:var(--text-primary);border-radius:999px;box-shadow:0 12px 30px rgba(0,0,0,.18);cursor:pointer;font:inherit;font-weight:900}
-.ananas-chat-jump-last-v18.show{display:inline-flex}.ananas-chat-jump-last-v18 i{color:var(--accent1)}
-.v18-work-actions{display:flex;gap:7px;flex-wrap:wrap;margin-top:10px}.v18-work-view-btn,.v18-work-lock-btn{border:1px solid var(--border);background:var(--bg-secondary);color:var(--text-primary);padding:8px 11px;border-radius:11px;cursor:pointer;font:inherit;font-weight:900;font-size:.76rem}.v18-work-view-btn:hover,.v18-work-lock-btn:hover{border-color:var(--accent1);color:var(--accent1)}.v18-work-view-btn:disabled{opacity:.48;cursor:not-allowed;border-style:dashed}.v18-work-lock-btn{background:rgba(108,92,231,.07)}
-.v18-work-card .acp-work-cover{height:160px!important}.v18-work-card .acp-work-body{padding:13px!important}.v18-work-card .acp-work-meta{font-size:.74rem!important}
-#ananasWorkZoomNoticeV18 .ananas-modal-card{max-width:520px}
-@media(max-width:700px){#authToggleBtn .v18-auth-name{max-width:90px}.v18-chat-bubble{max-width:84%}.v18-msg-profile .u{display:none}.ananas-chat-jump-last-v18{right:14px;bottom:86px}.v18-work-actions>*{flex:1 1 100%}}
+<!-- ===== USER REQUEST PATCH: account identity + compact chat + profile return ===== -->
+<style id="ananas-user-request-patch">
+/* 1) Logged-in account button: avatar + account name */
+#authToggleBtn.ananas-account-identity{
+  min-height:42px;
+  padding:5px 10px 5px 12px!important;
+  gap:8px!important;
+  border-radius:999px!important;
+  justify-content:center;
+  white-space:nowrap;
+}
+#authToggleBtn.ananas-account-identity .ananas-account-avatar{
+  width:32px;
+  height:32px;
+  border-radius:50%;
+  overflow:hidden;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  flex:0 0 32px;
+  background:var(--accent-gradient);
+  color:#fff;
+  font-size:.82rem;
+  font-weight:900;
+  border:1px solid rgba(255,255,255,.22);
+  box-shadow:0 4px 12px rgba(0,0,0,.12);
+}
+#authToggleBtn.ananas-account-identity .ananas-account-avatar img{
+  width:100%;height:100%;object-fit:cover;display:block;
+}
+#authToggleBtn.ananas-account-identity .ananas-account-name{
+  max-width:170px;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  font-size:.88rem;
+  font-weight:900;
+  line-height:1;
+}
+@media(max-width:768px){
+  #authToggleBtn.ananas-account-identity{padding:4px 8px!important;min-height:40px}
+  #authToggleBtn.ananas-account-identity .ananas-account-avatar{width:30px;height:30px;flex-basis:30px}
+  #authToggleBtn.ananas-account-identity .ananas-account-name{max-width:105px;font-size:.78rem}
+}
+
+/* 2) Chat: smaller, denser WhatsApp-like message cards while keeping avatar + name */
+#fullChatPage .chat-messages-list,
+#courseChatPage .chat-messages-list,
+#chatPageMessagesList,
+#fullChatMessagesList{
+  gap:2px!important;
+  padding:7px!important;
+}
+#fullChatPage .chat-msg,
+#courseChatPage .chat-msg,
+#chatPageMessagesList .chat-msg,
+#fullChatMessagesList .chat-msg{
+  max-width:min(72%,620px)!important;
+  padding:5px 9px!important;
+  margin-bottom:2px!important;
+  border-radius:11px!important;
+  box-shadow:0 1px 2px rgba(0,0,0,.06);
+}
+#fullChatPage .chat-msg.sent,
+#courseChatPage .chat-msg.sent,
+#chatPageMessagesList .chat-msg.sent,
+#fullChatMessagesList .chat-msg.sent{border-bottom-left-radius:4px!important}
+#fullChatPage .chat-msg.received,
+#courseChatPage .chat-msg.received,
+#chatPageMessagesList .chat-msg.received,
+#fullChatMessagesList .chat-msg.received{border-bottom-right-radius:4px!important}
+.chat-profile-head{
+  gap:6px!important;
+  margin-bottom:3px!important;
+  min-height:25px!important;
+}
+.chat-profile-avatar{
+  width:24px!important;
+  height:24px!important;
+  flex-basis:24px!important;
+  border-width:1px!important;
+}
+.chat-profile-name{
+  font-size:.74rem!important;
+  line-height:1.1!important;
+  font-weight:900!important;
+}
+.chat-msg .msg-header{min-height:25px!important;gap:6px!important}
+.chat-msg .msg-header .u{font-size:.74rem!important;line-height:1.1!important}
+.chat-msg .t{font-size:.84rem!important;line-height:1.3!important}
+.chat-msg .msg-time{font-size:.60rem!important;margin-top:2px!important}
+.chat-msg .msg-actions{gap:5px!important;margin-top:2px!important}
+.chat-msg .msg-actions button{font-size:.68rem!important}
+.reply-block{padding:4px 7px!important;border-radius:6px!important;margin-bottom:3px!important}
+.reply-block .ru{font-size:.66rem!important}
+.reply-block .rt{font-size:.70rem!important}
+.chat-msg img{max-width:150px!important;max-height:150px!important;border-radius:7px!important;margin-top:3px!important}
+.chat-msg .message-gallery{gap:3px!important;margin-top:3px!important}
+.chat-msg .message-gallery img{width:80px!important;height:80px!important;object-fit:cover!important}
+
+/* 3) Profile navigation: the back button can return to the owner's profile */
+#userProfilePage #profilePageClose{position:relative;z-index:3}
 </style>
-
-<script id="ananas-v18-final-patch">
-/* ===== ANANAS ACADEMY V18 - FINAL USER REQUEST PATCH (10 ITEMS) ===== */
+<script id="ananas-user-request-patch-script">
 (function(){
-'use strict';
-const $=id=>document.getElementById(id);
-const escV18=v=>String(v??'').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+  'use strict';
+  const $=id=>document.getElementById(id);
+  const esc=v=>String(v??'').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
 
-/* -------------------------------------------------------------
-   1) Login button becomes avatar + account name after sign-in.
-   ------------------------------------------------------------- */
-function updateAuthAccountButtonV18(){
-  const btn=$('authToggleBtn');
-  if(!btn)return;
-  if(!currentUser){
-    btn.innerHTML=`<i class="fas fa-user"></i><span id="authLabel">تسجيل الدخول</span>`;
-    btn.classList.remove('has-account-avatar');
-    return;
+  /* ---------- 1. Logged-in account identity ---------- */
+  function getProfilePhoto(user,profile){
+    return profile?.photoURL || profile?.photoUrl || profile?.photo || user?.photoURL || '';
   }
-  const p=currentUserProfile||{};
-  const name=p.displayName||p.name||currentUser.displayName||'حسابي';
-  const photo=p.photoURL||p.photoUrl||p.photo||currentUser.photoURL||'';
-  btn.classList.add('has-account-avatar');
-  btn.innerHTML=`<span class="v18-auth-avatar">${photo?`<img src="${escV18(photo)}" alt="">`:`<span>${escV18(name.slice(0,1)||'م')}</span>`}</span><span id="authLabel" class="v18-auth-name">${escV18(name)}</span>`;
-}
-
-/* -------------------------------------------------------------
-   2) Smaller, cleaner chat cards with avatar + name.
-   3/6/7/8/9/10) Profile/chat navigation, reply jump, last-message
-   button, auto-bottom, and admin pinning.
-   ------------------------------------------------------------- */
-let v18ActiveChatContainer=null;
-let v18ChatProfilesCache=Object.create(null);
-let v18ChatLastCount=0;
-let v18ForceChatBottom=false;
-
-function ensureChatJumpButtonV18(){
-  let b=$('ananasChatJumpLastV18');
-  if(b)return b;
-  b=document.createElement('button');
-  b.id='ananasChatJumpLastV18';
-  b.type='button';
-  b.className='ananas-chat-jump-last-v18';
-  b.innerHTML='<i class="fas fa-arrow-down"></i><span>آخر رسالة</span>';
-  b.title='الانتقال إلى آخر رسالة';
-  b.onclick=()=>{
-    if(v18ActiveChatContainer){
-      v18ActiveChatContainer.scrollTo({top:v18ActiveChatContainer.scrollHeight,behavior:'smooth'});
-      b.classList.remove('show');
+  function getProfileName(user,profile){
+    return profile?.displayName || profile?.name || user?.displayName || 'مستخدم';
+  }
+  function renderLoggedInAccountButton(user,profile){
+    const btn=$('authToggleBtn');
+    if(!btn)return;
+    if(!user){
+      btn.classList.remove('ananas-account-identity');
+      btn.innerHTML=`<i class="fas fa-user"></i> <span id="authLabel">تسجيل الدخول</span>`;
+      btn.removeAttribute('title');
+      return;
     }
-  };
-  document.body.appendChild(b);
-  return b;
-}
-function chatNearBottomV18(el){return !!el && (el.scrollHeight-el.scrollTop-el.clientHeight)<90;}
-function bindChatScrollV18(container){
-  if(!container||container.dataset.v18ScrollBound==='1')return;
-  container.dataset.v18ScrollBound='1';
-  container.addEventListener('scroll',()=>{
-    v18ActiveChatContainer=container;
-    const b=ensureChatJumpButtonV18();
-    b.classList.toggle('show',!chatNearBottomV18(container) && container.scrollHeight>container.clientHeight+80);
-  },{passive:true});
-}
-function scrollChatBottomV18(container,force){
-  if(!container)return;
-  v18ActiveChatContainer=container;
-  bindChatScrollV18(container);
-  requestAnimationFrame(()=>{
-    if(force || chatNearBottomV18(container) || v18ForceChatBottom){
-      container.scrollTop=container.scrollHeight;
-      ensureChatJumpButtonV18().classList.remove('show');
-    }
-    v18ForceChatBottom=false;
-  });
-}
-async function chatProfileV18(uid,fallbackName){
-  if(!uid)return {name:fallbackName||'زائر',photo:''};
-  if(v18ChatProfilesCache[uid])return v18ChatProfilesCache[uid];
-  try{
-    const s=await db.collection('users').doc(uid).get();
-    const p=s.exists?(s.data()||{}):{};
-    const out={name:p.displayName||p.name||fallbackName||'زائر',photo:p.photoURL||p.photoUrl||p.photo||''};
-    v18ChatProfilesCache[uid]=out;return out;
-  }catch(e){return {name:fallbackName||'زائر',photo:''};}
-}
-function chatAvatarV18(profile){return profile.photo?`<img src="${escV18(profile.photo)}" alt="">`:`<span>${escV18((profile.name||'م').slice(0,1))}</span>`;}
-function formatChatDateV18(v){
-  try{
-    const d=v?.toDate?v.toDate():(v?.seconds?new Date(v.seconds*1000):(v?new Date(v):new Date()));
-    return {d,dateKey:d.toLocaleDateString('ar-SA',{year:'numeric',month:'long',day:'numeric'}),time:d.toLocaleTimeString('ar-SA',{hour:'2-digit',minute:'2-digit'})};
-  }catch(e){return {d:new Date(),dateKey:'اليوم',time:''};}
-}
-function replyBlockV18(m){
-  if(!m.replyToText && !m.replyToId)return '';
-  const target=m.replyToId||'';
-  return `<button type="button" class="v18-reply-block" ${target?`onclick="goToChatMessageV18('${escV18(target)}')"`:''} title="الانتقال إلى الرسالة الأصلية"><span class="ru">${escV18(m.replyToName||'زائر')}</span><span class="rt">${escV18(m.replyToText||'')}</span></button>`;
-}
-function chatActionsV18(){ return ''; }
-function messageUserNameCacheV18(){return '';}
-function buildChatMessageV18(courseId,doc,m,profiles,uid){
-  const mine=m.userId===uid;
-  const profile=profiles[m.userId]||{name:m.userName||'زائر',photo:''};
-  const deleted=!!m.deleted;
-  const {time}=formatChatDateV18(m.createdAt);
-  const images=Array.isArray(m.imageUrls)?m.imageUrls:(m.imageUrl?[m.imageUrl]:[]);
-  const pinned=!!m.pinned;
-  let body='';
-  if(deleted&&!isAdmin) body='<div class="t v18-deleted-text"><i class="fas fa-ban"></i> هذه الرسالة محذوفة</div>';
-  else body=`${deleted?'<div class="v18-deleted-admin"><i class="fas fa-trash"></i> تم حذف هذه الرسالة</div>':''}<div class="t">${escV18(m.message||'')}${m.edited?'<span class="edited-label">(معدلة)</span>':''}</div>${images.length&&!deleted?`<div class="message-gallery">${images.map(u=>`<img src="${escV18(u)}" alt="صورة" onclick="openChatMessageGallery('${escV18(courseId)}','${escV18(doc.id)}')">`).join('')}</div>`:''}`;
-  const actions=[];
-  actions.push(`<button type="button" onclick='replyTo(${JSON.stringify(doc.id)},${JSON.stringify(profile.name)},${JSON.stringify((m.message||'').slice(0,120))})' title="رد"><i class="fas fa-reply"></i></button>`);
-  if(mine) actions.push(`<button type="button" onclick="editChatMessage('${escV18(courseId)}','${escV18(doc.id)}')" title="تعديل"><i class="fas fa-edit"></i></button>`);
-  if(mine||isAdmin) actions.push(`<button type="button" onclick="deleteChatMessage('${escV18(courseId)}','${escV18(doc.id)}')" title="حذف"><i class="fas fa-trash"></i></button>`);
-  if(isAdmin) actions.push(`<button type="button" class="v18-pin-btn ${pinned?'active':''}" onclick="togglePinChatMessageV18('${escV18(courseId)}','${escV18(doc.id)}',${pinned?'false':'true'})" title="${pinned?'إلغاء التثبيت':'تثبيت الرسالة'}"><i class="fas fa-thumbtack"></i></button>`);
-  return `<article class="chat-msg v18-chat-msg ${mine?'sent':'received'} ${deleted?'deleted-message':''} ${pinned?'is-pinned':''}" data-message-id="${escV18(doc.id)}"><button type="button" class="v18-msg-profile ${mine?'mine-profile':''}" data-profile-uid="${escV18(m.userId||'')}" title="فتح ملف ${escV18(profile.name)}"><span class="v18-msg-avatar">${chatAvatarV18(profile)}</span><span class="u">${escV18(mine?'أنت':profile.name)}</span></button><div class="v18-chat-bubble">${pinned?'<div class="v18-pinned-badge"><i class="fas fa-thumbtack"></i> مثبتة</div>':''}${replyBlockV18(m)}${body}<div class="msg-time">${escV18(time)}</div><div class="msg-actions v18-msg-actions">${actions.join('')}</div></div></article>`;
-}
-async function renderChatSnapshotV18(container,snapshot,courseId){
-  if(!container)return;
-  if(snapshot.empty){container.innerHTML='<div class="v18-chat-empty">لا توجد رسائل حتى الآن.</div>';scrollChatBottomV18(container,true);return;}
-  const uid=currentUser?.uid||null;
-  const docs=snapshot.docs||[];
-  const profiles={};
-  const ids=[...new Set(docs.map(d=>(d.data()||{}).userId).filter(Boolean))];
-  await Promise.all(ids.map(async id=>{profiles[id]=await chatProfileV18(id,docs.find(d=>(d.data()||{}).userId===id)?.data()?.userName)}));
-  let html='',lastDate='';
-  docs.forEach(doc=>{
-    const m=doc.data()||{},f=formatChatDateV18(m.createdAt); 
-    if(f.dateKey!==lastDate){html+=`<div class="v18-chat-date"><span>${escV18(f.dateKey)}</span></div>`;lastDate=f.dateKey;}
-    html+=buildChatMessageV18(courseId,doc,m,profiles,uid);
-  });
-  const wasNear=chatNearBottomV18(container);
-  const shouldBottom=v18ForceChatBottom || container.dataset.v18InitialOpen==='1' || wasNear || docs.length>v18ChatLastCount;
-  v18ChatLastCount=docs.length;
-  container.innerHTML=html;
-  bindChatScrollV18(container);
-  if(container.dataset.v18InitialOpen==='1')container.dataset.v18InitialOpen='0';
-  scrollChatBottomV18(container,shouldBottom);
-}
-function subscribeChatContainerV18(container,courseId){
-  if(!container)return;
-  if(chatUnsubscribe){try{chatUnsubscribe()}catch(e){} chatUnsubscribe=null;}
-  container.dataset.v18InitialOpen='1';
-  v18ActiveChatContainer=container;
-  container.innerHTML='<div class="v18-chat-loading">جاري تحميل الرسائل...</div>';
-  chatUnsubscribe=db.collection('courses').doc(courseId).collection('chat').orderBy('createdAt','asc').onSnapshot(s=>renderChatSnapshotV18(container,s,courseId),err=>{console.error(err);container.innerHTML='<div class="v18-chat-error">حدث خطأ في تحميل الدردشة.</div>';});
-}
-window.loadChatPage=function(courseId){subscribeChatContainerV18($('chatPageMessagesList'),courseId)};
-window.loadFullChatForCourse=function(courseId){subscribeChatContainerV18($('fullChatMessagesList'),courseId)};
-window.goToChatMessageV18=function(msgId){
-  const id=String(msgId||'');if(!id)return;
-  const node=document.querySelector(`.chat-msg[data-message-id="${CSS.escape(id)}"]`);
-  if(!node)return;
-  node.scrollIntoView({behavior:'smooth',block:'center'});
-  node.classList.remove('v18-highlight-message');
-  void node.offsetWidth;
-  node.classList.add('v18-highlight-message');
-  setTimeout(()=>node.classList.remove('v18-highlight-message'),1800);
-};
-window.togglePinChatMessageV18=async function(courseId,msgId,pin){
-  if(!isAdmin)return showCustomAlert('غير مسموح','تثبيت الرسائل متاح للمشرف فقط.');
-  try{await db.collection('courses').doc(courseId).collection('chat').doc(msgId).set({pinned:!!pin,pinnedAt:pin?firebase.firestore.FieldValue.serverTimestamp():null,pinnedBy:pin?currentUser?.uid||'':null},{merge:true});}
-  catch(e){console.error(e);showCustomAlert('خطأ','تعذر تحديث تثبيت الرسالة.');}
-};
-
-/* -------------------------------------------------------------
-   3) Profile navigation: from another profile always return to own
-   profile when that profile was opened from the account directory.
-   ------------------------------------------------------------- */
-window.__ananasProfileReturnToSelf=false;
-const baseOpenCanonicalV18=window.__openCanonicalProfile||window.openAnanasV10Profile||window.openPublicProfileFinal;
-if(baseOpenCanonicalV18){
-  window.__openCanonicalProfileV18=async function(uid,isSelf){
-    const target=String(uid||'');
-    if(target && target!==currentUser?.uid){window.__ananasProfileReturnToSelf=true;}
-    else if(target===currentUser?.uid){window.__ananasProfileReturnToSelf=false;}
-    return await baseOpenCanonicalV18.apply(this,arguments);
-  };
-  window.openAnanasV10Profile=window.__openCanonicalProfileV18;
-  window.openPublicProfileFinal=window.__openCanonicalProfileV18;
-  window.viewProfileByUserId=window.__openCanonicalProfileV18;
-  window.__openCanonicalProfile=window.__openCanonicalProfileV18;
-}
-function patchProfileBackV18(){
-  const back=$('acpBack');if(!back)return;
-  const self=String(currentUser?.uid||'');
-  const page=$('ananasCanonicalProfilePage');
-  const name=$('acpName')?.textContent||'';
-  const viewingOther=!!page&&!!name&&name!==(currentUserProfile?.displayName||currentUser?.displayName||'');
-  if(window.__ananasProfileReturnToSelf && viewingOther){
-    back.style.display='inline-flex';back.innerHTML='<i class="fas fa-arrow-right"></i> العودة إلى ملفي';back.title='العودة إلى ملفي الشخصي';back.onclick=async e=>{e.preventDefault();window.__ananasProfileReturnToSelf=false;await (window.openUserProfilePage?.()||window.__openCanonicalProfileV18?.(self,true));};
+    const name=getProfileName(user,profile),photo=getProfilePhoto(user,profile);
+    btn.classList.add('ananas-account-identity');
+    btn.title='فتح الملف الشخصي';
+    btn.innerHTML=`<span class="ananas-account-avatar">${photo?`<img src="${esc(photo)}" alt="${esc(name)}">`:`${esc(name.slice(0,1)||'م')}`}</span><span class="ananas-account-name" id="authLabel">${esc(name)}</span>`;
   }
-}
-document.addEventListener('click',e=>{if(e.target.closest?.('[data-acp-v17-uid],[data-acp-uid],[data-profile-target]'))setTimeout(patchProfileBackV18,150)},true);
-
-/* -------------------------------------------------------------
-   4) Work viewer + per-work zoom lock; admin can always zoom.
-   ------------------------------------------------------------- */
-function ensureWorkViewerNoticeV18(){
-  let m=$('ananasWorkZoomNoticeV18');if(m)return m;
-  m=document.createElement('div');m.id='ananasWorkZoomNoticeV18';m.className='ananas-modal-overlay';
-  m.innerHTML='<div class="ananas-modal-card" style="max-width:500px;text-align:center"><div class="ananas-modal-heading" style="justify-content:center;padding:0"><div class="ananas-modal-heading-icon"><i class="fas fa-lock"></i></div><div><h3>تكبير العمل مقفل</h3><p>صاحب هذا العمل أغلق إمكانية تكبيره. يمكنك رؤيته من المعرض المصغر فقط.</p></div></div><button type="button" class="ananas-primary-btn" id="ananasWorkZoomNoticeClose">فهمت</button></div>';
-  document.body.appendChild(m);$('ananasWorkZoomNoticeClose').onclick=()=>m.classList.remove('active');return m;
-}
-async function openPersonalWorkV18(uid,workId,ownerOnly){
-  const s=await db.collection('users').doc(uid).collection('portfolioWorks').doc(workId).get();if(!s.exists)return;
-  const w=s.data()||{},owner=uid===currentUser?.uid,admin=!!isAdmin;
-  if(!owner&&!admin&&w.allowZoom===false)return ensureWorkViewerNoticeV18().classList.add('active');
-  const images=Array.isArray(w.images)?w.images.filter(Boolean):(w.imageUrl?[w.imageUrl]:[]);
-  if(images.length)window.openPlatformGalleryViewer(images,w.title||'عمل');
-}
-async function openAssignmentWorkV18(courseId,assignmentId,workId){
-  const result=await getAssignmentData(courseId,assignmentId);if(!result)return;
-  const subs=Array.isArray(result.data.submissions)?result.data.submissions:[];
-  const idx=subs.findIndex((s,i)=>submissionWorkId(s,i)===workId);if(idx<0)return;
-  const sub=subs[idx]||{},owner=sub.userId===currentUser?.uid,admin=!!isAdmin;
-  if(!owner&&!admin){
-    if(!sub.approved)return showCustomAlert('غير متاح','هذا العمل قيد المراجعة ولا يمكن فتحه بالحجم الكبير للطلاب.');
-    if(sub.allowZoom===false)return ensureWorkViewerNoticeV18().classList.add('active');
-  }
-  const images=submissionImages(sub);if(images.length)window.openPlatformGalleryViewer(images,`${sub.userName||'عمل مرفوع'}${sub.approved?' — معتمد':' — قيد المراجعة'}`);
-}
-window.openAssignmentWorkViewer=window.openAssignmentWorkViewer||openAssignmentWorkV18;
-window.openPersonalPortfolioViewerV18=openPersonalWorkV18;
-window.openAssignmentWorkViewerV18=openAssignmentWorkV18;
-async function togglePersonalWorkZoomV18(uid,workId){
-  if(uid!==currentUser?.uid)return showCustomAlert('غير مسموح','يمكن لصاحب العمل فقط تغيير إعداد التكبير.');
-  const ref=db.collection('users').doc(uid).collection('portfolioWorks').doc(workId),s=await ref.get();if(!s.exists)return;
-  await ref.set({allowZoom:s.data()?.allowZoom===false?true:false,updatedAt:firebase.firestore.FieldValue.serverTimestamp()},{merge:true});
-  await window.openUserProfilePage?.();
-}
-async function toggleAssignmentWorkZoomV18(courseId,assignmentId,workId){
-  if(!currentUser)return;
-  const result=await getAssignmentData(courseId,assignmentId);if(!result)return;
-  const subs=Array.isArray(result.data.submissions)?[...result.data.submissions]:[];const idx=subs.findIndex((s,i)=>submissionWorkId(s,i)===workId);if(idx<0)return;
-  if(subs[idx].userId!==currentUser.uid)return showCustomAlert('غير مسموح','يمكن لصاحب العمل فقط تغيير إعداد التكبير.');
-  subs[idx]={...subs[idx],allowZoom:subs[idx].allowZoom===false?true:false};await result.ref.update({submissions:subs});await window.openUserProfilePage?.();
-}
-async function renderProfileWorksV18(uid){
-  const g=$('acpGallery');if(!g)return;
-  const self=uid===currentUser?.uid,admin=!!isAdmin;
-  try{
-    const [ps,pd]=await Promise.all([getPortfolioV17(uid),getProfileDataV17(uid)]);
-    const cards=[];
-    const assignmentZoomMap=Object.create(null);
-    await Promise.all((pd.works||[]).map(async w=>{try{const r=await getAssignmentData(w.courseId,w.assignmentId);const subs=Array.isArray(r?.data?.submissions)?r.data.submissions:[];const sub=subs.find((s,i)=>submissionWorkId(s,i)===w.workId);assignmentZoomMap[w.courseId+'__'+w.assignmentId+'__'+w.workId]=sub?.allowZoom!==false;}catch(_){assignmentZoomMap[w.courseId+'__'+w.assignmentId+'__'+w.workId]=true;}}));
-    ps.forEach(w=>cards.push({kind:'personal',id:w.id,uid,title:w.title||'عمل شخصي',type:w.type||'عمل شخصي',description:w.description||'',images:w.images||[],allowZoom:w.allowZoom!==false,approved:true,owner:self,admin}));
-    (pd.works||[]).forEach(w=>cards.push({kind:'assignment',courseId:w.courseId,assignmentId:w.assignmentId,id:w.workId,title:w.assignmentTitle||'واجب',type:w.courseTitle||'عمل مرفوع',description:w.approved?'معتمد':'قيد المراجعة',images:w.images||[],allowZoom:assignmentZoomMap[w.courseId+'__'+w.assignmentId+'__'+w.workId]!==false,approved:!!w.approved,owner:self,admin}));
-    if(!cards.length){g.innerHTML='<div class="acp-empty">لا توجد أعمال منشورة حاليًا.</div>';return;}
-    g.innerHTML=cards.map(w=>{
-      const img=w.images?.[0]||'';
-      const canOpen=self||admin||(w.approved&&w.allowZoom);
-      const viewBtn=w.kind==='personal'
-        ?`<button type="button" class="v18-work-view-btn" onclick="openPersonalPortfolioViewerV18('${escV18(w.uid)}','${escV18(w.id)}')" ${!canOpen?'disabled':''}><i class="fas fa-expand"></i> ${canOpen?'عرض العمل':'التكبير مقفل'}</button>`
-        :`<button type="button" class="v18-work-view-btn" onclick="openAssignmentWorkViewerV18('${escV18(w.courseId)}','${escV18(w.assignmentId)}','${escV18(w.id)}')" ${!canOpen?'disabled':''}><i class="fas fa-expand"></i> ${canOpen?'عرض العمل':'غير متاح الآن'}</button>`;
-      const lock=w.allowZoom?'':`<span class="v18-work-lock"><i class="fas fa-lock"></i> التكبير مغلق</span>`;
-      let ownerBtn='';
-      if(self){ownerBtn=w.kind==='personal'?`<button type="button" class="v18-work-lock-btn" onclick="togglePersonalWorkZoomV18('${escV18(w.uid)}','${escV18(w.id)}')"><i class="fas ${w.allowZoom?'fa-lock':'fa-lock-open'}"></i> ${w.allowZoom?'قفل التكبير':'فتح التكبير'}</button>`:`<button type="button" class="v18-work-lock-btn" onclick="toggleAssignmentWorkZoomV18('${escV18(w.courseId)}','${escV18(w.assignmentId)}','${escV18(w.id)}')"><i class="fas ${w.allowZoom?'fa-lock':'fa-lock-open'}"></i> ${w.allowZoom?'قفل التكبير':'فتح التكبير'}</button>`;}
-      return `<article class="acp-work v18-work-card"><div class="acp-work-cover">${img?`<img src="${escV18(img)}" alt="">`:'<i class="fas fa-images" style="font-size:2rem;color:var(--accent1)"></i>'}</div><div class="acp-work-body"><div class="acp-work-title">${escV18(w.title)}</div><div class="acp-work-meta">${escV18(w.type)}${w.description?`<br>${escV18(w.description)}`:''}<br>${w.approved?'✅ معتمد':'⏳ قيد المراجعة'} ${lock}</div><div class="v18-work-actions">${viewBtn}${ownerBtn}</div></div></article>`;
-    }).join('');
-  }catch(e){console.error('profile works v18',e);g.innerHTML='<div class="acp-empty">تعذر تحميل معرض الأعمال.</div>'}
-}
-
-/* Patch portfolio creation so new personal works default to zoom enabled. */
-const oldPortfolioModalSaveV18=window.openPersonalPortfolioWorkModalV16;
-/* New direct viewer wrappers do not rely on the old modal implementation. Existing records default to enabled. */
-
-/* -------------------------------------------------------------
-   5) Strict private-profile shell already exists, but reinforce it
-   whenever canonical profile is opened.
-   ------------------------------------------------------------- */
-async function openCanonicalFinalV18(uid,isSelf){
-  const target=String(uid||'');
-  if(!target||!currentUser)return;
-  const old=window.__openCanonicalProfileV18;
-  if(old && old!==openCanonicalFinalV18){
-    if(target!==currentUser.uid)window.__ananasProfileReturnToSelf=true;
-    const result=await old(target,isSelf);
-    setTimeout(async()=>{
+  window.__ananasRefreshAccountIdentity=function(){
+    try{renderLoggedInAccountButton(typeof currentUser!=='undefined'?currentUser:null,typeof currentUserProfile!=='undefined'?currentUserProfile:{});}catch(e){console.warn('account identity',e)}
+  };
+  if(typeof auth!=='undefined' && auth && !window.__ananasAccountAuthBound){
+    window.__ananasAccountAuthBound=true;
+    auth.onAuthStateChanged(async user=>{
+      if(!user){renderLoggedInAccountButton(null,{});return;}
+      let profile=window.currentUserProfile||{};
       try{
-        const s=await db.collection('users').doc(target).get();if(!s.exists)return;
-        const p=s.data()||{},self=target===currentUser.uid,admin=!!isAdmin;
-        if(!self&&!admin&&p.profilePublic===false){
-          const name=p.displayName||p.name||'مستخدم',photo=p.photoURL||p.photoUrl||p.photo||'';
-          $('acpEmail').textContent='حساب خاص';
-          $('acpBadge').innerHTML='<i class="fas fa-lock"></i> حساب خاص';
-          $('acpData').innerHTML=`<div class="acp-row"><strong>الاسم</strong><small>${escV18(name)}</small></div>`;
-        }else{
-          await renderProfileWorksV18(target);
-        }
-        patchProfileBackV18();
-      }catch(e){console.warn('canonical v18 enrich',e)}
-    },80);
-    return result;
+        if(typeof db!=='undefined' && db){const snap=await db.collection('users').doc(user.uid).get();if(snap.exists)profile=snap.data()||{};}
+      }catch(e){console.warn('account profile read',e)}
+      renderLoggedInAccountButton(user,profile);
+    });
   }
-}
-/* Do not replace the canonical opener here; wrapping in click handlers below avoids recursion. */
 
-/* -------------------------------------------------------------
-   7/8) Make chat opening always land at the last message.
-   ------------------------------------------------------------- */
-document.addEventListener('click',e=>{
-  const send=e.target.closest?.('#fullChatPageSendBtn,#fullPageSendBtn,#fullSendChatBtn');
-  if(send){v18ForceChatBottom=true;setTimeout(()=>{if(v18ActiveChatContainer)scrollChatBottomV18(v18ActiveChatContainer,true)},250);setTimeout(()=>{if(v18ActiveChatContainer)scrollChatBottomV18(v18ActiveChatContainer,true)},800);}
-},true);
-document.addEventListener('click',e=>{
-  const profile=e.target.closest?.('.v18-msg-profile,.chat-msg .msg-header .u,.chat-profile-head');
-  if(!profile)return;
-  const uid=profile.dataset.profileUid||profile.closest('[data-profile-uid]')?.dataset.profileUid;
-  if(uid){e.preventDefault();e.stopImmediatePropagation();window.openPublicProfileFinal?.(uid,uid===currentUser?.uid)}
-},true);
+  /* The existing profile click handler remains intact; this patch only changes its presentation. */
+  const accountBtn=$('authToggleBtn');
+  if(accountBtn && !accountBtn.dataset.ananasAccountUiBound){
+    accountBtn.dataset.ananasAccountUiBound='1';
+    accountBtn.addEventListener('profile-data-updated',()=>window.__ananasRefreshAccountIdentity?.());
+  }
 
-/* -------------------------------------------------------------
-   10) Pinned indicator and admin-only pin styling.
-   ------------------------------------------------------------- */
+  /* ---------- 2. Profile -> student -> Back to my profile ---------- */
+  const originalCloseProfile=window.closeProfilePageFinal;
+  window.__ananasProfileReturnContext=window.__ananasProfileReturnContext||null;
 
-/* -------------------------------------------------------------
-   Profile gallery refresh: hook the final canonical profile call.
-   ------------------------------------------------------------- */
-(function hookCanonicalProfileV18(){
-  const candidate=window.__openCanonicalProfile;
-  if(!candidate||candidate.__v18Wrapped)return;
-  const wrapped=async function(uid,isSelf){
-    const target=String(uid||'');
-    if(target && target!==currentUser?.uid)window.__ananasProfileReturnToSelf=true;
-    else if(target===currentUser?.uid)window.__ananasProfileReturnToSelf=false;
-    const res=await candidate.apply(this,arguments);
-    try{
-      const s=await db.collection('users').doc(target).get();
-      const p=s.exists?(s.data()||{}):{},self=target===currentUser?.uid,admin=!!isAdmin;
-      const page=$('ananasCanonicalProfilePage');
-      if(page){
-        const back=$('acpBack');
-        if(back){
-          if(!self){
-            back.style.display='inline-flex';
-            back.innerHTML='<i class="fas fa-arrow-right"></i> العودة إلى ملفي';
-            back.title='العودة إلى ملفي الشخصي';
-            back.onclick=async e=>{e.preventDefault();window.__ananasProfileReturnToSelf=false;await window.openUserProfilePage?.();};
-          }else back.style.display='none';
-        }
-      }
-      if(!self&&!admin&&p.profilePublic===false)return res;
-      await renderProfileWorksV18(target);
-    }catch(e){console.warn('profile v18 hook',e)}
-    return res;
+  function bindProfileBackButton(){
+    const btn=$('profilePageClose');
+    if(!btn || btn.dataset.ananasReturnBound==='1')return;
+    btn.dataset.ananasReturnBound='1';
+    btn.addEventListener('click',e=>{
+      const ctx=window.__ananasProfileReturnContext;
+      if(!ctx || !currentUser || ctx.ownerUid!==currentUser.uid)return;
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      window.__ananasProfileReturnContext=null;
+      try{window.openUserProfilePage?.();}catch(err){console.error('profile return',err)}
+    },true);
+  }
+  bindProfileBackButton();
+
+  /* Capture only directory-card clicks. This means chat/profile links keep their normal behavior. */
+  document.addEventListener('click',e=>{
+    const card=e.target.closest?.('#profileDirectoryGrid .profile-directory-card,[data-profile-target]');
+    if(!card || !currentUser)return;
+    const targetUid=card.dataset.profileTarget||card.getAttribute('data-profile-target');
+    if(!targetUid || targetUid===currentUser.uid)return;
+    if(!$('userProfilePage')?.classList.contains('active'))return;
+    const ownerUid=currentUser.uid;
+    window.__ananasProfileReturnContext={ownerUid,targetUid,from:'profile-directory'};
+    bindProfileBackButton();
+  },true);
+
+  /* Also cover the legacy directory renderer that uses onclick directly. */
+  const originalOpenPublic=window.openPublicProfileFinal;
+  if(originalOpenPublic && !window.__ananasPublicProfileReturnWrapped){
+    window.__ananasPublicProfileReturnWrapped=true;
+    window.openPublicProfileFinal=async function(uid){
+      const fromDirectory=!!window.__ananasProfileReturnContext && window.__ananasProfileReturnContext.targetUid===uid;
+      const result=await originalOpenPublic.apply(this,arguments);
+      if(fromDirectory)bindProfileBackButton();
+      return result;
+    };
+  }
+
+  /* Rebind after the canonical profile DOM is rebuilt. */
+  new MutationObserver(()=>{
+    bindProfileBackButton();
+  }).observe(document.body,{subtree:true,childList:true});
+
+  /* When the profile editor saves a new name/photo, refresh the navbar immediately. */
+  document.addEventListener('click',e=>{
+    if(e.target.closest?.('#profileEditorSave')){
+      setTimeout(()=>window.__ananasRefreshAccountIdentity?.(),150);
+      setTimeout(()=>window.__ananasRefreshAccountIdentity?.(),700);
+    }
+  },true);
+
+  /* Final compactness guard in case a later patch injects a chat header. */
+  window.__ananasCompactChat=function(root=document){
+    root.querySelectorAll?.('.chat-msg').forEach(m=>{
+      m.style.setProperty('padding','5px 9px','important');
+      m.style.setProperty('margin-bottom','2px','important');
+    });
   };
-  wrapped.__v18Wrapped=true;
-  window.__openCanonicalProfile=wrapped;
-  window.openAnanasV10Profile=wrapped;
-  window.openPublicProfileFinal=wrapped;
-  window.viewProfileByUserId=wrapped;
-  window.openChatProfileV13=wrapped;
-  window.openChatProfileV12=wrapped;
-  window.openUserProfilePage=()=>currentUser&&wrapped(currentUser.uid,true);
+  window.__ananasCompactChat();
 })();
-
-/* CSS and first-pass auth sync */
-ensureChatJumpButtonV18();
-updateAuthAccountButtonV18();
-try{
-  if(auth&&auth.onAuthStateChanged) auth.onAuthStateChanged(()=>setTimeout(updateAuthAccountButtonV18,300));
-}catch(e){}
-try{if(currentUserProfile)updateAuthAccountButtonV18()}catch(e){}
-
-/* Initial chat containers: ensure scroll button exists even before first render. */
-['chatPageMessagesList','fullChatMessagesList'].forEach(id=>{const c=$(id);if(c)bindChatScrollV18(c)});
-
-})();
-
 </script>
+
 </body>
 </html>
 
@@ -10800,7 +10607,7 @@ function ensureProfileEditorModal(){
  let m=$('ananasProfileEditor');if(m)return m;m=document.createElement('div');m.id='ananasProfileEditor';m.className='ananas-modal-overlay';m.innerHTML=`<div class="ananas-modal-card"><button type="button" class="ananas-modal-close" id="profileEditorClose"><i class="fas fa-xmark"></i></button><div class="ananas-modal-heading"><div class="ananas-modal-heading-icon"><i class="fas fa-user-pen"></i></div><div><h3>تعديل الملف الشخصي</h3><p>غيّر الصورة والاسم ورقم الهاتف وخصوصية ملفك.</p></div></div><div class="profile-edit-avatar"><div id="profileEditPreview">م</div><label class="ananas-primary-btn" for="profileEditPhoto"><i class="fas fa-camera"></i> تغيير الصورة</label><input id="profileEditPhoto" type="file" accept="image/*" hidden></div><div class="ananas-form-grid"><label class="ananas-field"><span>الاسم</span><input id="profileEditName" type="text"></label><label class="ananas-field"><span>رقم الهاتف</span><input id="profileEditPhone" type="text"></label></div><label class="ananas-toggle-row"><span><strong>إظهار ملفي للطلاب</strong><small>عند الإلغاء لا يستطيع الطلاب فتح ملفك، بينما يبقى ظاهرًا للمشرف.</small></span><input id="profileEditPublic" type="checkbox" checked><i></i></label><div class="ananas-modal-actions"><button type="button" class="ananas-secondary-btn" id="profileEditorCancel">إلغاء</button><button type="button" class="ananas-primary-btn" id="profileEditorSave"><i class="fas fa-check"></i> حفظ التعديلات</button></div></div>`;document.body.appendChild(m);
  $('profileEditorClose').onclick=()=>m.classList.remove('active');$('profileEditorCancel').onclick=()=>m.classList.remove('active');m.addEventListener('click',e=>{if(e.target===m)m.classList.remove('active')});
  $('profileEditPhoto').addEventListener('change',()=>{const f=$('profileEditPhoto').files?.[0];if(f){const u=URL.createObjectURL(f);$('profileEditPreview').innerHTML=`<img src="${u}" alt="">`;}});
- $('profileEditorSave').onclick=async()=>{if(!currentUser)return;const btn=$('profileEditorSave');btn.disabled=true;try{const name=$('profileEditName').value.trim(),phone=$('profileEditPhone').value.trim(),pub=$('profileEditPublic').checked;if(!name)return showCustomAlert('تنبيه','اكتب الاسم.');let photo=currentUserProfile?.photoURL||currentUserProfile?.photoUrl||currentUserProfile?.photo||'';const f=$('profileEditPhoto').files?.[0];if(f){photo=await uploadImage(f);if(!photo)throw Error('photo');}await currentUser.updateProfile({displayName:name,photoURL:photo||null});await db.collection('users').doc(currentUser.uid).set({uid:currentUser.uid,email:currentUser.email||'',displayName:name,phone,photoURL:photo||'',profilePublic:pub,updatedAt:firebase.firestore.FieldValue.serverTimestamp()},{merge:true});currentUserProfile={...(currentUserProfile||{}),displayName:name,phone,photoURL:photo||'',profilePublic:pub};if(typeof updateAuthAccountButtonV18==='function')updateAuthAccountButtonV18();m.classList.remove('active');await window.openUserProfilePage();showCustomAlert('تم الحفظ','تم تحديث ملفك الشخصي.');}catch(e){console.error(e);showCustomAlert('خطأ','تعذر حفظ بيانات الملف الشخصي.');}finally{btn.disabled=false;}};
+ $('profileEditorSave').onclick=async()=>{if(!currentUser)return;const btn=$('profileEditorSave');btn.disabled=true;try{const name=$('profileEditName').value.trim(),phone=$('profileEditPhone').value.trim(),pub=$('profileEditPublic').checked;if(!name)return showCustomAlert('تنبيه','اكتب الاسم.');let photo=currentUserProfile?.photoURL||currentUserProfile?.photoUrl||currentUserProfile?.photo||'';const f=$('profileEditPhoto').files?.[0];if(f){photo=await uploadImage(f);if(!photo)throw Error('photo');}await currentUser.updateProfile({displayName:name,photoURL:photo||null});await db.collection('users').doc(currentUser.uid).set({uid:currentUser.uid,email:currentUser.email||'',displayName:name,phone,photoURL:photo||'',profilePublic:pub,updatedAt:firebase.firestore.FieldValue.serverTimestamp()},{merge:true});currentUserProfile={...(currentUserProfile||{}),displayName:name,phone,photoURL:photo||'',profilePublic:pub};if($('authLabel'))$('authLabel').textContent=name;m.classList.remove('active');await window.openUserProfilePage();showCustomAlert('تم الحفظ','تم تحديث ملفك الشخصي.');}catch(e){console.error(e);showCustomAlert('خطأ','تعذر حفظ بيانات الملف الشخصي.');}finally{btn.disabled=false;}};
  return m;
 }
 function openProfileEditorFinal(uid){if(uid!==currentUser?.uid)return;const p=currentUserProfile||{},m=ensureProfileEditorModal(),photo=p.photoURL||p.photoUrl||p.photo||'',name=p.displayName||currentUser.displayName||'',phone=p.phone||'';$('profileEditName').value=name;$('profileEditPhone').value=phone;$('profileEditPublic').checked=p.profilePublic!==false;$('profileEditPreview').innerHTML=photo?`<img src="${esc(photo)}" alt="">`:esc(name.slice(0,1)||'م');$('profileEditPhoto').value='';m.classList.add('active');}
@@ -10872,7 +10679,7 @@ window.getEffectiveProfileData=oldGetEffective||getActiveCatalog;
 'use strict';
 const $=id=>document.getElementById(id), esc=window.escapeHtml||((v)=>String(v??''));
 const oldOpenProfile=window.openUserProfilePage;
-if(oldOpenProfile&&!window.__profileActivityEnriched){window.__profileActivityEnriched=true;window.openUserProfilePage=async function(){await oldOpenProfile.apply(this,arguments);if(!currentUser&&!currentUser)return;try{const uid=currentUser.uid;const cat=await getActiveCatalog();const acts=[];for(const [courseId,c] of cat.courses.entries?[]:[]){void courseId;void c;}for(const c of cat.courses){const fs=await db.collection('courses').doc(c.id).collection('files').where('uploadedBy','==',uid).get();fs.forEach(d=>{const f=d.data()||{};if(f.deleted===true)return;acts.push({t:`رفع ملف: ${f.name||'ملف'}`,d:fmtDate(f.uploadedAt)});});}const a=$('profileActivityList');if(a){const base=[...a.querySelectorAll('.profile-list-item')].map(x=>x.outerHTML);const fileItems=acts.slice(0,20).map(x=>`<div class="profile-list-item"><strong>${esc(x.t)}</strong><small>${esc(x.d)}</small></div>`);if(fileItems.length)a.innerHTML=fileItems.join('')+base.join('');}}catch(e){console.warn('profile activity enrichment',e);}};}
+if(oldOpenProfile&&!window.__profileActivityEnriched){window.__profileActivityEnriched=true;window.openUserProfilePage=async function(){await oldOpenProfile.apply(this,arguments);if(!window.currentUser&&!currentUser)return;try{const uid=currentUser.uid;const cat=await getActiveCatalog();const acts=[];for(const [courseId,c] of cat.courses.entries?[]:[]){void courseId;void c;}for(const c of cat.courses){const fs=await db.collection('courses').doc(c.id).collection('files').where('uploadedBy','==',uid).get();fs.forEach(d=>{const f=d.data()||{};if(f.deleted===true)return;acts.push({t:`رفع ملف: ${f.name||'ملف'}`,d:fmtDate(f.uploadedAt)});});}const a=$('profileActivityList');if(a){const base=[...a.querySelectorAll('.profile-list-item')].map(x=>x.outerHTML);const fileItems=acts.slice(0,20).map(x=>`<div class="profile-list-item"><strong>${esc(x.t)}</strong><small>${esc(x.d)}</small></div>`);if(fileItems.length)a.innerHTML=fileItems.join('')+base.join('');}}catch(e){console.warn('profile activity enrichment',e);}};}
 })();
 
 </script>
@@ -10922,7 +10729,7 @@ async function openAssignmentDetailV2(courseId,assignmentId){
   content.querySelectorAll('[data-work-approve]').forEach(b=>b.onclick=()=>window.approveSubmission(courseId,assignmentId,b.dataset.workApprove).then(()=>openAssignmentDetailV2(courseId,assignmentId)));
   content.querySelectorAll('[data-work-delete]').forEach(b=>b.onclick=()=>window.deleteAssignmentWork(courseId,assignmentId,b.dataset.workDelete).then(()=>openAssignmentDetailV2(courseId,assignmentId)));
   content.querySelectorAll('.assignment-filter').forEach(b=>b.onclick=()=>{content.querySelectorAll('.assignment-filter').forEach(x=>x.classList.toggle('active',x===b));content.querySelectorAll('.assignment-v2-card').forEach(c=>c.style.display=(!b.dataset.u||c.dataset.user===b.dataset.u)?'':'none');});
-  $('assignmentV2Upload')?.addEventListener('change',async e=>{const files=[...(e.target.files||[])];if(!files.length||!currentUser)return;const st=$('assignmentV2Status');st.textContent='جاري رفع الصور...';try{const urls=[];for(const f of files){const u=await uploadImage(f);if(!u)throw Error('upload');urls.push(u);}const latest=await getAssignmentData(courseId,assignmentId);if(!latest)throw Error('missing');const arr=Array.isArray(latest.data.submissions)?[...latest.data.submissions]:[];arr.push({workId:crypto.randomUUID?crypto.randomUUID():`work_${Date.now()}`,userId:currentUser.uid,userName:currentUser.displayName||'طالب',images:urls,approved:false,xpGranted:false,allowZoom:true,uploadedAt:new Date().toISOString()});await latest.ref.update({submissions:arr});await openAssignmentDetailV2(courseId,assignmentId);}catch(err){console.error(err);st.textContent='تعذر رفع العمل.'}finally{e.target.value=''}});
+  $('assignmentV2Upload')?.addEventListener('change',async e=>{const files=[...(e.target.files||[])];if(!files.length||!currentUser)return;const st=$('assignmentV2Status');st.textContent='جاري رفع الصور...';try{const urls=[];for(const f of files){const u=await uploadImage(f);if(!u)throw Error('upload');urls.push(u);}const latest=await getAssignmentData(courseId,assignmentId);if(!latest)throw Error('missing');const arr=Array.isArray(latest.data.submissions)?[...latest.data.submissions]:[];arr.push({workId:crypto.randomUUID?crypto.randomUUID():`work_${Date.now()}`,userId:currentUser.uid,userName:currentUser.displayName||'طالب',images:urls,approved:false,xpGranted:false,uploadedAt:new Date().toISOString()});await latest.ref.update({submissions:arr});await openAssignmentDetailV2(courseId,assignmentId);}catch(err){console.error(err);st.textContent='تعذر رفع العمل.'}finally{e.target.value=''}});
 }
 window.openAssignmentDetail=openAssignmentDetailV2;
 
@@ -11244,7 +11051,7 @@ function ensurePortfolioWorkV12(){
     btn.disabled=true;status.textContent='جاري رفع صور العمل...';
     try{
       const urls=[];for(const f of files){const u=await uploadImage(f);if(!u)throw Error('upload');urls.push(u);}
-      await db.collection('users').doc(currentUser.uid).collection('portfolioWorks').add({title,type,description,images:urls,allowZoom:true,createdAt:firebase.firestore.FieldValue.serverTimestamp(),updatedAt:firebase.firestore.FieldValue.serverTimestamp(),deleted:false});
+      await db.collection('users').doc(currentUser.uid).collection('portfolioWorks').add({title,type,description,images:urls,createdAt:firebase.firestore.FieldValue.serverTimestamp(),updatedAt:firebase.firestore.FieldValue.serverTimestamp(),deleted:false});
       m.classList.remove('active');await window.openUserProfilePage?.();showCustomAlert('تمت الإضافة','تمت إضافة العمل إلى معرضك الشخصي.');
       }
     catch(err){console.error(err);status.textContent='تعذر إضافة العمل.';showCustomAlert('خطأ','تعذر إضافة العمل إلى المعرض.')}
@@ -11348,519 +11155,4 @@ window.closeQuiz=async function(){
   }
   return result;
 };
-</script>
-
-
-<!-- ===== FINAL PATCH V19: chat UX, navigation history, pinned messages, live updates ===== -->
-<style id="ananas-v19-final-css">
-/* ---------- Account button ---------- */
-#authToggleBtn.has-account-avatar{min-height:48px!important;padding:6px 11px!important;display:inline-flex!important;align-items:center!important;gap:9px!important;white-space:nowrap!important}
-#authToggleBtn .v19-auth-avatar{width:38px!important;height:38px!important;flex:0 0 38px!important;border-radius:50%!important;overflow:hidden!important;display:grid!important;place-items:center!important;background:var(--accent-gradient)!important;color:#fff!important;font-weight:900!important;border:2px solid rgba(255,255,255,.18)!important;box-shadow:0 3px 12px rgba(0,0,0,.2)!important}
-#authToggleBtn .v19-auth-avatar img{width:100%!important;height:100%!important;object-fit:cover!important;display:block!important}
-#authToggleBtn .v19-auth-name{display:block!important;max-width:170px!important;overflow:hidden!important;text-overflow:ellipsis!important;white-space:nowrap!important;font-weight:800!important}
-
-/* ---------- Full chat surface ---------- */
-#courseChatPage,#fullChatPage{position:absolute!important;inset:0!important;width:100%!important;height:100%!important;max-width:none!important;margin:0!important;padding:0!important;border:0!important;border-radius:0!important;box-shadow:none!important;background:var(--bg-primary)!important;overflow:hidden!important;z-index:1200!important}
-#courseChatPage{display:none!important;flex-direction:column!important}
-#courseChatPage[style*='display: block']{display:flex!important}
-#fullChatPage.active{display:flex!important;flex-direction:column!important}
-#courseChatPage .page-title,#fullChatPage .chat-header{position:relative!important;flex:0 0 68px!important;width:100%!important;max-width:none!important;margin:0!important;padding:10px 18px!important;border:0!important;border-bottom:1px solid var(--border)!important;background:var(--bg-secondary)!important;display:flex!important;align-items:center!important;justify-content:space-between!important;z-index:20!important}
-#courseChatPage .page-title h2,#fullChatPage .chat-header h4{font-size:1rem!important;margin:0!important}
-#courseChatPage .chat-lock-banner{margin:0!important;border-radius:0!important;flex:0 0 auto!important}
-#courseChatPage #chatAdminToolsPage,#fullChatPage #clearChatBtn{display:none!important}
-#courseChatPage #chatPageMessagesList,#fullChatPage .chat-messages-list{flex:1 1 auto!important;width:100%!important;min-height:0!important;height:auto!important;max-height:none!important;overflow-y:auto!important;margin:0!important;padding:14px clamp(10px,2.5vw,34px) 18px!important;border:0!important;border-radius:0!important;background:transparent!important;box-shadow:none!important}
-#courseChatPage .chat-input-group,#fullChatPage .chat-input-group{flex:0 0 auto!important;width:100%!important;margin:0!important;padding:10px 14px!important;border-top:1px solid var(--border)!important;background:var(--bg-secondary)!important;z-index:20!important}
-#courseChatPage .page-title .v19-chat-back-btn,#fullChatPage .chat-header .v19-chat-back-btn{width:42px!important;height:42px!important;min-width:42px!important;padding:0!important;border-radius:14px!important;display:inline-grid!important;place-items:center!important;border:1px solid var(--border)!important;background:var(--bg-card)!important;color:var(--text-primary)!important;cursor:pointer!important;font-size:1rem!important}
-#courseChatPage .page-title .v19-chat-back-btn:hover,#fullChatPage .chat-header .v19-chat-back-btn:hover{border-color:var(--accent1)!important;color:var(--accent1)!important;transform:translateY(-1px)!important}
-
-/* ---------- Three-dot menu ---------- */
-.v19-chat-menu-wrap{position:relative!important;display:flex!important;align-items:center!important}
-.v19-chat-menu-btn{width:42px!important;height:42px!important;border:1px solid var(--border)!important;border-radius:14px!important;background:var(--bg-card)!important;color:var(--text-primary)!important;display:grid!important;place-items:center!important;cursor:pointer!important;font-size:1rem!important}
-.v19-chat-menu-btn:hover{border-color:var(--accent1)!important;color:var(--accent1)!important}
-.v19-chat-menu-panel{position:absolute!important;top:48px!important;inset-inline-start:0!important;width:min(230px,calc(100vw - 30px))!important;padding:7px!important;background:var(--bg-card)!important;border:1px solid var(--border)!important;border-radius:16px!important;box-shadow:0 18px 50px rgba(0,0,0,.3)!important;display:none!important;z-index:24000!important}
-.v19-chat-menu-panel.show{display:block!important}
-.v19-chat-menu-item{width:100%!important;border:0!important;background:transparent!important;color:var(--text-primary)!important;padding:10px 11px!important;border-radius:10px!important;display:flex!important;align-items:center!important;gap:9px!important;text-align:start!important;font:inherit!important;font-size:.8rem!important;font-weight:800!important;cursor:pointer!important}
-.v19-chat-menu-item:hover{background:rgba(127,127,127,.1)!important}
-.v19-chat-menu-item.danger{color:#e74c3c!important}
-
-/* ---------- WhatsApp-like message rows ---------- */
-.v19-chat-msg{display:flex!important;align-items:flex-start!important;gap:6px!important;width:100%!important;max-width:100%!important;margin:3px 0!important;padding:0!important;background:transparent!important;border:0!important;box-shadow:none!important}
-.v19-chat-msg.sent{justify-content:flex-start!important}
-.v19-chat-msg.received{justify-content:flex-end!important}
-.v19-chat-msg .v19-msg-profile{display:flex!important;align-items:center!important;gap:6px!important;flex:0 0 auto!important;max-width:175px!important;padding:2px!important;border:0!important;background:transparent!important;color:var(--text-primary)!important;font:inherit!important;cursor:pointer!important}
-.v19-msg-avatar{width:30px!important;height:30px!important;flex:0 0 30px!important;border-radius:50%!important;overflow:hidden!important;display:grid!important;place-items:center!important;background:var(--accent-gradient)!important;color:#fff!important;font-size:.67rem!important;font-weight:900!important;border:1px solid var(--border)!important}
-.v19-msg-avatar img{width:100%!important;height:100%!important;object-fit:cover!important;display:block!important}
-.v19-msg-profile .u{font-size:.72rem!important;font-weight:900!important;max-width:105px!important;overflow:hidden!important;text-overflow:ellipsis!important;white-space:nowrap!important}
-.v19-chat-bubble{max-width:min(74%,650px)!important;min-width:0!important;padding:7px 9px 6px!important;border-radius:14px!important;border:1px solid var(--border)!important;box-shadow:0 2px 9px rgba(0,0,0,.05)!important;background:var(--bg-secondary)!important;overflow:hidden!important}
-.v19-chat-msg.sent .v19-chat-bubble{background:var(--chat-bubble-mine)!important;color:var(--chat-bubble-mine-text)!important;border-color:transparent!important;border-bottom-right-radius:5px!important}
-.v19-chat-msg.received .v19-chat-bubble{background:var(--chat-bubble-others)!important;color:var(--chat-bubble-others-text)!important;border-bottom-left-radius:5px!important}
-.v19-chat-msg .t{font-size:.84rem!important;line-height:1.5!important;white-space:pre-wrap!important;word-break:break-word!important}
-.v19-chat-msg .msg-time{font-size:.58rem!important;line-height:1!important;opacity:.58!important;margin-top:3px!important;text-align:end!important}
-.v19-chat-msg .v19-msg-actions{display:flex!important;align-items:center!important;gap:2px!important;margin-top:2px!important;opacity:.68!important}
-.v19-chat-msg .v19-msg-actions button{width:24px!important;height:24px!important;padding:0!important;border:0!important;border-radius:7px!important;background:transparent!important;color:inherit!important;display:grid!important;place-items:center!important;cursor:pointer!important;font-size:.67rem!important}
-.v19-chat-msg .v19-msg-actions button:hover{background:rgba(127,127,127,.13)!important;opacity:1!important}
-.v19-chat-msg .msg-header{display:none!important}
-.v19-chat-msg .v18-reply-block,.v19-chat-msg .v19-reply-block{cursor:pointer!important}
-.v19-reply-block{display:flex!important;flex-direction:column!important;gap:1px!important;width:100%!important;padding:5px 7px!important;margin-bottom:5px!important;border:0!important;border-inline-start:3px solid var(--accent1)!important;border-radius:8px!important;background:rgba(108,92,231,.10)!important;color:inherit!important;text-align:start!important;font:inherit!important;cursor:pointer!important}
-.v19-reply-block .ru{font-size:.67rem!important;font-weight:900!important}
-.v19-reply-block .rt{font-size:.67rem!important;opacity:.78!important;white-space:nowrap!important;overflow:hidden!important;text-overflow:ellipsis!important}
-.v19-chat-date{text-align:center!important;margin:7px 0!important;font-size:.66rem!important;color:var(--text-muted)!important}
-.v19-chat-date span{display:inline-block!important;padding:3px 9px!important;border-radius:999px!important;background:var(--bg-card)!important;border:1px solid var(--border)!important}
-.v19-pinned-badge{display:inline-flex!important;align-items:center!important;gap:5px!important;margin-bottom:3px!important;font-size:.62rem!important;font-weight:900!important;color:#f5a623!important}
-.v19-pin-btn.active{color:#f5a623!important;background:rgba(245,166,35,.12)!important}
-.v19-chat-msg.is-pinned .v19-chat-bubble{border-color:rgba(245,166,35,.56)!important;box-shadow:0 4px 15px rgba(245,166,35,.12)!important}
-.v19-highlight-message .v19-chat-bubble{animation:v19ChatHighlight 1.8s ease!important}
-@keyframes v19ChatHighlight{0%,100%{box-shadow:0 0 0 0 rgba(108,92,231,0)}15%,65%{box-shadow:0 0 0 6px rgba(108,92,231,.18),0 12px 30px rgba(108,92,231,.12)}}
-
-/* ---------- Pinned messages tray ---------- */
-.v19-pinned-tray{display:flex!important;align-items:center!important;gap:7px!important;flex:0 0 auto!important;padding:7px 10px!important;border-bottom:1px solid var(--border)!important;background:var(--bg-secondary)!important;min-height:52px!important;z-index:18!important}
-.v19-pinned-nav{width:30px!important;height:30px!important;flex:0 0 30px!important;border:1px solid var(--border)!important;border-radius:9px!important;background:var(--bg-card)!important;color:var(--text-primary)!important;display:grid!important;place-items:center!important;cursor:pointer!important}
-.v19-pinned-track{display:flex!important;align-items:stretch!important;gap:6px!important;overflow-x:auto!important;scroll-behavior:smooth!important;scrollbar-width:none!important;flex:1!important;min-width:0!important}
-.v19-pinned-track::-webkit-scrollbar{display:none!important}
-.v19-pinned-card{min-width:min(280px,72vw)!important;max-width:360px!important;border:1px solid var(--border)!important;border-radius:11px!important;background:var(--bg-card)!important;color:var(--text-primary)!important;padding:6px 9px!important;text-align:start!important;font:inherit!important;cursor:pointer!important;overflow:hidden!important}
-.v19-pinned-card:hover{border-color:var(--accent1)!important}
-.v19-pinned-card .pc-name{font-weight:900!important;font-size:.67rem!important;display:block!important;margin-bottom:2px!important;white-space:nowrap!important;overflow:hidden!important;text-overflow:ellipsis!important}
-.v19-pinned-card .pc-text{font-size:.66rem!important;opacity:.76!important;display:block!important;white-space:nowrap!important;overflow:hidden!important;text-overflow:ellipsis!important}
-
-/* ---------- Last-message button ---------- */
-.ananas-chat-jump-last-v19{position:fixed!important;inset-inline-end:22px!important;bottom:86px!important;z-index:26000!important;display:none!important;align-items:center!important;gap:6px!important;padding:9px 13px!important;border:1px solid var(--border)!important;background:var(--bg-card)!important;color:var(--text-primary)!important;border-radius:999px!important;box-shadow:0 12px 30px rgba(0,0,0,.2)!important;cursor:pointer!important;font:inherit!important;font-weight:900!important}
-.ananas-chat-jump-last-v19.show{display:inline-flex!important}
-.ananas-chat-jump-last-v19 i{color:var(--accent1)!important}
-
-/* ---------- Assignment submitter ---------- */
-.v19-submitter{width:100%!important;display:flex!important;align-items:center!important;gap:8px!important;padding:0!important;margin:0 0 8px!important;border:0!important;background:transparent!important;color:var(--text-primary)!important;text-align:start!important;font:inherit!important;cursor:pointer!important}
-.v19-submitter:hover .v19-submitter-name{text-decoration:underline!important}
-.v19-submitter-avatar{width:34px!important;height:34px!important;flex:0 0 34px!important;border-radius:50%!important;overflow:hidden!important;display:grid!important;place-items:center!important;background:var(--accent-gradient)!important;color:#fff!important;font-size:.7rem!important;font-weight:900!important;border:1px solid var(--border)!important}
-.v19-submitter-avatar img{width:100%!important;height:100%!important;object-fit:cover!important;display:block!important}
-.v19-submitter-copy{display:flex!important;flex-direction:column!important;min-width:0!important;gap:1px!important}
-.v19-submitter-name{font-weight:900!important;font-size:.8rem!important}
-.v19-submitter-status{font-size:.66rem!important;color:var(--text-muted)!important}
-
-@media(max-width:700px){#authToggleBtn .v19-auth-name{max-width:100px!important}.v19-chat-bubble{max-width:84%!important}.v19-msg-profile .u{max-width:70px!important}.v19-pinned-card{min-width:230px!important}.ananas-chat-jump-last-v19{inset-inline-end:12px!important;bottom:82px!important}}
-</style>
-
-<script id="ananas-v19-final-js">
-(function(){
-'use strict';
-const $=id=>document.getElementById(id);
-const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-
-/* =============================================================
-   A) Account button: avatar + real account name, kept live.
-   ============================================================= */
-function accountPhotoV19(){
-  const p=currentUserProfile||{};
-  return p.photoURL||p.photoUrl||p.photo||currentUser?.photoURL||'';
-}
-function accountNameV19(){
-  const p=currentUserProfile||{};
-  return p.displayName||p.name||currentUser?.displayName||'حسابي';
-}
-function syncAccountButtonV19(){
-  const btn=$('authToggleBtn'); if(!btn)return;
-  if(!currentUser){
-    btn.classList.remove('has-account-avatar');
-    btn.innerHTML='<i class="fas fa-user"></i><span id="authLabel">تسجيل الدخول</span>';
-    return;
-  }
-  const name=accountNameV19(),photo=accountPhotoV19();
-  btn.classList.add('has-account-avatar');
-  btn.innerHTML=`<span class="v19-auth-avatar">${photo?`<img src="${esc(photo)}" alt="صورة الحساب">`:`<span>${esc(name.slice(0,1)||'م')}</span>`}</span><span id="authLabel" class="v19-auth-name">${esc(name)}</span>`;
-}
-window.syncAccountButtonV19=syncAccountButtonV19;
-try{
-  auth?.onAuthStateChanged?.(async user=>{
-    if(user){
-      try{const s=await db.collection('users').doc(user.uid).get();if(s.exists)currentUserProfile=s.data()||currentUserProfile||{};}catch(_){}
-    }
-    syncAccountButtonV19();
-  });
-}catch(_){}
-try{
-  if(currentUser?.uid){db.collection('users').doc(currentUser.uid).onSnapshot(s=>{if(s.exists){currentUserProfile=s.data()||{};syncAccountButtonV19();}})}
-}catch(_){}
-setTimeout(syncAccountButtonV19,50);setTimeout(syncAccountButtonV19,500);setTimeout(syncAccountButtonV19,1500);
-
-/* =============================================================
-   B) Profile-origin history. Closing a student profile simply
-      returns to the page that was underneath it.
-   ============================================================= */
-let profileOriginV19=null;
-function captureProfileOriginV19(){
-  const full=$('fullChatPage'),courseChat=$('courseChatPage'),ad=$('courseAssignmentDetailPage'),ap=$('courseAssignmentsPage'),profile=$('userProfilePage'),acp=$('ananasCanonicalProfilePage');
-  if(full?.classList.contains('active'))return {type:'full-chat',courseId:activeCourseId};
-  if(courseChat?.classList.contains('active')||(courseChat&&getComputedStyle(courseChat).display!=='none'&&courseChat.getBoundingClientRect().height>0))return {type:'course-chat',courseId:activeCourseId};
-  if(ad?.classList.contains('active'))return {type:'assignment-detail',courseId:activeCourseId,assignmentId:window.activeAssignmentDetailId||null};
-  if(ap?.classList.contains('active'))return {type:'assignments',courseId:activeCourseId};
-  if(profile?.classList.contains('active')||acp?.classList.contains('active'))return {type:'profile'};
-  return {type:'page',courseId:activeCourseId,page:currentCoursePage||'overview'};
-}
-function rememberProfileOriginV19(origin){profileOriginV19=origin||captureProfileOriginV19();window.__ananasProfileOriginV19=profileOriginV19;}
-window.rememberProfileOriginV19=rememberProfileOriginV19;
-function hideProfileSurfacesV19(){
-  ['ananasCanonicalProfilePage','userProfilePage','ananasPrivateProfileOverlay','ananasV10ProfilePage'].forEach(id=>{const e=$(id);if(e){e.classList.remove('active');if(id!=='ananasCanonicalProfilePage')e.style.removeProperty('display')}});
-}
-function restoreProfileOriginV19(){
-  hideProfileSurfacesV19();
-  const o=profileOriginV19||window.__ananasProfileOriginV19;
-  profileOriginV19=null;window.__ananasProfileOriginV19=null;
-  try{
-    if(o?.type==='full-chat'){
-      $('courseLearningView')?.classList.remove('active');$('fullChatPage')?.classList.add('active');
-      setTimeout(()=>{if(o.courseId)window.loadFullChatForCourse?.(o.courseId);},20);
-    }else if(o?.type==='course-chat'){
-      if(o.courseId&&o.courseId!==activeCourseId)activeCourseId=o.courseId;
-      window.switchCoursePage?.('chat');
-    }else if(o?.type==='assignment-detail'){
-      if(o.courseId&&o.courseId!==activeCourseId)activeCourseId=o.courseId;
-      if(o.assignmentId)window.openAssignmentDetail?.(o.courseId,o.assignmentId,false);
-    }else if(o?.type==='assignments'){
-      if(o.courseId&&o.courseId!==activeCourseId)activeCourseId=o.courseId;
-      window.switchCoursePage?.('assignments');
-    }
-  }catch(e){console.warn('restore profile origin',e)}
-  syncJumpButtonV19();
-}
-window.restoreProfileOriginV19=restoreProfileOriginV19;
-
-function patchProfileBackButtonsV19(){
-  const back1=$('acpBack'),back2=$('profilePageClose');
-  if(back1){back1.classList.add('v19-chat-back-btn');back1.innerHTML='<i class="fas fa-arrow-right"></i>';back1.title='العودة';back1.onclick=e=>{e.preventDefault();restoreProfileOriginV19();};}
-  if(back2){back2.innerHTML='<i class="fas fa-arrow-right"></i><span style="margin-inline-start:5px">العودة</span>';back2.classList.add('v19-chat-back-btn');back2.onclick=e=>{e.preventDefault();restoreProfileOriginV19();};}
-}
-window.patchProfileBackButtonsV19=patchProfileBackButtonsV19;
-
-/* Capture the origin before all known public profile entry points. */
-for(const key of ['openPublicProfileFinal','openAnanasV10Profile','viewProfileByUserId','openChatProfileV13','openChatProfileV12','__openCanonicalProfile']){
-  const fn=window[key];
-  if(typeof fn!=='function'||fn.__v19OriginWrapped)continue;
-  const wrapped=function(uid){rememberProfileOriginV19();return fn.apply(this,arguments)};
-  wrapped.__v19OriginWrapped=true;window[key]=wrapped;
-}
-document.addEventListener('click',e=>{
-  const target=e.target.closest?.('.v19-msg-profile,.v19-submitter,.profile-directory-card,[data-acp-v17-uid],[data-acp-uid],[data-profile-target]');
-  if(target){
-    const uid=target.dataset?.profileUid||target.dataset?.userId||target.dataset?.acpV17Uid||target.dataset?.acpUid||target.dataset?.profileTarget;
-    if(uid)rememberProfileOriginV19();
-    setTimeout(patchProfileBackButtonsV19,180);
-  }
-},true);
-setInterval(()=>{if($('ananasCanonicalProfilePage')?.classList.contains('active')||$('userProfilePage')?.classList.contains('active'))patchProfileBackButtonsV19();},700);
-
-/* =============================================================
-   C) Chat helpers: real WhatsApp-like rows, no "مستخدم" label.
-   ============================================================= */
-const profileCache=Object.create(null);
-async function resolveChatProfileV19(uid,fallback){
-  if(!uid)return {name:fallback||'زائر',photo:''};
-  if(profileCache[uid])return profileCache[uid];
-  try{
-    const s=await db.collection('users').doc(uid).get();
-    const p=s.exists?(s.data()||{}):{};
-    const name=p.displayName||p.name||fallback||'زائر';
-    const photo=p.photoURL||p.photoUrl||p.photo||'';
-    profileCache[uid]={name,photo};
-    return profileCache[uid];
-  }catch(_){return {name:fallback||'زائر',photo:''};}
-}
-function chatTimeV19(v){
-  let d;
-  try{d=v?.toDate?v.toDate():(v?.seconds?new Date(v.seconds*1000):(v?new Date(v):new Date()));}catch(_){d=new Date();}
-  return {date:d.toLocaleDateString('ar-SA',{year:'numeric',month:'long',day:'numeric'}),time:d.toLocaleTimeString('ar-SA',{hour:'2-digit',minute:'2-digit'})};
-}
-function makeReplyBlockV19(m){
-  if(!m.replyToId&&!m.replyToText)return '';
-  const id=m.replyToId||'';
-  return `<button type="button" class="v19-reply-block" ${id?`onclick="goToChatMessageV19('${esc(id)}')"`:''} title="الانتقال إلى الرسالة الأصلية"><span class="ru">${esc(m.replyToName||'زائر')}</span><span class="rt">${esc(m.replyToText||'')}</span></button>`;
-}
-function chatActionsMarkupV19(courseId,id,m,name){
-  const mine=m.userId===currentUser?.uid,arr=[];
-  if(!m.deleted)arr.push(`<button type="button" onclick='replyTo(${JSON.stringify(id)},${JSON.stringify(name)},${JSON.stringify((m.message||'').slice(0,160))})' title="رد"><i class="fas fa-reply"></i></button>`);
-  if(mine&&!m.deleted)arr.push(`<button type="button" onclick="editChatMessage('${esc(courseId)}','${esc(id)}')" title="تعديل"><i class="fas fa-edit"></i></button>`);
-  if((mine||isAdmin)&&!m.deleted)arr.push(`<button type="button" onclick="deleteChatMessage('${esc(courseId)}','${esc(id)}')" title="حذف"><i class="fas fa-trash"></i></button>`);
-  if(isAdmin&&!m.deleted)arr.push(`<button type="button" class="v19-pin-btn ${m.pinned?'active':''}" onclick="togglePinChatMessageV19('${esc(courseId)}','${esc(id)}',${m.pinned?'false':'true'})" title="${m.pinned?'إلغاء التثبيت':'تثبيت الرسالة'}"><i class="fas fa-thumbtack"></i></button>`);
-  return arr.join('');
-}
-async function renderChatV19(container,snapshot,courseId){
-  if(!container)return;
-  if(snapshot.empty){container.innerHTML='<div class="v18-chat-empty">لا توجد رسائل حتى الآن.</div>';hideJumpV19();return;}
-  const docs=snapshot.docs||[],uid=currentUser?.uid||null;
-  const ids=[...new Set(docs.map(d=>(d.data()||{}).userId).filter(Boolean))];
-  const profiles={};
-  await Promise.all(ids.map(async id=>profiles[id]=await resolveChatProfileV19(id,docs.find(d=>(d.data()||{}).userId===id)?.data()?.userName)));
-  let html='',lastDate='';
-  for(const doc of docs){
-    const m=doc.data()||{},who=profiles[m.userId]||{name:m.userName||'زائر',photo:''},mine=m.userId===uid,ft=chatTimeV19(m.createdAt),deleted=!!m.deleted;
-    if(ft.date!==lastDate){html+=`<div class="v19-chat-date"><span>${esc(ft.date)}</span></div>`;lastDate=ft.date;}
-    const imgs=Array.isArray(m.imageUrls)?m.imageUrls:(m.imageUrl?[m.imageUrl]:[]);
-    let body='';
-    if(deleted&&!isAdmin)body='<div class="t v18-deleted-text"><i class="fas fa-ban"></i> هذه الرسالة محذوفة</div>';
-    else body=`${deleted?'<div class="v18-deleted-admin"><i class="fas fa-trash"></i> تم حذف هذه الرسالة</div>':''}<div class="t">${esc(m.message||'')}${m.edited?'<span class="edited-label">(معدلة)</span>':''}</div>${imgs.length&&!deleted?`<div class="message-gallery">${imgs.map(u=>`<img src="${esc(u)}" alt="صورة" onclick="openChatMessageGallery('${esc(courseId)}','${esc(doc.id)}')">`).join('')}</div>`:''}`;
-    html+=`<article class="chat-msg v19-chat-msg ${mine?'sent':'received'} ${deleted?'deleted-message':''} ${m.pinned?'is-pinned':''}" data-message-id="${esc(doc.id)}" data-user-id="${esc(m.userId||'')}"><button type="button" class="v19-msg-profile" data-profile-uid="${esc(m.userId||'')}" title="فتح ملف ${esc(who.name)}"><span class="v19-msg-avatar">${who.photo?`<img src="${esc(who.photo)}" alt="">`:`<span>${esc((who.name||'م').slice(0,1))}</span>`}</span><span class="u">${esc(mine?'أنت':who.name)}</span></button><div class="v19-chat-bubble">${m.pinned?'<div class="v19-pinned-badge"><i class="fas fa-thumbtack"></i> مثبتة</div>':''}${makeReplyBlockV19(m)}${body}<div class="msg-time">${esc(ft.time)}</div><div class="v19-msg-actions">${chatActionsMarkupV19(courseId,doc.id,m,who.name)}</div></div></article>`;
-  }
-  const wasNear=chatNearBottomV19(container);
-  const newest=docs[docs.length-1]?.data?.()||{};
-  const newestMine=newest.userId===uid;
-  const initial=container.dataset.v19Initial==='1';
-  const changed=container.dataset.v19LastNewest!==String(docs[docs.length-1]?.id||'');
-  container.dataset.v19LastNewest=String(docs[docs.length-1]?.id||'');
-  container.innerHTML=html;
-  await updatePinnedTrayV19(container.parentElement,docs);
-  bindChatScrollV19(container);
-  const shouldBottom=initial||newestMine||wasNear||changed&&container.dataset.v19ForceBottom==='1';
-  if(initial)container.dataset.v19Initial='0';
-  container.dataset.v19ForceBottom='0';
-  if(shouldBottom)scrollChatBottomV19(container,true);else syncJumpButtonV19();
-  container.querySelectorAll('.v19-chat-msg').forEach(msg=>msg.querySelector('.u')?.textContent==='مستخدم'&&msg.querySelector('.u')?.replaceChildren(document.createTextNode(msg.dataset.userId===uid?'أنت':'')));
-}
-function chatNearBottomV19(el){return !!el&&(el.scrollHeight-el.scrollTop-el.clientHeight)<90;}
-function isVisibleChatContainerV19(c){
-  if(!c)return false;const full=$('fullChatPage'),page=$('courseChatPage');
-  return (full?.classList.contains('active')&&full.contains(c))||(page&&getComputedStyle(page).display!=='none'&&page.contains(c)&&page.getBoundingClientRect().height>0);
-}
-function ensureJumpV19(){
-  let b=$('ananasChatJumpLastV19');
-  if(b)return b;
-  b=document.createElement('button');b.id='ananasChatJumpLastV19';b.className='ananas-chat-jump-last-v19';b.type='button';b.innerHTML='<i class="fas fa-arrow-down"></i><span>آخر رسالة</span>';b.onclick=()=>{if(window.__v19ChatContainer){scrollChatBottomV19(window.__v19ChatContainer,true);b.classList.remove('show');}};document.body.appendChild(b);return b;
-}
-function hideJumpV19(){ensureJumpV19().classList.remove('show');}
-function syncJumpButtonV19(){const b=ensureJumpV19(),c=window.__v19ChatContainer;b.classList.toggle('show',!!c&&isVisibleChatContainerV19(c)&&!chatNearBottomV19(c)&&c.scrollHeight>c.clientHeight+80);}
-function bindChatScrollV19(c){
-  if(!c||c.dataset.v19Bound==='1')return;c.dataset.v19Bound='1';
-  c.addEventListener('scroll',()=>{window.__v19ChatContainer=c;syncJumpButtonV19();},{passive:true});
-}
-function scrollChatBottomV19(c,force){if(!c)return;window.__v19ChatContainer=c;bindChatScrollV19(c);requestAnimationFrame(()=>{c.scrollTo({top:c.scrollHeight,behavior:force?'smooth':'auto'});setTimeout(()=>{if(Math.abs(c.scrollHeight-c.scrollTop-c.clientHeight)<100)hideJumpV19();},220);});}
-window.goToChatMessageV19=function(id){
-  const node=document.querySelector(`.v19-chat-msg[data-message-id="${CSS.escape(String(id||''))}"]`)||document.querySelector(`.chat-msg[data-message-id="${CSS.escape(String(id||''))}"]`);
-  if(!node)return;node.scrollIntoView({behavior:'smooth',block:'center'});node.classList.remove('v19-highlight-message');void node.offsetWidth;node.classList.add('v19-highlight-message');setTimeout(()=>node.classList.remove('v19-highlight-message'),1900);setTimeout(syncJumpButtonV19,220);
-};
-window.togglePinChatMessageV19=async function(courseId,msgId,pin){
-  if(!isAdmin)return showCustomAlert('غير مسموح','تثبيت الرسائل متاح للمشرف فقط.');
-  try{await db.collection('courses').doc(courseId).collection('chat').doc(msgId).set({pinned:!!pin,pinnedAt:pin?firebase.firestore.FieldValue.serverTimestamp():null,pinnedBy:pin?currentUser?.uid||'':null},{merge:true});}
-  catch(e){console.error(e);showCustomAlert('خطأ','تعذر تحديث تثبيت الرسالة.');}
-};
-
-/* ---------- Pinned strip ---------- */
-function ensurePinnedTrayV19(parent){
-  if(!parent)return null;let t=parent.querySelector(':scope > .v19-pinned-tray');
-  if(t)return t;
-  t=document.createElement('div');t.className='v19-pinned-tray';t.innerHTML='<button type="button" class="v19-pinned-nav" data-dir="prev" title="السابق"><i class="fas fa-chevron-right"></i></button><div class="v19-pinned-track"></div><button type="button" class="v19-pinned-nav" data-dir="next" title="التالي"><i class="fas fa-chevron-left"></i></button>';
-  const list=parent.querySelector('#chatPageMessagesList,.chat-messages-list');
-  if(list)parent.insertBefore(t,list);else parent.appendChild(t);
-  const track=t.querySelector('.v19-pinned-track');t.querySelector('[data-dir="prev"]').onclick=()=>track.scrollBy({left:track.scrollWidth/2*-1,behavior:'smooth'});t.querySelector('[data-dir="next"]').onclick=()=>track.scrollBy({left:track.scrollWidth/2,behavior:'smooth'});
-  return t;
-}
-async function updatePinnedTrayV19(parent,docs){
-  const t=ensurePinnedTrayV19(parent);if(!t)return;const track=t.querySelector('.v19-pinned-track');
-  const pins=docs.filter(d=>!!d.data()?.pinned);
-  if(!pins.length){t.style.display='none';track.innerHTML='';return;}
-  t.style.display='flex';
-  track.innerHTML=pins.map(d=>{const m=d.data()||{};const name=m.userName||'رسالة';return `<button type="button" class="v19-pinned-card" onclick="goToChatMessageV19('${esc(d.id)}')"><span class="pc-name"><i class="fas fa-thumbtack"></i> ${esc(name)}</span><span class="pc-text">${esc(m.message||'صورة أو مرفق')}</span></button>`;}).join('');
-}
-
-/* ---------- Replace both chat subscriptions with one live renderer. ---------- */
-function subscribeChatV19(container,courseId){
-  if(!container)return;
-  if(chatUnsubscribe){try{chatUnsubscribe()}catch(_){}chatUnsubscribe=null;}
-  window.__v19ChatContainer=container;container.dataset.v19Initial='1';container.dataset.v19LastNewest='';container.dataset.v19ForceBottom='1';container.innerHTML='<div class="v18-chat-loading">جاري تحميل الرسائل...</div>';
-  ensurePinnedTrayV19(container.parentElement);
-  chatUnsubscribe=db.collection('courses').doc(courseId).collection('chat').orderBy('createdAt','asc').onSnapshot(s=>renderChatV19(container,s,courseId),err=>{console.error(err);container.innerHTML='<div class="v18-chat-error">حدث خطأ في تحميل الدردشة.</div>';hideJumpV19();});
-}
-window.loadChatPage=function(courseId){subscribeChatV19($('chatPageMessagesList'),courseId)};
-window.loadFullChatForCourse=function(courseId){subscribeChatV19($('fullChatMessagesList'),courseId)};
-
-/* ---------- Chat shell controls ---------- */
-function clearChatV19(){
-  if(!isAdmin||!activeCourseId)return;
-  showCustomConfirm('حذف المحادثة كلها','سيتم حذف جميع رسائل هذه الدردشة. هل تريد المتابعة؟',async()=>{
-    try{
-      const snap=await db.collection('courses').doc(activeCourseId).collection('chat').get();
-      const docs=snap.docs;for(let i=0;i<docs.length;i+=450){const batch=db.batch();docs.slice(i,i+450).forEach(d=>batch.delete(d.ref));await batch.commit();}
-      cancelReply?.();
-      showCustomAlert('تم الحذف','تم حذف جميع رسائل الدردشة.');
-    }catch(e){console.error(e);showCustomAlert('خطأ','تعذر حذف المحادثة كاملة.');}
-  });
-}
-window.clearChatV19=clearChatV19;
-function updateChatMenuStateV19(){
-  document.querySelectorAll('.v19-chat-menu-wrap').forEach(w=>{
-    w.style.display=isAdmin?'flex':'none';
-    const lock=w.querySelector('[data-action="lock"]'),unlock=w.querySelector('[data-action="unlock"]');
-    const locked=!!currentChatLock?.locked;
-    if(lock)lock.style.display=isAdmin&&!locked?'flex':'none';
-    if(unlock)unlock.style.display=isAdmin&&locked?'flex':'none';
-  });
-}
-function ensureChatShellV19(root){
-  if(!root)return;
-  const header=root.querySelector('.page-title,.chat-header');if(!header)return;
-  const oldBack=root.querySelector('#fullPageCloseChatBtn,#closeFullChatBtn');
-  if(oldBack){oldBack.classList.add('v19-chat-back-btn');oldBack.innerHTML='<i class="fas fa-arrow-right"></i>';oldBack.title='العودة';oldBack.setAttribute('aria-label','العودة');}
-  let wrap=header.querySelector('.v19-chat-menu-wrap');
-  if(!wrap){
-    wrap=document.createElement('div');wrap.className='v19-chat-menu-wrap';
-    wrap.innerHTML='<button type="button" class="v19-chat-menu-btn" aria-label="خيارات الدردشة" title="خيارات الدردشة"><i class="fas fa-ellipsis-vertical"></i></button><div class="v19-chat-menu-panel"><button type="button" class="v19-chat-menu-item" data-action="lock"><i class="fas fa-lock"></i><span>قفل الدردشة</span></button><button type="button" class="v19-chat-menu-item" data-action="unlock"><i class="fas fa-lock-open"></i><span>فتح الدردشة</span></button><button type="button" class="v19-chat-menu-item danger" data-action="clear"><i class="fas fa-trash"></i><span>حذف المحادثة كلها</span></button></div>';
-    header.appendChild(wrap);
-    const btn=wrap.querySelector('.v19-chat-menu-btn'),panel=wrap.querySelector('.v19-chat-menu-panel');
-    btn.onclick=e=>{e.stopPropagation();panel.classList.toggle('show');updateChatMenuStateV19();};
-    wrap.querySelector('[data-action="clear"]').onclick=()=>{panel.classList.remove('show');clearChatV19();};
-    wrap.querySelector('[data-action="lock"]').onclick=()=>{panel.classList.remove('show');window.openChatLockDialog?.();};
-    wrap.querySelector('[data-action="unlock"]').onclick=()=>{panel.classList.remove('show');window.unlockCourseChat?.();};
-  }
-  updateChatMenuStateV19();
-}
-['courseChatPage','fullChatPage'].forEach(id=>ensureChatShellV19($(id)));
-document.addEventListener('click',e=>{
-  document.querySelectorAll('.v19-chat-menu-panel.show').forEach(p=>{if(!p.parentElement.contains(e.target))p.classList.remove('show')});
-},true);
-
-/* Keep menu state live as lock state changes. */
-try{
-  const oldApply=window.applyChatLockNow;
-  if(typeof oldApply==='function'&&!oldApply.__v19Wrapped){
-    const wrapped=function(){const r=oldApply.apply(this,arguments);setTimeout(updateChatMenuStateV19,20);return r};wrapped.__v19Wrapped=true;window.applyChatLockNow=wrapped;
-  }
-}catch(_){}
-
-/* Back buttons on both chat variants. */
-document.addEventListener('click',e=>{
-  if(e.target.closest?.('#fullPageCloseChatBtn,#closeFullChatBtn')){hideJumpV19();setTimeout(syncJumpButtonV19,30);}
-},true);
-
-/* Send => always last message for the sender while staying in the chat page. */
-document.addEventListener('click',e=>{
-  const send=e.target.closest?.('#fullChatPageSendBtn,#fullSendChatBtn');
-  if(!send)return;
-  if(window.__v19ChatContainer){window.__v19ChatContainer.dataset.v19ForceBottom='1';setTimeout(()=>scrollChatBottomV19(window.__v19ChatContainer,true),180);setTimeout(()=>scrollChatBottomV19(window.__v19ChatContainer,true),650);}
-},true);
-
-/* =============================================================
-   D) Assignment submissions: real user avatar + name + profile link.
-   ============================================================= */
-const submitterCache=Object.create(null);
-async function hydrateAssignmentSubmittersV19(){
-  const cards=[...document.querySelectorAll('.assignment-work-card[data-user-id]')];
-  await Promise.all(cards.map(async card=>{
-    const uid=card.dataset.userId;if(!uid)return;
-    let p=submitterCache[uid];
-    if(!p){try{const s=await db.collection('users').doc(uid).get();p=s.exists?(s.data()||{}):{};}catch(_){p={};}submitterCache[uid]=p;}
-    const subName=p.displayName||p.name||card.querySelector(':scope > div:first-child')?.textContent?.split('✅')[0]?.split('⏳')[0]?.trim()||'طالب';
-    const photo=p.photoURL||p.photoUrl||p.photo||'';
-    let status=card.querySelector(':scope > .v19-submitter-status')?.textContent||'';
-    const first=card.firstElementChild;
-    if(!first||first.classList.contains('v19-submitter'))return;
-    const existing=first.textContent||'';status=existing.includes('معتمد')?'✅ معتمد':(existing.includes('قيد المراجعة')?'⏳ قيد المراجعة':'');
-    const b=document.createElement('button');b.type='button';b.className='v19-submitter';b.dataset.profileUid=uid;b.innerHTML=`<span class="v19-submitter-avatar">${photo?`<img src="${esc(photo)}" alt="">`:`<span>${esc(subName.slice(0,1)||'ط')}</span>`}</span><span class="v19-submitter-copy"><span class="v19-submitter-name">${esc(subName)}</span><span class="v19-submitter-status">${esc(status)}</span></span>`;b.onclick=async e=>{e.preventDefault();e.stopPropagation();rememberProfileOriginV19();try{await window.openPublicProfileFinal?.(uid,false)}catch(err){console.error(err)}setTimeout(patchProfileBackButtonsV19,150)};
-    first.replaceWith(b);
-  }));
-}
-window.hydrateAssignmentSubmittersV19=hydrateAssignmentSubmittersV19;
-
-/* Live assignment details: changes by students/admin appear immediately. */
-let assignmentLiveUnsubV19=null;
-function stopAssignmentLiveV19(){if(assignmentLiveUnsubV19){try{assignmentLiveUnsubV19()}catch(_){}assignmentLiveUnsubV19=null;}}
-function startAssignmentLiveV19(courseId,assignmentId){
-  stopAssignmentLiveV19();if(!courseId||!assignmentId)return;
-  assignmentLiveUnsubV19=db.collection('courses').doc(courseId).collection('assignments').doc(assignmentId).onSnapshot(async snap=>{
-    if(!snap.exists)return;
-    const content=$('assignmentDetailContent');if(content){try{await refreshAssignmentDetail(courseId,assignmentId)}catch(_){content.innerHTML=renderAssignmentDetailHtml(courseId,assignmentId,snap.data()||{});}await hydrateAssignmentSubmittersV19();}
-    try{window.loadAssignmentsPage?.(courseId)}catch(_){ }
-  },err=>console.warn('assignment realtime',err));
-}
-window.stopAssignmentLiveV19=stopAssignmentLiveV19;
-const latestOpenAssignmentV19=window.openAssignmentDetail;
-if(typeof latestOpenAssignmentV19==='function'&&!latestOpenAssignmentV19.__v19Live){
-  const wrapped=async function(courseId,assignmentId){const r=await latestOpenAssignmentV19.apply(this,arguments);startAssignmentLiveV19(courseId,assignmentId);setTimeout(hydrateAssignmentSubmittersV19,30);return r};wrapped.__v19Live=true;window.openAssignmentDetail=wrapped;
-}
-document.addEventListener('click',e=>{if(e.target.closest?.('#fullPageCloseChatBtn,#closeFullChatBtn'))stopAssignmentLiveV19();},true);
-
-/* =============================================================
-   E) Profile portfolio + directory live listeners.
-   ============================================================= */
-let profileLiveUnsubsV19=[];
-function clearProfileLiveV19(){profileLiveUnsubsV19.forEach(fn=>{try{fn()}catch(_) {}});profileLiveUnsubsV19=[];}
-async function startProfileLiveV19(uid){
-  clearProfileLiveV19();if(!uid)return;
-  try{
-    const uref=db.collection('users').doc(uid).collection('portfolioWorks');
-    profileLiveUnsubsV19.push(uref.onSnapshot(()=>window.renderProfileWorksV18?.(uid)));
-  }catch(_){}
-  try{
-    const cs=await db.collection('courses').get();
-    cs.forEach(c=>{const unsub=c.ref.collection('assignments').onSnapshot(()=>{if($('ananasCanonicalProfilePage')?.classList.contains('active')||$('userProfilePage')?.classList.contains('active')){window.renderProfileWorksV18?.(uid);window.renderProfileForUidFinal?.(uid,uid===currentUser?.uid);}});profileLiveUnsubsV19.push(unsub);});
-  }catch(_){}
-  try{
-    const unsub=db.collection('users').onSnapshot(()=>{if($('ananasCanonicalProfilePage')?.classList.contains('active')||$('userProfilePage')?.classList.contains('active')){window.loadDirectoryFinal?.();}});profileLiveUnsubsV19.push(unsub);
-  }catch(_){}
-}
-window.startProfileLiveV19=startProfileLiveV19;
-
-/* Wrap public profile entry point so the live listeners attach after it opens. */
-const latestPublicV19=window.openPublicProfileFinal;
-if(typeof latestPublicV19==='function'&&!latestPublicV19.__v19Live){
-  const wrapped=async function(uid){rememberProfileOriginV19();const r=await latestPublicV19.apply(this,arguments);patchProfileBackButtonsV19();startProfileLiveV19(uid);return r};wrapped.__v19Live=true;window.openPublicProfileFinal=wrapped;window.openAnanasV10Profile=wrapped;window.viewProfileByUserId=wrapped;
-}
-const latestOwnV19=window.openUserProfilePage;
-if(typeof latestOwnV19==='function'&&!latestOwnV19.__v19Live){const wrapped=async function(){rememberProfileOriginV19();const r=await latestOwnV19.apply(this,arguments);patchProfileBackButtonsV19();startProfileLiveV19(currentUser?.uid);return r};wrapped.__v19Live=true;window.openUserProfilePage=wrapped;}
-
-/* =============================================================
-   F) Realtime updates for the currently open course lists.
-   ============================================================= */
-let courseLiveUnsubsV19=[];
-function clearCourseLiveV19(){courseLiveUnsubsV19.forEach(fn=>{try{fn()}catch(_) {}});courseLiveUnsubsV19=[];}
-function startCourseLiveV19(courseId){
-  clearCourseLiveV19();if(!courseId)return;
-  const c=db.collection('courses').doc(courseId);
-  const listen=(sub,fn)=>{try{courseLiveUnsubsV19.push(c.collection(sub).onSnapshot(()=>{const visible=(sub==='lessons'&&currentCoursePage==='learning')||(sub==='quizzes'&&currentCoursePage==='quizzes')||(sub==='assignments'&&['assignments','dashboard','overview'].includes(currentCoursePage));if(visible)fn?.();}));}catch(_) {}};
-  listen('lessons',()=>{window.loadLessonsForCourse?.(courseId);window.loadLessonsForCurrentCourse?.(courseId)});
-  listen('quizzes',()=>{window.loadQuizzesForCourse?.(courseId);window.loadQuizzesPage?.(courseId)});
-  listen('assignments',()=>{window.loadAssignmentsPage?.(courseId)});
-}
-window.startCourseLiveV19=startCourseLiveV19;
-const latestOpenCourseV19=window.openCourseContent;
-if(typeof latestOpenCourseV19==='function'&&!latestOpenCourseV19.__v19Live){const wrapped=async function(courseId){const r=await latestOpenCourseV19.apply(this,arguments);startCourseLiveV19(courseId);return r};wrapped.__v19Live=true;window.openCourseContent=wrapped;}
-
-/* =============================================================
-   G) Chat settings are realtime too.
-   ============================================================= */
-let chatSettingsLiveV19=null;
-function watchChatSettingsV19(courseId){
-  if(chatSettingsLiveV19){try{chatSettingsLiveV19()}catch(_){}chatSettingsLiveV19=null;}
-  if(!courseId)return;
-  chatSettingsLiveV19=db.collection('courses').doc(courseId).collection('settings').doc('chat').onSnapshot(s=>{currentChatLock=s.exists?(s.data()||{locked:false}):{locked:false};window.applyChatLockNow?.();updateChatMenuStateV19();});
-}
-window.watchChatSettingsV19=watchChatSettingsV19;
-
-/* =============================================================
-   H) Ensure reply saving keeps the message id. The existing
-      replyTo() variables are the source of truth.
-   ============================================================= */
-const oldReplyToV19=window.replyTo;
-/* replyTo is a function declaration in the legacy script, so if it
-   is not exposed as window property this block simply uses it as-is. */
-if(typeof oldReplyToV19==='function'&&!oldReplyToV19.__v19){const w=function(){rememberReplyOriginV19?.();return oldReplyToV19.apply(this,arguments)};w.__v19=true;window.replyTo=w;}
-function rememberReplyOriginV19(){}
-
-/* =============================================================
-   I) Navigation/visibility observers for the last-message button.
-   ============================================================= */
-const visObs=new MutationObserver(()=>{syncJumpButtonV19();ensureChatShellV19($('courseChatPage'));ensureChatShellV19($('fullChatPage'));});
-try{visObs.observe(document.body,{subtree:true,attributes:true,attributeFilter:['class','style']});}catch(_){}
-window.addEventListener('resize',syncJumpButtonV19);
-window.addEventListener('beforeunload',()=>{hideJumpV19();stopAssignmentLiveV19();clearProfileLiveV19();clearCourseLiveV19();if(chatSettingsLiveV19){try{chatSettingsLiveV19()}catch(_){}chatSettingsLiveV19=null;}});
-
-/* Small repair: if the current profile exists but the header button still
-   says "مستخدم", pull the actual Firestore name once. */
-setTimeout(async()=>{try{
-  if(currentUser?.uid){const s=await db.collection('users').doc(currentUser.uid).get();if(s.exists){currentUserProfile=s.data()||{};syncAccountButtonV19();}}
-}catch(_){}},900);
-
-/* Start listeners for already-open surfaces. */
-setTimeout(()=>{
-  ensureChatShellV19($('courseChatPage'));ensureChatShellV19($('fullChatPage'));syncAccountButtonV19();
-  if(activeCourseId){watchChatSettingsV19(activeCourseId);startCourseLiveV19(activeCourseId);}
-  hydrateAssignmentSubmittersV19();
-},120);
-
-})();
 </script>
