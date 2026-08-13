@@ -12609,220 +12609,83 @@ document.addEventListener('keydown',e=>{if(e.key==='Escape'&&$('aaV12WorkViewer'
 })();
 </script>
 
-<style id="final-v13-profile-work-css">.final-v13-modal{font-family:inherit}</style>
-<script id="final-v13-profile-work-patch">(function(){
-'use strict';
-const $=id=>document.getElementById(id);
-const esc=v=>window.escapeHtml?window.escapeHtml(v):String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const imgList=x=>Array.isArray(x?.images)?x.images.filter(Boolean):(x?.imageUrl?[x.imageUrl]:[]);
 
-/* ==========================================================
-   FINAL PROFILE BUTTON FIX
-   Remove all old listeners from the account button so the
-   profile opener cannot recurse through legacy implementations.
-   ========================================================== */
-function bindAccountButtonOnce(){
-  const old=$('authToggleBtn');
-  if(!old || old.dataset.finalV13Bound==='1') return;
-  const clone=old.cloneNode(true);
-  old.replaceWith(clone);
-  clone.dataset.finalV13Bound='1';
-  clone.addEventListener('click',e=>{
-    e.preventDefault(); e.stopPropagation(); e.stopImmediatePropagation();
-    if(!currentUser){
-      $('authPopup')?.classList.add('active');
-      $('authStep1')&&( $('authStep1').style.display='block');
-      $('authStep2')&&( $('authStep2').style.display='none');
+<!-- FINAL PROFILE OPEN SAFETY PATCH -->
+<script id="final-profile-open-safety-patch">
+(function(){
+'use strict';
+const $id=id=>document.getElementById(id);
+
+/* One authoritative profile opener: never call older profile implementations. */
+window.aaOpenProfile = async function(uid, opts={}){
+  if(!window.currentUser || !uid) return;
+  try{
+    if(typeof window.hideLegacy==='function') window.hideLegacy();
+    else ['userProfilePage','ananasV10ProfilePage','ananasPrivateProfileOverlay','ananasCanonicalProfilePage'].forEach(id=>{
+      const e=$id(id); if(e){e.classList.remove('active');e.style.setProperty('display','none','important');}
+    });
+    const host=$id('aaRebuiltProfilePage');
+    if(!host){
+      if(typeof window.ensureProfilePage==='function') window.ensureProfilePage();
+    }
+    const page=$id('aaRebuiltProfilePage');
+    if(!page) throw new Error('PROFILE_PAGE_NOT_FOUND');
+    page.classList.add('active');
+    document.body.classList.add('aa-profile-open');
+    if(typeof window.__renderReliableProfile==='function'){
+      await window.__renderReliableProfile(uid, uid===window.currentUser.uid);
       return;
     }
-    window.openUserProfilePage?.();
-  },true);
-}
-
-let profileOpenBusy=false;
-window.aaOpenProfile=async function(uid,opts={}){
-  if(!currentUser || !uid || profileOpenBusy) return;
-  profileOpenBusy=true;
-  const isSelf=String(uid)===String(currentUser.uid);
-  try{
-    window.profileState={uid:String(uid),isSelf,source:opts.source||{kind:opts.kind||'public'},returnPoint:opts.returnPoint||null};
-    window.__aaViewedProfileUid=String(uid);
-    const page=$('aaRebuiltProfilePage');
-    if(page){
-      page.classList.add('active');
-      document.body.classList.add('aa-profile-open');
+    if(typeof window.renderAuthoritativeProfile==='function'){
+      await window.renderAuthoritativeProfile(uid, uid===window.currentUser.uid);
+      return;
     }
-    // Render immediately; do not await any legacy opener.
-    const renderer=window.__renderAuthoritativeProfile || window.__renderReliableProfile || window.__renderProfile;
-    if(typeof renderer==='function'){
-      Promise.resolve(renderer(String(uid),isSelf)).catch(err=>{
-        console.error('final profile render',err);
-        const g=$('aaProfileGallery');
-        if(g)g.innerHTML='<div class="aa-profile-empty">تعذر تحميل بيانات الملف الشخصي.</div>';
-      }).finally(()=>{
-        decorateProfileGallery();
-      });
-    }else{
-      console.error('No authoritative profile renderer found');
-      showCustomAlert?.('خطأ','تعذر فتح الملف الشخصي.');
-    }
+    throw new Error('PROFILE_RENDERER_NOT_FOUND');
   }catch(err){
-    console.error('final profile open',err);
-    showCustomAlert?.('خطأ','تعذر فتح الملف الشخصي.');
-  }finally{
-    profileOpenBusy=false;
+    console.error('final profile open failed',err);
+    try{window.showCustomAlert?.('خطأ','تعذر فتح الملف الشخصي.');}catch(_){ }
   }
 };
-window.openUserProfilePage=()=>currentUser?window.aaOpenProfile(currentUser.uid,{kind:'self'}):undefined;
-window.openPublicProfileFinal=uid=>uid?window.aaOpenProfile(uid,{kind:uid===currentUser?.uid?'self':'public',returnPoint:typeof profileReturnPoint==='function'?profileReturnPoint():null}):undefined;
+
+window.openUserProfilePage=async function(){
+  if(!window.currentUser) return window.triggerAuth?.();
+  return window.aaOpenProfile(window.currentUser.uid,{kind:'self'});
+};
+window.openPublicProfileFinal=function(uid){
+  if(!window.currentUser||!uid) return window.triggerAuth?.();
+  return window.aaOpenProfile(uid,{kind:uid===window.currentUser.uid?'self':'public'});
+};
 window.viewProfileByUserId=window.openPublicProfileFinal;
 window.openStudentProfile=window.openPublicProfileFinal;
 window.openAnanasV10Profile=window.openPublicProfileFinal;
-window.openChatProfileV13=uid=>uid&&window.aaOpenProfile(uid,{kind:'chat',returnPoint:typeof profileReturnPoint==='function'?profileReturnPoint():null});
+window.openChatProfileV13=uid=>window.aaOpenProfile(uid,{kind:'chat'});
 window.openChatProfileV12=window.openChatProfileV13;
-bindAccountButtonOnce();
 
-/* ==========================================================
-   PROFILE WORK VIEWER / EDIT / DELETE
-   Personal portfolio works use portfolioWorks documents.
-   Assignment works continue to use the real assignment viewer.
-   ========================================================== */
-function ensureWorkModal(){
-  let m=$('finalPortfolioWorkEditModal');
-  if(m) return m;
-  m=document.createElement('div');m.id='finalPortfolioWorkEditModal';m.className='final-v13-modal';
-  m.innerHTML=`<div class="final-v13-modal-card">
-    <div class="final-v13-modal-head"><div><h3>تعديل العمل</h3><p>عدّل بيانات العمل والصور من هنا.</p></div><button type="button" id="finalV13WorkClose">×</button></div>
-    <label>عنوان العمل<input id="finalV13WorkTitle" data-required="true" type="text"></label>
-    <label>نوع العمل<input id="finalV13WorkType" data-required="true" type="text"></label>
-    <label>وصف العمل<textarea id="finalV13WorkDesc" rows="4"></textarea></label>
-    <div><strong>الصور الحالية</strong><div id="finalV13WorkImages" class="final-v13-images"></div></div>
-    <input id="finalV13WorkFiles" type="file" accept="image/*" multiple hidden>
-    <button type="button" id="finalV13WorkAddFiles" class="final-v13-secondary"><i class="fas fa-plus"></i> إضافة صور</button>
-    <div id="finalV13WorkStatus" class="final-v13-status"></div>
-    <div class="final-v13-modal-actions"><button type="button" id="finalV13WorkCancel" class="final-v13-secondary">إلغاء</button><button type="button" id="finalV13WorkSave" class="final-v13-primary">حفظ التعديل</button></div>
-  </div>`;
-  document.body.appendChild(m);
-  const close=()=>m.classList.remove('active');
-  $('finalV13WorkClose').onclick=close;$('finalV13WorkCancel').onclick=close;
-  $('finalV13WorkAddFiles').onclick=()=>$('finalV13WorkFiles').click();
-  $('finalV13WorkFiles').onchange=async()=>{
-    const files=[...($('finalV13WorkFiles').files||[])];if(!files.length)return;
-    const arr=JSON.parse(m.dataset.images||'[]');$('finalV13WorkStatus').textContent='جاري رفع الصور...';
-    try{for(const f of files){const u=await uploadImage(f);if(u)arr.push(u);}m.dataset.images=JSON.stringify(arr);renderWorkImages();$('finalV13WorkStatus').textContent='تمت إضافة الصور.';}
-    catch(e){console.error(e);$('finalV13WorkStatus').textContent='تعذر رفع الصور.';}
-    finally{$('finalV13WorkFiles').value='';}
-  };
-  function renderWorkImages(){
-    const arr=JSON.parse(m.dataset.images||'[]');
-    $('finalV13WorkImages').innerHTML=arr.map((u,i)=>`<div class="final-v13-image"><img src="${esc(u)}"><button type="button" data-remove-index="${i}" title="حذف الصورة">×</button></div>`).join('')||'<div class="aa-profile-empty">لا توجد صور.</div>';
-  }
-  $('finalV13WorkImages').onclick=e=>{
-    const b=e.target.closest('[data-remove-index]');if(!b)return;const arr=JSON.parse(m.dataset.images||'[]');arr.splice(Number(b.dataset.removeIndex),1);m.dataset.images=JSON.stringify(arr);renderWorkImages();
-  };
-  $('finalV13WorkSave').onclick=async()=>{
-    const title=$('finalV13WorkTitle').value.trim(),type=$('finalV13WorkType').value.trim(),desc=$('finalV13WorkDesc').value.trim(),arr=JSON.parse(m.dataset.images||'[]');
-    const required=[['finalV13WorkTitle',title],['finalV13WorkType',type]];
-    let ok=true;required.forEach(([id,val])=>{const el=$(id);if(!val){ok=false;el.classList.add('final-v13-required-error')}else el.classList.remove('final-v13-required-error')});
-    if(!ok)return;
-    if(!arr.length){showCustomAlert?.('تنبيه','يجب أن يحتوي العمل على صورة واحدة على الأقل.');return;}
-    const id=m.dataset.workId;if(!id||!currentUser)return;
-    const btn=$('finalV13WorkSave');btn.disabled=true;$('finalV13WorkStatus').textContent='جاري الحفظ...';
-    try{
-      await db.collection('users').doc(currentUser.uid).collection('portfolioWorks').doc(id).update({title,type,description:desc,images:arr,updatedAt:firebase.firestore.FieldValue.serverTimestamp()});
-      close();await window.__renderAuthoritativeProfile?.(currentUser.uid,true);decorateProfileGallery();showCustomAlert?.('تم الحفظ','تم تعديل العمل بنجاح.');
-    }catch(e){console.error(e);$('finalV13WorkStatus').textContent='تعذر حفظ التعديل.';showCustomAlert?.('خطأ','تعذر حفظ تعديل العمل.');}
-    finally{btn.disabled=false;}
-  };
-  m._renderWorkImages=renderWorkImages;
-  return m;
-}
-
-window.__editProfilePortfolioWork=async function(id){
-  if(!currentUser||!id)return;
-  try{
-    const ref=db.collection('users').doc(currentUser.uid).collection('portfolioWorks').doc(id);const snap=await ref.get();
-    if(!snap.exists)return showCustomAlert?.('غير متاح','العمل غير موجود.');
-    const x=snap.data()||{},m=ensureWorkModal();m.dataset.workId=id;m.dataset.images=JSON.stringify(imgList(x));
-    $('finalV13WorkTitle').value=x.title||'';$('finalV13WorkType').value=x.type||'';$('finalV13WorkDesc').value=x.description||'';$('finalV13WorkStatus').textContent='';
-    m._renderWorkImages();m.classList.add('active');
-  }catch(e){console.error(e);showCustomAlert?.('خطأ','تعذر فتح تعديل العمل.');}
-};
-window.__deleteProfilePortfolioWork=async function(id){
-  if(!currentUser||!id)return;
-  showCustomConfirm?.('حذف العمل','هل تريد حذف هذا العمل من معرض أعمالك؟',async()=>{
-    try{
-      await db.collection('users').doc(currentUser.uid).collection('portfolioWorks').doc(id).update({deleted:true,deletedAt:firebase.firestore.FieldValue.serverTimestamp()});
-      await window.__renderAuthoritativeProfile?.(currentUser.uid,true);decorateProfileGallery();showCustomAlert?.('تم الحذف','تم حذف العمل من المعرض.');
-    }catch(e){console.error(e);showCustomAlert?.('خطأ','تعذر حذف العمل.');}
-  });
-};
-window.__viewProfilePortfolioWork=function(images,title){
-  const urls=imgList({images});if(!urls.length)return showCustomAlert?.('غير متاح','لا توجد صور لهذا العمل.');
-  if(window.openPlatformGalleryViewer)window.openPlatformGalleryViewer(urls,title||'معاينة العمل');
-  else if(window.openV12WorkViewer)window.openV12WorkViewer(urls,title||'معاينة العمل');
-};
-
-async function decorateProfileGallery(){
-  const grid=$('aaProfileGallery');if(!grid)return;
-  const uid=window.profileState?.uid||currentUser?.uid;if(!uid)return;
-  const self=String(uid)===String(currentUser?.uid);
-  let portfolio=[];
-  try{const snap=await db.collection('users').doc(uid).collection('portfolioWorks').get();portfolio=snap.docs.map(d=>({id:d.id,...(d.data()||{})})).filter(x=>x.deleted!==true);}catch(_){portfolio=[];}
-  const portByTitle=new Map(portfolio.map(x=>[String(x.title||''),x]));
-  grid.querySelectorAll('.aa-profile-work').forEach(card=>{
-    const body=card.querySelector('.aa-profile-work-body');if(!body)return;
-    card.querySelector('.final-v13-work-actions')?.remove();
-    const oldView=card.querySelector('.aa-profile-view-work');
-    const title=body.querySelector('strong')?.textContent?.trim()||'';
-    const isAssignment=!!oldView?.dataset?.assignment;
-    const actions=document.createElement('div');actions.className='final-v13-work-actions';
-    if(isAssignment){
-      const b=document.createElement('button');b.type='button';b.className='final-v13-work-btn';b.innerHTML='<i class="fas fa-expand"></i> عرض العمل';b.onclick=e=>{e.preventDefault();e.stopPropagation();window.openAssignmentWorkViewer?.(oldView.dataset.course,oldView.dataset.assignment,oldView.dataset.work)};actions.appendChild(b);
-    }else{
-      const x=portByTitle.get(title);
-      if(x){
-        card.dataset.portfolioId=x.id;
-        const view=document.createElement('button');view.type='button';view.className='final-v13-work-btn';view.innerHTML='<i class="fas fa-expand"></i> عرض العمل';view.onclick=()=>window.__viewProfilePortfolioWork(x.images,x.title);actions.appendChild(view);
-        if(self){
-          const edit=document.createElement('button');edit.type='button';edit.className='final-v13-work-btn';edit.innerHTML='<i class="fas fa-pen"></i> تعديل';edit.onclick=()=>window.__editProfilePortfolioWork(x.id);
-          const del=document.createElement('button');del.type='button';del.className='final-v13-work-btn danger';del.innerHTML='<i class="fas fa-trash"></i> حذف';del.onclick=()=>window.__deleteProfilePortfolioWork(x.id);actions.append(edit,del);
-        }
-      }
-    }
-    if(actions.children.length)body.appendChild(actions);
+/* Remove every old listener attached directly to the account button, then bind one clean listener. */
+const account=$id('authToggleBtn');
+if(account){
+  const clean=account.cloneNode(true);
+  account.parentNode.replaceChild(clean,account);
+  clean.addEventListener('click',function(e){
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    if(!window.currentUser) return window.triggerAuth?.();
+    window.openUserProfilePage();
   });
 }
 
-/* Decorate every time the authoritative renderer finishes, including later refreshes. */
-const oldAuthoritative=window.__renderAuthoritativeProfile;
-if(typeof oldAuthoritative==='function' && !oldAuthoritative.__v13Wrapped){
-  const wrap=async function(uid,isSelf){const r=await oldAuthoritative(uid,isSelf);await decorateProfileGallery();return r;};
-  wrap.__v13Wrapped=true;window.__renderAuthoritativeProfile=wrap;
+/* Prevent duplicate profile-page opens from direct helper calls while one is already opening. */
+if(!window.__profileOpenGuard){
+  window.__profileOpenGuard=true;
+  let opening=false;
+  const raw=window.openUserProfilePage;
+  window.openUserProfilePage=async function(){
+    if(opening) return;
+    opening=true;
+    try{return await raw.apply(this,arguments);}finally{opening=false;}
+  };
 }
-
-/* Mutation fallback: profile gallery is rebuilt asynchronously; decorate when it changes. */
-const obs=new MutationObserver(()=>{const g=$('aaProfileGallery');if(g&&!g.querySelector('.final-v13-work-actions'))decorateProfileGallery();});
-obs.observe(document.body,{subtree:true,childList:true});
-
-/* Modal body lock: while a modal is open the page behind it cannot scroll. */
-const lockStyle=document.createElement('style');lockStyle.textContent=`
-.final-v13-modal{position:fixed!important;inset:0!important;z-index:120000!important;display:none!important;align-items:center!important;justify-content:center!important;background:rgba(0,0,0,.58)!important;backdrop-filter:blur(8px)!important;padding:18px!important;}
-.final-v13-modal.active{display:flex!important;}
-.final-v13-modal-card{width:min(760px,100%);max-height:min(90vh,760px);overflow:auto;background:var(--bg-card);color:var(--text-primary);border:1px solid var(--border);border-radius:24px;padding:20px;box-shadow:0 30px 90px rgba(0,0,0,.35);}
-.final-v13-modal-head{display:flex;align-items:center;gap:12px;margin-bottom:16px}.final-v13-modal-head h3{margin:0}.final-v13-modal-head p{margin:4px 0 0;color:var(--text-muted);font-size:.8rem}.final-v13-modal-head button{margin-inline-start:auto;width:40px;height:40px;border:1px solid var(--border);border-radius:50%;background:var(--bg-secondary);color:var(--text-primary);cursor:pointer;font-size:1.3rem;}
-.final-v13-modal-card>label,.final-v13-modal-card>div{display:flex;flex-direction:column;gap:6px;margin-top:12px;font-weight:800}.final-v13-modal-card input,.final-v13-modal-card textarea{width:100%;padding:12px;border:1px solid var(--border);border-radius:14px;background:var(--bg-secondary);color:var(--text-primary);font:inherit;outline:none}.final-v13-images{display:grid!important;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:10px}.final-v13-image{position:relative}.final-v13-image img{width:100%;height:110px;object-fit:cover;border-radius:12px}.final-v13-image button{position:absolute;top:5px;inset-inline-end:5px;width:28px;height:28px;border:0;border-radius:50%;background:#e74c3c;color:#fff;cursor:pointer}.final-v13-modal-actions{display:flex!important;flex-direction:row!important;gap:10px;margin-top:16px}.final-v13-primary,.final-v13-secondary,.final-v13-work-btn{min-height:42px;padding:9px 13px;border:1px solid var(--border);border-radius:12px;background:var(--bg-secondary);color:var(--text-primary);font:inherit;font-weight:900;cursor:pointer}.final-v13-primary{background:var(--accent-gradient);color:#fff;border-color:transparent}.final-v13-status{min-height:24px;color:var(--text-muted);font-size:.82rem}.final-v13-required-error{border-color:#e74c3c!important;box-shadow:0 0 0 3px rgba(231,76,60,.12)!important;background:rgba(231,76,60,.05)!important}.final-v13-work-actions{display:flex;flex-wrap:wrap;gap:7px;margin-top:10px}.final-v13-work-btn{flex:1;min-width:90px;font-size:.8rem}.final-v13-work-btn:hover{border-color:var(--accent1);color:var(--accent1)}.final-v13-work-btn.danger{color:#e74c3c}
-body.final-v13-modal-open{overflow:hidden!important;touch-action:none!important;}
-@media(max-width:768px){.final-v13-modal{padding:10px!important;align-items:flex-start!important}.final-v13-modal-card{max-height:calc(100vh - 20px)!important}.final-v13-modal-actions{flex-direction:column!important}.final-v13-work-actions{display:grid;grid-template-columns:1fr 1fr}.final-v13-work-btn{min-width:0}}
-`;
-document.head.appendChild(lockStyle);
-function syncBodyLock(){const any=document.querySelector('.final-v13-modal.active,.profile-self-modal.active,.aa-portfolio-modal.active');document.body.classList.toggle('final-v13-modal-open',!!any);}
-new MutationObserver(syncBodyLock).observe(document.body,{subtree:true,attributes:true,attributeFilter:['class']});
-
-/* Rebind final profile view button after all earlier patching has run. */
-bindAccountButtonOnce();
 })();
-
 </script>
 </body>
 </html>
