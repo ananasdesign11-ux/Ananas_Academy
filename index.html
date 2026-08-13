@@ -9342,6 +9342,258 @@ window.__openCanonicalProfile=openCanonicalV17;window.openUserProfilePage=()=>cu
 document.addEventListener('click',async e=>{const n=e.target.closest?.('.chat-msg .chat-profile-avatar,.chat-msg .chat-profile-name,.chat-msg .msg-header .u,[data-profile-uid]');if(!n)return;const msg=n.closest('.chat-msg');let uid=n.dataset.profileUid||n.closest('[data-profile-uid]')?.dataset.profileUid;if(!uid&&msg?.dataset.messageId&&typeof activeCourseId!=='undefined'&&activeCourseId){try{const s=await db.collection('courses').doc(activeCourseId).collection('chat').doc(msg.dataset.messageId).get();uid=s.data()?.userId||''}catch(_){}}if(uid){e.preventDefault();e.stopImmediatePropagation();await openCanonicalV17(uid,uid===currentUser?.uid);}},true);
 })();
 </script>
+
+
+<!-- ===== ANANAS V18 FINAL PROFILE + CHAT REBUILD ===== -->
+<style id="ananas-v18-profile-chat-style">
+/* ---------- V18 profile navigation ---------- */
+#acpHomeBtn{min-height:44px;padding:10px 15px;border-radius:14px;border:1px solid var(--border);background:var(--bg-card);color:var(--text-primary);font:inherit;font-weight:900;cursor:pointer;transition:.2s;display:none;align-items:center;gap:8px}
+#acpHomeBtn:hover{transform:translateY(-1px);border-color:var(--accent1);color:var(--accent1);box-shadow:0 10px 24px rgba(108,92,231,.10)}
+#acpBack{min-width:48px;width:48px;height:48px;padding:0!important;border-radius:16px!important;display:none!important;align-items:center;justify-content:center;font-size:1.55rem!important;font-weight:900!important;line-height:1}
+#acpBack:hover{transform:translateX(2px)!important;color:var(--accent1);border-color:rgba(108,92,231,.45)!important}
+#acpGallery .acp-work{cursor:default;transition:.22s}
+#acpGallery .acp-work:hover{transform:translateY(-3px);border-color:rgba(108,92,231,.42);box-shadow:0 18px 38px rgba(108,92,231,.10)}
+#acpGallery .acp-work-cover{cursor:zoom-in}
+#acpGallery .v18-gallery-actions{display:flex;gap:8px;margin-top:11px}
+#acpGallery .v18-gallery-actions button{min-height:40px;flex:1;border:1px solid var(--border);border-radius:12px;background:var(--bg-card);color:var(--text-primary);font:inherit;font-weight:900;cursor:pointer}
+#acpGallery .v18-gallery-actions button:hover{border-color:var(--accent1);color:var(--accent1)}
+#acpGallery .v18-gallery-actions .primary{background:var(--accent-gradient);color:#fff;border-color:transparent}
+
+/* ---------- V18 chat shell ---------- */
+#courseChatPage.v18-chat-page{position:relative!important;display:flex;flex-direction:column;min-height:100%;height:100%;padding:0!important;overflow:hidden!important;background:var(--bg-primary)!important}
+#courseChatPage.v18-chat-page .v18-chat-shell{width:min(1180px,100%);height:100%;margin:0 auto;display:flex;flex-direction:column;min-height:0;padding:22px clamp(14px,3vw,26px) 18px;gap:12px}
+.v18-chat-top{display:flex;align-items:center;justify-content:space-between;gap:12px;flex:0 0 auto;padding:14px 16px;border:1px solid var(--surface-border,var(--border));border-radius:20px;background:linear-gradient(145deg,var(--bg-card),rgba(108,92,231,.045));box-shadow:var(--surface-shadow,0 14px 34px rgba(0,0,0,.04))}
+.v18-chat-title{display:flex;align-items:center;gap:12px;min-width:0}.v18-chat-title-icon{width:44px;height:44px;border-radius:14px;background:rgba(108,92,231,.10);color:var(--accent1);display:grid;place-items:center;font-size:1.15rem;flex:0 0 auto}.v18-chat-title h2{margin:0;font-size:1.08rem}.v18-chat-title p{margin:3px 0 0;color:var(--text-muted);font-size:.78rem}
+.v18-chat-head-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.v18-chat-head-actions button{min-height:40px;border:1px solid var(--border);border-radius:12px;background:var(--bg-secondary);color:var(--text-primary);font:inherit;font-weight:850;cursor:pointer;padding:0 12px}.v18-chat-head-actions button:hover{border-color:var(--accent1);color:var(--accent1)}
+#chatAdminToolsPage.v18-admin-tools{display:flex!important;align-items:center;justify-content:flex-end;gap:8px;flex-wrap:wrap;flex:0 0 auto}#chatAdminToolsPage.v18-admin-tools:not(.show){display:none!important}
+.v18-chat-board{position:relative;display:flex;flex:1;min-height:0;overflow:hidden;border:1px solid var(--surface-border,var(--border));border-radius:24px;background:var(--bg-card);box-shadow:var(--surface-shadow,0 18px 44px rgba(0,0,0,.05))}
+#chatPageMessagesList.v18-chat-messages{height:auto!important;flex:1!important;min-height:0!important;overflow-y:auto!important;overflow-x:hidden!important;border:0!important;border-radius:0!important;background:transparent!important;padding:22px 16px 30px!important;display:flex!important;flex-direction:column!important;gap:8px!important;scroll-behavior:smooth;overscroll-behavior:contain}
+.v18-chat-date{align-self:center;padding:6px 12px;border-radius:999px;background:var(--bg-secondary);border:1px solid var(--border);color:var(--text-muted);font-size:.72rem;font-weight:800;margin:4px 0 6px}
+.v18-chat-msg{max-width:min(78%,680px);padding:11px 12px;border-radius:18px;border:1px solid var(--border);background:var(--bg-secondary);box-shadow:0 6px 18px rgba(0,0,0,.025);position:relative;animation:v18ChatIn .18s ease}.v18-chat-msg.sent{align-self:flex-start;background:linear-gradient(145deg,var(--accent1),#5b4cd1);color:#fff;border-color:transparent;border-bottom-left-radius:6px}.v18-chat-msg.received{align-self:flex-end;border-bottom-right-radius:6px}.v18-chat-msg.deleted{opacity:.75}.v18-chat-msg .v18-msg-head{display:flex;align-items:center;gap:8px;margin-bottom:6px}.v18-chat-msg .v18-msg-avatar{width:29px;height:29px;border-radius:10px;overflow:hidden;background:var(--accent-gradient);color:#fff;display:grid;place-items:center;font-size:.72rem;font-weight:950;flex:0 0 auto}.v18-chat-msg .v18-msg-avatar img{width:100%;height:100%;object-fit:cover}.v18-chat-msg .v18-msg-name{font-size:.76rem;font-weight:950;cursor:pointer}.v18-chat-msg.sent .v18-msg-name{color:#fff}.v18-chat-msg .v18-msg-name:hover{text-decoration:underline}.v18-chat-msg .v18-msg-body{font-size:.92rem;line-height:1.8;white-space:pre-wrap;word-break:break-word}.v18-chat-msg .v18-msg-time{margin-top:7px;font-size:.68rem;opacity:.68}.v18-chat-msg.sent .v18-msg-time{text-align:left}.v18-chat-msg .v18-msg-actions{display:flex;gap:5px;margin-top:7px;opacity:0;transition:.15s}.v18-chat-msg:hover .v18-msg-actions,.v18-chat-msg:focus-within .v18-msg-actions{opacity:1}.v18-chat-msg .v18-msg-actions button{width:31px;height:31px;border-radius:9px;border:1px solid var(--border);background:var(--bg-card);color:var(--text-muted);display:grid;place-items:center;cursor:pointer}.v18-chat-msg.sent .v18-msg-actions button{background:rgba(255,255,255,.10);border-color:rgba(255,255,255,.25);color:#fff}.v18-chat-msg .v18-msg-actions button:hover{color:var(--accent1);border-color:var(--accent1)}
+.v18-reply-preview{margin-bottom:8px;padding:7px 9px;border-right:3px solid var(--accent1);border-radius:10px;background:rgba(108,92,231,.08);cursor:pointer}.v18-chat-msg.sent .v18-reply-preview{background:rgba(255,255,255,.10);border-right-color:#fff}.v18-reply-preview strong{display:block;font-size:.73rem}.v18-reply-preview span{display:block;margin-top:2px;font-size:.72rem;opacity:.72;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.v18-msg-images{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px;margin-top:8px}.v18-msg-images.single{grid-template-columns:minmax(0,1fr)}.v18-msg-images img{width:100%;max-height:230px;object-fit:cover;border-radius:12px;cursor:zoom-in;border:1px solid rgba(255,255,255,.14)}
+.v18-chat-bottom{position:relative;display:flex;align-items:flex-end;gap:8px;flex:0 0 auto}.v18-chat-composer{position:relative;display:flex;align-items:flex-end;gap:8px;flex:1;padding:8px;border:1px solid var(--border);border-radius:18px;background:var(--bg-card);box-shadow:0 10px 28px rgba(0,0,0,.04)}.v18-chat-composer textarea{min-height:44px;max-height:140px;resize:none;flex:1;border:0!important;outline:none;background:transparent!important;color:var(--text-primary)!important;font:inherit;line-height:1.7;padding:9px 10px}.v18-chat-tool{width:42px;height:42px;border-radius:13px;border:1px solid var(--border);background:var(--bg-secondary);color:var(--text-muted);display:grid;place-items:center;cursor:pointer;flex:0 0 auto}.v18-chat-tool:hover{border-color:var(--accent1);color:var(--accent1)}.v18-chat-send{background:var(--accent-gradient)!important;border-color:transparent!important;color:#fff!important}.v18-chat-send:hover{filter:brightness(1.05);transform:translateY(-1px)}
+.v18-chat-selected-files{display:flex;gap:7px;overflow:auto;padding:2px 2px 4px;margin-top:3px}.v18-chat-selected-files:empty{display:none}.v18-chat-selected-file{position:relative;width:58px;height:58px;border-radius:12px;overflow:hidden;flex:0 0 auto;border:1px solid var(--border)}.v18-chat-selected-file img{width:100%;height:100%;object-fit:cover}.v18-chat-selected-file button{position:absolute;top:3px;left:3px;width:20px;height:20px;border:0;border-radius:7px;background:rgba(0,0,0,.65);color:#fff;cursor:pointer}
+.v18-chat-reply{display:none;align-items:center;justify-content:space-between;gap:10px;padding:9px 12px;border:1px solid rgba(108,92,231,.18);border-radius:14px;background:rgba(108,92,231,.06)}.v18-chat-reply.active{display:flex}.v18-chat-reply strong{font-size:.76rem}.v18-chat-reply span{display:block;color:var(--text-muted);font-size:.72rem;margin-top:2px;max-width:70vw;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.v18-chat-reply button{width:30px;height:30px;border-radius:9px;border:1px solid var(--border);background:var(--bg-card);color:var(--text-muted);cursor:pointer}
+.v18-chat-jump{position:absolute;left:18px;bottom:18px;width:44px;height:44px;border-radius:15px;border:1px solid var(--border);background:var(--bg-card);color:var(--accent1);box-shadow:0 12px 30px rgba(0,0,0,.14);display:grid;place-items:center;cursor:pointer;z-index:5;opacity:0;pointer-events:none;transform:translateY(8px);transition:.18s}.v18-chat-jump.show{opacity:1;pointer-events:auto;transform:translateY(0)}.v18-chat-jump:hover{transform:translateY(-2px)}
+.v18-chat-lock{flex:0 0 auto;display:none;padding:11px 13px;border:1px solid rgba(231,76,60,.2);border-radius:14px;background:rgba(231,76,60,.055);color:var(--text-primary);font-size:.8rem}.v18-chat-lock.active{display:block}
+.v18-chat-highlight{animation:v18ChatHighlight 2.1s ease}.v18-chat-typing{font-size:.72rem;color:var(--text-muted);padding:0 8px;display:none}
+@keyframes v18ChatIn{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}@keyframes v18ChatHighlight{0%,100%{box-shadow:0 0 0 0 rgba(108,92,231,0)}25%,75%{box-shadow:0 0 0 4px rgba(108,92,231,.34);border-color:rgba(108,92,231,.7)}}
+@media(max-width:700px){#courseChatPage.v18-chat-page .v18-chat-shell{padding:10px 8px 9px;gap:8px}.v18-chat-top{padding:10px 11px}.v18-chat-title-icon{width:38px;height:38px;border-radius:12px}.v18-chat-title h2{font-size:.98rem}.v18-chat-title p{display:none}.v18-chat-head-actions button{width:40px;padding:0;font-size:0}.v18-chat-head-actions button i{font-size:1rem}.v18-chat-msg{max-width:88%;padding:10px}.v18-chat-bottom{gap:5px}.v18-chat-composer{gap:5px;padding:6px}.v18-chat-tool,.v18-chat-send{width:38px;height:38px}.v18-chat-jump{left:10px;bottom:12px;width:40px;height:40px;border-radius:13px}}
+</style>
+<script id="ananas-v18-final-runtime">
+(function(){
+'use strict';
+const $=id=>document.getElementById(id);
+const escV18=window.escapeHtml||((v)=>String(v??'').replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])));
+
+/* ===== PROFILE: deterministic state, own-profile home button, other-profile arrow ===== */
+let v18OriginalCanonical=window.__openCanonicalProfile||window.openPublicProfileFinal||window.openAnanasV10Profile;
+if(!window.__v18CanonicalCaptured&&v18OriginalCanonical){window.__v18CanonicalCaptured=true;window.__v18OriginalCanonical=v18OriginalCanonical}
+v18OriginalCanonical=window.__v18OriginalCanonical||v18OriginalCanonical;
+
+function v18EnsureProfileHomeButton(){
+  const actions=$('ananasCanonicalProfilePage')?.querySelector('.acp-actions'); if(!actions)return null;
+  let b=$('acpHomeBtn');
+  if(!b){b=document.createElement('button');b.id='acpHomeBtn';b.type='button';b.innerHTML='<i class="fas fa-house"></i><span>الرئيسية</span>';actions.insertBefore(b,actions.firstChild);}
+  b.onclick=()=>{hideAllProfilesV17?.();document.querySelectorAll('.nav-btn,.auth-btn').forEach(x=>x.classList.remove('active'));try{window.mobileNavigate?.('courses')}catch(_){if(typeof window.switchCoursePage==='function'&&window.activeCourseId)window.switchCoursePage('overview');} };
+  return b;
+}
+function v18SetProfileNav(isSelf){
+  const back=$('acpBack'), home=v18EnsureProfileHomeButton();
+  if(back){back.innerHTML='&lt;';back.textContent='<';back.title='العودة إلى حسابي';back.setAttribute('aria-label','العودة إلى حسابي');back.style.setProperty('display',isSelf?'none':'inline-flex','important');back.onclick=async e=>{e.preventDefault();e.stopImmediatePropagation();if(!window.currentUser)return;const own=window.__v18OriginalCanonical;if(typeof own==='function'){await own(window.currentUser.uid,true);}else if(typeof window.openUserProfilePage==='function'){await window.openUserProfilePage();}v18SetProfileNav(true);try{window.resetPlatformScroll?.()}catch(_){};};}
+  if(home)home.style.display=isSelf?'inline-flex':'none';
+  $('acpEdit')?.style.setProperty('display',isSelf?'inline-flex':'none','important');
+  $('acpAddWork')?.style.setProperty('display',isSelf?'inline-flex':'none','important');
+  $('acpLogout')?.style.setProperty('display',isSelf?'inline-flex':'none','important');
+}
+async function v18RenderPublicGallery(uid,isSelf){
+  if(isSelf && uid===currentUser?.uid){/* keep existing self gallery, but still make preview clickable */}
+  const gallery=$('acpGallery');if(!gallery)return;
+  try{
+    const data=await getEffectiveProfileData(uid);
+    const personal=await loadPersonalPortfolio(uid);
+    const items=[...personal.map(x=>({kind:'personal',id:x.id,title:x.title||x.name||'عمل شخصي',meta:x.type||'عمل شخصي',description:x.description||'',images:Array.isArray(x.images)?x.images.filter(Boolean):(x.imageUrl?[x.imageUrl]:[])})),...data.assignmentWorks.map(x=>({kind:'assignment',id:x.workId,title:x.assignmentTitle||'واجب',meta:x.courseTitle||'دورة',description:x.approved?'معتمد':'قيد المراجعة',images:Array.isArray(x.images)?x.images.filter(Boolean):[]}))].filter(x=>x.images.length);
+    if(!items.length){gallery.innerHTML='<div class="acp-empty">لا توجد أعمال منشورة حاليًا.</div>';return;}
+    gallery.innerHTML=items.map((x,i)=>{
+      const first=x.images[0];
+      const payload=encodeURIComponent(JSON.stringify(x.images));
+      return `<article class="acp-work" data-v18-gallery-images="${payload}"><div class="acp-work-cover" data-v18-preview-work="1"><img src="${escV18(first)}" alt="${escV18(x.title)}"></div><div class="acp-work-body"><div class="acp-work-title">${escV18(x.title)}</div><div class="acp-work-meta">${escV18(x.meta)}${x.description?`<br>${escV18(x.description)}`:''}${x.images.length>1?`<br>${x.images.length} صور`:''}</div><div class="v18-gallery-actions"><button type="button" class="primary" data-v18-preview-work="1"><i class="fas fa-expand"></i> معاينة الأعمال</button></div></div></article>`;
+    }).join('');
+  }catch(e){console.warn('v18 gallery',e)}
+}
+function v18OpenImageSet(images,caption){if(!Array.isArray(images)||!images.length)return;if(typeof window.openPlatformGalleryViewer==='function'){window.openPlatformGalleryViewer(images,caption||'معاينة الأعمال');return}window.__ananasOpenLargeImage?.(images[0],caption||'معاينة الأعمال');}
+document.addEventListener('click',e=>{
+  const card=e.target.closest?.('#acpGallery .acp-work[data-v18-gallery-images]'); if(!card)return;
+  const trigger=e.target.closest?.('[data-v18-preview-work]'); if(!trigger)return;
+  e.preventDefault();e.stopPropagation();
+  try{const images=JSON.parse(decodeURIComponent(card.dataset.v18GalleryImages||'[]'));v18OpenImageSet(images,card.querySelector('.acp-work-title')?.textContent?.trim()||'معاينة الأعمال')}catch(_){ }
+},true);
+
+async function v18OpenCanonical(uid,isSelf){
+  if(!currentUser||!uid)return;
+  const self=uid===currentUser.uid||isSelf===true;
+  if(typeof v18OriginalCanonical==='function')await v18OriginalCanonical(uid,self);
+  v18SetProfileNav(self);
+  window.__ananasViewingProfileUid=uid;
+  try{
+    const snap=await db.collection('users').doc(uid).get();
+    const prof=snap.exists?(snap.data()||{}):{};
+    const admin=typeof resolveAdmin==='function'?await resolveAdmin():!!window.isAdmin;
+    const privateProfile=!self&&!admin&&prof.profilePublic===false;
+    if(!privateProfile)await v18RenderPublicGallery(uid,self);
+  }catch(e){console.warn('v18 public profile/gallery',e)}
+  try{window.resetPlatformScroll?.()}catch(_){ }
+}
+window.__openCanonicalProfile=v18OpenCanonical;
+window.openAnanasV10Profile=v18OpenCanonical;
+window.openPublicProfileFinal=uid=>v18OpenCanonical(uid,uid===currentUser?.uid);
+window.viewProfileByUserId=uid=>v18OpenCanonical(uid,uid===currentUser?.uid);
+window.openStudentProfile=v18OpenCanonical;
+window.openChatProfileV13=v18OpenCanonical;
+window.openChatProfileV12=v18OpenCanonical;
+window.openUserProfilePage=()=>currentUser?v18OpenCanonical(currentUser.uid,true):triggerAuth?.();
+
+/* Emoji picker rebuilt for the new composer. */
+function v18EmojiPicker(){
+  const btn=$('chatEmojiBtnPage'),input=$('fullChatPageInput');if(!btn||!input)return;
+  let picker=$('v18ChatEmojiPicker');
+  if(!picker){
+    picker=document.createElement('div');picker.id='v18ChatEmojiPicker';picker.style.cssText='position:absolute;bottom:calc(100% + 8px);right:0;width:min(300px,calc(100vw - 24px));max-height:230px;overflow:auto;display:none;grid-template-columns:repeat(8,minmax(0,1fr));gap:4px;padding:9px;background:var(--bg-secondary);border:1px solid var(--border);border-radius:15px;box-shadow:var(--shadow);z-index:20;direction:rtl;';
+    const emojis='😀 😂 😍 🥰 😎 😭 😡 👍 👏 🔥 ❤️ 🎉 ✨ 💯 🙏 🤍 🤣 😅 🤔 👀 💪 🙌 🌟 🎯 📚 ✏️ 🚀 😊 😮 😢 ❤️‍🔥 💙 😄 😁 😆 😇 🙂 🙃 😉 😌 😘 😗 😙 😚 😋 😛 😝 😜 🤪 🤨 🧐 🤓 😏 😒 🙄 😬 🤐 😴 🤤 😷 🤒 🤕 🤢 🤮 🤧 🥳 🤠 🤡 🤩 🥺 😱 😨 😰 😥 😓 🤗 🤭 🤫 🫡 🤥 😶 😐 😑 😯 😲 🥱 😪 😵 🤯 😈 👿 💀 👻 👽 🤖 💩 🎃 🐶 🐱 🦊 🐻 🐼 🐯 🦁 🦄 🐝 🦋 🌸 🌹 🌻 🌱 🍀 🍎 🍓 🍉 🍕 🍔 ☕ 🎂 ⚽ 🏆 🎮 🎵 🚀 ⭐ 🌈 ☀️ 🌙 🧡 💛 💚 💜 🖤 🤎 💔 💕 ✅ ❌ ❗ ❓ 🔔 📌 📎 🎁 💡 📝 🔒 🔓'.split(' ');
+    emojis.forEach(em=>{const b=document.createElement('button');b.type='button';b.textContent=em;b.title=em;b.style.cssText='border:0;background:transparent;border-radius:8px;padding:6px;cursor:pointer;font-size:20px;line-height:1;';b.addEventListener('click',()=>{const st=input.selectionStart??input.value.length,en=input.selectionEnd??input.value.length;input.value=input.value.slice(0,st)+em+input.value.slice(en);input.selectionStart=input.selectionEnd=st+em.length;input.focus();picker.style.display='none'});picker.appendChild(b)});
+    $('fullChatPageInput')?.parentElement?.appendChild(picker);
+    document.addEventListener('click',e=>{if(picker.style.display==='grid'&&!picker.contains(e.target)&&e.target!==btn&&!btn.contains(e.target))picker.style.display='none'},{passive:true});
+  }
+  picker.style.display=picker.style.display==='grid'?'none':'grid';
+}
+window.__ananasOpenChatEmojiPicker=v18EmojiPicker;
+/* ===== CHAT: full UI rebuild, keeping Firebase fields and existing feature functions ===== */
+let v18ChatUnsub=null,v18ChatCourse=null,v18ChatFiles=[],v18ChatSelectedReply=null;
+async function v18ClearChat(){
+  if(!isAdmin||!v18ChatCourse)return;
+  showCustomConfirm?.('حذف المحادثة','سيتم حذف جميع الرسائل. هل أنت متأكد؟',async()=>{
+    try{
+      const snap=await db.collection('courses').doc(v18ChatCourse).collection('chat').get();
+      const docs=snap.docs;if(!docs.length)return;
+      // Firestore batches are limited to 500 writes.
+      for(let i=0;i<docs.length;i+=450){
+        const batch=db.batch();docs.slice(i,i+450).forEach(d=>batch.delete(d.ref));await batch.commit();
+      }
+      v18ScrollBottom(false);
+    }catch(e){console.error('v18 clear chat',e);showCustomAlert?.('خطأ','تعذر حذف المحادثة بالكامل.');}
+  },()=>{});
+}
+function v18WatchChatLock(courseId){
+  if(window.__v18ChatLockUnsub){window.__v18ChatLockUnsub();window.__v18ChatLockUnsub=null}
+  if(!courseId)return;
+  window.__v18ChatLockUnsub=db.collection('courses').doc(courseId).collection('settings').doc('chat').onSnapshot(snap=>{
+    const d=snap.exists?(snap.data()||{}):{};currentChatLock=d;
+    const now=Date.now();const start=d.startAt?.toDate?d.startAt.toDate().getTime():Number(d.startAt||0);const end=d.endAt?.toDate?d.endAt.toDate().getTime():Number(d.endAt||0);let locked=!!d.locked;if(start&&now<start)locked=false;if(end&&now>=end&&d.autoExpire!==false)locked=false;
+    const banner=$('v18ChatLockBanner');if(banner){banner.classList.toggle('active',locked);banner.innerHTML=locked?`<strong><i class="fas fa-lock"></i> الدردشة مقفلة</strong><div style="margin-top:3px">${escV18(d.reason||'الدردشة مقفلة حاليًا.')}</div>`:''}
+    const can=isAdmin||!locked;
+    ['fullChatPageInput','fullChatPageSendBtn','fullChatPageFileInput','chatEmojiBtnPage','v18ChatImageBtn'].forEach(id=>{const el=$(id);if(el)el.disabled=!can});
+    const input=$('fullChatPageInput');if(input)input.placeholder=!can?'الدردشة مقفلة حاليًا':'اكتب رسالتك هنا...';
+    const lock=$('v18ChatLockBtn'),unlock=$('v18ChatUnlockBtn'),clear=$('v18ChatClearBtn');
+    lock?.classList.toggle('show',!!isAdmin&&!locked);unlock?.classList.toggle('show',!!isAdmin&&locked);clear?.classList.toggle('show',!!isAdmin);
+    [lock,unlock,clear].forEach(b=>b?.classList.toggle('admin-ready',!!isAdmin));
+    [$('v18ChatLockBtn'),$('v18ChatUnlockBtn'),$('v18ChatClearBtn')].forEach(b=>{if(b){b.style.display=isAdmin?'inline-flex':'none'}});
+    if(isAdmin&&lock)lock.style.display=locked?'none':'inline-flex';if(isAdmin&&unlock)unlock.style.display=locked?'inline-flex':'none';
+  });
+}
+function v18ChatShell(){
+  const page=$('courseChatPage');if(!page)return null;
+  if(page.dataset.v18Built==='1')return page;
+  page.dataset.v18Built='1';page.classList.add('v18-chat-page');
+  page.innerHTML=`<div class="v18-chat-shell">
+    <div class="v18-chat-top"><div class="v18-chat-title"><div class="v18-chat-title-icon"><i class="fas fa-comments"></i></div><div><h2>دردشة الدورة</h2><p>تواصل مع بقية الطلاب والمشرفين</p></div></div><div class="v18-chat-head-actions"><button type="button" id="v18ChatClearBtn" class="admin-only"><i class="fas fa-trash"></i><span>حذف</span></button><button type="button" id="v18ChatLockBtn" class="admin-only"><i class="fas fa-lock"></i><span>قفل</span></button><button type="button" id="v18ChatUnlockBtn" class="admin-only" style="display:none"><i class="fas fa-lock-open"></i><span>فتح</span></button><button type="button" id="v18ChatCloseBtn" title="العودة"><i class="fas fa-arrow-right"></i><span>عودة</span></button></div></div>
+    <div id="v18ChatLockBanner" class="v18-chat-lock"></div>
+    <div class="v18-chat-board"><div id="chatPageMessagesList" class="v18-chat-messages"></div><button type="button" id="v18ChatJumpBtn" class="v18-chat-jump" title="الانتقال إلى نهاية الدردشة"><i class="fas fa-arrow-down"></i></button></div>
+    <div id="v18ChatReply" class="v18-chat-reply"><div><strong id="v18ChatReplyName"></strong><span id="v18ChatReplyText"></span></div><button type="button" id="v18ChatReplyCancel" aria-label="إلغاء الرد">×</button></div>
+    <div id="chatImagePreviewPage" class="v18-chat-selected-files"></div>
+    <div class="v18-chat-bottom"><div class="v18-chat-composer"><button type="button" id="chatEmojiBtnPage" class="v18-chat-tool" title="إيموجي"><i class="far fa-smile"></i></button><button type="button" id="v18ChatImageBtn" class="v18-chat-tool" title="إضافة صور"><i class="fas fa-image"></i><input type="file" id="fullChatPageFileInput" accept="image/*" multiple hidden></button><textarea id="fullChatPageInput" rows="1" placeholder="اكتب رسالتك هنا..."></textarea><button type="button" id="fullChatPageSendBtn" class="v18-chat-tool v18-chat-send" title="إرسال"><i class="fas fa-paper-plane"></i></button></div></div>
+  </div>`;
+  // Reuse the platform's emoji picker binding if it exists.
+  const emoji=$('chatEmojiBtnPage'); if(emoji) emoji.addEventListener('click',()=>window.__ananasOpenChatEmojiPicker?.());
+  $('v18ChatImageBtn')?.addEventListener('click',()=>$('fullChatPageFileInput')?.click());
+  $('fullChatPageFileInput')?.addEventListener('change',e=>{v18ChatFiles=[...(e.target.files||[])];v18RenderSelectedFiles()});
+  $('v18ChatReplyCancel')?.addEventListener('click',()=>{v18ChatSelectedReply=null;cancelReply?.();v18SyncReplyUI()});
+  $('v18ChatCloseBtn')?.addEventListener('click',()=>window.switchCoursePage?.('dashboard'));
+  $('v18ChatJumpBtn')?.addEventListener('click',()=>v18ScrollBottom(true));
+  $('chatPageMessagesList')?.addEventListener('scroll',v18UpdateJump,{passive:true});
+  $('fullChatPageInput')?.addEventListener('input',v18AutoGrow);
+  $('fullChatPageInput')?.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();v18SendMessage();}});
+  $('fullChatPageSendBtn')?.addEventListener('click',v18SendMessage);
+  $('v18ChatClearBtn')?.addEventListener('click',v18ClearChat);
+  $('v18ChatLockBtn')?.addEventListener('click',()=>window.openChatLockDialog?.());
+  $('v18ChatUnlockBtn')?.addEventListener('click',()=>window.unlockCourseChat?.());
+  return page;
+}
+function v18RenderSelectedFiles(){const box=$('chatImagePreviewPage');if(!box)return;box.innerHTML=v18ChatFiles.map((f,i)=>`<div class="v18-chat-selected-file"><img src="${URL.createObjectURL(f)}" alt=""><button type="button" data-v18-file-index="${i}">×</button></div>`).join('');box.querySelectorAll('[data-v18-file-index]').forEach(b=>b.onclick=()=>{v18ChatFiles.splice(Number(b.dataset.v18FileIndex),1);v18RenderSelectedFiles()})}
+function v18AutoGrow(e){const t=e.target;t.style.height='auto';t.style.height=Math.min(t.scrollHeight,140)+'px'}
+function v18Date(v){try{const d=v?.toDate?v.toDate():(v?.seconds?new Date(v.seconds*1000):new Date(v));return d&&!isNaN(d)?d.toLocaleDateString('ar-SA',{year:'numeric',month:'long',day:'numeric'}):'—'}catch(_){return '—'}}
+function v18Time(v){try{const d=v?.toDate?v.toDate():(v?.seconds?new Date(v.seconds*1000):new Date(v));return d&&!isNaN(d)?d.toLocaleTimeString('ar-SA',{hour:'2-digit',minute:'2-digit'}):''}catch(_){return ''}}
+function v18Avatar(m){const photo=m.userPhoto||m.photoURL||m.photoUrl||m.photo||'';const name=m.userName||'زائر';return photo?`<img src="${escV18(photo)}" alt="">`:escV18(name.slice(0,1))}
+function v18ReplyToOriginal(id){if(!id)return;const list=$('chatPageMessagesList');if(!list)return;const target=list.querySelector(`[data-message-id="${CSS.escape(id)}"]`);if(!target)return;target.scrollIntoView({behavior:'smooth',block:'center'});target.classList.remove('v18-chat-highlight');void target.offsetWidth;target.classList.add('v18-chat-highlight');setTimeout(()=>target.classList.remove('v18-chat-highlight'),2200)}
+function v18RenderMessages(snapshot){
+  const list=$('chatPageMessagesList');if(!list)return;
+  if(snapshot.empty){list.innerHTML='<div class="v18-chat-date">لا توجد رسائل بعد</div>';v18UpdateJump();return}
+  let html='',last='';const uid=currentUser?.uid||null;
+  snapshot.forEach(doc=>{
+    const m=doc.data()||{};const mine=m.userId===uid,deleted=!!m.deleted;const d=m.createdAt?.toDate?m.createdAt.toDate():(m.createdAt?.seconds?new Date(m.createdAt.seconds*1000):new Date());const day=d.toLocaleDateString('ar-SA',{year:'numeric',month:'long',day:'numeric'});
+    if(day!==last){html+=`<div class="v18-chat-date">${escV18(day)}</div>`;last=day;}
+    const replyId=m.replyToId||'';const reply=m.replyToText?`<div class="v18-reply-preview" data-v18-reply-target="${escV18(replyId)}"><strong>${escV18(m.replyToName||'زائر')}</strong><span>${escV18(m.replyToText)}</span></div>`:'';
+    const imgs=Array.isArray(m.imageUrls)?m.imageUrls:(m.imageUrl?[m.imageUrl]:[]);const gallery=imgs.length?`<div class="v18-msg-images ${imgs.length===1?'single':''}">${imgs.map((u,i)=>`<img src="${escV18(u)}" alt="صورة" data-v18-msg-image="${escV18(u)}" data-v18-msg-gallery="${escV18(encodeURIComponent(JSON.stringify(imgs)))}">`).join('')}</div>`:'';
+    const head=`<div class="v18-msg-head"><span class="v18-msg-avatar">${v18Avatar(m)}</span><span class="v18-msg-name" data-v18-profile-uid="${escV18(m.userId||'')}">${escV18(m.userName||'زائر')}</span></div>`;
+    let body='';if(deleted&&!isAdmin){body='<div class="v18-msg-body" style="font-style:italic;color:var(--text-muted)"><i class="fas fa-ban"></i> هذه الرسالة محذوفة</div>'}else{body=`${deleted?'<div style="font-size:.75rem;color:#e74c3c;font-weight:900;margin-bottom:5px">تم حذف هذه الرسالة</div>':''}<div class="v18-msg-body">${escV18(m.message||'')}${m.edited?'<span style="opacity:.7;font-size:.7rem"> (معدلة)</span>':''}</div>${gallery}`}
+    const acts=deleted?'':`<div class="v18-msg-actions"><button type="button" data-v18-reply="${doc.id}" title="رد"><i class="fas fa-reply"></i></button>${mine?`<button type="button" data-v18-edit="${doc.id}" title="تعديل"><i class="fas fa-edit"></i></button>`:''}${mine||isAdmin?`<button type="button" data-v18-delete="${doc.id}" title="حذف"><i class="fas fa-trash"></i></button>`:''}</div>`;
+    html+=`<article class="v18-chat-msg ${mine?'sent':'received'} ${deleted?'deleted':''}" data-message-id="${doc.id}">${head}${reply}${body}<div class="v18-msg-time">${v18Time(m.createdAt)}</div>${acts}</article>`;
+  });
+  list.innerHTML=html;
+  list.querySelectorAll('[data-v18-reply-target]').forEach(r=>r.addEventListener('click',()=>v18ReplyToOriginal(r.dataset.v18ReplyTarget)));
+  list.querySelectorAll('[data-v18-msg-image]').forEach(img=>img.addEventListener('click',()=>{try{v18OpenImageSet(JSON.parse(decodeURIComponent(img.dataset.v18MsgGallery||'[]')),'صورة في المحادثة')}catch(_){v18OpenImageSet([img.dataset.v18MsgImage],'صورة في المحادثة')}}));
+  list.querySelectorAll('[data-v18-reply]').forEach(b=>b.addEventListener('click',()=>{const id=b.dataset.v18Reply;const node=list.querySelector(`[data-message-id="${CSS.escape(id)}"]`);const name=node?.querySelector('.v18-msg-name')?.textContent||'زائر';const txt=node?.querySelector('.v18-msg-body')?.textContent||'';if(typeof replyTo==='function')replyTo(id,name,txt.slice(0,120));v18ChatSelectedReply={id,name,text:txt.slice(0,120)};v18SyncReplyUI();$('fullChatPageInput')?.focus()}));
+  list.querySelectorAll('[data-v18-edit]').forEach(b=>b.addEventListener('click',()=>window.editChatMessage?.(v18ChatCourse,b.dataset.v18Edit)));
+  list.querySelectorAll('[data-v18-delete]').forEach(b=>b.addEventListener('click',()=>window.deleteChatMessage?.(v18ChatCourse,b.dataset.v18Delete)));
+  list.querySelectorAll('[data-v18-profile-uid]').forEach(b=>b.addEventListener('click',e=>{e.stopPropagation();const id=b.dataset.v18ProfileUid;if(id)window.viewProfileByUserId?.(id)}));
+  const nearBottom=list.scrollHeight-list.scrollTop-list.clientHeight<90;if(nearBottom||!list.dataset.v18Initial){v18ScrollBottom(false);list.dataset.v18Initial='1'}v18UpdateJump();
+}
+function v18SyncReplyUI(){const box=$('v18ChatReply');if(!box)return;if(v18ChatSelectedReply){box.classList.add('active');$('v18ChatReplyName').textContent=v18ChatSelectedReply.name||'زائر';$('v18ChatReplyText').textContent=v18ChatSelectedReply.text||''}else box.classList.remove('active')}
+function v18ScrollBottom(force){const list=$('chatPageMessagesList');if(!list)return;list.scrollTo({top:list.scrollHeight,behavior:force?'smooth':'auto'});setTimeout(v18UpdateJump,250)}
+function v18UpdateJump(){const list=$('chatPageMessagesList'),b=$('v18ChatJumpBtn');if(!list||!b)return;const far=list.scrollHeight-list.scrollTop-list.clientHeight>180;b.classList.toggle('show',far)}
+async function v18SendMessage(){
+  if(!activeCourseId||!currentUser)return triggerAuth?.();
+  if(currentChatLock?.locked&&!isAdmin)return showCustomAlert?.('الدردشة مقفلة',currentChatLock.reason||'الدردشة مقفلة حاليًا.');
+  const input=$('fullChatPageInput'),fileInput=$('fullChatPageFileInput');const message=input?.value.trim()||'';const files=v18ChatFiles.length?v18ChatFiles:Array.from(fileInput?.files||[]);if(!message&&!files.length)return;
+  const send=$('fullChatPageSendBtn');if(send)send.disabled=true;
+  try{
+    const imageUrls=[];for(const file of files){const url=await uploadImage(file);if(!url)throw Error('image-upload');imageUrls.push(url)}
+    const data={userId:currentUser.uid,userName:currentUser.displayName||currentUserProfile?.displayName||'طالب',userPhoto:currentUser.photoURL||currentUserProfile?.photoURL||currentUserProfile?.photoUrl||'',message,createdAt:firebase.firestore.FieldValue.serverTimestamp()};
+    if(imageUrls.length){data.imageUrls=imageUrls;data.imageUrl=imageUrls[0]}
+    const replyId=v18ChatSelectedReply?.id||window.replyToMsgId||null;if(replyId){data.replyToId=replyId;data.replyToName=v18ChatSelectedReply?.name||window.replyToUser||'زائر';data.replyToText=v18ChatSelectedReply?.text||window.replyToMsgText||''}
+    await db.collection('courses').doc(activeCourseId).collection('chat').add(data);
+    if(input){input.value='';input.style.height='44px'}v18ChatFiles=[];if(fileInput)fileInput.value='';v18RenderSelectedFiles();v18ChatSelectedReply=null;cancelReply?.();v18SyncReplyUI();setTimeout(()=>v18ScrollBottom(true),250);
+  }catch(e){console.error('v18 chat send',e);showCustomAlert?.('خطأ','تعذر إرسال الرسالة.');}finally{if(send)send.disabled=false}
+}
+async function v18LoadChatPage(courseId){
+  v18ChatShell();v18ChatCourse=courseId;
+  if(v18ChatUnsub){v18ChatUnsub();v18ChatUnsub=null}
+  const list=$('chatPageMessagesList');if(list){list.innerHTML='<div class="v18-chat-date">جاري تحميل الرسائل...</div>';list.dataset.v18Initial=''}
+  try{
+    v18ChatUnsub=db.collection('courses').doc(courseId).collection('chat').orderBy('createdAt','asc').onSnapshot(v18RenderMessages,e=>{console.error('v18 chat snapshot',e);if(list)list.innerHTML='<div class="v18-chat-date">تعذر تحميل الدردشة.</div>'});
+  }catch(e){console.error(e)}
+  v18WatchChatLock(courseId);
+}
+window.loadChatPage=v18LoadChatPage;
+
+/* Keep the existing course switcher pointing at the rebuilt shell. */
+const v18OldSwitch=window.switchCoursePage;
+if(v18OldSwitch&&!window.__v18SwitchPatched){window.__v18SwitchPatched=true;window.switchCoursePage=function(page){if(page==='chat'){v18ChatShell();const r=v18OldSwitch.apply(this,arguments);setTimeout(()=>v18LoadChatPage(window.activeCourseId),0);return r}return v18OldSwitch.apply(this,arguments)}}
+
+/* Cleanup before/after leaving chat */
+window.addEventListener('beforeunload',()=>{if(v18ChatUnsub)v18ChatUnsub()});
+})();
+</script>
 </body>
 </html>
 
