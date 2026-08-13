@@ -10832,5 +10832,293 @@ hideLegacy();
 })();
 </script>
 
+<script id="final-live-content-xp-fix">
+(function(){
+  'use strict';
+  const $ = id => document.getElementById(id);
+  const esc = window.escapeHtml || (v => String(v ?? '').replace(/[&<>\"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',"'":'&#39;'}[c])));
+
+  function asNumber(v){ return Number(v)||0; }
+  function ts(v){ try{return v?.toDate?v.toDate():new Date(v||0)}catch(_){return new Date(0)} }
+  function validDate(v){const d=ts(v);return !isNaN(d.getTime())&&d.getTime()>0;}
+
+  async function getExistingCourseContent(courseId){
+    const courseRef=db.collection('courses').doc(courseId);
+    const [ls,qs,as]=await Promise.all([
+      courseRef.collection('lessons').get(),
+      courseRef.collection('quizzes').get(),
+      courseRef.collection('assignments').get()
+    ]);
+    return {courseRef,lessons:ls.docs,quizzes:qs.docs,assignments:as.docs};
+  }
+
+  async function adjustUserXP(uid,delta){
+    if(!uid||!delta)return;
+    const ref=db.collection('userStats').doc(uid);
+    await db.runTransaction(async tx=>{
+      const snap=await tx.get(ref);
+      const current=asNumber(snap.exists?(snap.data()||{}).xp:0);
+      tx.set(ref,{xp:Math.max(0,current+delta),updatedAt:firebase.firestore.FieldValue.serverTimestamp()},{merge:true});
+    });
+  }
+
+  async function removeLessonXPFromUsers(courseId,lessonId){
+    const done=await db.collection('users').doc('_dummy').collection('completedLessons').get().catch(()=>null);
+    void done;
+    // completedLessons is stored per user, so find only users who have a record for this lesson.
+    const users=await db.collection('users').get();
+    let affected=0;
+    for(const u of users.docs){
+      const ref=u.ref.collection('completedLessons').doc(lessonId);
+      const snap=await ref.get().catch(()=>null);
+      if(!snap?.exists)continue;
+      const xp=asNumber((snap.data()||{}).xpEarned);
+      if(xp){await adjustUserXP(u.id,-xp);affected++;}
+      await ref.delete().catch(()=>{});
+    }
+    return affected;
+  }
+
+  async function removeQuizXPFromUsers(quizId){
+    const users=await db.collection('users').get();
+    let affected=0;
+    for(const u of users.docs){
+      const ref=db.collection('userStats').doc(u.id).collection('completedQuizzes').doc(quizId);
+      const snap=await ref.get().catch(()=>null);
+      if(!snap?.exists)continue;
+      const xp=asNumber((snap.data()||{}).xpEarned);
+      if(xp){await adjustUserXP(u.id,-xp);affected++;}
+      await ref.delete().catch(()=>{});
+    }
+    return affected;
+  }
+
+  async function removeAssignmentXPFromUsers(assignDoc){
+    const a=assignDoc.data()||{};
+    const submissions=Array.isArray(a.submissions)?a.submissions:[];
+    const submissionFallback=new Map();
+    submissions.forEach(s=>{
+      if(!s||!s.userId||!s.approved||!s.xpGranted)return;
+      const xp=asNumber(a.xpReward);
+      if(xp)submissionFallback.set(s.userId,(submissionFallback.get(s.userId)||0)+xp);
+    });
+
+    const allUsers=await db.collection('users').get();
+    for(const u of allUsers.docs){
+      const ref=db.collection('userStats').doc(u.id).collection('completedAssignments').doc(assignDoc.id);
+      const snap=await ref.get().catch(()=>null);
+      if(snap?.exists){
+        const xp=asNumber((snap.data()||{}).xpEarned);
+        if(xp)await adjustUserXP(u.id,-xp);
+        await ref.delete().catch(()=>{});
+        submissionFallback.delete(u.id); // ledger is authoritative; do not subtract twice.
+      }
+    }
+    for(const [uid,xp] of submissionFallback){
+      await adjustUserXP(uid,-xp);
+    }
+    return submissionFallback.size;
+  }
+
+  async function collectCourseDeletionImpact(courseId){
+    const content=await getExistingCourseContent(courseId);
+    const lessonIds=new Set(content.lessons.map(d=>d.id));
+    const quizIds=new Set(content.quizzes.map(d=>d.id));
+    const assignmentIds=new Set(content.assignments.map(d=>d.id));
+    const users=await db.collection('users').get();
+    const impact=new Map();
+
+    for(const u of users.docs){
+      let xp=0;
+      const ls=await u.ref.collection('completedLessons').get().catch(()=>null);
+      if(ls)ls.forEach(d=>{if(lessonIds.has(d.id))xp+=asNumber((d.data()||{}).xpEarned)});
+      const qs=await db.collection('userStats').doc(u.id).collection('completedQuizzes').get().catch(()=>null);
+      if(qs)qs.forEach(d=>{if(quizIds.has(d.id))xp+=asNumber((d.data()||{}).xpEarned)});
+      const ads=await db.collection('userStats').doc(u.id).collection('completedAssignments').get().catch(()=>null);
+      if(ads)ads.forEach(d=>{if(assignmentIds.has(d.id))xp+=asNumber((d.data()||{}).xpEarned)});
+      if(xp)impact.set(u.id,xp);
+    }
+    return {content,impact};
+  }
+
+  function askXPDeleteChoice(title,message,onKeep,onRemove){
+    const modalId='xpDeletionChoiceModal';
+    let modal=$(modalId);
+    if(!modal){
+      modal=document.createElement('div');modal.id=modalId;modal.className='custom-alert-modal';
+      modal.innerHTML=`<div class="custom-alert-box" style="max-width:560px"><button class="close-lightbox" type="button">&times;</button><h4></h4><p></p><div class="buttons" style="flex-wrap:wrap"><button type="button" class="btn btn-secondary" data-xp-action="keep">حذف المحتوى والإبقاء على النقاط</button><button type="button" class="btn btn-danger" data-xp-action="remove">حذف المحتوى وحذف النقاط</button></div></div>`;
+      document.body.appendChild(modal);
+    }
+    modal.querySelector('h4').textContent=title||'تأكيد حذف المحتوى';
+    modal.querySelector('p').textContent=message||'هذا العنصر يمنح نقاط خبرة. ماذا تريد أن يحدث للنقاط المكتسبة سابقًا؟';
+    modal.classList.add('active');
+    return new Promise(resolve=>{
+      const finish=choice=>{modal.classList.remove('active');resolve(choice)};
+      modal.querySelector('[data-xp-action="keep"]').onclick=()=>finish('keep');
+      modal.querySelector('[data-xp-action="remove"]').onclick=()=>finish('remove');
+      modal.querySelector('.close-lightbox').onclick=()=>finish('cancel');
+    });
+  }
+
+  function hasLessonXP(x){return asNumber(x?.xpReward)>0}
+  function hasQuizXP(x){return Array.isArray(x?.questions)&&x.questions.some(q=>asNumber(q?.xpReward)>0)}
+  function hasAssignmentXP(x){return asNumber(x?.xpReward)>0}
+
+  // ---------- Exact live-content profile stats ----------
+  async function loadCurrentOnlyProfileStats(uid){
+    const out={xp:0,lessons:[],quizzes:[],works:[]};
+    const coursesSnap=await db.collection('courses').get();
+    const courseMeta=new Map(coursesSnap.docs.map(d=>[d.id,{id:d.id,...(d.data()||{})}]));
+
+    const completedLessons=await db.collection('users').doc(uid).collection('completedLessons').get().catch(()=>({docs:[]}));
+    const completedQuizzes=await db.collection('userStats').doc(uid).collection('completedQuizzes').get().catch(()=>({docs:[]}));
+    const completedAssignments=await db.collection('userStats').doc(uid).collection('completedAssignments').get().catch(()=>({docs:[]}));
+
+    const lessonMap=new Map();
+    const quizMap=new Map();
+    const assignmentMap=new Map();
+    for(const c of coursesSnap.docs){
+      const [ls,qs,as]=await Promise.all([
+        c.ref.collection('lessons').get().catch(()=>({docs:[]})),
+        c.ref.collection('quizzes').get().catch(()=>({docs:[]})),
+        c.ref.collection('assignments').get().catch(()=>({docs:[]}))
+      ]);
+      ls.docs.forEach(d=>lessonMap.set(d.id,{id:d.id,courseId:c.id,courseTitle:(c.data()||{}).titleAr||'دورة',...d.data()}));
+      qs.docs.forEach(d=>quizMap.set(d.id,{id:d.id,courseId:c.id,courseTitle:(c.data()||{}).titleAr||'دورة',...d.data()}));
+      as.docs.forEach(d=>assignmentMap.set(d.id,{id:d.id,courseId:c.id,courseTitle:(c.data()||{}).titleAr||'دورة',...d.data()}));
+      for(const d of as.docs){
+        const a=d.data()||{};const subs=Array.isArray(a.submissions)?a.submissions:[];
+        subs.forEach((s,i)=>{
+          if(!s||s.userId!==uid||s.deleted===true)return;
+          const images=Array.isArray(s.images)&&s.images.length?s.images.filter(Boolean):(s.imageUrl?[s.imageUrl]:[]);
+          if(!images.length)return;
+          out.works.push({kind:'assignment',id:s.workId||s.id||`legacy_${d.id}_${i}`,assignmentId:d.id,courseId:c.id,title:a.titleAr||'واجب',courseTitle:(c.data()||{}).titleAr||'دورة',approved:!!s.approved,xpGranted:!!s.xpGranted,images,uploadedAt:s.uploadedAt});
+        });
+      }
+    }
+    completedLessons.forEach(d=>{if(!lessonMap.has(d.id))return;const x=d.data()||{},l=lessonMap.get(d.id);out.lessons.push({id:d.id,title:l.titleAr||l.title||'حصة',courseTitle:l.courseTitle,courseId:l.courseId,completedAt:x.completedAt,xpEarned:asNumber(x.xpEarned)||asNumber(l.xpReward)});});
+    completedQuizzes.forEach(d=>{if(!quizMap.has(d.id))return;const x=d.data()||{},q=quizMap.get(d.id);out.quizzes.push({id:d.id,title:q.titleAr||q.title||'اختبار',courseTitle:q.courseTitle,courseId:q.courseId,passedAt:x.passedAt||x.completedAt,score:asNumber(x.score),xpEarned:asNumber(x.xpEarned)||q.questions?.reduce((n,z)=>n+asNumber(z?.xpReward),0)});});
+
+    const assignmentIds=new Set(assignmentMap.keys());
+    const completedAssignmentById=new Map();
+    completedAssignments.forEach(d=>{
+      if(!assignmentIds.has(d.id))return;
+      const x=d.data()||{};
+      completedAssignmentById.set(d.id,asNumber(x.xpEarned));
+      out.xp+=asNumber(x.xpEarned);
+    });
+    out.xp+=out.lessons.reduce((n,x)=>n+asNumber(x.xpEarned),0);
+    out.xp+=out.quizzes.reduce((n,x)=>n+asNumber(x.xpEarned),0);
+    // Legacy fallback only: use submission XP when the current assignment still exists
+    // but there is no completedAssignments ledger for that student.
+    const assignmentFallbackSeen=new Set();
+    out.works.filter(x=>x.approved&&x.xpGranted).forEach(x=>{
+      if(completedAssignmentById.has(x.assignmentId))return;
+      if(assignmentFallbackSeen.has(x.assignmentId))return;
+      const xp=asNumber(assignmentMap.get(x.assignmentId)?.xpReward);
+      if(xp){out.xp+=xp;assignmentFallbackSeen.add(x.assignmentId);}
+    });
+    return out;
+  }
+
+  window.__loadCurrentOnlyProfileStats=loadCurrentOnlyProfileStats;
+  // Make the reliable loader use only current live content.
+  const oldReliable=window.__loadReliableProfile;
+  if(oldReliable&&!window.__liveStatsProfilePatched){
+    window.__liveStatsProfilePatched=true;
+    window.__loadReliableProfile=async function(uid){
+      const data=await oldReliable(uid);
+      try{
+        const live=await loadCurrentOnlyProfileStats(uid);
+        data.stats={xp:live.xp};
+        data.lessons=live.lessons;
+        data.quizzes=live.quizzes;
+        data.assignments=live.works.filter(x=>x.kind==='assignment');
+        const portfolio=Array.isArray(data.portfolio)?data.portfolio.filter(x=>x.deleted!==true):[];
+        data.portfolio=portfolio;
+        data.activities=Array.isArray(data.activities)?data.activities:[];
+      }catch(e){console.warn('live profile stats failed',e);}
+      return data;
+    };
+  }
+
+  // ---------- Deletion flows with explicit XP policy ----------
+  async function deleteLessonWithXpPolicy(courseId,lessonId){
+    if(!isAdmin)return showCustomAlert('غير مسموح','حذف الحصص متاح للمشرف فقط.');
+    const ref=db.collection('courses').doc(courseId).collection('lessons').doc(lessonId);const snap=await ref.get();if(!snap.exists)return;
+    const l=snap.data()||{};const gives=hasLessonXP(l);
+    const choice=gives?await askXPDeleteChoice('حذف الحصة','هذه الحصة تمنح '+asNumber(l.xpReward)+' XP. اختر هل تُحذف النقاط التي حصل عليها الطلاب من هذه الحصة أم تبقى.',null,null):'keep';
+    if(choice==='cancel')return;
+    await ref.delete();
+    if(choice==='remove')await removeLessonXPFromUsers(courseId,lessonId);
+    const remaining=await db.collection('courses').doc(courseId).collection('lessons').get();let mins=0;remaining.forEach(d=>mins+=asNumber((d.data()||{}).duration));
+    await db.collection('courses').doc(courseId).update({lessons:remaining.size,hours:Math.round(mins/60*10)/10});
+    window.loadLessonsForCourse?.(courseId);window.loadCourses?.();showCustomAlert('تم الحذف','تم حذف الحصة بنجاح.');
+  }
+
+  async function deleteQuizWithXpPolicy(courseId,quizId){
+    if(!isAdmin)return showCustomAlert('غير مسموح','حذف الاختبارات متاح للمشرف فقط.');
+    const ref=db.collection('courses').doc(courseId).collection('quizzes').doc(quizId);const snap=await ref.get();if(!snap.exists)return;
+    const q=snap.data()||{};const xp=q.questions?.reduce((n,z)=>n+asNumber(z?.xpReward),0)||0;const gives=xp>0;
+    const choice=gives?await askXPDeleteChoice('حذف الاختبار','هذا الاختبار يمنح حتى '+xp+' XP. اختر هل تُحذف النقاط التي حصل عليها الطلاب منه أم تبقى.',null,null):'keep';
+    if(choice==='cancel')return;
+    await ref.delete();
+    if(choice==='remove')await removeQuizXPFromUsers(quizId);
+    await db.collection('courses').doc(courseId).update({quizzes:firebase.firestore.FieldValue.increment(-1)}).catch(()=>{});
+    window.loadQuizzesForCourse?.(courseId);window.loadQuizzesPage?.(courseId);window.loadCourses?.();showCustomAlert('تم الحذف','تم حذف الاختبار بنجاح.');
+  }
+
+  async function deleteAssignmentWithXpPolicy(courseId,assignId){
+    if(!isAdmin)return showCustomAlert('غير مسموح','حذف الواجبات متاح للمشرف فقط.');
+    const ref=db.collection('courses').doc(courseId).collection('assignments').doc(assignId);const snap=await ref.get();if(!snap.exists)return;
+    const a=snap.data()||{};const gives=hasAssignmentXP(a)&&Array.isArray(a.submissions)&&a.submissions.some(s=>s?.approved&&s?.xpGranted);
+    const choice=gives?await askXPDeleteChoice('حذف الواجب','هناك طلاب حصلوا بالفعل على نقاط XP من هذا الواجب. اختر هل تُحذف تلك النقاط أم تبقى.',null,null):'keep';
+    if(choice==='cancel')return;
+    if(choice==='remove')await removeAssignmentXPFromUsers(snap);
+    await ref.delete();
+    window.loadAssignmentsForCourse?.(courseId);window.loadAssignmentsPage?.(courseId);showCustomAlert('تم الحذف','تم حذف الواجب بنجاح.');
+  }
+
+  async function deleteCourseWithXpPolicy(courseId){
+    if(!isAdmin)return showCustomAlert('غير مسموح','حذف الدورات متاح للمشرف فقط.');
+    const impact=await collectCourseDeletionImpact(courseId);
+    const hasXp=impact.impact.size>0;
+    const choice=hasXp?await askXPDeleteChoice('حذف الدورة','هذه الدورة تحتوي على محتوى حصل منه طلاب على نقاط XP. اختر هل تُحذف هذه النقاط أم تبقى.',null,null):'keep';
+    if(choice==='cancel')return;
+    if(choice==='remove'){for(const [uid,xp] of impact.impact){await adjustUserXP(uid,-xp);}}
+    await db.collection('courses').doc(courseId).delete();
+    window.loadCourses?.(true);showCustomAlert('تم الحذف','تم حذف الدورة ومحتواها بنجاح.');
+  }
+
+  // Override the platform deletion entry points.
+  window.deleteLesson=deleteLessonWithXpPolicy;
+  window.deleteQuiz=deleteQuizWithXpPolicy;
+  window.deleteAssignment=deleteAssignmentWithXpPolicy;
+  window.deleteCourse=deleteCourseWithXpPolicy;
+
+  // Deleting an assignment submission: if XP was granted to its owner, ask before removing that XP.
+  const oldDeleteWork=window.deleteAssignmentWork;
+  window.deleteAssignmentWork=async function(courseId,assignmentId,workId){
+    if(!currentUser)return;
+    const result=await getAssignmentData(courseId,assignmentId);if(!result)return;
+    const submissions=Array.isArray(result.data.submissions)?[...result.data.submissions]:[];
+    const index=submissions.findIndex((sub,i)=>(typeof submissionWorkId==='function'?submissionWorkId(sub,i):(sub.workId||sub.id||`legacy_${assignmentId}_${i}`))===workId);if(index<0)return;
+    const sub=submissions[index];if(!isAdmin&&sub.userId!==currentUser.uid)return showCustomAlert('غير مسموح','يمكنك حذف أعمالك فقط.');
+    const xp=Array.isArray(result.data.submissions)&&sub.approved&&sub.xpGranted?asNumber(result.data.xpReward):0;
+    if(xp>0){
+      const choice=await askXPDeleteChoice('حذف العمل','هذا العمل حصل صاحبه بسببه على '+xp+' XP. هل تريد حذف هذه النقاط أيضًا أم إبقاءها؟');
+      if(choice==='cancel')return;
+      if(choice==='remove'){
+        await adjustUserXP(sub.userId,-xp);
+        await db.collection('userStats').doc(sub.userId).collection('completedAssignments').doc(assignmentId).delete().catch(()=>{});
+      }
+    }else{
+      const ok=await new Promise(resolve=>showCustomConfirm('حذف العمل','هل تريد حذف هذا العمل نهائيًا؟',()=>resolve(true),()=>resolve(false)));if(!ok)return;
+    }
+    submissions.splice(index,1);await result.ref.update({submissions});window.loadAssignmentsPage?.(courseId);window.loadAssignmentsForCourse?.(courseId);
+  };
+})();
+</script>
+
 </body>
 </html>
