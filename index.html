@@ -11395,5 +11395,272 @@ if(account){account.addEventListener('click',e=>{if(!currentUser)return;e.preven
 })();
 </script>
 
+
+<script id="final-mobile-directory-code-access-patch">
+(function(){
+'use strict';
+const $=id=>document.getElementById(id);
+const escSafe=v=>{try{return window.esc?window.esc(v):String(v??'').replace(/[&<>\"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',"'":'&#39;'}[c]))}catch(_){return String(v??'')}};
+
+/* ============================================================
+   FINAL RESPONSIVE / PROFILE DIRECTORY / CODE ACCESS PATCH
+   ============================================================ */
+
+/* ---------- Avatar helpers: real image or deterministic initial ---------- */
+const AVATAR_COLORS=['#6c5ce7','#0984e3','#00b894','#e17055','#d63031','#fdcb6e','#e84393','#00cec9','#a29bfe','#2d3436','#16a085','#8e44ad'];
+function avatarInitial(name){return String(name||'مستخدم').trim().charAt(0)||'م';}
+function avatarColorFor(uid,initial,usedByInitial){
+  const key=String(uid||initial||'');
+  let idx=0;for(let i=0;i<key.length;i++)idx=(idx+key.charCodeAt(i)*17)%AVATAR_COLORS.length;
+  if(usedByInitial){const used=usedByInitial.get(initial)||new Set();let guard=0;while(used.has(AVATAR_COLORS[idx])&&guard<AVATAR_COLORS.length){idx=(idx+1)%AVATAR_COLORS.length;guard++;}used.add(AVATAR_COLORS[idx]);usedByInitial.set(initial,used);}
+  return AVATAR_COLORS[idx];
+}
+function avatarHtml(name,photo,uid,cls='aa-avatar-fallback',usedByInitial){
+  if(photo)return `<span class="${cls} aa-avatar-photo"><img src="${escSafe(photo)}" alt="${escSafe(name)}"></span>`;
+  const initial=avatarInitial(name),bg=avatarColorFor(uid,initial,usedByInitial);
+  return `<span class="${cls} aa-avatar-fallback" style="--avatar-bg:${bg}">${escSafe(initial)}</span>`;
+}
+window.__aaAvatarHtml=avatarHtml;
+
+/* ---------- One final directory renderer. Admin only. ---------- */
+async function buildAdminDirectoryControls(){
+  const panel=$('aaProfileDirectoryPanel'),box=$('aaProfileDirectory');
+  if(!panel||!box||!isAdmin)return;
+  const head=panel.querySelector('.aa-profile-section-head');
+  if(!head)return;
+  let controls=$('aaProfileDirectoryControls');
+  if(!controls){
+    controls=document.createElement('div');controls.id='aaProfileDirectoryControls';controls.className='aa-profile-directory-controls';
+    controls.innerHTML=`
+      <div class="aa-dir-filter-row">
+        <label class="aa-dir-field"><span>عرض الحسابات</span><select id="aaDirMembershipFilter"><option value="all">جميع الحسابات</option><option value="none">غير المشتركة في أي دورة</option><option value="enrolled">المشتركة في الدورات</option></select></label>
+        <label class="aa-dir-field"><span>الدورة</span><select id="aaDirCourseFilter"><option value="all">جميع الدورات</option></select></label>
+        <label class="aa-dir-field aa-dir-search"><span>البحث بالاسم</span><input id="aaDirNameSearch" type="search" placeholder="اكتب اسم الحساب..."></label>
+      </div>`;
+    head.insertAdjacentElement('afterend',controls);
+  }
+  const courseSelect=$('aaDirCourseFilter');
+  if(courseSelect&&courseSelect.options.length===1){
+    try{const cs=await db.collection('courses').get();const courses=cs.docs.map(d=>({id:d.id,...(d.data()||{})})).sort((a,b)=>String(a.titleAr||a.title||'').localeCompare(String(b.titleAr||b.title||''),'ar'));courseSelect.insertAdjacentHTML('beforeend',courses.map(c=>`<option value="${escSafe(c.id)}">${escSafe(c.titleAr||c.title||'دورة')}</option>`).join(''));}catch(e){console.warn('directory courses',e)}
+  }
+  ['aaDirMembershipFilter','aaDirCourseFilter','aaDirNameSearch'].forEach(id=>{const el=$(id);if(el&&!el.dataset.bound){el.dataset.bound='1';el.addEventListener('input',renderDirectoryEnhanced);el.addEventListener('change',renderDirectoryEnhanced);}});
+}
+
+let __directoryCache={users:[],ready:false};
+async function loadDirectoryEnhanced(){
+  const panel=$('aaProfileDirectoryPanel'),box=$('aaProfileDirectory');
+  if(!panel||!box)return;
+  if(!isAdmin){panel.style.display='none';return;}
+  panel.style.display='block';
+  await buildAdminDirectoryControls();
+  box.innerHTML='<div class="aa-profile-empty">جاري تحميل الحسابات...</div>';
+  try{
+    const snap=await db.collection('users').get();
+    const rows=[];
+    for(const d of snap.docs){
+      const u={id:d.id,...(d.data()||{})};
+      if(String(u.id)===String(currentUser?.uid))continue; /* لا يظهر حساب المشرف */
+      let enrolledIds=[];
+      try{const es=await d.ref.collection('enrolledCourses').get();enrolledIds=es.docs.map(x=>String(x.id)).filter(Boolean);}catch(_){enrolledIds=[];}
+      rows.push({...u,enrolledCourseIds:enrolledIds});
+    }
+    __directoryCache={users:rows,ready:true};
+    renderDirectoryEnhanced();
+  }catch(e){console.error('directory',e);box.innerHTML='<div class="aa-profile-empty">تعذر تحميل الحسابات.</div>';}
+}
+function renderDirectoryEnhanced(){
+  const box=$('aaProfileDirectory');if(!box)return;
+  const membership=$('aaDirMembershipFilter')?.value||'all';
+  const courseId=$('aaDirCourseFilter')?.value||'all';
+  const q=String($('aaDirNameSearch')?.value||'').trim().toLocaleLowerCase('ar');
+  const viewed=String(window.profileState?.uid||'');
+  let users=__directoryCache.users.filter(u=>String(u.id)!==String(currentUser?.uid)&&String(u.id)!==viewed);
+  if(membership==='none')users=users.filter(u=>!u.enrolledCourseIds.length);
+  if(membership==='enrolled')users=users.filter(u=>u.enrolledCourseIds.length>0);
+  if(courseId!=='all')users=users.filter(u=>u.enrolledCourseIds.includes(String(courseId)));
+  if(q)users=users.filter(u=>String(u.displayName||u.name||'').toLocaleLowerCase('ar').includes(q));
+  users.sort((a,b)=>String(a.displayName||a.name||'').localeCompare(String(b.displayName||b.name||''),'ar'));
+  const count=$('aaProfileDirectoryCount');if(count)count.textContent=`${users.length} حساب`;
+  const usedByInitial=new Map();
+  box.innerHTML=users.length?users.map(u=>{const n=u.displayName||u.name||'مستخدم',photo=u.photoURL||u.photoUrl||u.photo||'';return `<button type="button" class="aa-profile-directory-card" data-aa-uid="${escSafe(u.id)}"><span class="aa-profile-directory-avatar">${avatarHtml(n,photo,u.id,'aa-dir-avatar',usedByInitial)}</span><span class="aa-profile-directory-copy"><strong>${escSafe(n)}</strong><small>${u.profilePublic===false?'حساب خاص':'حساب عام'} · ${u.enrolledCourseIds.length?'مشترك في '+u.enrolledCourseIds.length+' دورة':'غير مشترك'}</small></span><i class="fas fa-chevron-left"></i></button>`}).join(''):'<div class="aa-profile-empty">لا توجد حسابات مطابقة للفلاتر الحالية.</div>';
+  box.querySelectorAll('[data-aa-uid]').forEach(b=>b.onclick=()=>window.aaOpenProfile?.(b.dataset.aaUid,{kind:'admin-directory'}));
+}
+window.loadDirectory=loadDirectoryEnhanced;
+
+/* Re-run directory whenever a profile becomes visible, including return to admin profile. */
+const oldReliableRender=window.__renderReliableProfile;
+if(oldReliableRender&&!window.__aaDirectoryPatched){
+  window.__aaDirectoryPatched=true;
+  window.__renderReliableProfile=async function(){const r=await oldReliableRender.apply(this,arguments);if(isAdmin){await loadDirectoryEnhanced();}return r;};
+}
+
+/* ---------- Active profile avatar fallback ---------- */
+function refreshProfileAvatar(){
+ const name=$('aaProfileName')?.textContent||'مستخدم', host=$('aaProfileAvatar'); if(!host)return;
+ const img=host.querySelector('img'); if(img&&img.getAttribute('src'))return;
+ host.innerHTML=avatarHtml(name,'',window.profileState?.uid||currentUser?.uid,'aa-profile-initial');
+}
+
+/* ---------- Assignment uploader identity: real profile + fallback initial ---------- */
+function refreshAssignmentSubmitterAvatars(root=document){
+ const usedByInitial=new Map();root.querySelectorAll?.('.assignment-submitter[data-profile-uid]').forEach(btn=>{
+   const name=btn.querySelector('.assignment-submitter-name')?.textContent||'مستخدم';
+   const holder=btn.querySelector('.assignment-submitter-avatar');
+   const img=holder?.querySelector('img');
+   if(holder&&!img){holder.innerHTML=avatarHtml(name,'',btn.dataset.profileUid,'assignment-avatar',usedByInitial)}
+ });
+}
+const oldAssignmentProfileRefresher=window.__aaRefreshAssignmentSubmitterProfiles;
+window.__aaRefreshAssignmentSubmitterProfiles=async function(){const r=await oldAssignmentProfileRefresher?.apply(this,arguments);refreshAssignmentSubmitterAvatars(document);return r;};
+
+/* ---------- Global responsive viewport: everything stays between fixed bars ---------- */
+const responsiveStyle=document.createElement('style');responsiveStyle.id='final-global-mobile-layout-patch';responsiveStyle.textContent=`
+@media(max-width:768px){
+  :root{--mobile-top-safe:var(--nav-height-mobile,70px);--mobile-bottom-safe:calc(var(--mobile-bottom-nav-content-height,66px) + env(safe-area-inset-bottom));}
+  html,body{width:100%;max-width:100%;overflow-x:hidden;}
+  body{padding-top:var(--mobile-top-safe)!important;padding-bottom:var(--mobile-bottom-safe)!important;}
+  .navbar{top:0!important;height:var(--nav-height-mobile,70px)!important;}
+  .mobile-bottom-nav{bottom:0!important;z-index:5000!important;}
+  #coursesPage{padding-top:0!important;padding-bottom:18px!important;min-height:calc(100dvh - var(--mobile-top-safe) - var(--mobile-bottom-safe))!important;}
+  #courseDetailView{position:fixed!important;top:var(--mobile-top-safe)!important;bottom:var(--mobile-bottom-safe)!important;left:0!important;right:0!important;width:100vw!important;height:auto!important;max-height:none!important;overflow:hidden!important;z-index:900!important;}
+  #courseDetailView>.course-overview,#courseDetailView>#courseDashboard,#courseDetailView>#courseLessonsPage,#courseDetailView>#courseLessonPlayerPage,#courseDetailView>#courseQuizzesPage,#courseDetailView>#courseAssignmentsPage,#courseDetailView>#courseFilesPage,#courseDetailView>#courseChatPage{height:100%!important;max-height:100%!important;min-height:0!important;overflow-y:auto!important;overflow-x:hidden!important;padding:14px 12px 20px!important;}
+  #courseDetailView>.course-overview{padding-top:14px!important;}
+  #courseAssignmentDetailPage{top:0!important;bottom:0!important;max-height:100%!important;padding:14px 12px 20px!important;}
+  #fullChatPage{height:100%!important;max-height:100%!important;overflow-y:auto!important;}
+  .footer{padding-bottom:20px!important;}
+  .page-title h2,#courseQuizzesPage .page-title h2,#courseAssignmentsPage .page-title h2,#courseChatPage .page-title h2{font-size:1.2rem!important;line-height:1.5!important;}
+  .page-title,.full-page-actions,.course-card .course-actions,.aa-profile-actions{gap:7px!important;}
+  button,.btn,.nav-btn,.auth-btn{white-space:nowrap;}
+  h1,h2,h3,h4,h5,h6,p,span,label,strong,small,.aa-profile-row,.aa-profile-directory-copy,.course-card .course-body,.full-page-card,.assignment-work-card{word-break:normal!important;overflow-wrap:normal!important;white-space:normal;line-height:1.7;}
+  .course-card .course-body h3{line-height:1.45!important;}
+  .course-card .course-body p{line-height:1.75!important;}
+  .aa-profile-head-copy h1,.aa-profile-head-copy p,.aa-profile-directory-copy strong{white-space:nowrap!important;overflow:hidden;text-overflow:ellipsis;}
+  .aa-profile-shell{width:100%!important;}
+  #aaRebuiltProfilePage{position:fixed!important;top:var(--mobile-top-safe)!important;bottom:var(--mobile-bottom-safe)!important;left:0!important;right:0!important;inset-inline:0!important;width:100vw!important;height:auto!important;min-height:0!important;max-height:none!important;overflow-y:auto!important;overflow-x:hidden!important;padding:12px!important;z-index:130000!important;box-sizing:border-box!important;}
+  #aaRebuiltProfilePage .aa-profile-hero{grid-template-columns:1fr!important;text-align:center!important;gap:12px!important;padding:16px!important;}
+  #aaRebuiltProfilePage .aa-profile-avatar{margin:0 auto;width:86px!important;height:86px!important;border-radius:24px!important;font-size:2rem!important;}
+  #aaRebuiltProfilePage .aa-profile-head-copy h1{font-size:1.35rem!important;}
+  #aaRebuiltProfilePage .aa-profile-actions{justify-content:center!important;display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr));}
+  #aaRebuiltProfilePage .aa-profile-btn{width:100%!important;padding:9px 8px!important;font-size:.78rem!important;min-height:42px!important;}
+  #aaRebuiltProfilePage .aa-profile-stats{grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:8px!important;}
+  #aaRebuiltProfilePage .aa-profile-stat{padding:13px 8px!important;border-radius:16px!important;}
+  #aaRebuiltProfilePage .aa-profile-stat b{font-size:1.25rem!important;}
+  #aaRebuiltProfilePage .aa-profile-stat span{font-size:.72rem!important;}
+  #aaRebuiltProfilePage .aa-profile-grid{grid-template-columns:1fr!important;gap:10px!important;}
+  #aaRebuiltProfilePage .aa-profile-panel{padding:14px!important;border-radius:17px!important;}
+  #aaRebuiltProfilePage .aa-profile-panel.full{grid-column:auto!important;}
+  #aaRebuiltProfilePage .aa-profile-gallery{grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:8px!important;}
+  #aaRebuiltProfilePage .aa-profile-cover{height:120px!important;}
+  #aaRebuiltProfilePage .aa-profile-directory{grid-template-columns:1fr!important;}
+  #aaRebuiltProfilePage .aa-profile-directory-card{padding:10px!important;}
+  #aaRebuiltProfilePage .aa-profile-directory-avatar{width:44px!important;height:44px!important;flex-basis:44px!important;}
+  .aa-profile-directory-controls .aa-dir-filter-row{grid-template-columns:1fr!important;}
+  .profile-self-modal{position:absolute!important;inset:0!important;overflow:auto!important;align-items:flex-start!important;padding:12px!important;}
+  .profile-self-card{width:100%!important;max-height:none!important;margin:auto 0!important;}
+  .profile-self-grid{grid-template-columns:1fr!important;}
+  .aa-profile-self-full{grid-column:auto!important;}
+  .aa-profile-self-input{font-size:16px!important;}
+  .assignment-work-grid{grid-template-columns:1fr!important;}
+  .assignment-work-card{padding:9px!important;}
+  .assignment-submitter{padding:7px!important;}
+  .assignment-work-card img{height:auto!important;max-height:320px!important;}
+  .course-files-upload-grid{grid-template-columns:1fr!important;}
+}
+@media(min-width:769px){
+  #aaRebuiltProfilePage{padding-top:calc(var(--nav-height-desktop,80px) + 18px)!important;}
+}
+.aa-profile-directory-controls{margin:0 0 12px;padding:12px;border:1px solid var(--border);border-radius:17px;background:var(--bg-secondary);}
+.aa-dir-filter-row{display:grid;grid-template-columns:1fr 1fr 1.3fr;gap:9px;align-items:end;}
+.aa-dir-field{display:flex;flex-direction:column;gap:5px;min-width:0;}
+.aa-dir-field span{font-size:.76rem;color:var(--text-muted);font-weight:800;}
+.aa-dir-field select,.aa-dir-field input{width:100%;min-height:42px;padding:9px 11px;border:1px solid var(--border);border-radius:12px;background:var(--bg-card);color:var(--text-primary);font:inherit;outline:none;}
+.aa-dir-field select:focus,.aa-dir-field input:focus{border-color:var(--accent1);box-shadow:0 0 0 3px rgba(108,92,231,.1)}
+.aa-avatar-fallback{display:grid;place-items:center;background:var(--avatar-bg,var(--accent1));color:#fff;font-weight:900;}
+.aa-profile-directory-avatar .aa-dir-avatar{width:100%;height:100%;border-radius:inherit;}
+.assignment-submitter-avatar .assignment-avatar{width:100%;height:100%;border-radius:inherit;}
+#aaRebuiltProfilePage .aa-profile-avatar .aa-avatar-fallback{width:100%;height:100%;border-radius:inherit;}
+`;
+document.head.appendChild(responsiveStyle);
+
+/* ---------- Make the directory truly admin-only even if old renderers run ---------- */
+function enforceDirectoryAdminOnly(){const p=$('aaProfileDirectoryPanel');if(p)p.style.display=isAdmin?'block':'none';}
+setInterval(enforceDirectoryAdminOnly,1500);
+
+/* ---------- Immediate ejection on code expiry / suspension / code deletion ---------- */
+function aaEjectFromCourse(message){
+  if(isAdmin)return;
+  try{stopLessonForNavigation?.();}catch(_){}
+  try{window.__accessUnsubs?.forEach?.(fn=>{try{fn()}catch(_){} });}catch(_){}
+  try{window.__aaExpiryUnsub?.();}catch(_){}
+  try{window.__aaExpiryCodeUnsub?.();}catch(_){}
+  try{activeCourseId=null;activeLessonId=null;activeQuizId=null;window.activeAssignmentDetailId=null;currentCoursePage='courses';}catch(_){}
+  document.querySelectorAll('#courseDetailView > *').forEach(el=>{el.classList.remove('active');if(el.id==='courseOverviewContainer')el.style.display='none';else if(el.id!=='courseLearningView')el.style.display='none';});
+  const dash=$('courseDashboard');if(dash)dash.style.display='none';
+  const cp=$('coursesPage');if(cp)cp.style.display='block';
+  try{window.mobileNavigate?.('courses');}catch(_){}
+  try{renderCourses?.();}catch(_){}
+  if(message)showCustomAlert?.('تم إنهاء الدخول',message);
+}
+const oldWatchCourseAccess=window.watchCourseAccess;
+if(oldWatchCourseAccess&&!window.__aaExpiryGuardPatched){
+  window.__aaExpiryGuardPatched=true;
+  window.watchCourseAccess=function(courseId){
+    const er=db.collection('users').doc(currentUser?.uid||'').collection('enrolledCourses').doc(courseId);
+    if(currentUser&&!isAdmin&&courseId){
+      window.__aaExpiryUnsub?.();
+      window.__aaExpiryUnsub=er.onSnapshot(async snap=>{
+        if(!snap.exists){aaEjectFromCourse('لم يعد لديك اشتراك فعال في هذه الدورة.');return;}
+        const d=snap.data()||{};const codeId=d.codeId;if(!codeId)return;
+        const cr=db.collection('courses').doc(courseId).collection('codes').doc(codeId);
+        window.__aaExpiryCodeUnsub?.();
+        window.__aaExpiryTimers?.forEach?.(t=>clearTimeout(t));
+        window.__aaExpiryTimers=[];
+        window.__aaExpiryCodeUnsub=cr.onSnapshot(cs=>{
+          if(!cs.exists){aaEjectFromCourse('تم إنهاء كود الاشتراك المرتبط بحسابك.');return;}
+          const c=cs.data()||{},now=Date.now();
+          const asDate=v=>v?.toDate?v.toDate():v?new Date(v):null;
+          const end=asDate(c.endTime);
+          if(end&&!isNaN(end.getTime())){
+            const ms=end.getTime()-Date.now();
+            if(ms<=0){aaEjectFromCourse('انتهى كود الاشتراك، وتم إخراجك من الدورة.');return;}
+            window.__aaExpiryTimers.push(setTimeout(()=>aaEjectFromCourse('انتهى كود الاشتراك، وتم إخراجك من الدورة.'),ms+50));
+          }
+          const until=asDate(c.suspendedUntil);
+          if(c.disabled&&(!until||until.getTime()>now)){aaEjectFromCourse('تم إيقاف كود الاشتراك، وتم إخراجك من الدورة.');return;}
+          if(c.disabled&&until&&until.getTime()<=now)window.__aaExpiryTimers.push(setTimeout(()=>window.watchCourseAccess?.(courseId),100));
+          const block=(Array.isArray(c.blockedUsers)?c.blockedUsers:[]).find(x=>String(typeof x==='string'?x:x?.uid)===String(currentUser.uid));
+          if(block){const bu=asDate(block.suspendedUntil);if(!bu||bu.getTime()>now)aaEjectFromCourse('تم إيقاف دخولك إلى هذه الدورة.');else if(bu)window.__aaExpiryTimers.push(setTimeout(()=>window.watchCourseAccess?.(courseId),bu.getTime()-now+50));}
+        });
+      });
+    }
+    return oldWatchCourseAccess.apply(this,arguments);
+  };
+}
+
+/* Logout always exits any open course before signing out. */
+const logoutNames=['signOutUser','logoutUser','handleLogout'];
+logoutNames.forEach(n=>{const fn=window[n];if(typeof fn==='function'&&!fn.__aaLogoutPatched){const wrap=async function(){try{if(activeCourseId&&!isAdmin)aaEjectFromCourse('تم تسجيل الخروج من الدورة.');}catch(_){} try{window.mobileNavigate?.('courses');}catch(_){} return fn.apply(this,arguments)};wrap.__aaLogoutPatched=true;window[n]=wrap;}});
+
+/* ---------- Suspended code button state: always "cancel" while active ---------- */
+const oldLoadCodes=window.loadCodesForCourse;
+if(oldLoadCodes&&!window.__aaCodeListPatched){
+  window.__aaCodeListPatched=true;
+  window.loadCodesForCourse=async function(courseId){
+    const r=await oldLoadCodes.apply(this,arguments);
+    const rows=document.querySelectorAll('#codesTableBody tr[data-code-row]');
+    for(const row of rows){
+      const id=row.dataset.codeRow,btn=row.querySelector('button[onclick*="toggleEnrollmentCode"]');
+      if(btn){const txt=btn.textContent.trim();if(txt==='إيقاف')btn.textContent='إيقاف';else if(txt.includes('إلغاء الإيقاف'))btn.textContent='إلغاء الإيقاف';}
+    }
+    return r;
+  };
+}
+
+/* ---------- Refresh assignment fallback initials after any render ---------- */
+document.addEventListener('DOMContentLoaded',()=>refreshAssignmentSubmitterAvatars(document));
+const assignmentObserver=new MutationObserver(()=>refreshAssignmentSubmitterAvatars(document));assignmentObserver.observe(document.body,{subtree:true,childList:true});
+})();
+
+</script>
 </body>
 </html>
