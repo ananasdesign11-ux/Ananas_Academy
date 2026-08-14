@@ -13808,551 +13808,144 @@ document.head.appendChild(st);
 })();
 </script>
 
-<!-- ===== FINAL MOBILE NOTIFICATION / OVERVIEW / LOGOUT REPAIR ===== -->
-<style id="aa-v22-final-repair-style">
-@media(max-width:768px){
-  /* Notifications are portaled to <body>; never allow navbar overflow to clip them. */
-  .aa-notifications-wrap{position:relative!important;z-index:100004!important;overflow:visible!important;}
-  .aa-notifications-btn{position:relative!important;z-index:100005!important;touch-action:manipulation!important;pointer-events:auto!important;}
-  .aa-notifications-dropdown.aa-v22-portal{
-    position:fixed!important;
-    top:calc(var(--nav-height-mobile,70px) + 8px)!important;
-    width:calc(100vw - 24px)!important;
-    max-width:390px!important;
-    max-height:calc(100dvh - var(--nav-height-mobile,70px) - var(--mobile-bottom-nav-content-height,66px) - 24px)!important;
-    overflow:hidden!important;
-    z-index:200000!important;
-  }
-  .aa-notifications-dropdown.aa-v22-portal .aa-notif-list{max-height:calc(100dvh - var(--nav-height-mobile,70px) - var(--mobile-bottom-nav-content-height,66px) - 150px)!important;overflow-y:auto!important;-webkit-overflow-scrolling:touch!important;}
-  #aaNotificationsPage.aa-v22-page-open{display:block!important;visibility:visible!important;opacity:1!important;pointer-events:auto!important;z-index:180000!important;}
-  #aaNotificationsPage.aa-v22-page-open .aa-notifications-page-inner{height:100%!important;max-height:100%!important;overflow-y:auto!important;-webkit-overflow-scrolling:touch!important;}
-
-  /* Course overview must always be a visible, independent page when selected. */
-  #courseDetailView.aa-v22-overview-mode{display:flex!important;visibility:visible!important;opacity:1!important;}
-  #courseOverviewContainer.aa-v22-overview-visible{display:block!important;visibility:visible!important;opacity:1!important;height:100%!important;min-height:0!important;overflow-y:auto!important;overflow-x:hidden!important;}
-}
-</style>
-<script>
-(function(){
-  'use strict';
-  const E=id=>document.getElementById(id);
-
-  /* ---------- 1) Robust notification button on mobile ---------- */
-  function portalNotificationDropdown(){
-    const drop=E('aaNotificationsDropdown');
-    if(!drop||drop.classList.contains('aa-v22-portal')) return drop;
-    document.body.appendChild(drop);
-    drop.classList.add('aa-v22-portal');
-    return drop;
-  }
-  function positionNotificationDropdown(){
-    const btn=E('aaNotificationsBtn'),drop=E('aaNotificationsDropdown');
-    if(!btn||!drop||window.innerWidth>768)return;
-    const r=btn.getBoundingClientRect();
-    const width=Math.min(390,Math.max(0,window.innerWidth-24));
-    const right=Math.max(12,window.innerWidth-r.right);
-    drop.style.right=right+'px';
-    drop.style.left='auto';
-    drop.style.top=(Math.max(8,r.bottom+8))+'px';
-    drop.style.width=width+'px';
-  }
-  function openNotificationDropdownV22(){
-    const btn=E('aaNotificationsBtn'); if(!btn)return;
-    const drop=portalNotificationDropdown(); if(!drop)return;
-    positionNotificationDropdown();
-    drop.classList.add('active');btn.classList.add('active');
-  }
-  function closeNotificationDropdownV22(){E('aaNotificationsDropdown')?.classList.remove('active');E('aaNotificationsBtn')?.classList.remove('active');}
-  function toggleNotificationDropdownV22(){
-    const drop=portalNotificationDropdown();
-    if(!drop)return;
-    if(drop.classList.contains('active'))closeNotificationDropdownV22();else openNotificationDropdownV22();
-  }
-  const nb=E('aaNotificationsBtn');
-  if(nb&&!nb.dataset.aaV22Bound){
-    nb.dataset.aaV22Bound='1';
-    nb.addEventListener('pointerdown',e=>{
-      if(window.innerWidth<=768){e.preventDefault();e.stopPropagation();e.stopImmediatePropagation();toggleNotificationDropdownV22();}
-    },true);
-    nb.addEventListener('click',e=>{
-      if(window.innerWidth<=768){e.preventDefault();e.stopPropagation();e.stopImmediatePropagation();}
-    },true);
-  }
-  document.addEventListener('click',e=>{
-    const wrap=E('aaNotificationsWrap'),drop=E('aaNotificationsDropdown');
-    if(!wrap||!drop)return;
-    if(!wrap.contains(e.target)&&!drop.contains(e.target))closeNotificationDropdownV22();
-  },true);
-  window.addEventListener('resize',positionNotificationDropdown,{passive:true});
-  window.addEventListener('orientationchange',()=>setTimeout(positionNotificationDropdown,80),{passive:true});
-
-  /* ---------- 2) Make the notification page a true standalone layer ---------- */
-  function openNotificationsPageV22(){
-    closeNotificationDropdownV22();
-    const page=E('aaNotificationsPage');if(!page)return;
-    page.classList.add('active','aa-v22-page-open');
-    page.setAttribute('aria-hidden','false');
-    document.body.classList.add('aa-notifications-open');
-    try{window.aaRenderNotifications?.()}catch(_){ }
-    if(window.isAdmin) setTimeout(()=>window.setupAdminCenterV?.(),0);
-  }
-  function closeNotificationsPageV22(){
-    const page=E('aaNotificationsPage');if(!page)return;
-    page.classList.remove('active','aa-v22-page-open');
-    page.setAttribute('aria-hidden','true');
-    document.body.classList.remove('aa-notifications-open');
-  }
-  window.__aaV22OpenNotificationsPage=openNotificationsPageV22;
-  const oa=E('aaOpenAllNotificationsBtn');
-  if(oa&&!oa.dataset.aaV22Bound){
-    oa.dataset.aaV22Bound='1';
-    oa.addEventListener('click',e=>{e.preventDefault();e.stopPropagation();openNotificationsPageV22();},true);
-  }
-  const cp=E('aaCloseNotificationsPage');
-  if(cp&&!cp.dataset.aaV22Bound){
-    cp.dataset.aaV22Bound='1';cp.addEventListener('click',e=>{e.preventDefault();e.stopPropagation();closeNotificationsPageV22();},true);
-  }
-
-  /* ---------- 3) Overview navigation repair: always force the overview visible ---------- */
-  const baseSwitch=window.switchCoursePage;
-  if(typeof baseSwitch==='function'&&!baseSwitch.__aaV22OverviewRepair){
-    const robustSwitch=function(page){
-      const result=baseSwitch.apply(this,arguments);
-      if(String(page)==='overview'){
-        setTimeout(()=>{
-          const detail=E('courseDetailView'),ov=E('courseOverviewContainer'),dash=E('courseDashboard');
-          if(detail)detail.classList.add('aa-v22-overview-mode');
-          if(ov){ov.classList.add('aa-v22-overview-visible');ov.style.display='block';ov.style.visibility='visible';ov.style.opacity='1';}
-          if(dash){dash.style.display='none';dash.classList.remove('active');}
-          ['courseLessonsPage','courseLessonPlayerPage','courseQuizzesPage','courseAssignmentsPage','courseAssignmentDetailPage','courseFilesPage','courseChatPage','courseLearningView','fullChatPage'].forEach(id=>{const el=E(id);if(!el)return;el.classList.remove('active');if(id!=='courseLessonPlayerPage')el.style.display='none';});
-          try{currentCoursePage='overview';window.persistCourseState?.();}catch(_){ }
-        },0);
-      }
-      return result;
-    };
-    robustSwitch.__aaV22OverviewRepair=true;
-    window.switchCoursePage=robustSwitch;
-  }
-
-  /* Also repair direct calls that only hide pages without using switchCoursePage. */
-  window.__aaV22ForceOverview=function(){
-    const detail=E('courseDetailView'),ov=E('courseOverviewContainer'),dash=E('courseDashboard');
-    if(detail)detail.classList.add('aa-v22-overview-mode');
-    if(ov){ov.classList.add('aa-v22-overview-visible');ov.style.display='block';}
-    if(dash)dash.style.display='none';
-    try{currentCoursePage='overview'}catch(_){ }
-  };
-
-  /* ---------- 4) Logout must leave the public site shell intact ---------- */
-  function resetLoggedOutShellV22(){
-    try{E('aaNotificationsDropdown')?.classList.remove('active');E('aaNotificationsBtn')?.classList.remove('active');}catch(_){ }
-    try{closeNotificationsPageV22();}catch(_){ }
-    try{E('aaNotificationDetailModal')?.classList.remove('active');E('aaCodeReasonModal')?.classList.remove('active');}catch(_){ }
-    try{
-      ['aaRebuiltProfilePage','ananasCanonicalProfilePage','ananasV10ProfilePage','userProfilePage','profileSelfModal','profile-self-modal'].forEach(id=>{const el=E(id);if(el){el.classList.remove('active','show');if(id!=='aaRebuiltProfilePage')el.style.display='none';}});
-      document.querySelectorAll('.profile-self-modal,.profile-overlay,.user-profile-page').forEach(el=>{el.classList.remove('active','show');el.style.display='none';});
-    }catch(_){ }
-    try{
-      if(E('courseDetailView')){E('courseDetailView').style.display='none';E('courseDetailView').classList.remove('active','aa-v22-overview-mode');}
-      ['courseOverviewContainer','courseDashboard','courseLessonsPage','courseLessonPlayerPage','courseQuizzesPage','courseAssignmentsPage','courseAssignmentDetailPage','courseFilesPage','courseChatPage','courseLearningView','fullChatPage'].forEach(id=>{const el=E(id);if(!el)return;el.classList.remove('active');el.style.display='none';});
-      if(E('coursesPage')){E('coursesPage').style.display='block';E('coursesPage').classList.remove('active');}
-      if(E('coursesGridContainer'))E('coursesGridContainer').style.display='grid';
-      if(E('coursesListPageHeader'))E('coursesListPageHeader').classList.remove('course-list-header-hidden');
-      window.mobileNavigate?.('courses');
-      renderCourses?.();
-    }catch(_){ }
-    try{document.querySelectorAll('.admin-only').forEach(el=>el.classList.remove('show'));}catch(_){ }
-  }
-  if(!window.__aaV22LogoutAuthBound){
-    window.__aaV22LogoutAuthBound=true;
-    auth.onAuthStateChanged(user=>{if(!user)setTimeout(resetLoggedOutShellV22,40);});
-  }
-
-  /* If the account is signed out while a profile is open, close the profile immediately. */
-  window.addEventListener('pagehide',()=>{},false);
-})();
-</script>
-
-</body>
-
-<!-- ===== FINAL NOTIFICATION UX / EXPIRY SYNC PATCH v23 ===== -->
-<style id="aa-notification-v23-style">
-  /* Keep the dropdown entirely inside the viewport on every device. */
-  .aa-notifications-dropdown.aa-v23-positioned{
-    position:fixed!important;
-    z-index:120500!important;
-    top:auto!important;
-    right:auto!important;
-    left:auto!important;
-    inset-inline-end:auto!important;
-    inset-inline-start:auto!important;
-    margin:0!important;
-    max-width:calc(100vw - 24px)!important;
-    width:min(390px,calc(100vw - 24px))!important;
-    max-height:calc(100dvh - 24px)!important;
-    overflow:hidden!important;
-  }
-  .aa-v23-head-toggle{display:flex;align-items:center;gap:10px;justify-content:space-between;cursor:pointer;user-select:none;}
-  .aa-v23-head-toggle .aa-admin-collapse-btn{width:36px;height:36px;border:1px solid var(--border);background:var(--bg-secondary);color:var(--text-muted);border-radius:50%;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;flex:0 0 36px;transition:.2s;}
-  .aa-v23-head-toggle .aa-admin-collapse-btn:hover{color:var(--accent1);border-color:var(--accent1);transform:translateY(-1px);}
-  .aa-v23-admin-tools{overflow:hidden;transition:max-height .25s ease,opacity .2s ease,padding .2s ease;margin-bottom:18px;}
-  .aa-v23-admin-tools.collapsed{max-height:58px!important;opacity:.98;}
-  .aa-v23-admin-tools.expanded{max-height:1400px!important;opacity:1;}
-  .aa-v23-admin-tools.collapsed .aa-admin-notification-body{display:none!important;}
-  .aa-admin-notification-body{margin-top:12px;}
-  .aa-v23-notification-delete{width:34px;height:34px;flex:0 0 34px;border:1px solid rgba(231,76,60,.25);background:rgba(231,76,60,.06);color:#e74c3c;border-radius:10px;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;transition:.18s;}
-  .aa-v23-notification-delete:hover{background:#e74c3c;color:#fff;transform:scale(1.04);}
-  .aa-notif-item{position:relative;}
-  .aa-notif-item .aa-v23-delete-wrap{margin-inline-start:auto;align-self:flex-start;display:flex;}
-  @media(max-width:768px){
-    .aa-notifications-dropdown.aa-v23-positioned{top:calc(var(--nav-height-mobile,70px) + 8px)!important;}
-    .aa-notif-item{padding-inline-start:8px;padding-inline-end:8px;}
-    .aa-v23-notification-delete{width:32px;height:32px;flex-basis:32px;}
-  }
-</style>
-<script id="aa-notification-v23-script">
+<script id="final-mobile-notifications-overview-logout-v22">
 (function(){
 'use strict';
+
+/* ===== FINAL MOBILE + NOTIFICATIONS + LOGOUT PATCH ===== */
 const $=id=>document.getElementById(id);
-const esc=v=>String(v??'').replace(/[&<>'"]/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[m]));
 
-/* 1) Put the bell dropdown fully inside the viewport, based on the bell position. */
-function positionBellDropdown(){
-  const btn=$('aaNotificationsBtn'),drop=$('aaNotificationsDropdown');
-  if(!btn||!drop||!drop.classList.contains('active'))return;
-  drop.classList.add('aa-v23-positioned');
-  const r=btn.getBoundingClientRect();
-  const vw=Math.max(document.documentElement.clientWidth,window.innerWidth||0);
-  const vh=Math.max(document.documentElement.clientHeight,window.innerHeight||0);
-  const w=Math.min(390,vw-24);
-  const gap=8;
-  let left=r.right-w;
-  if(left<12)left=12;
-  if(left+w>vw-12)left=Math.max(12,vw-w-12);
-  let top=r.bottom+gap;
-  const measured=drop.getBoundingClientRect().height||360;
-  if(top+measured>vh-12){
-    const above=r.top-gap-measured;
-    top=above>=12?above:Math.max(12,vh-measured-12);
+/* 1) Mobile notifications: keep the bell in the navbar, but portal the dropdown to <body>.
+      This prevents navbar overflow/backdrop-filter from clipping it on phones. */
+(function fixMobileNotificationDropdown(){
+  const btn=$('aaNotificationsBtn'), dropdown=$('aaNotificationsDropdown'), wrap=$('aaNotificationsWrap');
+  if(!btn||!dropdown||!wrap||btn.dataset.v22Bound)return;
+  btn.dataset.v22Bound='1';
+  let opened=false;
+  const originalParent=dropdown.parentElement;
+  function place(){
+    if(window.innerWidth>768){
+      if(dropdown.parentElement!==originalParent) originalParent.appendChild(dropdown);
+      dropdown.style.cssText='';
+      dropdown.classList.remove('aa-v22-portal');
+      return;
+    }
+    if(dropdown.parentElement!==document.body) document.body.appendChild(dropdown);
+    const gap=8;
+    const width=Math.min(390,window.innerWidth-24);
+    let left=Math.round((window.innerWidth-width)/2);
+    left=Math.max(12,Math.min(left,window.innerWidth-width-12));
+    dropdown.style.position='fixed';
+    dropdown.style.top='calc(var(--nav-height-mobile,70px) + 8px)';
+    dropdown.style.left=left+'px';
+    dropdown.style.right='auto';
+    dropdown.style.width=width+'px';
+    dropdown.style.maxWidth='calc(100vw - 24px)';
+    dropdown.style.maxHeight='min(70dvh,560px)';
+    dropdown.style.overflow='hidden';
+    dropdown.style.zIndex='120500';
+    dropdown.style.margin='0';
+    dropdown.classList.add('aa-v22-portal');
   }
-  drop.style.left=left+'px';
-  drop.style.right='auto';
-  drop.style.top=top+'px';
-  drop.style.bottom='auto';
-  drop.style.maxHeight=Math.max(180,vh-top-12)+'px';
-}
-function hideBellDropdown(){
-  $('aaNotificationsDropdown')?.classList.remove('aa-v23-positioned');
-}
-$('aaNotificationsBtn')?.addEventListener('click',()=>setTimeout(positionBellDropdown,0),true);
-window.addEventListener('resize',positionBellDropdown,{passive:true});
-window.addEventListener('orientationchange',()=>setTimeout(positionBellDropdown,120),{passive:true});
+  function close(){opened=false;dropdown.classList.remove('active');btn.classList.remove('active');}
+  function open(){place();opened=true;dropdown.classList.add('active');btn.classList.add('active');}
+  btn.addEventListener('click',function(e){e.preventDefault();e.stopPropagation();opened?close():open();},true);
+  ['pointerup','touchend'].forEach(type=>btn.addEventListener(type,function(e){
+    if(type==='touchend'){e.preventDefault();e.stopPropagation();opened?close():open();}
+  },{passive:false,capture:true}));
+  window.addEventListener('resize',()=>{if(opened)place();},{passive:true});
+  window.addEventListener('orientationchange',()=>setTimeout(()=>{if(opened)place();},80),{passive:true});
+  document.addEventListener('click',e=>{if(!opened)return;if(!wrap.contains(e.target)&&e.target!==dropdown&&!dropdown.contains(e.target))close();},true);
+  window.__aaCloseNotificationDropdownV22=close;
+})();
 
-document.addEventListener('click',e=>{
-  const t=e.target.closest?.('#aaNotificationsDropdown');
-  if(!t && !$('aaNotificationsDropdown')?.classList.contains('active'))hideBellDropdown();
-},{capture:true});
+/* 2) Notifications full page: make it a true independent application layer on phones. */
+(function fixNotificationsPageLayer(){
+  const page=$('aaNotificationsPage'); if(!page||page.dataset.v22Bound)return;
+  page.dataset.v22Bound='1';
+  const style=document.createElement('style');style.id='aa-v22-notification-mobile-style';style.textContent=`
+    #aaNotificationsPage{position:fixed!important;inset:0!important;display:none;z-index:130500!important;background:var(--bg-primary)!important;width:100vw!important;height:100dvh!important;max-width:100vw!important;max-height:100dvh!important;overflow:hidden!important;}
+    #aaNotificationsPage.active{display:block!important;}
+    #aaNotificationsPage .aa-notifications-page-inner{height:100%!important;max-height:100%!important;overflow-y:auto!important;overflow-x:hidden!important;box-sizing:border-box!important;padding:calc(var(--nav-height-mobile,70px) + 12px) 12px calc(var(--mobile-bottom-nav-content-height,66px) + env(safe-area-inset-bottom) + 18px)!important;-webkit-overflow-scrolling:touch!important;}
+    #aaNotificationsPage .aa-notifications-page-head{position:sticky!important;top:0!important;z-index:2!important;background:var(--bg-primary)!important;padding-top:4px!important;}
+    #aaNotificationsPage .aa-notifications-all-list{padding-bottom:10px!important;}
+    @media(min-width:769px){#aaNotificationsPage{inset:0!important;}#aaNotificationsPage .aa-notifications-page-inner{padding:24px 24px 36px!important;}}
+  `;document.head.appendChild(style);
+  const closeBtn=$('aaCloseNotificationsPage');
+  closeBtn?.addEventListener('click',()=>{window.__aaCloseNotificationDropdownV22?.();document.body.classList.remove('aa-notifications-open');page.classList.remove('active');page.setAttribute('aria-hidden','true');});
+})();
 
-/* 2) Add a delete button to every notification item, without changing the existing open-detail behavior. */
-async function deleteNotification(id){
-  if(!currentUser||!id)return;
-  try{
-    await db.collection('users').doc(currentUser.uid).collection('notifications').doc(id).delete();
-  }catch(err){console.error('delete notification',err);showCustomAlert?.('خطأ','تعذر حذف الإشعار.');}
-}
-function decorateNotificationDeletes(){
-  document.querySelectorAll('#aaNotifDropdownList .aa-notif-item,#aaNotificationsAllList .aa-notif-item').forEach(item=>{
-    if(item.dataset.v23DeleteBound==='1')return;
-    item.dataset.v23DeleteBound='1';
-    const id=item.dataset.notificationId;
-    if(!id)return;
-    const wrap=document.createElement('span');
-    wrap.className='aa-v23-delete-wrap';
-    const btn=document.createElement('button');
-    btn.type='button';btn.className='aa-v23-notification-delete';btn.title='حذف الإشعار';
-    btn.innerHTML='<i class="fas fa-trash"></i>';
-    btn.addEventListener('click',async ev=>{
-      ev.preventDefault();ev.stopPropagation();
-      await deleteNotification(id);
-    });
-    wrap.appendChild(btn);item.appendChild(wrap);
-  });
-}
-const notifLists=['aaNotifDropdownList','aaNotificationsAllList'];
-notifLists.forEach(id=>{
-  const el=$(id);if(!el)return;
-  new MutationObserver(decorateNotificationDeletes).observe(el,{childList:true,subtree:true});
+/* 3) Mobile course overview/dashboard: explicit deterministic view switching.
+      Older switchCoursePage wrappers can conflict; this direct handler uses DOM state itself. */
+(function fixMobileCourseOverview(){
+  const start=$('startLearningBtn'); if(start&&!start.dataset.v22Bound){
+    start.dataset.v22Bound='1';
+    const goDashboard=()=>{
+      if(!window.activeCourseId && !activeCourseId)return;
+      const overview=$('courseOverviewContainer'),dash=$('courseDashboard'),learning=$('courseLearningView'),chat=$('fullChatPage'),lessons=$('courseLessonsPage'),lp=$('courseLessonPlayerPage'),quizzes=$('courseQuizzesPage'),assignments=$('courseAssignmentsPage'),detail=$('courseAssignmentDetailPage'),files=$('courseFilesPage'),chatPage=$('courseChatPage');
+      [learning,chat,lessons,lp,detail].forEach(x=>x?.classList.remove('active'));
+      [quizzes,assignments,files,chatPage].forEach(x=>{if(x)x.style.display='none'});
+      if(overview)overview.style.display='none';
+      if(dash){dash.style.display='flex';dash.classList.remove('active');}
+      window.currentCoursePage='dashboard';
+      try{window.persistCourseState?.();}catch(_){ }
+      try{window.setMobileNavActive?.('dashboard');}catch(_){ }
+    };
+    start.addEventListener('click',e=>{e.preventDefault();e.stopImmediatePropagation();goDashboard();},true);
+    start.addEventListener('touchend',e=>{e.preventDefault();e.stopImmediatePropagation();goDashboard();},{passive:false,capture:true});
+  }
+
+  /* Rebind the dashboard overview button on mobile and desktop to the same deterministic handler. */
+  document.addEventListener('click',e=>{
+    const b=e.target.closest?.('#courseDashboard .dashboard-btn');
+    if(!b)return;
+    const text=(b.innerText||b.textContent||'').trim();
+    if(text.includes('نبذة الدورة')){
+      e.preventDefault();e.stopImmediatePropagation();
+      const overview=$('courseOverviewContainer'),dash=$('courseDashboard');
+      if(dash)dash.style.display='none';
+      if(overview)overview.style.display='block';
+      window.currentCoursePage='overview';
+      try{window.persistCourseState?.();}catch(_){ }
+      try{window.setMobileNavActive?.('overview');}catch(_){ }
+    }
+  },true);
+})();
+
+/* 4) Logout: always leave profile/course/notification layers first, then sign out. */
+(function fixLogout(){
+  const originalSignOut=auth?.signOut?.bind(auth); if(!originalSignOut||auth.signOut.__v22Wrapped)return;
+  const goHome=()=>{
+    try{window.__aaCloseNotificationDropdownV22?.();}catch(_){ }
+    ['aaNotificationDetailModal','aaCodeReasonModal'].forEach(id=>$(id)?.classList.remove('active'));
+    $('aaNotificationsPage')?.classList.remove('active');$('aaNotificationsPage')?.setAttribute('aria-hidden','true');
+    document.body.classList.remove('aa-notifications-open');
+    try{window.stopAccessWatch?.();}catch(_){ }
+    try{window.__aaNotifEnrollUnsub?.();window.__aaNotifEnrollUnsub=null;}catch(_){ }
+    document.querySelectorAll('.custom-alert-modal,.edit-modal,.auth-popup,.gallery-viewer,.platform-image-viewer,.file-viewer-overlay,.profile-self-modal').forEach(x=>x.classList.remove('active'));
+    document.querySelectorAll('#aaRebuiltProfilePage,#ananasCanonicalProfilePage,#ananasV10ProfilePage,#userProfilePage').forEach(x=>{x.classList.remove('active');x.style.display='none';});
+    try{window.aaEjectFromCourse?.('تم تسجيل الخروج من المنصة.');}catch(_){ }
+    const detail=$('courseDetailView');if(detail){detail.style.display='none';}
+    const courses=$('coursesPage');if(courses){courses.style.display='block';courses.classList.add('active');}
+    const grid=$('coursesGridContainer');if(grid)grid.style.display='grid';
+    const head=$('coursesListPageHeader');if(head)head.classList.remove('course-list-header-hidden');
+    document.querySelectorAll('.nav-btn,.auth-btn,.mobile-nav-item').forEach(x=>x.classList.remove('active'));
+    $('coursesNavBtn')?.classList.add('active');
+    try{window.mobileNavigate?.('courses');}catch(_){ }
+  };
+  const wrapped=async function(){goHome();try{await window.persistCourseState?.();}catch(_){ }return originalSignOut();};
+  wrapped.__v22Wrapped=true;auth.signOut=wrapped;
+})();
+
+/* 5) Also make explicit UI logout buttons use the same path. */
+['userProfileLogoutBtn','profileLogoutPageBtn','aaProfileLogout','aaProfileLogoutBtn','aaProfileLogoutPageBtn','aaV9Logout','v10Logout','acpLogout'].forEach(id=>{
+  const b=$(id); if(!b||b.dataset.v22Bound)return;
+  b.dataset.v22Bound='1';
+  b.addEventListener('click',e=>{e.preventDefault();e.stopImmediatePropagation();auth.signOut();},true);
 });
-setTimeout(decorateNotificationDeletes,500);
-setTimeout(decorateNotificationDeletes,1500);
-
-/* 3) Make the admin composer collapsible with an arrow. */
-function makeAdminComposerCollapsible(){
-  const tools=$('aaAdminNotificationToolsV');
-  if(!tools||tools.dataset.v23Collapsible==='1')return;
-  tools.dataset.v23Collapsible='1';
-  tools.classList.add('aa-v23-admin-tools','expanded');
-  const h3=tools.querySelector('h3');
-  if(!h3)return;
-  const originalText=h3.innerHTML;
-  h3.innerHTML='';
-  const row=document.createElement('div');row.className='aa-v23-head-toggle';
-  const title=document.createElement('span');title.innerHTML=originalText;
-  const btn=document.createElement('button');btn.type='button';btn.className='aa-admin-collapse-btn';btn.setAttribute('aria-expanded','true');btn.innerHTML='<i class="fas fa-chevron-up"></i>';
-  row.appendChild(title);row.appendChild(btn);h3.appendChild(row);
-  const body=document.createElement('div');body.className='aa-admin-notification-body';
-  while(tools.children.length>1)body.appendChild(tools.children[1]);
-  tools.appendChild(body);
-  const set=collapsed=>{
-    tools.classList.toggle('collapsed',collapsed);tools.classList.toggle('expanded',!collapsed);
-    btn.setAttribute('aria-expanded',String(!collapsed));btn.innerHTML=collapsed?'<i class="fas fa-chevron-down"></i>':'<i class="fas fa-chevron-up"></i>';
-  };
-  btn.addEventListener('click',ev=>{ev.preventDefault();ev.stopPropagation();set(!tools.classList.contains('collapsed'));});
-  title.addEventListener('click',()=>set(!tools.classList.contains('collapsed')));
-}
-const adminObs=$('aaNotificationsPage');
-if(adminObs)new MutationObserver(()=>setTimeout(makeAdminComposerCollapsible,0)).observe(adminObs,{attributes:true,childList:true,subtree:true});
-setTimeout(makeAdminComposerCollapsible,1600);
-
-/* 4) Authoritative subscription-expiry sync.
-      Old expiry notices are removed first; a fresh notice is created only when
-      the CURRENT enrollment points to a genuinely expired/deleted code. */
-function asDate(v){try{if(!v)return null;const d=v.toDate?v.toDate():new Date(v);return isNaN(d.getTime())?null:d}catch(_){return null}}
-async function syncCurrentUserExpiryNotifications(){
-  const uid=String(currentUser?.uid||'');
-  if(!uid||isAdmin)return;
-  const userRef=db.collection('users').doc(uid);
-  try{
-    const [enrollSnap,notifSnap]=await Promise.all([
-      userRef.collection('enrolledCourses').get(),
-      userRef.collection('notifications').where('type','==','subscription_expired').get().catch(()=>({docs:[]}))
-    ]);
-    const enrollments=new Map();
-    for(const ed of enrollSnap.docs){
-      const courseId=ed.id,e=ed.data()||{};
-      enrollments.set(courseId,{courseId,...e});
-    }
-    /* Remove any old/stale expiry notices. They will be recreated only from the current truth. */
-    const staleBatch=db.batch();let staleCount=0;
-    for(const nd of (notifSnap.docs||[])){
-      const n=nd.data()||{};
-      const courseId=n.data?.courseId;
-      const codeId=n.data?.codeId;
-      const e=courseId?enrollments.get(String(courseId)):null;
-      let valid=false;
-      if(e&&e.codeId&&(!codeId||String(e.codeId)===String(codeId))&&!e.codeDeleted){
-        try{
-          const cs=await db.collection('courses').doc(String(courseId)).collection('codes').doc(String(e.codeId)).get();
-          if(cs.exists){
-            const c=cs.data()||{},end=asDate(c.endTime);
-            valid=!!end&&end.getTime()<=Date.now();
-          }
-        }catch(_){ }
-      }
-      if(!valid){staleBatch.delete(nd.ref);staleCount++;}
-    }
-    if(staleCount)await staleBatch.commit().catch(()=>{});
-
-    /* Re-read only valid expired enrollments and send a fresh notification. */
-    for(const e of enrollments.values()){
-      if(!e.codeId||e.codeDeleted)continue;
-      const courseId=String(e.courseId);
-      try{
-        const courseSnap=await db.collection('courses').doc(courseId).get();
-        const courseTitle=courseSnap.exists?(courseSnap.data()?.titleAr||courseSnap.data()?.name||'الدورة'):'الدورة';
-        const codeSnap=await db.collection('courses').doc(courseId).collection('codes').doc(String(e.codeId)).get();
-        const end=codeSnap.exists?asDate(codeSnap.data()?.endTime):null;
-        const actuallyExpired=!codeSnap.exists||!!(end&&end.getTime()<=Date.now());
-        if(!actuallyExpired)continue;
-        const endIso=end?end.toISOString():null;
-        await window.aaAddNotification?.(uid,{
-          title:'مبارك انتهاء اشتراكك',
-          body:`نهنئك ونبارك لك إتمام فترة اشتراكك في دورة «${courseTitle}»، ونشكرك على اشتراكك وثقتك بنا. يمكنك تجديد الاشتراك بكود جديد للعودة إلى الدورة.`,
-          type:'subscription_expired',
-          data:{courseId,codeId:e.codeId,courseTitle,endAt:endIso,route:'course'},
-          dedupeKey:`subscription_expired_current_${courseId}_${e.codeId}_${endIso||'deleted'}`
-        });
-      }catch(err){console.warn('expiry sync item',err)}
-    }
-  }catch(err){console.warn('expiry sync',err)}
-}
-window.__aaSyncCurrentExpiryNotifications=syncCurrentUserExpiryNotifications;
-if(!window.__aaExpirySyncV23Bound){
-  window.__aaExpirySyncV23Bound=true;
-  auth.onAuthStateChanged(u=>{currentUser=u||null;setTimeout(()=>syncCurrentUserExpiryNotifications(),900);});
-  setInterval(()=>syncCurrentUserExpiryNotifications(),45000);
-}
-
-/* 5) Old notifications about an expiry should never point to a different course during renewal. */
-function patchExpiredNotificationActionData(){
-  /* Detail action already uses notification.data.courseId. The sync above ensures
-     stale notifications are removed, so only the current course remains. */
-}
-patchExpiredNotificationActionData();
 
 })();
+
 </script>
-</html>
-
-<style id="aa-notification-v24-final-style">
-/* Final notification dropdown: single viewport-safe surface, no clipping. */
-@media (max-width: 768px){
-  .navbar,.nav-container,.nav-actions-top,.aa-notifications-wrap{overflow:visible!important;}
-}
-.aa-notifications-dropdown.aa-v24-final{
-  position:fixed!important;
-  z-index:300000!important;
-  display:none;
-  width:min(390px,calc(100vw - 24px))!important;
-  max-width:calc(100vw - 24px)!important;
-  max-height:calc(100dvh - 110px)!important;
-  overflow:hidden!important;
-  inset:auto!important;
-  margin:0!important;
-  box-sizing:border-box!important;
-}
-.aa-notifications-dropdown.aa-v24-final.active{display:block!important;}
-.aa-notifications-dropdown.aa-v24-final .aa-notif-list{
-  max-height:calc(100dvh - 190px)!important;
-  overflow-y:auto!important;
-  overflow-x:hidden!important;
-  -webkit-overflow-scrolling:touch!important;
-  overscroll-behavior:contain!important;
-}
-#aaNotificationDetailModal{z-index:400000!important;}
-#aaNotificationDetailModal.active{display:flex!important;}
-#aaNotificationsPage.aa-v24-page-open{z-index:350000!important;}
-</style>
-<script id="aa-notification-v24-final-script">
-(function(){
-'use strict';
-const E=id=>document.getElementById(id);
-
-/* ---------- A) Rebuild the bell interaction once, avoiding duplicate legacy handlers. ---------- */
-(function rebuildBell(){
-  const old=E('aaNotificationsBtn'), drop=E('aaNotificationsDropdown');
-  if(!old||!drop)return;
-  const btn=old.cloneNode(true);
-  old.replaceWith(btn);
-  drop.classList.remove('aa-v22-portal','aa-v23-positioned');
-  drop.classList.add('aa-v24-final');
-  function close(){drop.classList.remove('active');btn.classList.remove('active');}
-  function open(){
-    const r=btn.getBoundingClientRect();
-    const vw=Math.max(document.documentElement.clientWidth||0,window.innerWidth||0);
-    const vh=Math.max(document.documentElement.clientHeight||0,window.innerHeight||0);
-    const w=Math.min(390,Math.max(260,vw-24));
-    let left=r.right-w;
-    if(left<12)left=12;
-    if(left+w>vw-12)left=vw-w-12;
-    /* Keep the dropdown below the top bar when possible; otherwise place it above. */
-    let top=r.bottom+8;
-    drop.style.left=Math.max(12,left)+'px';
-    drop.style.right='auto';
-    drop.style.width=w+'px';
-    drop.style.maxHeight=Math.max(180,vh-top-12)+'px';
-    drop.classList.add('active');btn.classList.add('active');
-    const h=drop.getBoundingClientRect().height||360;
-    if(top+h>vh-12){
-      const above=r.top-8-h;
-      top=above>=12?above:Math.max(12,vh-h-12);
-      drop.style.maxHeight=Math.max(180,vh-top-12)+'px';
-    }
-    drop.style.top=Math.max(12,top)+'px';
-  }
-  btn.addEventListener('click',e=>{e.preventDefault();e.stopPropagation();drop.classList.contains('active')?close():open();});
-  drop.addEventListener('click',e=>e.stopPropagation());
-  document.addEventListener('click',e=>{if(!drop.contains(e.target)&&e.target!==btn&&!btn.contains(e.target))close();},true);
-  window.addEventListener('resize',()=>{if(drop.classList.contains('active'))open();},{passive:true});
-  window.addEventListener('orientationchange',()=>setTimeout(()=>{if(drop.classList.contains('active'))open()},120),{passive:true});
-  window.__aaV24CloseBell=close;
-})();
-
-/* ---------- B) Notification details must stay ABOVE the standalone notifications page. ---------- */
-(function patchNotificationDetail(){
-  const original=window.aaOpenNotification;
-  if(typeof original!=='function'||original.__aaV24Patched)return;
-  const patched=async function(id){
-    await original(id);
-    E('aaNotificationDetailModal')?.style.setProperty('z-index','400000','important');
-    E('aaNotificationsPage')?.classList.add('aa-v24-page-open');
-  };
-  patched.__aaV24Patched=true;
-  window.aaOpenNotification=patched;
-})();
-
-/* ---------- C) Authoritative subscription-expiry logic. ----------
-   Rules:
-   1. Never generate expiry notices for deleted courses.
-   2. Prefer the currently active code for each existing course.
-   3. If no active code exists, consider only the last known code for that course.
-   4. A notice is sent once per exact subscription (course + code + end time).
-   5. Old/stale expiry notices are removed before rebuilding valid ones. */
-function dateV(v){try{if(!v)return null;const d=v?.toDate?v.toDate():new Date(v);return isNaN(d?.getTime?.())?null:d}catch(_){return null}}
-async function authoritativeExpirySync(){
-  const user=currentUser;
-  if(!user||isAdmin)return;
-  const uid=String(user.uid);
-  const uref=db.collection('users').doc(uid);
-  try{
-    const [courseSnap,enrollSnap,notifSnap]=await Promise.all([
-      db.collection('courses').get(),
-      uref.collection('enrolledCourses').get(),
-      uref.collection('notifications').where('type','==','subscription_expired').get().catch(()=>({docs:[]}))
-    ]);
-    const liveCourses=new Map(courseSnap.docs.map(d=>[String(d.id),{id:String(d.id),...(d.data()||{})}]));
-    const allEnrollments=enrollSnap.docs.map(d=>({courseId:String(d.id),...(d.data()||{})})).filter(e=>liveCourses.has(e.courseId));
-
-    /* Group by course. The current enrollment record is authoritative for that course. */
-    const byCourse=new Map();
-    for(const e of allEnrollments)byCourse.set(e.courseId,e);
-
-    /* Remove EVERY old expiry notice that is not exactly the currently valid expired subscription. */
-    const keepKeys=new Set();
-    const candidates=[];
-    for(const [courseId,e] of byCourse){
-      if(e.codeDeleted||e.accessBlocked)continue; // these states have their own notifications.
-      const codeId=e.codeId?String(e.codeId):'';
-      if(!codeId)continue;
-      const codeSnap=await db.collection('courses').doc(courseId).collection('codes').doc(codeId).get().catch(()=>null);
-      if(!codeSnap?.exists)continue;
-      const code={...(codeSnap.data()||{})};
-      if(code.disabled)continue;
-      const end=dateV(code.endTime);
-      if(!end||end.getTime()>Date.now())continue; // currently active subscription; no expiry notice.
-      const key=`subscription_expired_exact_${courseId}_${codeId}_${end.toISOString()}`;
-      keepKeys.add(key);
-      candidates.push({courseId,e,codeId,code,end,key});
-    }
-
-    const batch=db.batch();
-    let changed=false;
-    for(const nd of (notifSnap.docs||[])){
-      const n=nd.data()||{};
-      const k=n.data?.dedupeKey||n.data?.expiryKey||'';
-      if(!keepKeys.has(String(k))){batch.delete(nd.ref);changed=true;}
-    }
-    if(changed)await batch.commit();
-
-    for(const item of candidates){
-      const course=liveCourses.get(item.courseId)||{};
-      const courseTitle=course.titleAr||course.name||'الدورة';
-      await window.aaAddNotification?.(uid,{
-        title:'مبارك انتهاء اشتراكك',
-        body:`نهنئك ونبارك لك انتهاء اشتراكك في دورة «${courseTitle}»، ونشكرك على اشتراكك وثقتك بنا. يمكنك تجديد الاشتراك بكود جديد للعودة إلى الدورة.`,
-        type:'subscription_expired',
-        data:{courseId:item.courseId,codeId:item.codeId,courseTitle,endAt:item.end.toISOString(),route:'course'},
-        dedupeKey:item.key
-      });
-    }
-  }catch(err){console.warn('authoritative subscription expiry sync',err)}
-}
-window.__aaAuthoritativeExpirySync=authoritativeExpirySync;
-if(!window.__aaV24ExpiryBound){
-  window.__aaV24ExpiryBound=true;
-  auth.onAuthStateChanged(()=>setTimeout(authoritativeExpirySync,1200));
-  setInterval(authoritativeExpirySync,60000);
-}
-})();
-</script>
+</body>
 </html>
