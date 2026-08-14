@@ -13807,145 +13807,289 @@ const st=document.createElement('style');st.id='final-privacy-v21-style';st.text
 document.head.appendChild(st);
 })();
 </script>
-
-<script id="final-mobile-notifications-overview-logout-v22">
-(function(){
-'use strict';
-
-/* ===== FINAL MOBILE + NOTIFICATIONS + LOGOUT PATCH ===== */
-const $=id=>document.getElementById(id);
-
-/* 1) Mobile notifications: keep the bell in the navbar, but portal the dropdown to <body>.
-      This prevents navbar overflow/backdrop-filter from clipping it on phones. */
-(function fixMobileNotificationDropdown(){
-  const btn=$('aaNotificationsBtn'), dropdown=$('aaNotificationsDropdown'), wrap=$('aaNotificationsWrap');
-  if(!btn||!dropdown||!wrap||btn.dataset.v22Bound)return;
-  btn.dataset.v22Bound='1';
-  let opened=false;
-  const originalParent=dropdown.parentElement;
-  function place(){
-    if(window.innerWidth>768){
-      if(dropdown.parentElement!==originalParent) originalParent.appendChild(dropdown);
-      dropdown.style.cssText='';
-      dropdown.classList.remove('aa-v22-portal');
-      return;
-    }
-    if(dropdown.parentElement!==document.body) document.body.appendChild(dropdown);
-    const gap=8;
-    const width=Math.min(390,window.innerWidth-24);
-    let left=Math.round((window.innerWidth-width)/2);
-    left=Math.max(12,Math.min(left,window.innerWidth-width-12));
-    dropdown.style.position='fixed';
-    dropdown.style.top='calc(var(--nav-height-mobile,70px) + 8px)';
-    dropdown.style.left=left+'px';
-    dropdown.style.right='auto';
-    dropdown.style.width=width+'px';
-    dropdown.style.maxWidth='calc(100vw - 24px)';
-    dropdown.style.maxHeight='min(70dvh,560px)';
-    dropdown.style.overflow='hidden';
-    dropdown.style.zIndex='120500';
-    dropdown.style.margin='0';
-    dropdown.classList.add('aa-v22-portal');
-  }
-  function close(){opened=false;dropdown.classList.remove('active');btn.classList.remove('active');}
-  function open(){place();opened=true;dropdown.classList.add('active');btn.classList.add('active');}
-  btn.addEventListener('click',function(e){e.preventDefault();e.stopPropagation();opened?close():open();},true);
-  ['pointerup','touchend'].forEach(type=>btn.addEventListener(type,function(e){
-    if(type==='touchend'){e.preventDefault();e.stopPropagation();opened?close():open();}
-  },{passive:false,capture:true}));
-  window.addEventListener('resize',()=>{if(opened)place();},{passive:true});
-  window.addEventListener('orientationchange',()=>setTimeout(()=>{if(opened)place();},80),{passive:true});
-  document.addEventListener('click',e=>{if(!opened)return;if(!wrap.contains(e.target)&&e.target!==dropdown&&!dropdown.contains(e.target))close();},true);
-  window.__aaCloseNotificationDropdownV22=close;
-})();
-
-/* 2) Notifications full page: make it a true independent application layer on phones. */
-(function fixNotificationsPageLayer(){
-  const page=$('aaNotificationsPage'); if(!page||page.dataset.v22Bound)return;
-  page.dataset.v22Bound='1';
-  const style=document.createElement('style');style.id='aa-v22-notification-mobile-style';style.textContent=`
-    #aaNotificationsPage{position:fixed!important;inset:0!important;display:none;z-index:130500!important;background:var(--bg-primary)!important;width:100vw!important;height:100dvh!important;max-width:100vw!important;max-height:100dvh!important;overflow:hidden!important;}
-    #aaNotificationsPage.active{display:block!important;}
-    #aaNotificationsPage .aa-notifications-page-inner{height:100%!important;max-height:100%!important;overflow-y:auto!important;overflow-x:hidden!important;box-sizing:border-box!important;padding:calc(var(--nav-height-mobile,70px) + 12px) 12px calc(var(--mobile-bottom-nav-content-height,66px) + env(safe-area-inset-bottom) + 18px)!important;-webkit-overflow-scrolling:touch!important;}
-    #aaNotificationsPage .aa-notifications-page-head{position:sticky!important;top:0!important;z-index:2!important;background:var(--bg-primary)!important;padding-top:4px!important;}
-    #aaNotificationsPage .aa-notifications-all-list{padding-bottom:10px!important;}
-    @media(min-width:769px){#aaNotificationsPage{inset:0!important;}#aaNotificationsPage .aa-notifications-page-inner{padding:24px 24px 36px!important;}}
-  `;document.head.appendChild(style);
-  const closeBtn=$('aaCloseNotificationsPage');
-  closeBtn?.addEventListener('click',()=>{window.__aaCloseNotificationDropdownV22?.();document.body.classList.remove('aa-notifications-open');page.classList.remove('active');page.setAttribute('aria-hidden','true');});
-})();
-
-/* 3) Mobile course overview/dashboard: explicit deterministic view switching.
-      Older switchCoursePage wrappers can conflict; this direct handler uses DOM state itself. */
-(function fixMobileCourseOverview(){
-  const start=$('startLearningBtn'); if(start&&!start.dataset.v22Bound){
-    start.dataset.v22Bound='1';
-    const goDashboard=()=>{
-      if(!window.activeCourseId && !activeCourseId)return;
-      const overview=$('courseOverviewContainer'),dash=$('courseDashboard'),learning=$('courseLearningView'),chat=$('fullChatPage'),lessons=$('courseLessonsPage'),lp=$('courseLessonPlayerPage'),quizzes=$('courseQuizzesPage'),assignments=$('courseAssignmentsPage'),detail=$('courseAssignmentDetailPage'),files=$('courseFilesPage'),chatPage=$('courseChatPage');
-      [learning,chat,lessons,lp,detail].forEach(x=>x?.classList.remove('active'));
-      [quizzes,assignments,files,chatPage].forEach(x=>{if(x)x.style.display='none'});
-      if(overview)overview.style.display='none';
-      if(dash){dash.style.display='flex';dash.classList.remove('active');}
-      window.currentCoursePage='dashboard';
-      try{window.persistCourseState?.();}catch(_){ }
-      try{window.setMobileNavActive?.('dashboard');}catch(_){ }
-    };
-    start.addEventListener('click',e=>{e.preventDefault();e.stopImmediatePropagation();goDashboard();},true);
-    start.addEventListener('touchend',e=>{e.preventDefault();e.stopImmediatePropagation();goDashboard();},{passive:false,capture:true});
-  }
-
-  /* Rebind the dashboard overview button on mobile and desktop to the same deterministic handler. */
-  document.addEventListener('click',e=>{
-    const b=e.target.closest?.('#courseDashboard .dashboard-btn');
-    if(!b)return;
-    const text=(b.innerText||b.textContent||'').trim();
-    if(text.includes('نبذة الدورة')){
-      e.preventDefault();e.stopImmediatePropagation();
-      const overview=$('courseOverviewContainer'),dash=$('courseDashboard');
-      if(dash)dash.style.display='none';
-      if(overview)overview.style.display='block';
-      window.currentCoursePage='overview';
-      try{window.persistCourseState?.();}catch(_){ }
-      try{window.setMobileNavActive?.('overview');}catch(_){ }
-    }
-  },true);
-})();
-
-/* 4) Logout: always leave profile/course/notification layers first, then sign out. */
-(function fixLogout(){
-  const originalSignOut=auth?.signOut?.bind(auth); if(!originalSignOut||auth.signOut.__v22Wrapped)return;
-  const goHome=()=>{
-    try{window.__aaCloseNotificationDropdownV22?.();}catch(_){ }
-    ['aaNotificationDetailModal','aaCodeReasonModal'].forEach(id=>$(id)?.classList.remove('active'));
-    $('aaNotificationsPage')?.classList.remove('active');$('aaNotificationsPage')?.setAttribute('aria-hidden','true');
-    document.body.classList.remove('aa-notifications-open');
-    try{window.stopAccessWatch?.();}catch(_){ }
-    try{window.__aaNotifEnrollUnsub?.();window.__aaNotifEnrollUnsub=null;}catch(_){ }
-    document.querySelectorAll('.custom-alert-modal,.edit-modal,.auth-popup,.gallery-viewer,.platform-image-viewer,.file-viewer-overlay,.profile-self-modal').forEach(x=>x.classList.remove('active'));
-    document.querySelectorAll('#aaRebuiltProfilePage,#ananasCanonicalProfilePage,#ananasV10ProfilePage,#userProfilePage').forEach(x=>{x.classList.remove('active');x.style.display='none';});
-    try{window.aaEjectFromCourse?.('تم تسجيل الخروج من المنصة.');}catch(_){ }
-    const detail=$('courseDetailView');if(detail){detail.style.display='none';}
-    const courses=$('coursesPage');if(courses){courses.style.display='block';courses.classList.add('active');}
-    const grid=$('coursesGridContainer');if(grid)grid.style.display='grid';
-    const head=$('coursesListPageHeader');if(head)head.classList.remove('course-list-header-hidden');
-    document.querySelectorAll('.nav-btn,.auth-btn,.mobile-nav-item').forEach(x=>x.classList.remove('active'));
-    $('coursesNavBtn')?.classList.add('active');
-    try{window.mobileNavigate?.('courses');}catch(_){ }
-  };
-  const wrapped=async function(){goHome();try{await window.persistCourseState?.();}catch(_){ }return originalSignOut();};
-  wrapped.__v22Wrapped=true;auth.signOut=wrapped;
-})();
-
-/* 5) Also make explicit UI logout buttons use the same path. */
-['userProfileLogoutBtn','profileLogoutPageBtn','aaProfileLogout','aaProfileLogoutBtn','aaProfileLogoutPageBtn','aaV9Logout','v10Logout','acpLogout'].forEach(id=>{
-  const b=$(id); if(!b||b.dataset.v22Bound)return;
-  b.dataset.v22Bound='1';
-  b.addEventListener('click',e=>{e.preventDefault();e.stopImmediatePropagation();auth.signOut();},true);
-});
-
-})();
-
-</script>
 </body>
 </html>
+
+
+<!-- ===== FINAL UX / MOBILE NOTIFICATIONS / COURSE NAVIGATION / CODE-LINKED NOTIFICATIONS v22 ===== -->
+<style id="aa-final-v22-ux-style">
+/* Notification dropdown: never exceed the viewport on phones. */
+#aaNotificationsDropdown{z-index:25000!important;max-width:calc(100vw - 24px)!important;box-sizing:border-box!important;}
+#aaNotificationDetailModal,#aaCodeReasonModal{z-index:26000!important;}
+body.aa-notifications-open{overflow:hidden!important;overscroll-behavior:none!important;}
+@media(max-width:768px){
+  .aa-notifications-wrap{position:static!important;width:40px!important;min-width:40px!important;}
+  #aaNotificationsDropdown{position:fixed!important;top:calc(var(--nav-height-mobile,70px) + 8px)!important;left:12px!important;right:12px!important;inset-inline-start:12px!important;inset-inline-end:12px!important;width:auto!important;max-width:none!important;max-height:calc(100dvh - var(--nav-height-mobile,70px) - 66px - 20px)!important;overflow:hidden!important;border-radius:18px!important;}
+  #aaNotificationsDropdown .aa-notif-list{max-height:calc(100dvh - var(--nav-height-mobile,70px) - 66px - 150px)!important;overflow-y:auto!important;overscroll-behavior:contain!important;-webkit-overflow-scrolling:touch!important;}
+  #aaNotificationsPage{top:var(--nav-height-mobile,70px)!important;bottom:calc(var(--mobile-bottom-nav-content-height,66px) + env(safe-area-inset-bottom))!important;left:0!important;right:0!important;inset-inline:0!important;width:100vw!important;height:auto!important;max-height:none!important;z-index:24000!important;overflow:hidden!important;box-sizing:border-box!important;}
+  #aaNotificationsPage .aa-notifications-page-inner{height:100%!important;max-height:none!important;overflow-y:auto!important;overflow-x:hidden!important;overscroll-behavior:contain!important;-webkit-overflow-scrolling:touch!important;padding:12px 12px 20px!important;box-sizing:border-box!important;}
+  #aaNotificationDetailModal{top:var(--nav-height-mobile,70px)!important;bottom:calc(var(--mobile-bottom-nav-content-height,66px) + env(safe-area-inset-bottom))!important;left:0!important;right:0!important;inset-inline:0!important;padding:10px!important;align-items:center!important;justify-content:center!important;box-sizing:border-box!important;}
+  #aaNotificationDetailModal .aa-notification-detail-box{width:min(100%,620px)!important;max-width:none!important;max-height:calc(100dvh - var(--nav-height-mobile,70px) - var(--mobile-bottom-nav-content-height,66px) - 20px)!important;overflow-y:auto!important;box-sizing:border-box!important;}
+  .aa-admin-notification-tools{margin-bottom:12px!important;}
+}
+
+/* Keep the notification center and detail modal on top of every page without exposing the page below. */
+body.aa-notifications-open #coursesPage,
+body.aa-notifications-open #courseDetailView,
+body.aa-notifications-open footer,
+body.aa-notifications-open .custom-alert-modal,
+body.aa-notifications-open .edit-modal:not(#aaCodeReasonModal){visibility:hidden!important;pointer-events:none!important;}
+
+/* Admin notification composer. */
+.aa-admin-notification-tools{position:relative!important;}
+.aa-admin-notification-tools .aa-admin-compose-head{display:flex;align-items:center;justify-content:space-between;gap:10px;}
+.aa-admin-compose-toggle{width:38px;height:38px;border-radius:50%;border:1px solid var(--border);background:var(--bg-secondary);color:var(--text-primary);cursor:pointer;display:inline-grid;place-items:center;flex:0 0 38px;transition:.2s;}
+.aa-admin-compose-toggle:hover{border-color:var(--accent1);color:var(--accent1);transform:translateY(-1px);}
+.aa-admin-compose-body{display:none;margin-top:12px;}
+.aa-admin-notification-tools.expanded .aa-admin-compose-body{display:block;}
+.aa-admin-notification-tools.expanded .aa-admin-compose-toggle i{transform:rotate(180deg);}
+.aa-admin-notification-tools .aa-admin-compose-summary{margin:4px 0 0;color:var(--text-muted);font-size:.78rem;line-height:1.7;}
+
+/* Smooth mobile scrolling for content pages. */
+@media(max-width:768px){
+  #coursesPage,#courseDetailView,#courseDetailView > .course-overview,#courseDetailView > #courseDashboard,
+  #courseLessonsPage,#courseLessonPlayerPage,#courseQuizzesPage,#courseAssignmentsPage,#courseAssignmentDetailPage,
+  #courseFilesPage,#courseChatPage,#fullChatPage,.assignment-detail-page,
+  #aaNotificationsPage .aa-notifications-page-inner{scroll-behavior:smooth;scrollbar-width:thin;scrollbar-color:rgba(108,92,231,.82) rgba(108,92,231,.08);}
+  #coursesPage::-webkit-scrollbar,#courseDetailView::-webkit-scrollbar,#courseOverviewContainer::-webkit-scrollbar,#courseDashboard::-webkit-scrollbar,
+  #courseLessonsPage::-webkit-scrollbar,#courseLessonPlayerPage::-webkit-scrollbar,#courseQuizzesPage::-webkit-scrollbar,#courseAssignmentsPage::-webkit-scrollbar,
+  #courseAssignmentDetailPage::-webkit-scrollbar,#courseFilesPage::-webkit-scrollbar,#courseChatPage::-webkit-scrollbar,#fullChatPage::-webkit-scrollbar,
+  #aaNotificationsPage .aa-notifications-page-inner::-webkit-scrollbar{width:7px!important;}
+}
+</style>
+
+<script id="aa-final-v22-ux-script">
+(function(){
+  'use strict';
+  const E=id=>document.getElementById(id);
+  const esc=v=>String(v??'').replace(/[&<>'"]/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[m]));
+  const asDate=v=>{try{if(!v)return null;const d=v.toDate?v.toDate():new Date(v);return isNaN(d.getTime())?null:d}catch(_){return null}};
+  const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+
+  /* ---------- 1) Notification button: capture clicks on mobile so the dropdown always opens. ---------- */
+  if(!window.__aaV22NotificationButtonBound){
+    window.__aaV22NotificationButtonBound=true;
+    document.addEventListener('click',function(e){
+      const btn=e.target.closest?.('#aaNotificationsBtn');
+      if(!btn)return;
+      e.preventDefault();e.stopPropagation();
+      const drop=E('aaNotificationsDropdown');
+      if(!drop)return;
+      const opening=!drop.classList.contains('active');
+      drop.classList.toggle('active',opening);
+      btn.classList.toggle('active',opening);
+      if(opening&&typeof window.aaRenderNotifications==='function')window.aaRenderNotifications();
+    },true);
+  }
+
+  /* ---------- 2) Notification page is a real modal-page; detail opens above it, not over courses. ---------- */
+  function closeNotificationDetail(){E('aaNotificationDetailModal')?.classList.remove('active');}
+  function closeNotificationPage(){
+    E('aaNotificationsPage')?.classList.remove('active');
+    document.body.classList.remove('aa-notifications-open');
+    document.body.style.overflow='';
+  }
+  window.__aaV22CloseNotificationPage=closeNotificationPage;
+  window.__aaV22CloseNotificationDetail=closeNotificationDetail;
+
+  E('aaNotificationDetailClose')?.addEventListener('click',closeNotificationDetail);
+  E('aaCloseNotificationsPage')?.addEventListener('click',function(){closeNotificationPage();closeNotificationDetail();});
+
+  /* ---------- 3) Admin compose panel: collapsible arrow with notifications directly underneath. ---------- */
+  function prepareAdminCompose(){
+    const wrap=E('aaAdminNotificationToolsV');
+    if(!wrap||wrap.dataset.v22Ready==='1')return;
+    wrap.dataset.v22Ready='1';
+    const h3=wrap.querySelector('h3');
+    const p=wrap.querySelector('p');
+    const grid=wrap.querySelector('.aa-admin-notification-grid');
+    const actions=wrap.querySelector('.aa-notif-compose-actions');
+    if(!h3)return;
+    const head=document.createElement('div');head.className='aa-admin-compose-head';
+    const titleWrap=document.createElement('div');titleWrap.style.minWidth='0';
+    titleWrap.appendChild(h3);if(p){p.classList.add('aa-admin-compose-summary');titleWrap.appendChild(p);}
+    const toggle=document.createElement('button');toggle.type='button';toggle.className='aa-admin-compose-toggle';toggle.setAttribute('aria-expanded','false');toggle.title='فتح أو إخفاء إرسال الإشعار';toggle.innerHTML='<i class="fas fa-chevron-down"></i>';
+    head.appendChild(titleWrap);head.appendChild(toggle);
+    const body=document.createElement('div');body.className='aa-admin-compose-body';
+    if(grid)body.appendChild(grid);if(actions)body.appendChild(actions);
+    wrap.innerHTML='';wrap.appendChild(head);wrap.appendChild(body);
+    toggle.addEventListener('click',function(){const open=!wrap.classList.contains('expanded');wrap.classList.toggle('expanded',open);toggle.setAttribute('aria-expanded',String(open));});
+  }
+  const adminComposeObserver=new MutationObserver(()=>prepareAdminCompose());
+  if(E('aaNotificationsPage'))adminComposeObserver.observe(E('aaNotificationsPage'),{subtree:true,childList:true});
+  setTimeout(prepareAdminCompose,300);setTimeout(prepareAdminCompose,1200);setTimeout(prepareAdminCompose,2200);
+
+  /* ---------- 4) Final mobile course viewport: content only lives between top and bottom bars. ---------- */
+  function setMobileViewportHeight(){
+    if(window.innerWidth>768)return;
+    const top=parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--nav-height-mobile'))||70;
+    const bottom=parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--mobile-bottom-nav-content-height'))||66;
+    document.documentElement.style.setProperty('--aa-v22-content-top',top+'px');
+    document.documentElement.style.setProperty('--aa-v22-content-bottom',bottom+'px');
+    document.documentElement.style.setProperty('--aa-v22-content-height',`calc(100dvh - ${top}px - ${bottom}px - env(safe-area-inset-bottom))`);
+  }
+  setMobileViewportHeight();window.addEventListener('resize',setMobileViewportHeight,{passive:true});window.addEventListener('orientationchange',()=>setTimeout(setMobileViewportHeight,100),{passive:true});
+
+  /* ---------- 5) Prevent duplicate course entry clicks on mobile and force a clean overview. ---------- */
+  let openingCoursePromise=null,openingCourseId=null;
+  const currentOpenCourse=window.openCourse;
+  if(typeof currentOpenCourse==='function'&&!currentOpenCourse.__aaV22Wrapped){
+    const wrapped=async function(courseId){
+      if(openingCoursePromise&&String(openingCourseId)===String(courseId))return openingCoursePromise;
+      openingCourseId=courseId;
+      openingCoursePromise=Promise.resolve().then(()=>currentOpenCourse.apply(this,arguments)).finally(()=>{openingCoursePromise=null;openingCourseId=null;});
+      return openingCoursePromise;
+    };
+    wrapped.__aaV22Wrapped=true;window.openCourse=wrapped;
+  }
+
+  window.__aaV22ShowOverview=function(){
+    if(!window.activeCourseId)return;
+    const detail=E('courseDetailView'),overview=E('courseOverviewContainer'),dashboard=E('courseDashboard');
+    if(!detail||!overview)return;
+    detail.style.display='flex';
+    document.querySelectorAll('#courseDetailView > *').forEach(el=>{
+      if(el===overview)el.style.display='block';
+      else if(el===dashboard)el.style.display='none';
+      else if(el.classList?.contains('course-details-header'))el.style.display='none';
+      else {el.style.display='none';el.classList?.remove('active');}
+    });
+    overview.style.display='block';overview.classList.remove('active');
+    window.currentCoursePage='overview';
+    try{document.querySelector('#courseOverviewContainer')?.scrollTo({top:0,behavior:'smooth'});}catch(_){ }
+    try{window.setMobileNavActive?.('overview')}catch(_){ }
+  };
+
+  if(!window.__aaV22CourseClicksBound){
+    window.__aaV22CourseClicksBound=true;
+    document.addEventListener('click',function(e){
+      const overviewBtn=e.target.closest?.('#courseDashboard .dashboard-btn');
+      if(overviewBtn&&/نبذة الدورة/.test(overviewBtn.textContent||'')){
+        e.preventDefault();e.stopImmediatePropagation();window.__aaV22ShowOverview?.();return;
+      }
+      const start=e.target.closest?.('#startLearningBtn');
+      if(start){
+        e.preventDefault();e.stopImmediatePropagation();
+        if(window.activeCourseId)window.switchCoursePage?.('dashboard');
+        return;
+      }
+    },true);
+  }
+
+  /* ---------- 6) Logout always leaves the current page immediately. ---------- */
+  function leaveToCourses(){try{window.aaEjectFromCourse?.();}catch(_){}try{window.mobileNavigate?.('courses');}catch(_){}
+    const detail=E('courseDetailView');if(detail)detail.style.display='none';
+    const grid=E('coursesGridContainer');if(grid)grid.style.display='grid';
+  }
+  if(window.signOutUser&&!window.signOutUser.__aaV22Logout){
+    const old=window.signOutUser;const fn=async function(){leaveToCourses();await sleep(20);return old.apply(this,arguments)};fn.__aaV22Logout=true;window.signOutUser=fn;
+  }
+  if(auth?.signOut&&!auth.signOut.__aaV22Logout){
+    const original=auth.signOut.bind(auth);const fn=async function(){leaveToCourses();await sleep(20);return original()};fn.__aaV22Logout=true;auth.signOut=fn;
+  }
+
+  /* ---------- 7) Code-linked subscription lifecycle notifications. ---------- */
+  async function notifyOnce(uid,payload,key){
+    if(!uid||typeof window.aaAddNotification!=='function')return;
+    const data={...(payload.data||{}),subscriptionNotificationKey:key};
+    try{await window.aaAddNotification(uid,{...payload,data,dedupeKey:key});}catch(_){ }
+  }
+  async function currentEnrollmentState(uid,courseId){
+    const ref=db.collection('users').doc(uid).collection('enrolledCourses').doc(courseId);const s=await ref.get();return {ref,s,data:s.exists?(s.data()||{}):null};
+  }
+  async function syncCurrentSubscriptionNotifications(uid){
+    if(!uid||!currentUser||isAdmin)return;
+    try{
+      const courseDocs=await db.collection('users').doc(uid).collection('enrolledCourses').get();
+      for(const ed of courseDocs.docs){
+        const courseId=ed.id,e=ed.data()||{};const codeId=e.codeId||null;
+        if(!codeId)continue;
+        const courseSnap=await db.collection('courses').doc(courseId).get();
+        if(!courseSnap.exists)continue; // deleted course = no notification source
+        const course=courseSnap.data()||{};const courseTitle=course.titleAr||course.title||'الدورة';
+        const codeSnap=await db.collection('courses').doc(courseId).collection('codes').doc(codeId).get();
+        const now=Date.now();
+        if(!codeSnap.exists){
+          if(e.codeDeleted===true)continue; // deletion notification is already emitted by the delete action
+          const end=asDate(e.subscriptionEndAt)||asDate(e.endTime)||null;
+          if(end&&end.getTime()<=now){
+            await notifyOnce(uid,{title:'مبارك انتهاء اشتراكك',body:`نبارك لك انتهاء اشتراكك في ${courseTitle}، ونشكرك على اشتراكك واستفادتك من الدورة. يمكنك تجديد الاشتراك بكود جديد.`,type:'subscription_expired',data:{route:'course',courseId,codeId,courseTitle,codeStatus:'missing',subscriptionStartAt:e.enrolledAt||null,subscriptionEndAt:end.toISOString()}},`subscription_expired_${courseId}_${codeId}_${end.getTime()}`);
+          }
+          continue;
+        }
+        const c=codeSnap.data()||{};const start=asDate(c.startTime),end=asDate(c.endTime),until=asDate(c.suspendedUntil);
+        const base={courseId,codeId,code:c.code||codeId,courseTitle,codeStatus:c.disabled?'suspended':(end&&end.getTime()<=now?'expired':'active'),subscriptionStartAt:start?.toISOString()||null,subscriptionEndAt:end?.toISOString()||null,suspendedUntil:until?.toISOString()||null,suspensionReason:c.suspensionReason||null};
+        if(c.disabled){
+          const disabledKey=`code_suspended_${courseId}_${codeId}_${c.suspensionUpdatedAt?.seconds||String(c.suspensionUpdatedAt||'')}`;
+          // The explicit suspension action already sends this notification. This key simply prevents a duplicate if the poll sees it again.
+          if(e.accessBlocked===true && !aaNotificationsCache.some(n=>n.type==='code_suspended'&&String(n.data?.courseId)===String(courseId)&&String(n.data?.codeId)===String(codeId)&&String(n.data?.subscriptionNotificationKey||'')===disabledKey)){
+            await notifyOnce(uid,{title:'تم إيقاف اشتراكك',body:until?`تم إيقاف اشتراكك في ${courseTitle} حتى ${until.toLocaleString('ar-SA',{timeZone:'Asia/Riyadh'})}.`:`تم إيقاف اشتراكك في ${courseTitle} حتى إلغاء الإيقاف من المشرف.`,reason:c.suspensionReason||'',type:'code_suspended',data:base},disabledKey);
+          }
+          if(until&&until.getTime()<=now){
+            const key=`suspension_expired_${courseId}_${codeId}_${until.getTime()}`;
+            await notifyOnce(uid,{title:'انتهت مدة إيقاف الاشتراك',body:`انتهت مدة إيقاف اشتراكك في ${courseTitle} ويمكنك الدخول إلى الدورة مرة أخرى.`,type:'suspension_expired',data:{...base,codeStatus:'active'}},key);
+          }
+        }
+        if(end&&end.getTime()<=now){
+          const key=`subscription_expired_${courseId}_${codeId}_${end.getTime()}`;
+          await notifyOnce(uid,{title:'مبارك انتهاء اشتراكك',body:`نبارك لك انتهاء اشتراكك في ${courseTitle}، ونشكرك على اشتراكك واستفادتك من الدورة. يمكنك تجديد الاشتراك بكود جديد.`,type:'subscription_expired',data:{...base,codeStatus:'expired'}},key);
+        }
+      }
+    }catch(e){console.warn('v22 subscription notifications',e)}
+  }
+  window.__aaV22SyncSubscriptionNotifications=syncCurrentSubscriptionNotifications;
+
+  if(!window.__aaV22LifecyclePoll){
+    window.__aaV22LifecyclePoll=setInterval(()=>{if(currentUser&&!isAdmin)syncCurrentSubscriptionNotifications(currentUser.uid)},30000);
+    if(currentUser&&!isAdmin)setTimeout(()=>syncCurrentSubscriptionNotifications(currentUser.uid),800);
+  }
+  if(!window.__aaV22AuthLifecycleBound){
+    window.__aaV22AuthLifecycleBound=true;
+    auth.onAuthStateChanged(user=>{if(user&&!isAdmin)setTimeout(()=>syncCurrentSubscriptionNotifications(user.uid),900);});
+  }
+
+  /* ---------- 8) Keep notification details above the notification page, and keep page open under them. ---------- */
+  if(!window.__aaV22NotificationDetailNavBound){
+    window.__aaV22NotificationDetailNavBound=true;
+    document.addEventListener('click',function(e){
+      const item=e.target.closest?.('#aaNotificationsPage .aa-notif-item');if(!item)return;
+      // The original handler opens the detail. We only make the layering explicit.
+      setTimeout(()=>{if(E('aaNotificationDetailModal')?.classList.contains('active')){E('aaNotificationDetailModal').style.display='flex';E('aaNotificationDetailModal').style.zIndex='26000';}},0);
+    },true);
+  }
+
+})();
+</script>
+
+
+<!-- ===== FINAL CODE UNSUSPEND NOTIFICATION PATCH v22 ===== -->
+<script id="aa-v22-code-unsuspend-notification">
+(function(){
+  'use strict';
+  if(window.__aaV22UnsuspendNotifBound)return;
+  window.__aaV22UnsuspendNotifBound=true;
+  const oldToggle=window.toggleEnrollmentCode;
+  if(typeof oldToggle!=='function')return;
+  const asDate=v=>{try{if(!v)return null;const d=v.toDate?v.toDate():new Date(v);return isNaN(d.getTime())?null:d}catch(_){return null}};
+  const escName=v=>String(v||'الدورة');
+  const fn=async function(codeId,currentSuspended){
+    let before=null,courseId=window.activeCourseId||null;
+    try{if(isAdmin&&courseId){const ss=await db.collection('courses').doc(courseId).collection('codes').doc(codeId).get();if(ss.exists)before=ss.data()||{}}}catch(_){ }
+    const result=await oldToggle.apply(this,arguments);
+    if(currentSuspended&&isAdmin&&courseId&&before){
+      try{
+        const courseSnap=await db.collection('courses').doc(courseId).get();
+        if(!courseSnap.exists)return result;
+        const course=courseSnap.data()||{},courseTitle=course.titleAr||course.title||'الدورة';
+        const users=[...new Set([...(Array.isArray(before.usedBy)?before.usedBy:[]),...(Array.isArray(before.usedByInfo)?before.usedByInfo:[])].map(x=>String(typeof x==='string'?x:x?.uid||'')).filter(Boolean))];
+        const nowKey=Date.now();
+        for(const uid of users){
+          try{await window.aaAddNotification?.(uid,{title:'تم إلغاء إيقاف اشتراكك',body:`تم إلغاء إيقاف اشتراكك في ${courseTitle} وأصبح بإمكانك الدخول إلى الدورة مرة أخرى.`,type:'code_unsuspended',data:{route:'course',courseId,codeId,code:before.code||codeId,courseTitle,codeStatus:'active',previousSuspendedUntil:asDate(before.suspendedUntil)?.toISOString()||null},dedupeKey:`code_unsuspended_${courseId}_${codeId}_${nowKey}_${uid}`});}catch(_){ }
+        }
+      }catch(e){console.warn('unsuspend notification',e)}
+    }
+    return result;
+  };
+  fn.__aaV22UnsuspendNotif=true;window.toggleEnrollmentCode=fn;
+})();
+</script>
