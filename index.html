@@ -14193,3 +14193,166 @@ patchExpiredNotificationActionData();
 })();
 </script>
 </html>
+
+<style id="aa-notification-v24-final-style">
+/* Final notification dropdown: single viewport-safe surface, no clipping. */
+@media (max-width: 768px){
+  .navbar,.nav-container,.nav-actions-top,.aa-notifications-wrap{overflow:visible!important;}
+}
+.aa-notifications-dropdown.aa-v24-final{
+  position:fixed!important;
+  z-index:300000!important;
+  display:none;
+  width:min(390px,calc(100vw - 24px))!important;
+  max-width:calc(100vw - 24px)!important;
+  max-height:calc(100dvh - 110px)!important;
+  overflow:hidden!important;
+  inset:auto!important;
+  margin:0!important;
+  box-sizing:border-box!important;
+}
+.aa-notifications-dropdown.aa-v24-final.active{display:block!important;}
+.aa-notifications-dropdown.aa-v24-final .aa-notif-list{
+  max-height:calc(100dvh - 190px)!important;
+  overflow-y:auto!important;
+  overflow-x:hidden!important;
+  -webkit-overflow-scrolling:touch!important;
+  overscroll-behavior:contain!important;
+}
+#aaNotificationDetailModal{z-index:400000!important;}
+#aaNotificationDetailModal.active{display:flex!important;}
+#aaNotificationsPage.aa-v24-page-open{z-index:350000!important;}
+</style>
+<script id="aa-notification-v24-final-script">
+(function(){
+'use strict';
+const E=id=>document.getElementById(id);
+
+/* ---------- A) Rebuild the bell interaction once, avoiding duplicate legacy handlers. ---------- */
+(function rebuildBell(){
+  const old=E('aaNotificationsBtn'), drop=E('aaNotificationsDropdown');
+  if(!old||!drop)return;
+  const btn=old.cloneNode(true);
+  old.replaceWith(btn);
+  drop.classList.remove('aa-v22-portal','aa-v23-positioned');
+  drop.classList.add('aa-v24-final');
+  function close(){drop.classList.remove('active');btn.classList.remove('active');}
+  function open(){
+    const r=btn.getBoundingClientRect();
+    const vw=Math.max(document.documentElement.clientWidth||0,window.innerWidth||0);
+    const vh=Math.max(document.documentElement.clientHeight||0,window.innerHeight||0);
+    const w=Math.min(390,Math.max(260,vw-24));
+    let left=r.right-w;
+    if(left<12)left=12;
+    if(left+w>vw-12)left=vw-w-12;
+    /* Keep the dropdown below the top bar when possible; otherwise place it above. */
+    let top=r.bottom+8;
+    drop.style.left=Math.max(12,left)+'px';
+    drop.style.right='auto';
+    drop.style.width=w+'px';
+    drop.style.maxHeight=Math.max(180,vh-top-12)+'px';
+    drop.classList.add('active');btn.classList.add('active');
+    const h=drop.getBoundingClientRect().height||360;
+    if(top+h>vh-12){
+      const above=r.top-8-h;
+      top=above>=12?above:Math.max(12,vh-h-12);
+      drop.style.maxHeight=Math.max(180,vh-top-12)+'px';
+    }
+    drop.style.top=Math.max(12,top)+'px';
+  }
+  btn.addEventListener('click',e=>{e.preventDefault();e.stopPropagation();drop.classList.contains('active')?close():open();});
+  drop.addEventListener('click',e=>e.stopPropagation());
+  document.addEventListener('click',e=>{if(!drop.contains(e.target)&&e.target!==btn&&!btn.contains(e.target))close();},true);
+  window.addEventListener('resize',()=>{if(drop.classList.contains('active'))open();},{passive:true});
+  window.addEventListener('orientationchange',()=>setTimeout(()=>{if(drop.classList.contains('active'))open()},120),{passive:true});
+  window.__aaV24CloseBell=close;
+})();
+
+/* ---------- B) Notification details must stay ABOVE the standalone notifications page. ---------- */
+(function patchNotificationDetail(){
+  const original=window.aaOpenNotification;
+  if(typeof original!=='function'||original.__aaV24Patched)return;
+  const patched=async function(id){
+    await original(id);
+    E('aaNotificationDetailModal')?.style.setProperty('z-index','400000','important');
+    E('aaNotificationsPage')?.classList.add('aa-v24-page-open');
+  };
+  patched.__aaV24Patched=true;
+  window.aaOpenNotification=patched;
+})();
+
+/* ---------- C) Authoritative subscription-expiry logic. ----------
+   Rules:
+   1. Never generate expiry notices for deleted courses.
+   2. Prefer the currently active code for each existing course.
+   3. If no active code exists, consider only the last known code for that course.
+   4. A notice is sent once per exact subscription (course + code + end time).
+   5. Old/stale expiry notices are removed before rebuilding valid ones. */
+function dateV(v){try{if(!v)return null;const d=v?.toDate?v.toDate():new Date(v);return isNaN(d?.getTime?.())?null:d}catch(_){return null}}
+async function authoritativeExpirySync(){
+  const user=currentUser;
+  if(!user||isAdmin)return;
+  const uid=String(user.uid);
+  const uref=db.collection('users').doc(uid);
+  try{
+    const [courseSnap,enrollSnap,notifSnap]=await Promise.all([
+      db.collection('courses').get(),
+      uref.collection('enrolledCourses').get(),
+      uref.collection('notifications').where('type','==','subscription_expired').get().catch(()=>({docs:[]}))
+    ]);
+    const liveCourses=new Map(courseSnap.docs.map(d=>[String(d.id),{id:String(d.id),...(d.data()||{})}]));
+    const allEnrollments=enrollSnap.docs.map(d=>({courseId:String(d.id),...(d.data()||{})})).filter(e=>liveCourses.has(e.courseId));
+
+    /* Group by course. The current enrollment record is authoritative for that course. */
+    const byCourse=new Map();
+    for(const e of allEnrollments)byCourse.set(e.courseId,e);
+
+    /* Remove EVERY old expiry notice that is not exactly the currently valid expired subscription. */
+    const keepKeys=new Set();
+    const candidates=[];
+    for(const [courseId,e] of byCourse){
+      if(e.codeDeleted||e.accessBlocked)continue; // these states have their own notifications.
+      const codeId=e.codeId?String(e.codeId):'';
+      if(!codeId)continue;
+      const codeSnap=await db.collection('courses').doc(courseId).collection('codes').doc(codeId).get().catch(()=>null);
+      if(!codeSnap?.exists)continue;
+      const code={...(codeSnap.data()||{})};
+      if(code.disabled)continue;
+      const end=dateV(code.endTime);
+      if(!end||end.getTime()>Date.now())continue; // currently active subscription; no expiry notice.
+      const key=`subscription_expired_exact_${courseId}_${codeId}_${end.toISOString()}`;
+      keepKeys.add(key);
+      candidates.push({courseId,e,codeId,code,end,key});
+    }
+
+    const batch=db.batch();
+    let changed=false;
+    for(const nd of (notifSnap.docs||[])){
+      const n=nd.data()||{};
+      const k=n.data?.dedupeKey||n.data?.expiryKey||'';
+      if(!keepKeys.has(String(k))){batch.delete(nd.ref);changed=true;}
+    }
+    if(changed)await batch.commit();
+
+    for(const item of candidates){
+      const course=liveCourses.get(item.courseId)||{};
+      const courseTitle=course.titleAr||course.name||'الدورة';
+      await window.aaAddNotification?.(uid,{
+        title:'مبارك انتهاء اشتراكك',
+        body:`نهنئك ونبارك لك انتهاء اشتراكك في دورة «${courseTitle}»، ونشكرك على اشتراكك وثقتك بنا. يمكنك تجديد الاشتراك بكود جديد للعودة إلى الدورة.`,
+        type:'subscription_expired',
+        data:{courseId:item.courseId,codeId:item.codeId,courseTitle,endAt:item.end.toISOString(),route:'course'},
+        dedupeKey:item.key
+      });
+    }
+  }catch(err){console.warn('authoritative subscription expiry sync',err)}
+}
+window.__aaAuthoritativeExpirySync=authoritativeExpirySync;
+if(!window.__aaV24ExpiryBound){
+  window.__aaV24ExpiryBound=true;
+  auth.onAuthStateChanged(()=>setTimeout(authoritativeExpirySync,1200));
+  setInterval(authoritativeExpirySync,60000);
+}
+})();
+</script>
+</html>
