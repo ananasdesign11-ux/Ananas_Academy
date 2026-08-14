@@ -6697,8 +6697,39 @@ body.aa-notifications-open #coursesPage,body.aa-notifications-open footer,body.a
         document.getElementById('userProfileLogoutBtn')?.addEventListener('click', () => { document.getElementById('userProfileModal')?.classList.remove('active'); auth.signOut(); });
         if (authCloseBtn) authCloseBtn.addEventListener('click', () => { if (authPopup) authPopup.classList.remove('active'); });
 
-        if (document.getElementById('googleSignInBtn')) document.getElementById('googleSignInBtn').addEventListener('click', () => {
-            auth.signInWithPopup(provider).catch(err => { if (authStatus) authStatus.textContent = 'Error: ' + err.message; });
+        // ===== إشعار تسجيل الدخول: يبدأ من هذه اللحظة فقط =====
+        let aaLoginNotifyLock = { uid: null, at: 0 };
+        async function aaNotifyLoginSuccess(user) {
+            if (!user?.uid) return;
+            const now = Date.now();
+            // حماية من النقر المزدوج/تكرار الاستدعاء في نفس عملية الدخول.
+            if (aaLoginNotifyLock.uid === user.uid && now - aaLoginNotifyLock.at < 5000) return;
+            aaLoginNotifyLock = { uid: user.uid, at: now };
+            try {
+                const loginTime = new Date().toLocaleString('ar-SA', {
+                    year: 'numeric', month: 'long', day: 'numeric',
+                    hour: '2-digit', minute: '2-digit', second: '2-digit'
+                });
+                await window.aaAddNotification?.(user.uid, {
+                    title: 'تم تسجيل الدخول إلى حسابك',
+                    body: `تم تسجيل الدخول إلى حسابك بنجاح في ${loginTime}. إذا لم تكن أنت من قام بتسجيل الدخول، يُرجى مراجعة أمان حسابك.`,
+                    type: 'login_success',
+                    data: {
+                        source: 'auth',
+                        loginAt: new Date().toISOString(),
+                        uid: user.uid
+                    }
+                });
+            } catch (e) { console.warn('login notification', e); }
+        }
+
+        if (document.getElementById('googleSignInBtn')) document.getElementById('googleSignInBtn').addEventListener('click', async () => {
+            try {
+                const result = await auth.signInWithPopup(provider);
+                await aaNotifyLoginSuccess(result?.user);
+            } catch (err) {
+                if (authStatus) authStatus.textContent = 'Error: ' + err.message;
+            }
         });
 
         if (document.getElementById('emailSignInBtn')) document.getElementById('emailSignInBtn').addEventListener('click', async () => {
@@ -6710,12 +6741,14 @@ body.aa-notifications-open #coursesPage,body.aa-notifications-open footer,body.a
             if (pass.length < 6) return authStatus.textContent = 'Password must be at least 6 characters';
 
             try {
-                await auth.signInWithEmailAndPassword(email, pass);
+                const credential = await auth.signInWithEmailAndPassword(email, pass);
+                await aaNotifyLoginSuccess(credential?.user);
                 if (authStatus) authStatus.textContent = 'Logging in...';
             } catch (error) {
                 if (error.code === 'auth/user-not-found' || error.code === 'auth/invalid-credential' || error.code === 'auth/wrong-password') {
                     try {
-                        await auth.createUserWithEmailAndPassword(email, pass);
+                        const createdCredential = await auth.createUserWithEmailAndPassword(email, pass);
+                        await aaNotifyLoginSuccess(createdCredential?.user);
                         if (authStatus) authStatus.textContent = 'Account created successfully!';
                     } catch (createError) {
                         if (authStatus) authStatus.textContent = 'Error creating account: ' + createError.message;
@@ -13451,7 +13484,7 @@ const s=document.createElement('style');s.textContent=`
   function aaTime(v){const d=aaDate(v);return d&&!isNaN(d.getTime())?d.toLocaleString('ar-SA',{dateStyle:'medium',timeStyle:'short'}):'—'}
   function aaGoCourses(){try{window.aaEjectFromCourse?.();}catch(_){try{window.mobileNavigate?.('courses')}catch(__){}}}
   function aaRenderNotificationItem(n,all=false){
-    const icon=n.type==='code_deleted'?'fa-user-slash':n.type==='code_suspended'?'fa-pause-circle':n.type==='suspension_expired'?'fa-unlock':n.type==='subscription_expired'?'fa-calendar-xmark':n.type==='assignment_submitted'?'fa-images':n.type==='assignment_approved'?'fa-circle-check':n.type==='subscription_success'?'fa-graduation-cap':n.type==='course_lessons_complete'?'fa-circle-check':n.type==='course_quizzes_complete'?'fa-list-check':'fa-bell';
+    const icon=n.type==='login_success'?'fa-right-to-bracket':n.type==='code_deleted'?'fa-user-slash':n.type==='code_suspended'?'fa-pause-circle':n.type==='suspension_expired'?'fa-unlock':n.type==='subscription_expired'?'fa-calendar-xmark':n.type==='assignment_submitted'?'fa-images':n.type==='assignment_approved'?'fa-circle-check':n.type==='subscription_success'?'fa-graduation-cap':n.type==='course_lessons_complete'?'fa-circle-check':n.type==='course_quizzes_complete'?'fa-list-check':'fa-bell';
     return `<div class="aa-notif-item ${n.read?'':'unread'}" data-notification-id="${esc(n.id)}"><div class="aa-notif-icon"><i class="fas ${icon}"></i></div><div class="aa-notif-copy"><div class="aa-notif-title">${!n.read?'<span class="aa-notification-dot"></span>':''}<span>${esc(n.title||'إشعار')}</span></div><div class="aa-notif-preview">${esc(n.body||'')}</div><div class="aa-notif-time">${esc(aaTime(n.createdAt))}</div></div></div>`;
   }
   function aaRenderNotifications(){
@@ -13473,7 +13506,7 @@ const s=document.createElement('style');s.textContent=`
     $('aaNotificationDetailTitle').textContent=n.title||'إشعار';
     $('aaNotificationDetailBody').textContent=n.body||'';
     const meta=$('aaNotificationDetailMeta');
-    meta.innerHTML=`<span>${esc(n.type==='code_deleted'?'إزالة اشتراك':n.type==='code_suspended'?'إيقاف اشتراك':n.type==='assignment_submitted'?'عمل واجب جديد':n.type==='assignment_approved'?'اعتماد عمل':n.type==='subscription_expired'?'انتهاء اشتراك':n.type==='suspension_expired'?'انتهاء الإيقاف':'إشعار')}</span><span>${esc(aaTime(n.createdAt))}</span>`;
+    meta.innerHTML=`<span>${esc(n.type==='login_success'?'تسجيل دخول':n.type==='code_deleted'?'إزالة اشتراك':n.type==='code_suspended'?'إيقاف اشتراك':n.type==='assignment_submitted'?'عمل واجب جديد':n.type==='assignment_approved'?'اعتماد عمل':n.type==='subscription_expired'?'انتهاء اشتراك':n.type==='suspension_expired'?'انتهاء الإيقاف':'إشعار')}</span><span>${esc(aaTime(n.createdAt))}</span>`;
     const reason=$('aaNotificationDetailReason');
     if(n.reason){reason.style.display='block';reason.innerHTML=`<strong>السبب</strong><div style="margin-top:5px;line-height:1.8;">${esc(n.reason)}</div>`}else{reason.style.display='none';reason.innerHTML=''}
     const oldAction=document.getElementById('aaNotificationActionBtn');oldAction?.remove();
