@@ -1961,6 +1961,20 @@ body.aa-notifications-open #coursesPage,body.aa-notifications-open footer,body.a
 .aa-notif-selection-note{color:var(--text-muted);font-size:.74rem;margin-top:6px}.aa-notif-compose-actions{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end;margin-top:12px}.aa-notif-compose-actions button{min-height:44px;padding:9px 14px;border-radius:12px;border:1px solid var(--border);background:var(--bg-secondary);color:var(--text-primary);font:inherit;font-weight:900;cursor:pointer}.aa-notif-compose-actions .primary{background:var(--accent-gradient);color:#fff;border-color:transparent}.aa-notif-compose-actions .success{color:#22c55e;border-color:#22c55e}
 @media(max-width:768px){#aaNotificationsPage{inset:var(--nav-height-mobile,70px) 0 calc(var(--mobile-bottom-nav-content-height,66px) + env(safe-area-inset-bottom)) 0!important}.aa-admin-notification-grid{grid-template-columns:1fr}.aa-admin-notification-grid .full{grid-column:auto}}
 </style>
+<style id="aa-v24-notification-fix">
+@media(max-width:768px){
+  .aa-notifications-dropdown{position:fixed!important;top:calc(var(--nav-height-mobile,70px) + 8px)!important;left:12px!important;right:12px!important;inset-inline-start:12px!important;inset-inline-end:12px!important;width:auto!important;max-width:none!important;box-sizing:border-box!important;max-height:calc(100dvh - var(--nav-height-mobile,70px) - 78px)!important;overflow:hidden!important;}
+  .aa-notif-list{max-height:calc(100dvh - var(--nav-height-mobile,70px) - 200px)!important;overflow-y:auto!important;-webkit-overflow-scrolling:touch!important;}
+}
+.aa-notif-preview,.aa-notif-title,.aa-notification-detail-title,.aa-notification-detail-body,.aa-admin-notification-tools p,.aa-admin-notification-tools label,.aa-admin-notification-tools input,.aa-admin-notification-tools textarea,.aa-admin-notification-tools select{overflow-wrap:anywhere;word-break:normal;white-space:normal;}
+.aa-admin-notification-tools{position:relative;}
+.aa-admin-notification-toggle{width:100%;display:flex;align-items:center;justify-content:space-between;gap:10px;border:1px solid var(--border);background:var(--bg-card);color:var(--text-primary);padding:12px 14px;border-radius:16px;font:inherit;font-weight:900;cursor:pointer;box-shadow:0 8px 22px rgba(0,0,0,.06);}
+.aa-admin-notification-toggle .arrow{transition:transform .2s ease;}
+.aa-admin-notification-tools.collapsed .arrow{transform:rotate(180deg);}
+.aa-admin-notification-form{max-height:1200px;overflow:hidden;transition:max-height .25s ease,opacity .2s ease,margin-top .2s ease;opacity:1;margin-top:12px;}
+.aa-admin-notification-tools.collapsed .aa-admin-notification-form{max-height:0;opacity:0;margin-top:0;pointer-events:none;}
+.aa-notif-under-compose{margin:14px 0 8px;}
+</style>
 </head>
 <body class="light-mode">
     
@@ -13611,7 +13625,30 @@ async function collectCourseStudentsV(courseId){const ids=new Set();try{const sn
 async function collectEnrolledV(){const ids=new Set();try{const users=await db.collection('users').get();for(const u of users.docs){const e=await u.ref.collection('enrolledCourses').get();if(e.docs.some(d=>!d.data()?.codeDeleted))ids.add(u.id)}}catch(_){}ids.delete(String(currentUser?.uid||''));return [...ids]}
 async function loadUsersV(){try{const s=await db.collection('users').get();window.__aaNotifUsersV=s.docs.map(d=>({id:d.id,...(d.data()||{})})).filter(u=>u.id!==String(currentUser?.uid||'')).sort((a,b)=>String(a.displayName||a.name||'').localeCompare(String(b.displayName||b.name||''),'ar'));renderUsersV()}catch(_){E('aaNotifUserListV')&&(E('aaNotifUserListV').innerHTML='<div class="aa-notif-empty">تعذر تحميل الحسابات.</div>')}}
 function renderUsersV(){const box=E('aaNotifUserListV');if(!box)return;const q=String(E('aaNotifUserSearchV')?.value||'').trim().toLowerCase();const arr=(window.__aaNotifUsersV||[]).filter(u=>!q||String(u.displayName||u.name||'').toLowerCase().includes(q));box.innerHTML=arr.length?arr.map(u=>{const n=u.displayName||u.name||'مستخدم',p=u.photoURL||u.photoUrl||u.photo||'';return `<label class="aa-recipient-row"><input type="checkbox" value="${escV(u.id)}"><span class="aa-recipient-avatar">${p?`<img src="${escV(p)}" alt="">`:escV(String(n).slice(0,1))}</span><span class="aa-recipient-copy"><strong>${escV(n)}</strong><small>${escV(u.email||u.id)}</small></span></label>`}).join(''):'<div class="aa-notif-empty">لا توجد حسابات مطابقة.</div>'}
-async function setupAdminCenterV(){if(!isAdmin||E('aaAdminNotificationToolsV'))return;const page=E('aaNotificationsPage'),inner=page?.querySelector('.aa-notifications-page-inner');if(!inner)return;const wrap=document.createElement('section');wrap.id='aaAdminNotificationToolsV';wrap.className='aa-admin-notification-tools';wrap.innerHTML=`<h3><i class="fas fa-paper-plane"></i> إرسال إشعار من المشرف</h3><p>يمكنك إرسال إشعار إلى حسابات محددة، طلاب دورة، جميع المسجلين في الدورات أو جميع حسابات المنصة.</p><div class="aa-admin-notification-grid"><div class="aa-admin-notification-field"><label>نوع المستلمين</label><select id="aaNotifAudienceV"><option value="specific">حسابات محددة</option><option value="course">طلاب دورة معينة</option><option value="enrolled">كل الطلاب المسجلين في دورات</option><option value="all">كل حسابات المنصة</option></select></div><div class="aa-admin-notification-field" id="aaNotifCourseFieldV" style="display:none"><label>الدورة</label><select id="aaNotifCourseSelectV"><option value="">اختر الدورة</option></select></div><div class="aa-admin-notification-field full" id="aaNotifSpecificFieldV"><label>الحسابات المحددة</label><div class="aa-recipient-tools"><input id="aaNotifUserSearchV" placeholder="بحث بالاسم"><button type="button" id="aaNotifSelectAllV">تحديد الظاهر</button><button type="button" id="aaNotifClearAllV">إلغاء التحديد</button></div><div class="aa-recipient-list" id="aaNotifUserListV"></div><div class="aa-notif-selection-note" id="aaNotifSelectionV">تم تحديد 0 حساب</div></div><div class="aa-admin-notification-field"><label>عنوان الإشعار</label><input id="aaNotifTitleV" placeholder="العنوان"></div><div class="aa-admin-notification-field"><label>النوع</label><select id="aaNotifTypeV"><option value="admin_message">رسالة من المشرف</option><option value="announcement">إعلان</option><option value="reminder">تذكير</option><option value="important">تنبيه مهم</option></select></div><div class="aa-admin-notification-field full"><label>المحتوى</label><textarea id="aaNotifBodyV" placeholder="تفاصيل الإشعار"></textarea></div></div><div class="aa-notif-compose-actions"><button class="primary" type="button" id="aaNotifSendV"><i class="fas fa-paper-plane"></i> إرسال</button></div>`;inner.insertBefore(wrap,inner.querySelector('.aa-notifications-all-list'));const aud=E('aaNotifAudienceV');aud.onchange=()=>{const v=aud.value;E('aaNotifCourseFieldV').style.display=v==='course'?'grid':'none';E('aaNotifSpecificFieldV').style.display=v==='specific'?'grid':'none'};E('aaNotifUserSearchV').oninput=renderUsersV;E('aaNotifSelectAllV').onclick=()=>{document.querySelectorAll('#aaNotifUserListV input[type=checkbox]').forEach(x=>x.checked=true);E('aaNotifSelectionV').textContent=`تم تحديد ${document.querySelectorAll('#aaNotifUserListV input:checked').length} حساب`};E('aaNotifClearAllV').onclick=()=>{document.querySelectorAll('#aaNotifUserListV input[type=checkbox]').forEach(x=>x.checked=false);E('aaNotifSelectionV').textContent='تم تحديد 0 حساب'};E('aaNotifUserListV').addEventListener('change',()=>E('aaNotifSelectionV').textContent=`تم تحديد ${document.querySelectorAll('#aaNotifUserListV input:checked').length} حساب`);
+async function setupAdminCenterV(){if(!isAdmin||E('aaAdminNotificationToolsV'))return;const page=E('aaNotificationsPage'),inner=page?.querySelector('.aa-notifications-page-inner');if(!inner)return;const wrap=document.createElement('section');wrap.id='aaAdminNotificationToolsV';wrap.className='aa-admin-notification-tools';wrap.innerHTML=`<h3><i class="fas fa-paper-plane"></i> إرسال إشعار من المشرف</h3><p>يمكنك إرسال إشعار إلى حسابات محددة، طلاب دورة، جميع المسجلين في الدورات أو جميع حسابات المنصة.</p><div class="aa-admin-notification-grid"><div class="aa-admin-notification-field"><label>نوع المستلمين</label><select id="aaNotifAudienceV"><option value="specific">حسابات محددة</option><option value="course">طلاب دورة معينة</option><option value="enrolled">كل الطلاب المسجلين في دورات</option><option value="all">كل حسابات المنصة</option></select></div><div class="aa-admin-notification-field" id="aaNotifCourseFieldV" style="display:none"><label>الدورة</label><select id="aaNotifCourseSelectV"><option value="">اختر الدورة</option></select></div><div class="aa-admin-notification-field full" id="aaNotifSpecificFieldV"><label>الحسابات المحددة</label><div class="aa-recipient-tools"><input id="aaNotifUserSearchV" placeholder="بحث بالاسم"><button type="button" id="aaNotifSelectAllV">تحديد الظاهر</button><button type="button" id="aaNotifClearAllV">إلغاء التحديد</button></div><div class="aa-recipient-list" id="aaNotifUserListV"></div><div class="aa-notif-selection-note" id="aaNotifSelectionV">تم تحديد 0 حساب</div></div><div class="aa-admin-notification-field"><label>عنوان الإشعار</label><input id="aaNotifTitleV" placeholder="العنوان"></div><div class="aa-admin-notification-field"><label>النوع</label><select id="aaNotifTypeV"><option value="admin_message">رسالة من المشرف</option><option value="announcement">إعلان</option><option value="reminder">تذكير</option><option value="important">تنبيه مهم</option></select></div><div class="aa-admin-notification-field full"><label>المحتوى</label><textarea id="aaNotifBodyV" placeholder="تفاصيل الإشعار"></textarea></div></div><div class="aa-notif-compose-actions"><button class="primary" type="button" id="aaNotifSendV"><i class="fas fa-paper-plane"></i> إرسال</button></div>`;inner.insertBefore(wrap,inner.querySelector('.aa-notifications-all-list'));
+  const heading=wrap.querySelector('h3');
+  if(heading){
+    const toggle=document.createElement('button');
+    toggle.type='button';
+    toggle.className='aa-admin-notification-toggle';
+    toggle.innerHTML='<span>إرسال إشعار من المشرف</span><i class="fas fa-chevron-up arrow"></i>';
+    const form=document.createElement('div');
+    form.className='aa-admin-notification-form';
+    const intro=wrap.querySelector('p'),grid=wrap.querySelector('.aa-admin-notification-grid'),actions=wrap.querySelector('.aa-notif-compose-actions');
+    if(intro)form.appendChild(intro);
+    if(grid)form.appendChild(grid);
+    if(actions)form.appendChild(actions);
+    heading.remove();
+    wrap.insertBefore(toggle,wrap.firstChild);
+    wrap.appendChild(form);
+    toggle.addEventListener('click',()=>wrap.classList.toggle('collapsed'));
+  }
+  const under=document.createElement('div');
+  under.className='aa-notif-under-compose';
+  under.innerHTML='<div style="color:var(--text-muted);font-weight:800;margin-bottom:8px;">الإشعارات</div>';
+  const allList=inner.querySelector('.aa-notifications-all-list');
+  if(allList)inner.insertBefore(under,allList);
+  const aud=E('aaNotifAudienceV');aud.onchange=()=>{const v=aud.value;E('aaNotifCourseFieldV').style.display=v==='course'?'grid':'none';E('aaNotifSpecificFieldV').style.display=v==='specific'?'grid':'none'};E('aaNotifUserSearchV').oninput=renderUsersV;E('aaNotifSelectAllV').onclick=()=>{document.querySelectorAll('#aaNotifUserListV input[type=checkbox]').forEach(x=>x.checked=true);E('aaNotifSelectionV').textContent=`تم تحديد ${document.querySelectorAll('#aaNotifUserListV input:checked').length} حساب`};E('aaNotifClearAllV').onclick=()=>{document.querySelectorAll('#aaNotifUserListV input[type=checkbox]').forEach(x=>x.checked=false);E('aaNotifSelectionV').textContent='تم تحديد 0 حساب'};E('aaNotifUserListV').addEventListener('change',()=>E('aaNotifSelectionV').textContent=`تم تحديد ${document.querySelectorAll('#aaNotifUserListV input:checked').length} حساب`);
  const cs=await db.collection('courses').get().catch(()=>null);if(cs){cs.docs.forEach(d=>{const o=document.createElement('option');o.value=d.id;o.textContent=d.data()?.titleAr||'دورة';E('aaNotifCourseSelectV').appendChild(o)})}
  await loadUsersV();
  E('aaNotifSendV').onclick=async()=>{const btn=E('aaNotifSendV'),title=E('aaNotifTitleV').value.trim(),body=E('aaNotifBodyV').value.trim(),audience=aud.value;if(!title||!body)return showCustomAlert?.('تنبيه','اكتب العنوان والمحتوى.');let ids=[];try{if(audience==='specific')ids=[...document.querySelectorAll('#aaNotifUserListV input:checked')].map(x=>x.value);if(audience==='course')ids=await collectCourseStudentsV(E('aaNotifCourseSelectV').value);if(audience==='enrolled')ids=await collectEnrolledV();if(audience==='all'){const u=await db.collection('users').get();ids=u.docs.map(d=>d.id).filter(x=>x!==String(currentUser?.uid||''))}ids=[...new Set(ids)].filter(Boolean);if(!ids.length)return showCustomAlert?.('تنبيه','لا يوجد مستلمون.');btn.disabled=true;const batch=db.batch();for(const uid of ids){const ref=db.collection('users').doc(uid).collection('notifications').doc();batch.set(ref,{title,body,type:E('aaNotifTypeV').value,data:{source:'admin',senderUid:currentUser?.uid||null},read:false,createdAt:firebase.firestore.FieldValue.serverTimestamp()})}await batch.commit();showCustomAlert?.('تم الإرسال',`تم إرسال الإشعار إلى ${ids.length} حساب.`);E('aaNotifTitleV').value='';E('aaNotifBodyV').value='';document.querySelectorAll('#aaNotifUserListV input:checked').forEach(x=>x.checked=false);E('aaNotifSelectionV').textContent='تم تحديد 0 حساب'}catch(err){console.error(err);showCustomAlert?.('خطأ','تعذر إرسال الإشعار: '+err.message)}finally{btn.disabled=false}}
@@ -13628,7 +13665,54 @@ const oldQuiz=window.submitQuiz;if(typeof oldQuiz==='function'&&!oldQuiz.__aaNot
 const oldApprove=window.approveSubmission;if(typeof oldApprove==='function'&&!oldApprove.__aaNotifV17){const fn=async function(courseId,assignmentId,workId){const r0=await getAssignmentData(courseId,assignmentId).catch(()=>null);let sub=null;if(r0){const ss=Array.isArray(r0.data?.submissions)?r0.data.submissions:[];const i=ss.findIndex((x,j)=>(typeof submissionWorkId==='function'?submissionWorkId(x,j):(x.workId||x.id||`legacy_${j}`))===workId);if(i>=0)sub=ss[i]}const r=await oldApprove.apply(this,arguments);try{if(sub?.userId)await notifyOnceV(sub.userId,{title:'تم اعتماد عملك',body:`تم اعتماد عملك في ${r0.data?.titleAr||'الواجب'} من المشرف.`,type:'assignment_approved',data:{route:'assignment',courseId,assignmentId,workId}},`assignment_approved_${courseId}_${assignmentId}_${workId}`)}catch(e){console.warn(e)}return r};fn.__aaNotifV17=true;window.approveSubmission=fn}
 
 // Expiry/suspension-expiry notifications for all enrollments, even outside a course page.
-if(!window.__aaNotifPollV17){window.__aaNotifPollV17=setInterval(async()=>{try{if(!currentUser||isAdmin)return;const enrollSnap=await db.collection('users').doc(currentUser.uid).collection('enrolledCourses').get();const now=Date.now();for(const ed of enrollSnap.docs){const courseId=ed.id,e=ed.data()||{},codeId=e.codeId;if(!codeId||e.codeDeleted)continue;const cs=await db.collection('courses').doc(courseId).collection('codes').doc(codeId).get();if(!cs.exists){await notifyOnceV(currentUser.uid,{title:'مبارك انتهاء اشتراكك',body:'نبارك لك إكمال فترة اشتراكك، ونشكرك على اشتراكك في الدورة والاستفادة من محتواها. يمكنك التجديد بكود جديد للعودة إلى الدورة.',type:'subscription_expired',data:{courseId,route:'course'}},`subscription_expired_${courseId}_${codeId}`);continue}const c=cs.data()||{},end=asDateV(c.endTime),until=asDateV(c.suspendedUntil);if(end&&end.getTime()<=now)await notifyOnceV(currentUser.uid,{title:'مبارك انتهاء اشتراكك',body:'نبارك لك إكمال فترة اشتراكك، ونشكرك على اشتراكك في هذه الدورة. يمكنك تجديد الاشتراك بكود جديد للعودة إلى الدورة.',type:'subscription_expired',data:{route:'course',courseId}},`subscription_expired_${courseId}_${codeId}`);if(c.disabled&&until&&until.getTime()<=now)await notifyOnceV(currentUser.uid,{title:'انتهت مدة إيقاف الاشتراك',body:'انتهت مدة إيقاف اشتراكك ويمكنك الوصول إلى الدورة مرة أخرى.',type:'suspension_expired',data:{route:'course',courseId}},`suspension_expired_${courseId}_${codeId}_${until.getTime()}`)}}catch(e){console.warn(e)}},20000)}
+if(window.__aaNotifPollV17){clearInterval(window.__aaNotifPollV17);window.__aaNotifPollV17=null}
+if(!window.__aaAuthoritativeExpiryPollV24){
+  async function aaCheckSubscriptionExpiryV24(){
+    try{
+      if(!currentUser||isAdmin)return;
+      const enrollSnap=await db.collection('users').doc(currentUser.uid).collection('enrolledCourses').get();
+      const now=Date.now();
+      for(const ed of enrollSnap.docs){
+        const courseId=ed.id,e=ed.data()||{},codeId=e.codeId;
+        if(!codeId||e.codeDeleted)continue;
+        const cs=await db.collection('courses').doc(courseId).collection('codes').doc(codeId).get();
+        // A missing code is not proof that the subscription expired.
+        if(!cs.exists)continue;
+        const c=cs.data()||{},end=asDateV(c.endTime),until=asDateV(c.suspendedUntil);
+        const courseSnap=await db.collection('courses').doc(courseId).get();
+        const course=courseSnap.exists?(courseSnap.data()||{}):{};
+        const courseName=course.titleAr||course.title||'الدورة';
+        if(end&&end.getTime()<=now){
+          await notifyOnceV(currentUser.uid,{title:`مبارك انتهاء اشتراكك في ${courseName}`,body:`نبارك لك انتهاء فترة اشتراكك في دورة ${courseName}، ونشكرك على اشتراكك فيها والاستفادة من محتواها. يمكنك تجديد الاشتراك بكود جديد للعودة إلى الدورة.`,type:'subscription_expired',reason:'انتهت مدة الاشتراك المحددة للكود المستخدم.',data:{route:'course',courseId,courseName,codeId,expiredAt:end.toISOString()}},`subscription_expired_${courseId}_${codeId}`);
+        }
+        if(c.disabled&&until&&until.getTime()<=now){
+          await notifyOnceV(currentUser.uid,{title:`انتهت مدة إيقاف اشتراك ${courseName}`,body:`انتهت مدة إيقاف اشتراكك في ${courseName} ويمكنك الوصول إلى الدورة مرة أخرى.`,type:'suspension_expired',data:{route:'course',courseId,courseName}},`suspension_expired_${courseId}_${codeId}_${until.getTime()}`);
+        }
+      }
+    }catch(e){console.warn('authoritative expiry monitor',e)}
+  }
+  window.__aaAuthoritativeExpiryPollV24=setInterval(aaCheckSubscriptionExpiryV24,20000);
+  setTimeout(aaCheckSubscriptionExpiryV24,2500);
+  window.__aaCleanupStaleExpiryNotificationsV24=async function(){
+    try{
+      if(!currentUser||isAdmin)return;
+      const ns=await db.collection('users').doc(currentUser.uid).collection('notifications').where('type','==','subscription_expired').get();
+      for(const d of ns.docs){
+        const n=d.data()||{},courseId=n.data?.courseId;if(!courseId)continue;
+        const er=await db.collection('users').doc(currentUser.uid).collection('enrolledCourses').doc(courseId).get();
+        if(!er.exists)continue;
+        const e=er.data()||{}; if(e.codeDeleted===true)continue;
+        let trulyExpired=false;
+        if(e.codeId){
+          const cs=await db.collection('courses').doc(courseId).collection('codes').doc(e.codeId).get();
+          if(cs.exists){const end=asDateV(cs.data()?.endTime);trulyExpired=!!(end&&end.getTime()<=Date.now());}
+        }
+        if(!trulyExpired)await d.ref.delete();
+      }
+    }catch(e){console.warn('stale expiry cleanup',e)}
+  };
+  setTimeout(()=>window.__aaCleanupStaleExpiryNotificationsV24?.(),3500);
+}
 
 })();
 </script>
@@ -13970,6 +14054,16 @@ document.head.appendChild(st);
 
   /* If the account is signed out while a profile is open, close the profile immediately. */
   window.addEventListener('pagehide',()=>{},false);
+})();
+</script>
+<script id="aa-v24-final-notification-runtime">
+(function(){
+'use strict';
+const $=id=>document.getElementById(id);
+function fixMobileNotifPosition(){const d=$('aaNotificationsDropdown');if(!d)return;if(window.innerWidth<=768){d.style.position='fixed';d.style.left='12px';d.style.right='12px';d.style.insetInlineStart='12px';d.style.insetInlineEnd='12px';d.style.width='auto';d.style.maxWidth='none';}else{d.style.position='absolute';d.style.left='';d.style.right='';d.style.insetInlineStart='';d.style.insetInlineEnd='0';d.style.width='min(390px,calc(100vw - 24px))';}}
+window.addEventListener('resize',fixMobileNotifPosition,{passive:true});
+setTimeout(fixMobileNotifPosition,200);
+$('aaNotificationsBtn')?.addEventListener('click',()=>setTimeout(fixMobileNotifPosition,0),true);
 })();
 </script>
 
