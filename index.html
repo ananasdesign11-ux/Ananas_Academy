@@ -14021,7 +14021,7 @@ document.addEventListener('pointerup',e=>{
 },true);
 
 /* Auth state: login notice once per session. */
-auth?.onAuthStateChanged?.(u=>{if(u){setTimeout(()=>sendLoginNotificationV22(u),900);setTimeout(bindLogoutV22,300)}});
+auth?.onAuthStateChanged?.(u=>{if(u){setTimeout(()=>bindLogoutV22,300)}});
 
 /* ---------- Course-linked notifications are filtered in aaStartNotificationListener above. ---------- */
 
@@ -14180,13 +14180,8 @@ async function startNotificationListener(uid){
  },e=>console.warn('final notifications listener',e));
 }
 async function addNotification(uid,payload){
- if(!uid)return;
- const data={...(payload.data||{})};
- if(data.courseId){if(!(await existsDoc(`courses/${data.courseId}`)))return;}
- const ref=db.collection('users').doc(String(uid)).collection('notifications');
- const dedupe=payload.dedupeKey?String(payload.dedupeKey).replace(/[^a-zA-Z0-9_-]/g,'_').slice(0,130):'';
- if(dedupe){const doc=ref.doc('auto_'+dedupe);if((await doc.get()).exists)return;try{const sameType=await ref.where('type','==',payload.type||'general').limit(80).get();const duplicate=sameType.docs.some(d=>{const x=d.data()||{},xd=x.data||{};return String(xd.courseId||'')===String(data.courseId||'')&&String(xd.codeId||'')===String(data.codeId||'')&&String(xd.assignmentId||'')===String(data.assignmentId||'')&&String(xd.workId||'')===String(data.workId||'')});if(duplicate)return;}catch(_){ }await doc.set({title:payload.title||'إشعار',body:payload.body||'',reason:payload.reason||'',type:payload.type||'general',data:{...data,dedupeKey:dedupe},read:false,createdAt:firebase.firestore.FieldValue.serverTimestamp()});return;}
- await ref.add({title:payload.title||'إشعار',body:payload.body||'',reason:payload.reason||'',type:payload.type||'general',data,read:false,createdAt:firebase.firestore.FieldValue.serverTimestamp()});
+  if(typeof window.__aaCentralAddNotification==='function') return window.__aaCentralAddNotification(uid,payload);
+  return null;
 }
 window.aaAddNotification=addNotification;
 window.aaNotifyUsers=async(uids,payload)=>{for(const uid of [...new Set((uids||[]).map(String).filter(Boolean))])await addNotification(uid,payload)};
@@ -14241,25 +14236,7 @@ function buildAdminPanel(){if(!isAdmin||adminPanelBuilt)return;adminPanelBuilt=t
 function autoKey(type,courseId,codeId,extra=''){return [type,courseId||'none',codeId||'none',extra||'none'].join('_')}
 async function getCurrentEnrollment(courseId,uid=currentUid()){if(!uid||!courseId)return null;const s=await db.collection('users').doc(uid).collection('enrolledCourses').doc(courseId).get().catch(()=>null);return s?.exists?{id:courseId,...(s.data()||{})}:null}
 async function getCurrentCode(courseId,codeId){if(!courseId||!codeId)return null;const s=await db.collection('courses').doc(courseId).collection('codes').doc(codeId).get().catch(()=>null);return s?.exists?{id:codeId,...(s.data()||{})}:null}
-async function maybeNotifyLogin(user){
-  if(!user)return;
-  const key='aa_login_final_'+user.uid;
-  if(sessionStorage.getItem(key))return;
-  const d=new Date();
-  const sessionId=`${user.uid}_${d.getTime()}_${Math.random().toString(36).slice(2,10)}`;
-  try{
-    sessionStorage.setItem(key,sessionId);
-    await addNotification(user.uid,{
-      title:'تم تسجيل الدخول إلى حسابك',
-      body:`تم تسجيل الدخول إلى حسابك في منصة أناناس أكاديمي بتاريخ ${d.toLocaleString('ar-SA',{dateStyle:'full',timeStyle:'short',timeZone:'Asia/Riyadh'})}. إذا لم تكن أنت من قام بتسجيل الدخول، يرجى مراجعة أمان حسابك.`,
-      type:'login_notice',
-      data:{route:'notifications',loginAt:d.toISOString(),sessionId}
-    });
-  }catch(e){
-    sessionStorage.removeItem(key);
-    console.warn('login notification',e);
-  }
-}
+async function maybeNotifyLogin(user){ return null; }
 
 async function validateAllCourseCompletions(uid){if(!uid)return;const usersLessons=await db.collection('users').doc(uid).collection('completedLessons').get().catch(()=>null);const doneL=new Set(usersLessons?.docs.map(d=>d.id)||[]);const statQ=await db.collection('userStats').doc(uid).collection('completedQuizzes').get().catch(()=>null);const doneQ=new Set(statQ?.docs.map(d=>d.id)||[]);const courses=await db.collection('courses').get().catch(()=>null);if(!courses)return;for(const cdoc of courses.docs){const cid=cdoc.id;const lessons=await cdoc.ref.collection('lessons').get().catch(()=>null);if(lessons?.size&&lessons.docs.every(d=>doneL.has(d.id)))await addNotification(uid,{title:'أكملت جميع حصص الدورة',body:`أكملت جميع الحصص الموجودة حاليًا في دورة ${cdoc.data()?.titleAr||'الدورة'}. أحسنت!`,type:'course_lessons_complete',data:{route:'course',courseId:cid},dedupeKey:autoKey('lessons_complete',cid,'','current')});const qs=await cdoc.ref.collection('quizzes').get().catch(()=>null);if(qs?.size&&qs.docs.every(d=>doneQ.has(d.id)))await addNotification(uid,{title:'أكملت جميع اختبارات الدورة',body:`أكملت جميع الاختبارات الموجودة حاليًا في دورة ${cdoc.data()?.titleAr||'الدورة'}. أحسنت!`,type:'course_quizzes_complete',data:{route:'course',courseId:cid},dedupeKey:autoKey('quizzes_complete',cid,'','current')})}}
 
@@ -15204,77 +15181,225 @@ const pl=$('profilePhoneLabel');if(pl)pl.innerHTML=(pl.textContent||'رقم ال
 
 <script id="aa-login-notification-final-v32">
 (function(){
-  'use strict';
-  const KEY_PREFIX='aa_login_session_v32_';
-  let lastAuthUid='';
-  let activeWrite=null;
+  // Login notifications are intentionally controlled by the real login buttons only.
+  window.aaForceLoginNotificationV32=function(){};
+})();
+</script>
 
-  function getCurrentUserSafe(){
-    try{
-      return (typeof auth!=='undefined' && auth?.currentUser) || window.currentUser || null;
-    }catch(_){
-      return window.currentUser || null;
-    }
+<!-- ===== ANANAS CENTRAL NOTIFICATION ENGINE v33 ===== -->
+<style id="aa-central-notification-v33-style">
+#aaRejectWorkModal{position:fixed;inset:0;z-index:260000;display:none;align-items:center;justify-content:center;padding:18px;background:rgba(0,0,0,.18);backdrop-filter:blur(15px);-webkit-backdrop-filter:blur(15px)}
+#aaRejectWorkModal.active{display:flex}
+#aaRejectWorkModal .aa-reject-box{width:min(560px,96vw);max-height:min(86vh,760px);overflow:auto;background:var(--bg-card);color:var(--text-primary);border:1px solid var(--border);border-radius:24px;padding:22px;box-shadow:0 30px 90px rgba(0,0,0,.28)}
+#aaRejectWorkModal textarea{width:100%;min-height:120px;resize:vertical;border:1px solid var(--border);border-radius:14px;background:var(--bg-secondary);color:var(--text-primary);padding:12px;font-family:inherit;line-height:1.8}
+.aa-v33-reject-btn{border:1px solid rgba(231,76,60,.35)!important;background:rgba(231,76,60,.08)!important;color:#e74c3c!important}
+.aa-v33-cancel-approval-btn{border:1px solid rgba(245,158,11,.38)!important;background:rgba(245,158,11,.08)!important;color:#d97706!important}
+</style>
+<script id="aa-central-notification-v33-script">
+(function(){
+'use strict';
+const $=id=>document.getElementById(id);
+const esc=v=>String(v??'').replace(/[&<>'"]/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[m]));
+const asDate=v=>{try{return v?.toDate?v.toDate():(v?new Date(v):null)}catch(_){return null}};
+const uid=()=>String(auth?.currentUser?.uid||currentUser?.uid||'');
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+
+/* ---------- One and only automatic notification writer ---------- */
+function safeKey(v){return String(v||'').replace(/[^a-zA-Z0-9_-]/g,'_').slice(0,150)}
+function logicalKey(payload){
+  if(payload.dedupeKey)return safeKey(payload.dedupeKey);
+  const d=payload.data||{}; const t=payload.type||'general';
+  if(t==='login_notice' && d.sessionId)return 'login_'+safeKey(d.sessionId);
+  if(d.courseId&&(d.codeId||d.assignmentId||d.quizId||d.lessonId||d.workId)) return safeKey([t,d.courseId,d.codeId||'',d.assignmentId||'',d.quizId||'',d.lessonId||'',d.workId||''].join('_'));
+  if(d.courseId && ['course_lessons_complete','course_quizzes_complete','subscription_success','subscription_expired'].includes(t))return safeKey([t,d.courseId,d.codeId||''].join('_'));
+  return '';
+}
+async function courseExists(courseId){if(!courseId)return true;try{return (await db.collection('courses').doc(String(courseId)).get()).exists}catch(_){return false}}
+async function currentEnrollment(uidValue,courseId){try{const r=await db.collection('users').doc(String(uidValue)).collection('enrolledCourses').doc(String(courseId)).get();return r.exists?{ref:r.ref,...(r.data()||{})}:null}catch(_){return null}}
+async function resolveCurrentCode(uidValue,courseId,enrollment){
+  try{
+    const cid=enrollment?.codeId;
+    if(cid){const r=await db.collection('courses').doc(courseId).collection('codes').doc(String(cid)).get();if(r.exists)return{id:r.id,...(r.data()||{})}}
+    const snap=await db.collection('courses').doc(courseId).collection('codes').get();
+    const matches=snap.docs.filter(d=>Array.isArray(d.data()?.usedBy)&&d.data().usedBy.map(String).includes(String(uidValue))).map(d=>({id:d.id,...(d.data()||{})}));
+    matches.sort((a,b)=>(asDate(b.startTime)?.getTime()||0)-(asDate(a.startTime)?.getTime()||0));
+    return matches[0]||null;
+  }catch(_){return null}
+}
+function notificationPayload(uidValue,payload){
+  return {title:String(payload.title||'إشعار'),body:String(payload.body||''),reason:String(payload.reason||''),type:String(payload.type||'general'),data:{...(payload.data||{})},read:false,createdAt:firebase.firestore.FieldValue.serverTimestamp(),recipientUid:String(uidValue)};
+}
+async function centralAddNotification(uidValue,payload){
+  if(!uidValue)return null;
+  const data={...(payload?.data||{})};
+  if(data.courseId && !(await courseExists(data.courseId)))return null;
+  const ref=db.collection('users').doc(String(uidValue)).collection('notifications');
+  const key=logicalKey(payload||{});
+  if(key){
+    const docRef=ref.doc('auto_'+key);
+    const exists=await docRef.get().catch(()=>null);
+    if(exists?.exists)return null;
+    await docRef.set(notificationPayload(uidValue,{...payload,data:{...data,dedupeKey:key}}));
+    return docRef.id;
   }
+  const docRef=ref.doc(); await docRef.set(notificationPayload(uidValue,{...payload,data})); return docRef.id;
+}
+async function centralNotifyUsers(ids,payload){for(const x of [...new Set((ids||[]).map(String).filter(Boolean))]){try{await centralAddNotification(x,payload)}catch(e){console.warn('central notify',e)}}}
+window.__aaCentralAddNotification=centralAddNotification;
+window.aaAddNotification=centralAddNotification;
+window.aaNotifyUsers=centralNotifyUsers;
 
-  async function writeLoginNotification(user){
-    if(!user?.uid)return;
-    const key=KEY_PREFIX+String(user.uid);
-    if(sessionStorage.getItem(key))return;
-    if(activeWrite)return activeWrite;
-
-    activeWrite=(async()=>{
-      try{
-        const ref=db.collection('users').doc(String(user.uid)).collection('notifications').doc();
-        const now=new Date();
-        const name=user.displayName || window.currentUserProfile?.displayName || 'مستخدم';
-        await ref.set({
-          title:'تم تسجيل الدخول إلى حسابك',
-          body:`مرحبًا ${name}، تم تسجيل الدخول إلى حسابك في منصة أناناس أكاديمي بتاريخ ${now.toLocaleString('ar-SA',{dateStyle:'full',timeStyle:'short',timeZone:'Asia/Riyadh'})}.`,
-          type:'login_notice',
-          data:{
-            route:'notifications',
-            loginAt:now.toISOString(),
-            uid:String(user.uid),
-            source:'auth_login'
-          },
-          read:false,
-          createdAt:firebase.firestore.FieldValue.serverTimestamp()
-        });
-        sessionStorage.setItem(key,'1');
-      }catch(err){
-        console.error('فشل إنشاء إشعار تسجيل الدخول:',err);
-        // لا نضع علامة نجاح حتى تتم محاولة الكتابة مرة أخرى لاحقًا.
-      }finally{
-        activeWrite=null;
-      }
-    })();
-
-    return activeWrite;
-  }
-
-  auth?.onAuthStateChanged?.(async user=>{
-    if(!user){
-      lastAuthUid='';
-      return;
-    }
-    // نتعامل فقط مع انتقال دخول جديد، ولا نكرر الإشعار مع مستمعات Firebase المتعددة.
-    if(String(user.uid)!==String(lastAuthUid)){
-      lastAuthUid=String(user.uid);
-      await writeLoginNotification(user);
-    }
+/* ---------- Button-driven login notification only ---------- */
+let loginWriting=false;
+async function notifyActualLogin(user,source){
+  if(!user?.uid||loginWriting)return;
+  loginWriting=true;
+  try{
+    const now=new Date(); const sid=`${user.uid}_${now.getTime()}_${Math.random().toString(36).slice(2,10)}`;
+    await centralAddNotification(user.uid,{title:'تم تسجيل الدخول إلى حسابك',body:`تم تسجيل الدخول إلى حسابك في منصة أناناس أكاديمي بتاريخ ${now.toLocaleString('ar-SA',{dateStyle:'full',timeStyle:'short',timeZone:'Asia/Riyadh'})}. إذا لم تكن أنت من قام بتسجيل الدخول، ننصحك بمراجعة أمان حسابك.`,type:'login_notice',data:{route:'notifications',loginAt:now.toISOString(),sessionId:sid,source:source||'login_button'},dedupeKey:`login_${sid}`});
+  }finally{loginWriting=false}
+}
+function bindRealLoginButtons(){
+  ['emailSignInBtn','googleSignInBtn'].forEach(id=>{
+    const b=$(id); if(!b||b.dataset.aaV33LoginBound)return; b.dataset.aaV33LoginBound='1';
+    b.addEventListener('click',()=>{
+      const before=auth?.currentUser?.uid||''; const started=Date.now();
+      const timer=setInterval(async()=>{
+        const u=auth?.currentUser;
+        if(u && String(u.uid)!==String(before||'')){
+          clearInterval(timer); await sleep(250); await notifyActualLogin(u,id);
+        }else if(Date.now()-started>12000){clearInterval(timer)}
+      },350);
+    },true);
   });
+}
+bindRealLoginButtons(); setTimeout(bindRealLoginButtons,500); setTimeout(bindRealLoginButtons,1500);
 
-  // إذا كان المستخدم قد سجل الدخول قبل تحميل هذه الرقعة، نفّذ محاولة واحدة بعد استقرار auth.
-  setTimeout(()=>{
-    const u=getCurrentUserSafe();
-    if(u && String(u.uid)!==String(lastAuthUid)){
-      lastAuthUid=String(u.uid);
-      writeLoginNotification(u);
+/* ---------- Admin is enrolled in every current and future course ---------- */
+async function syncAdminEnrollments(){
+  if(!isAdmin||!currentUser)return;
+  try{const snap=await db.collection('courses').get();const batch=db.batch();snap.docs.forEach(c=>batch.set(db.collection('users').doc(currentUser.uid).collection('enrolledCourses').doc(c.id),{adminEnrollment:true,courseId:c.id,enrolledAt:firebase.firestore.FieldValue.serverTimestamp(),accessSource:'admin'},{merge:true}));if(snap.size)await batch.commit();}catch(e){console.warn('admin enrollment sync',e)}
+}
+function watchAdminCourses(){
+  if(!isAdmin||!currentUser||window.__aaAdminCourseSyncV33)return;
+  window.__aaAdminCourseSyncV33=db.collection('courses').onSnapshot(async snap=>{
+    const batch=db.batch();snap.docs.forEach(c=>batch.set(db.collection('users').doc(currentUser.uid).collection('enrolledCourses').doc(c.id),{adminEnrollment:true,courseId:c.id,accessSource:'admin',enrolledAt:firebase.firestore.FieldValue.serverTimestamp()},{merge:true}));
+    if(snap.size)await batch.commit().catch(()=>{});
+  },e=>console.warn('admin course watch',e));
+}
+window.aaSyncAdminEnrollmentsV33=syncAdminEnrollments;
+
+/* ---------- Current content only helpers ---------- */
+async function currentCourseStudents(courseId){
+  const out=[];try{const users=await db.collection('users').get();for(const u of users.docs){if(String(u.id)===String(currentUser?.uid||''))continue;const e=await u.ref.collection('enrolledCourses').doc(String(courseId)).get();if(e.exists&&!e.data()?.codeDeleted&&!e.data()?.accessBlocked&&!e.data()?.adminEnrollment)out.push(u.id)}}catch(_){}return out;
+}
+async function notifyContentPublished(type,courseId,contentId,title){
+  const stateId=safeKey(`${type}_${courseId}_${contentId}`);const stateRef=db.collection('notificationSystem').doc('content_'+stateId);
+  const seen=await stateRef.get().catch(()=>null);if(seen?.exists)return;
+  const created=asDate(title?.createdAt||title?.publishedAt);
+  if(!created){await stateRef.set({seenAt:firebase.firestore.FieldValue.serverTimestamp(),silent:true,noTimestamp:true}).catch(()=>{});return;}
+  const age=Date.now()-created.getTime();
+  if(age>60*60*1000||age<0){await stateRef.set({seenAt:firebase.firestore.FieldValue.serverTimestamp(),silent:true}).catch(()=>{});return;}
+  const ids=await currentCourseStudents(courseId); if(ids.length){for(const r of ids)await centralAddNotification(r,{title:type==='lesson_published'?'تم نشر حصة جديدة':type==='quiz_published'?'تم نشر اختبار جديد':'تم نشر واجب جديد',body:`تمت إضافة ${type==='lesson_published'?'حصة':type==='quiz_published'?'اختبار':'واجب'} جديد في دورة ${title?.titleAr||title?.name||'الدورة'}.`,type,data:{route:'course',courseId,contentId,contentType:type},dedupeKey:`published_${type}_${courseId}_${contentId}`})}
+  await stateRef.set({seenAt:firebase.firestore.FieldValue.serverTimestamp(),notifiedCount:ids.length}).catch(()=>{});
+}
+async function scanPublishedContent(){
+  try{const courses=await db.collection('courses').get();for(const c of courses.docs){const cid=c.id,cd=c.data()||{};for(const [col,type] of [['lessons','lesson_published'],['quizzes','quiz_published'],['assignments','assignment_published']]){const snap=await c.ref.collection(col).get().catch(()=>null);if(!snap)continue;for(const d of snap.docs){const x={...(d.data()||{}),titleAr:(d.data()||{}).titleAr||cd.titleAr};await notifyContentPublished(type,cid,d.id,x)}}}}catch(e){console.warn('published scan',e)}
+}
+
+/* ---------- Completion, XP, subscription lifecycle ---------- */
+async function scanStudentLifecycle(){
+  const u=auth?.currentUser;if(!u||isAdmin)return;
+  try{
+    const courses=await db.collection('courses').get();
+    for(const c of courses.docs){
+      const cid=c.id,courseTitle=c.data()?.titleAr||'الدورة';
+      const e=await currentEnrollment(u.uid,cid); if(!e||e.codeDeleted||e.adminEnrollment)continue;
+      const code=await resolveCurrentCode(u.uid,cid,e); if(!code)continue;
+      const end=asDate(code.endTime),until=asDate(code.suspendedUntil),now=Date.now();
+      if(end){const ms=end.getTime()-now;for(const days of [7,3,1]){if(ms>0&&ms<=days*86400000&&ms>(days-1)*86400000){await centralAddNotification(u.uid,{title:`تبقى ${days} ${days===1?'يومًا':'أيام'} على انتهاء اشتراكك`,body:`تبقى ${days} ${days===1?'يومًا':'أيام'} على انتهاء اشتراكك في دورة ${courseTitle}.`,type:'subscription_ending_soon',data:{route:'course',courseId:cid,codeId:code.id,days},dedupeKey:`subscription_ending_${cid}_${code.id}_${days}`})}}}
+      const lifecycleRef=db.collection('users').doc(u.uid).collection('notificationLifecycle').doc(safeKey(`${cid}_${code.id}`));
+      const prev=(await lifecycleRef.get().catch(()=>null))?.data()||{};
+      const suspended=!!code.disabled&&(!until||until.getTime()>now);
+      if(prev.lastSuspended===true && !suspended && !(until&&until.getTime()<=now)){
+        await centralAddNotification(u.uid,{title:'تم إلغاء إيقاف اشتراكك',body:`ألغى المشرف إيقاف اشتراكك في دورة ${courseTitle} ويمكنك الدخول إلى الدورة مرة أخرى.`,type:'suspension_cancelled',data:{route:'course',courseId:cid,codeId:code.id},dedupeKey:`suspension_cancelled_${cid}_${code.id}_${prev.lastStateAt||''}`});
+      }
+      if(suspended && (!prev.lastSuspended||prev.lastSuspensionUntil!==String(code.suspendedUntil||''))){await centralAddNotification(u.uid,{title:'تم إيقاف اشتراكك',body:`تم إيقاف اشتراكك في دورة ${courseTitle}${until?' حتى '+until.toLocaleString('ar-SA',{timeZone:'Asia/Riyadh'}):' حتى إلغاء الإيقاف يدويًا'}.`,reason:code.suspensionReason||'تم إيقاف الاشتراك من قبل المشرف.',type:'code_suspended',data:{route:'course',courseId:cid,codeId:code.id,suspendedUntil:code.suspendedUntil},dedupeKey:`code_suspended_${cid}_${code.id}_${String(code.suspendedUntil||'permanent')}`})}
+      if(prev.lastSuspended===true&&until&&until.getTime()<=now&&!prev.suspensionExpired){await centralAddNotification(u.uid,{title:'انتهت مدة الإيقاف',body:`انتهت مدة إيقاف اشتراكك في دورة ${courseTitle} ويمكنك الوصول إليها مرة أخرى.`,reason:code.suspensionReason||'',type:'suspension_expired',data:{route:'course',courseId:cid,codeId:code.id},dedupeKey:`suspension_expired_${cid}_${code.id}_${until.getTime()}`})}
+      if(end&&end.getTime()<=now&&!prev.subscriptionExpired){await centralAddNotification(u.uid,{title:'مبارك انتهاء اشتراكك',body:`نبارك لك انتهاء اشتراكك في دورة ${courseTitle}، ونشكرك على اشتراكك وثقتك بنا. يمكنك تجديد الاشتراك بكود جديد متى رغبت.`,type:'subscription_expired',data:{route:'course',courseId:cid,codeId:code.id},dedupeKey:`subscription_expired_${cid}_${code.id}_${end.getTime()}`})}
+      const next={lastSuspended:suspended,lastSuspensionUntil:String(code.suspendedUntil||''),subscriptionExpired:!!(end&&end.getTime()<=now),suspensionExpired:!!(until&&until.getTime()<=now),lastStateAt:String(Date.now())};await lifecycleRef.set(next,{merge:true});
+      // Completion notifications only against current content.
+      const doneL=await db.collection('users').doc(u.uid).collection('completedLessons').get().catch(()=>null);const doneLessons=new Set((doneL?.docs||[]).map(d=>d.id));
+      const lessons=await c.ref.collection('lessons').get().catch(()=>null);if(lessons?.size&&lessons.docs.every(d=>doneLessons.has(d.id))){await centralAddNotification(u.uid,{title:'أكملت جميع حصص الدورة',body:`أكملت جميع الحصص الموجودة حاليًا في دورة ${courseTitle}. أحسنت!`,type:'course_lessons_complete',data:{route:'course',courseId:cid},dedupeKey:`lessons_complete_${cid}_${lessons.docs.map(d=>d.id).sort().join('_')}`})}
+      const doneQ=await db.collection('userStats').doc(u.uid).collection('completedQuizzes').get().catch(()=>null);const doneQuizzes=new Set((doneQ?.docs||[]).map(d=>d.id));
+      const quizzes=await c.ref.collection('quizzes').get().catch(()=>null);if(quizzes?.size&&quizzes.docs.every(d=>doneQuizzes.has(d.id))){await centralAddNotification(u.uid,{title:'أكملت جميع اختبارات الدورة',body:`أكملت جميع الاختبارات الموجودة حاليًا في دورة ${courseTitle}. أحسنت!`,type:'course_quizzes_complete',data:{route:'course',courseId:cid},dedupeKey:`quizzes_complete_${cid}_${quizzes.docs.map(d=>d.id).sort().join('_')}`})}
     }
-  },1200);
+    const stats=await db.collection('userStats').doc(u.uid).get().catch(()=>null);const xp=Number(stats?.data()?.xp||0);if(xp>0){await centralAddNotification(u.uid,{title:'حصلت على نقاط خبرة',body:`رائع! نقاط خبرتك الحالية هي ${xp} XP. استمر في التقدم.`,type:'xp_earned',data:{route:'profile',xp},dedupeKey:`xp_${xp}`})}
+  }catch(e){console.warn('student lifecycle scan',e)}
+}
 
-  window.aaForceLoginNotificationV32=()=>writeLoginNotification(getCurrentUserSafe());
+/* ---------- Admin: all work submissions and approval/cancellation/rejection ---------- */
+async function getWork(courseId,assignmentId,workId){const r=await db.collection('courses').doc(courseId).collection('assignments').doc(String(assignmentId)).get();if(!r.exists)return null;const subs=Array.isArray(r.data()?.submissions)?r.data().submissions:[];const idx=subs.findIndex((x,i)=>(x.workId||x.id||`legacy_${i}`)===String(workId));if(idx<0)return null;return {ref:r.ref,data:r.data(),submissions:subs,index:idx,sub:{...subs[idx]}}}
+function ensureRejectModal(){if($('aaRejectWorkModal'))return;const m=document.createElement('div');m.id='aaRejectWorkModal';m.innerHTML=`<div class="aa-reject-box"><button type="button" id="aaRejectClose" style="float:left;border:0;background:none;color:var(--text-muted);font-size:1.6rem;cursor:pointer">×</button><h3 style="color:#e74c3c;margin-bottom:8px">رفض العمل / إلغاء الاعتماد</h3><p id="aaRejectHint" style="color:var(--text-muted);line-height:1.8">اكتب سبب الإجراء، وسيصل السبب إلى صاحب العمل.</p><textarea id="aaRejectReason" placeholder="سبب الرفض..."></textarea><div style="display:flex;gap:10px;margin-top:14px"><button type="button" id="aaRejectCancel" style="flex:1;padding:11px;border-radius:14px;border:1px solid var(--border);background:var(--bg-secondary);color:var(--text-primary);font-family:inherit;font-weight:800">إلغاء</button><button type="button" id="aaRejectConfirm" style="flex:1;padding:11px;border:0;border-radius:14px;background:#e74c3c;color:#fff;font-family:inherit;font-weight:800">تأكيد</button></div></div>`;document.body.appendChild(m);['aaRejectClose','aaRejectCancel'].forEach(id=>$(id).addEventListener('click',()=>m.classList.remove('active')))}
+let rejectContext=null;
+async function rejectOrCancelApproval(courseId,assignmentId,workId,mode){if(!isAdmin)return;ensureRejectModal();rejectContext={courseId,assignmentId,workId,mode};$('aaRejectHint').textContent=mode==='cancel'?'اكتب سبب إلغاء اعتماد العمل. سيصل السبب إلى الطالب.':'اكتب سبب رفض العمل. سيصل السبب إلى الطالب ليتمكن من التعديل وإعادة الرفع.';$('aaRejectReason').value='';$('aaRejectWorkModal').classList.add('active');setTimeout(()=>$('aaRejectReason').focus(),30)}
+window.rejectAssignmentWork=(c,a,w)=>rejectOrCancelApproval(c,a,w,'reject');
+window.cancelAssignmentApproval=(c,a,w)=>rejectOrCancelApproval(c,a,w,'cancel');
+document.addEventListener('click',e=>{const b=e.target.closest?.('[data-aa-reject-work],[data-aa-cancel-approval]');if(!b)return;e.preventDefault();const [c,a,w]=[b.dataset.course,b.dataset.assignment,b.dataset.work];rejectOrCancelApproval(c,a,w,b.hasAttribute('data-aa-cancel-approval')?'cancel':'reject')},true);
+setTimeout(ensureRejectModal,400);
+setTimeout(()=>{$('aaRejectConfirm')?.addEventListener('click',async()=>{if(!rejectContext)return;const reason=$('aaRejectReason').value.trim();if(!reason)return showCustomAlert?.('تنبيه','اكتب سبب الإجراء أولًا.');const {courseId,assignmentId,workId,mode}=rejectContext;try{const r=await getWork(courseId,assignmentId,workId);if(!r)throw new Error('لم يتم العثور على العمل');const sub={...r.sub};const wasApproved=sub.approved===true;let xp=Number(r.data?.xpReward)||0;if(mode==='cancel'&&wasApproved&&sub.xpGranted&&sub.userId){await db.collection('userStats').doc(String(sub.userId)).set({xp:firebase.firestore.FieldValue.increment(-xp),rank:firebase.firestore.FieldValue.increment(-1)},{merge:true});sub.xpGranted=false;}sub.approved=false;sub.status='rejected';sub.rejected=true;sub.rejectionReason=reason;sub.rejectedAt=firebase.firestore.FieldValue.serverTimestamp();sub.approvalCancelled=mode==='cancel';r.submissions[r.index]=sub;await r.ref.update({submissions:r.submissions});if(sub.userId){await centralAddNotification(String(sub.userId),{title:mode==='cancel'?'تم إلغاء اعتماد عملك':'تم رفض عملك',body:mode==='cancel'?`تم إلغاء اعتماد عملك في واجب ${r.data?.titleAr||'الواجب'}.`:`تم رفض عملك في واجب ${r.data?.titleAr||'الواجب'} ويمكنك التعديل وإعادة الرفع.`,reason,type:mode==='cancel'?'assignment_approval_cancelled':'assignment_rejected',data:{route:'assignment',courseId,assignmentId,workId},dedupeKey:`${mode==='cancel'?'approval_cancelled':'rejected'}_${courseId}_${assignmentId}_${workId}_${Date.now()}`})}$('aaRejectWorkModal').classList.remove('active');if(window.openAssignmentDetailV2)await window.openAssignmentDetailV2(courseId,assignmentId);else if(window.openAssignmentDetail)await window.openAssignmentDetail(courseId,assignmentId,true);showCustomAlert?.('تم','تم تنفيذ الإجراء وإرسال الإشعار.')}catch(err){showCustomAlert?.('خطأ',err.message)}});},600);
+
+/* Inject reject/cancel-approval buttons into any existing assignment work card. */
+function injectWorkActions(){document.querySelectorAll('#assignmentDetailContent [data-work-view],[#assignmentDetailContent .assignment-work-card]').forEach(card=>{const article=card.closest('[data-work-id]')||card.closest('.assignment-work-card')||card;const work=article?.dataset?.workId||card.dataset?.workId||'';const c=activeCourseId||article?.dataset?.courseId||'';const a=article?.dataset?.assignmentId||'';if(!work||!c||!a)return;const actions=article.querySelector?.('.work-card-actions');if(!actions)return;if(isAdmin){if(!actions.querySelector('[data-aa-reject-work]')&&!actions.querySelector('[data-aa-cancel-approval]')){const approved=article.querySelector('[data-work-approve]')||article.textContent?.includes('موافق');const b=document.createElement('button');b.type='button';b.className='aa-v33-reject-btn';b.dataset.course=c;b.dataset.assignment=a;b.dataset.work=work;if(approved&&String(article.textContent).includes('مكتمل')){b.dataset.aaCancelApproval='1';b.innerHTML='<i class="fas fa-rotate-left"></i> إلغاء الاعتماد';}else{b.dataset.aaRejectWork='1';b.innerHTML='<i class="fas fa-xmark"></i> رفض';}actions.appendChild(b)}}});}
+setInterval(injectWorkActions,1500);
+
+/* ---------- Remove invalid/deleted-course notifications and collapse duplicates ---------- */
+async function cleanupNotifications(uidValue){if(!uidValue)return;try{const ref=db.collection('users').doc(uidValue).collection('notifications');const snap=await ref.get();const keep=new Map();const remove=[];for(const d of snap.docs){const n={id:d.id,...(d.data()||{})};const cid=n.data?.courseId;if(cid&&!(await courseExists(cid))){remove.push(d.ref);continue}const t=n.type||'general', logical= n.data?.dedupeKey || (cid&&[t,cid,n.data?.codeId||'',n.data?.assignmentId||'',n.data?.workId||'',n.data?.quizId||'',n.data?.lessonId||''].join('|'));
+ if(logical){if(keep.has(logical)){const prev=keep.get(logical);const ta=asDate(prev.createdAt)?.getTime()||0,tb=asDate(n.createdAt)?.getTime()||0;if(tb>ta){remove.push(prev.ref);keep.set(logical,n)}else remove.push(d.ref);}else keep.set(logical,n)}}if(remove.length){for(let i=0;i<remove.length;i+=400){const b=db.batch();remove.slice(i,i+400).forEach(r=>b.delete(r));await b.commit()}}}catch(e){console.warn('notification cleanup',e)}}
+
+
+/* ---------- Direct admin lifecycle hooks ---------- */
+function notifyCodeUsersFromData(courseId,codeId,codeData,type,title,reason){
+  const users=[...(Array.isArray(codeData?.usedBy)?codeData.usedBy:[])].map(String).filter(Boolean);
+  return centralNotifyUsers(users,{title,body:reason||title,type,data:{route:'course',courseId,codeId},reason:reason||'',dedupeKey:`${type}_${courseId}_${codeId}`});
+}
+const __v33Toggle=window.toggleEnrollmentCode;
+if(typeof __v33Toggle==='function'&&!__v33Toggle.__v33Wrapped){
+  window.toggleEnrollmentCode=async function(codeId,currentlySuspended){
+    const courseId=activeCourseId; let before=null;
+    try{if(courseId){const r=await db.collection('courses').doc(courseId).collection('codes').doc(String(codeId)).get();before=r.exists?{id:r.id,...(r.data()||{})}:null;}}catch(_){}
+    const result=await __v33Toggle.apply(this,arguments);
+    if(courseId&&before&&currentlySuspended){
+      setTimeout(async()=>{try{const afterRef=db.collection('courses').doc(courseId).collection('codes').doc(String(codeId));const after=await afterRef.get();if(after.exists&&!after.data()?.disabled){const users=Array.isArray(before.usedBy)?before.usedBy.map(String):[];await centralNotifyUsers(users,{title:'تم إلغاء إيقاف اشتراكك',body:'ألغى المشرف إيقاف اشتراكك ويمكنك الدخول إلى الدورة مرة أخرى.',type:'suspension_cancelled',data:{route:'course',courseId,codeId},dedupeKey:`suspension_cancelled_${courseId}_${codeId}_${Date.now()}`});}}catch(_){ }},1200);
+    }
+    return result;
+  };
+  window.toggleEnrollmentCode.__v33Wrapped=true;
+}
+const __v33Delete=window.deleteEnrollmentCode;
+if(typeof __v33Delete==='function'&&!__v33Delete.__v33Wrapped){
+  window.deleteEnrollmentCode=async function(codeId){
+    const courseId=activeCourseId;let snapshot=null;
+    try{if(courseId){const r=await db.collection('courses').doc(courseId).collection('codes').doc(String(codeId)).get();snapshot=r.exists?{id:r.id,...(r.data()||{})}:null;}}catch(_){}
+    const result=await __v33Delete.apply(this,arguments);
+    if(courseId&&snapshot){setTimeout(async()=>{try{const now=await db.collection('courses').doc(courseId).collection('codes').doc(String(codeId)).get();if(!now.exists){await centralNotifyUsers((snapshot.usedBy||[]).map(String),{title:'تم حذف اشتراكك',body:'تم حذف كود الاشتراك المرتبط بهذا الحساب من دورة المنصة.',reason:'تم حذف كود الاشتراك من قبل المشرف.',type:'code_deleted',data:{route:'course',courseId,codeId},dedupeKey:`code_deleted_${courseId}_${codeId}`});}}catch(_){ }},1400)}
+    return result;
+  };
+  window.deleteEnrollmentCode.__v33Wrapped=true;
+}
+const __v33SuspendSave=$('confirmCourseSuspendBtn');
+if(__v33SuspendSave&&!__v33SuspendSave.dataset.v33Hook){
+  __v33SuspendSave.dataset.v33Hook='1';
+  __v33SuspendSave.addEventListener('click',()=>setTimeout(async()=>{try{const courseId=activeCourseId,codeId=window.__aaCodeSuspendTarget; if(!courseId||!codeId)return;const r=await db.collection('courses').doc(courseId).collection('codes').doc(String(codeId)).get();if(!r.exists)return;const c=r.data()||{};if(c.disabled){await centralNotifyUsers((c.usedBy||[]).map(String),{title:'تم إيقاف اشتراكك',body:`تم إيقاف اشتراكك في الدورة${c.suspendedUntil?' حتى '+(asDate(c.suspendedUntil)?.toLocaleString('ar-SA',{timeZone:'Asia/Riyadh'})||''):' حتى إلغاء الإيقاف يدويًا'}.`,reason:c.suspensionReason||'تم إيقاف الاشتراك من قبل المشرف.',type:'code_suspended',data:{route:'course',courseId,codeId,suspendedUntil:c.suspendedUntil},dedupeKey:`code_suspended_${courseId}_${codeId}_${String(c.suspendedUntil||'permanent')}`});}}catch(_){ }},1200),true);
+}
+
+/* ---------- Bind final engine lifecycle ---------- */
+auth?.onAuthStateChanged?.(async u=>{if(!u){try{window.__aaAdminCourseSyncV33?.();window.__aaAdminCourseSyncV33=null}catch(_){ }return;}if(isAdmin){await syncAdminEnrollments();watchAdminCourses()}if(!isAdmin){await scanStudentLifecycle();await scanPublishedContent();await cleanupNotifications(u.uid)}else{await cleanupNotifications(u.uid)} });
+setInterval(async()=>{const u=auth?.currentUser;if(!u)return;if(isAdmin){await syncAdminEnrollments();}else{await scanStudentLifecycle();await scanPublishedContent();await cleanupNotifications(u.uid)}injectWorkActions()},30000);
+
+/* Make central writer the single public notification API. */
+window.__aaCentralNotificationEngineV33=true;
+
 })();
 </script>
 </body>
