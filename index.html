@@ -13923,11 +13923,20 @@ async function sendLoginNotificationV22(user){
     if(!user||typeof window.aaAddNotification!=='function')return;
     const key=`aa_login_notice_${user.uid}`;
     if(sessionStorage.getItem(key))return;
-    sessionStorage.setItem(key,'1');
     const now=new Date();
+    const sessionId=`${user.uid}_${now.getTime()}_${Math.random().toString(36).slice(2,10)}`;
+    sessionStorage.setItem(key,sessionId);
     const when=now.toLocaleString('ar-SA',{dateStyle:'full',timeStyle:'short',timeZone:'Asia/Riyadh'});
-    await window.aaAddNotification(user.uid,{title:'تم تسجيل الدخول إلى حسابك',body:`تم تسجيل دخول إلى حسابك في منصة أناناس أكاديمي بتاريخ ${when}. إذا لم تكن أنت من قام بتسجيل الدخول، ننصحك بمراجعة أمان حسابك.`,type:'login_notice',data:{route:'notifications',loginAt:now.toISOString()},dedupeKey:`login_${user.uid}_${now.toISOString().slice(0,10)}`});
-  }catch(e){console.warn('login notification',e)}
+    await window.aaAddNotification(user.uid,{
+      title:'تم تسجيل الدخول إلى حسابك',
+      body:`تم تسجيل الدخول إلى حسابك في منصة أناناس أكاديمي بتاريخ ${when}. إذا لم تكن أنت من قام بتسجيل الدخول، ننصحك بمراجعة أمان حسابك.`,
+      type:'login_notice',
+      data:{route:'notifications',loginAt:now.toISOString(),sessionId}
+    });
+  }catch(e){
+    try{sessionStorage.removeItem(`aa_login_notice_${user.uid}`)}catch(_){}
+    console.warn('login notification',e)
+  }
 }
 
 /* ---------- Reliable logout: leave every page, then sign out ---------- */
@@ -14232,7 +14241,25 @@ function buildAdminPanel(){if(!isAdmin||adminPanelBuilt)return;adminPanelBuilt=t
 function autoKey(type,courseId,codeId,extra=''){return [type,courseId||'none',codeId||'none',extra||'none'].join('_')}
 async function getCurrentEnrollment(courseId,uid=currentUid()){if(!uid||!courseId)return null;const s=await db.collection('users').doc(uid).collection('enrolledCourses').doc(courseId).get().catch(()=>null);return s?.exists?{id:courseId,...(s.data()||{})}:null}
 async function getCurrentCode(courseId,codeId){if(!courseId||!codeId)return null;const s=await db.collection('courses').doc(courseId).collection('codes').doc(codeId).get().catch(()=>null);return s?.exists?{id:codeId,...(s.data()||{})}:null}
-async function maybeNotifyLogin(user){if(!user)return;const key='aa_login_final_'+user.uid;const sessionToken=sessionStorage.getItem(key);if(sessionToken)return;sessionStorage.setItem(key,'1');const d=new Date();await addNotification(user.uid,{title:'تم تسجيل الدخول إلى حسابك',body:`تم تسجيل الدخول إلى حسابك في منصة أناناس أكاديمي بتاريخ ${d.toLocaleString('ar-SA',{dateStyle:'full',timeStyle:'short',timeZone:'Asia/Riyadh'})}. إذا لم تكن أنت من قام بتسجيل الدخول، يرجى مراجعة أمان حسابك.`,type:'login_notice',data:{route:'notifications',loginAt:d.toISOString()},dedupeKey:`login_${user.uid}_${d.toISOString().slice(0,10)}`});}
+async function maybeNotifyLogin(user){
+  if(!user)return;
+  const key='aa_login_final_'+user.uid;
+  if(sessionStorage.getItem(key))return;
+  const d=new Date();
+  const sessionId=`${user.uid}_${d.getTime()}_${Math.random().toString(36).slice(2,10)}`;
+  try{
+    sessionStorage.setItem(key,sessionId);
+    await addNotification(user.uid,{
+      title:'تم تسجيل الدخول إلى حسابك',
+      body:`تم تسجيل الدخول إلى حسابك في منصة أناناس أكاديمي بتاريخ ${d.toLocaleString('ar-SA',{dateStyle:'full',timeStyle:'short',timeZone:'Asia/Riyadh'})}. إذا لم تكن أنت من قام بتسجيل الدخول، يرجى مراجعة أمان حسابك.`,
+      type:'login_notice',
+      data:{route:'notifications',loginAt:d.toISOString(),sessionId}
+    });
+  }catch(e){
+    sessionStorage.removeItem(key);
+    console.warn('login notification',e);
+  }
+}
 
 async function validateAllCourseCompletions(uid){if(!uid)return;const usersLessons=await db.collection('users').doc(uid).collection('completedLessons').get().catch(()=>null);const doneL=new Set(usersLessons?.docs.map(d=>d.id)||[]);const statQ=await db.collection('userStats').doc(uid).collection('completedQuizzes').get().catch(()=>null);const doneQ=new Set(statQ?.docs.map(d=>d.id)||[]);const courses=await db.collection('courses').get().catch(()=>null);if(!courses)return;for(const cdoc of courses.docs){const cid=cdoc.id;const lessons=await cdoc.ref.collection('lessons').get().catch(()=>null);if(lessons?.size&&lessons.docs.every(d=>doneL.has(d.id)))await addNotification(uid,{title:'أكملت جميع حصص الدورة',body:`أكملت جميع الحصص الموجودة حاليًا في دورة ${cdoc.data()?.titleAr||'الدورة'}. أحسنت!`,type:'course_lessons_complete',data:{route:'course',courseId:cid},dedupeKey:autoKey('lessons_complete',cid,'','current')});const qs=await cdoc.ref.collection('quizzes').get().catch(()=>null);if(qs?.size&&qs.docs.every(d=>doneQ.has(d.id)))await addNotification(uid,{title:'أكملت جميع اختبارات الدورة',body:`أكملت جميع الاختبارات الموجودة حاليًا في دورة ${cdoc.data()?.titleAr||'الدورة'}. أحسنت!`,type:'course_quizzes_complete',data:{route:'course',courseId:cid},dedupeKey:autoKey('quizzes_complete',cid,'','current')})}}
 
@@ -14837,7 +14864,9 @@ body.aaN27-lock-scroll{overflow:hidden!important;}
   .aaN28-send-panel{max-width:1120px;margin:0 auto 18px;border:1px solid var(--border);border-radius:26px;background:linear-gradient(145deg,rgba(108,92,231,.055),var(--bg-card));box-shadow:var(--shadow);overflow:hidden}
   .aaN28-send-toggle{width:100%;display:flex;justify-content:space-between;align-items:center;gap:12px;padding:18px 20px;border:0;background:transparent;color:var(--text-primary);font:inherit;font-weight:900;font-size:1.08rem;cursor:pointer;text-align:start}
   .aaN28-send-toggle i{transition:transform .2s;color:var(--accent1)}.aaN28-send-panel.collapsed .aaN28-send-toggle i{transform:rotate(180deg)}
-  .aaN28-send-body{padding:0 20px 20px;display:grid;gap:14px}.aaN28-send-panel.collapsed .aaN28-send-body{display:none}
+  .aaN28-send-body{will-change:max-height,opacity,transform}
+  @media (prefers-reduced-motion: reduce){.aaN28-send-body{transition:none!important}.aaN28-send-toggle i{transition:none!important}}
+  .aaN28-send-body{padding:0 20px 20px;display:grid;gap:14px;max-height:1400px;opacity:1;overflow:hidden;transform:translateY(0);transition:max-height .38s ease,opacity .28s ease,transform .38s ease,padding-top .38s ease,padding-bottom .38s ease}.aaN28-send-panel.collapsed .aaN28-send-body{max-height:0;opacity:0;transform:translateY(-10px);padding-top:0;padding-bottom:0;pointer-events:none}
   .aaN28-send-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}.aaN28-send-field{display:grid;gap:6px}.aaN28-send-field.full{grid-column:1/-1}.aaN28-send-field label{font-size:.84rem;font-weight:900}.aaN28-send-field input,.aaN28-send-field select,.aaN28-send-field textarea{width:100%;min-height:46px;border:1px solid var(--border);border-radius:15px;background:var(--bg-primary);color:var(--text-primary);padding:10px 12px;font:inherit;outline:none}.aaN28-send-field textarea{min-height:120px;resize:vertical;line-height:1.85}.aaN28-recipient-tools{display:flex;gap:8px;flex-wrap:wrap}.aaN28-recipient-tools input{flex:1;min-width:180px}.aaN28-small-action{border:1px solid var(--border);background:var(--bg-secondary);color:var(--text-primary);border-radius:12px;padding:8px 11px;font:inherit;font-weight:800;cursor:pointer}.aaN28-recipient-list{max-height:230px;overflow:auto;border:1px solid var(--border);border-radius:16px;background:var(--bg-secondary);padding:7px;display:grid;gap:5px}.aaN28-recipient-row{display:flex;align-items:center;gap:9px;padding:8px 9px;border-radius:12px;cursor:pointer}.aaN28-recipient-row:hover{background:rgba(108,92,231,.06)}.aaN28-recipient-row input{width:17px;height:17px}.aaN28-rec-avatar{width:32px;height:32px;border-radius:50%;overflow:hidden;display:grid;place-items:center;color:#fff;font-weight:900;background:linear-gradient(135deg,#6c5ce7,#0984e3);flex:0 0 32px}.aaN28-rec-avatar img{width:100%;height:100%;object-fit:cover}.aaN28-rec-copy{min-width:0;display:flex;flex-direction:column}.aaN28-rec-copy strong{font-size:.8rem}.aaN28-rec-copy small{color:var(--text-muted);font-size:.7rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.aaN28-send-actions{display:flex;justify-content:flex-end;gap:8px}.aaN28-primary{min-height:46px;padding:10px 16px;border:0;border-radius:14px;background:linear-gradient(135deg,#6c5ce7,#0984e3);color:#fff;font:inherit;font-weight:900;cursor:pointer}
   .aaN28-all-list{max-width:1120px;margin:0 auto;display:grid;gap:11px}.aaN28-all-list .aaN28-item{background:var(--bg-card);border:1px solid var(--border);padding:14px 16px;border-radius:18px;box-shadow:0 5px 16px rgba(0,0,0,.03)}
 
@@ -15039,6 +15068,410 @@ const pl=$('profilePhoneLabel');if(pl)pl.innerHTML=(pl.textContent||'رقم ال
 #authToggleBtn .auth-user-avatar{background:var(--accent-gradient);display:grid;place-items:center;color:#fff}
 #authToggleBtn .auth-user-avatar .aa-v28-initial-avatar{border-radius:50%}
 </style>
+
+
+<script id="final-login-logout-fix-v31">
+(function(){
+  'use strict';
+  const $=id=>document.getElementById(id);
+  let logoutInProgress=false;
+
+  function clearModalLayers(){
+    try{document.querySelectorAll(
+      '.custom-alert-modal.active,.auth-popup.active,.edit-modal.active,.auth-popup,.custom-alert-modal,'+
+      '.profile-self-modal.active,.aa-notification-detail-modal.active,.aa-final-notif-detail.is-open,'+
+      '#aaFinalNotifDropdown.is-open,#aaFinalNotificationsRoot.is-open,#aaNotificationsPage.active,'+
+      '#userProfileModal.active,#userProfilePage.active,#aaRebuiltProfilePage.active'
+    ).forEach(el=>el.classList.remove('active','is-open'))}catch(_){}
+    try{document.body.classList.remove('aa-notifications-open','aa-v28-modal-open','aa-modal-open','modal-open')}catch(_){}
+    try{document.body.style.overflow='';document.documentElement.style.overflow=''}catch(_){}
+  }
+
+  function forceHomeBeforeLogout(){
+    clearModalLayers();
+
+    // Hide every course/profile/detail surface.
+    const detail=$('courseDetailView');
+    if(detail){
+      detail.style.display='none';
+      detail.classList.remove('active');
+    }
+    ['courseOverviewContainer','courseDashboard','courseLessonsPage','courseLessonPlayerPage',
+     'courseQuizzesPage','courseAssignmentsPage','courseAssignmentDetailPage','courseFilesPage',
+     'courseChatPage','courseLearningView','fullChatPage','aaRebuiltProfilePage',
+     'aaNotificationsPage','aaFinalNotificationsRoot'].forEach(id=>{
+      const el=$(id);
+      if(!el)return;
+      el.classList.remove('active','is-mobile-active','is-open');
+      if(id!=='courseOverviewContainer') el.style.display='none';
+    });
+
+    const cp=$('coursesPage');
+    if(cp){
+      cp.style.display='block';
+      cp.classList.add('active');
+      cp.scrollTop=0;
+    }
+    const grid=$('coursesGridContainer');
+    if(grid) grid.style.display='grid';
+    const header=$('coursesListPageHeader');
+    if(header) header.classList.remove('course-list-header-hidden');
+
+    try{activeCourseId=null;activeLessonId=null;activeQuizId=null;currentCoursePage='overview';}catch(_){}
+    try{window.__aaViewedProfileUid='';}catch(_){}
+    try{window.mobileNavigate?.('courses')}catch(_){}
+
+    // Keep the browser at the top of the home/courses page.
+    requestAnimationFrame(()=>{
+      try{window.scrollTo({top:0,left:0,behavior:'instant'})}catch(_){try{window.scrollTo(0,0)}catch(__){}}
+      try{cp?.scrollTo({top:0,left:0,behavior:'instant'})}catch(_){}
+    });
+  }
+
+  window.aaForceHomeBeforeLogoutV31=forceHomeBeforeLogout;
+
+  async function performLogoutV31(e){
+    if(logoutInProgress)return;
+    logoutInProgress=true;
+    try{e?.preventDefault?.();e?.stopPropagation?.();e?.stopImmediatePropagation?.()}catch(_){}
+    const uid=currentUser?.uid;
+    try{
+      if(uid){
+        sessionStorage.removeItem(`aa_login_final_${uid}`);
+        sessionStorage.removeItem(`aa_login_notice_${uid}`);
+      }
+    }catch(_){}
+
+    // The user must leave the current UI immediately, before Firebase finishes sign-out.
+    forceHomeBeforeLogout();
+
+    try{
+      await auth.signOut();
+    }catch(err){
+      console.warn('logout',err);
+    }finally{
+      // Re-assert home after auth state listeners complete.
+      setTimeout(forceHomeBeforeLogout,0);
+      setTimeout(forceHomeBeforeLogout,150);
+      setTimeout(forceHomeBeforeLogout,500);
+      logoutInProgress=false;
+    }
+  }
+
+  // Capture every current/future logout button before legacy handlers run.
+  function isLogoutTarget(el){
+    return !!el?.closest?.(
+      '#aaProfileLogout,#aaProfileLogoutBtn,#userProfileLogoutBtn,#aaV10Logout,#acpLogout,'+
+      '#v10Logout,#profileLogoutPageBtn,[data-action="logout"]'
+    );
+  }
+  document.addEventListener('click',e=>{
+    if(isLogoutTarget(e.target))performLogoutV31(e);
+  },true);
+  document.addEventListener('pointerup',e=>{
+    if(isLogoutTarget(e.target))performLogoutV31(e);
+  },true);
+
+  // Direct bindings for dynamically-created profile buttons.
+  const bind=()=>{
+    document.querySelectorAll(
+      '#aaProfileLogout,#aaProfileLogoutBtn,#userProfileLogoutBtn,#aaV10Logout,#acpLogout,#v10Logout,#profileLogoutPageBtn,[data-action="logout"]'
+    ).forEach(btn=>{
+      if(btn.dataset.v31Logout)return;
+      btn.dataset.v31Logout='1';
+      btn.addEventListener('click',e=>performLogoutV31(e),true);
+    });
+  };
+  bind();
+  setTimeout(bind,300);
+  setTimeout(bind,1000);
+  setTimeout(bind,2500);
+
+  // Any auth transition to signed-out state also guarantees the courses page is visible.
+  auth?.onAuthStateChanged?.(u=>{
+    if(!u){
+      setTimeout(forceHomeBeforeLogout,0);
+      setTimeout(forceHomeBeforeLogout,200);
+    }
+  });
+
+  // Patch the modal/logout helpers used by older UI versions.
+  window.logoutFromProfileV31=performLogoutV31;
+  window.signOutAndGoHomeV31=performLogoutV31;
+
+})();
+</script>
+
+<script id="final-automatic-notifications-v32">
+(() => {
+  'use strict';
+  const $ = id => document.getElementById(id);
+  const dbx = window.db || db;
+  const authx = window.auth || auth;
+  const FIELD = firebase.firestore.FieldValue;
+  const KEY_PREFIX = 'v32_auto_';
+  const sleep = ms => new Promise(r => setTimeout(r, ms));
+  const uid = () => String(window.currentUser?.uid || authx?.currentUser?.uid || '');
+  const now = () => Date.now();
+  const tsDate = v => {
+    try { if(!v) return null; if(v.toDate) return v.toDate(); if(v.toMillis) return new Date(v.toMillis()); const d=new Date(v); return Number.isNaN(d.getTime())?null:d; } catch(_) { return null; }
+  };
+  const norm = v => String(v ?? '').trim();
+  const safeTitle = c => norm(c?.titleAr || c?.title || c?.name || 'الدورة');
+  const notificationKey = parts => KEY_PREFIX + parts.map(x => norm(x).replace(/[^\w\-:,.]/g,'_')).join('__').slice(0,180);
+  const sessionKey = (u, marker) => `${KEY_PREFIX}session_${u}_${marker}`;
+
+  async function currentCoursesMap(){
+    const snap = await dbx.collection('courses').get();
+    const map = new Map();
+    snap.docs.forEach(d => map.set(d.id,{id:d.id,...(d.data()||{})}));
+    return map;
+  }
+
+  async function writeNotification(userId,payload){
+    if(!userId || !payload?.title) return false;
+    const ref = dbx.collection('users').doc(String(userId)).collection('notifications');
+    const key = payload.dedupeKey ? String(payload.dedupeKey) : '';
+    const docId = key ? notificationKey([payload.type||'general',key]).slice(0,150) : null;
+    try{
+      if(docId){
+        const dref=ref.doc(docId);
+        const snap=await dref.get();
+        if(snap.exists) return false;
+        await dref.set({
+          title:payload.title,
+          body:payload.body||'',
+          reason:payload.reason||'',
+          type:payload.type||'general',
+          data:payload.data||{},
+          read:false,
+          createdAt:FIELD.serverTimestamp(),
+          auto:true,
+          autoKey:key
+        });
+      }else{
+        await ref.add({title:payload.title,body:payload.body||'',reason:payload.reason||'',type:payload.type||'general',data:payload.data||{},read:false,createdAt:FIELD.serverTimestamp(),auto:true});
+      }
+      return true;
+    }catch(e){ console.warn('v32 notification write',e); return false; }
+  }
+
+  // Replace all automatic writers with one idempotent implementation. Manual notifications still work.
+  window.aaAddNotification = writeNotification;
+  window.addNotification = writeNotification;
+  window.addN27 = async (userId,payload,key='') => writeNotification(userId,{...payload,dedupeKey:key || payload.dedupeKey || ''});
+
+  function currentCodeStatus(code, enroll){
+    const n=now();
+    if(enroll?.codeDeleted===true) return 'deleted';
+    if(enroll?.accessBlocked===true){
+      const until=tsDate(enroll.blockedUntil);
+      if(!until || until.getTime()>n) return 'suspended';
+    }
+    if(code){
+      const start=tsDate(code.startTime), end=tsDate(code.endTime), sus=tsDate(code.suspendedUntil);
+      const disabled=code.disabled===true || code.isSuspended===true || code.status==='suspended' || code.state==='suspended';
+      if(disabled && (!sus || sus.getTime()>n)) return 'suspended';
+      if(end && end.getTime()<n) return 'expired';
+      if(start && start.getTime()>n) return 'not_started';
+      return 'active';
+    }
+    return enroll?.accessBlocked ? 'suspended' : (enroll?.codeDeleted ? 'deleted' : 'unknown');
+  }
+
+  async function findCode(courseId, codeId, codeUsed){
+    if(!courseId) return null;
+    if(codeId){
+      const s=await dbx.collection('courses').doc(courseId).collection('codes').doc(codeId).get().catch(()=>null);
+      if(s?.exists) return {id:s.id,...(s.data()||{})};
+    }
+    if(codeUsed){
+      const s=await dbx.collection('courses').doc(courseId).collection('codes').where('code','==',codeUsed).limit(1).get().catch(()=>null);
+      if(s&&!s.empty) return {id:s.docs[0].id,...(s.docs[0].data()||{})};
+    }
+    return null;
+  }
+
+  async function syncSubscriptionForUser(userId,courseId,enroll,courseMap){
+    const course=courseMap.get(courseId); if(!course) return;
+    const code=await findCode(courseId,enroll.codeId,enroll.codeUsed);
+    const status=currentCodeStatus(code,enroll);
+    const ref=dbx.collection('users').doc(userId).collection('enrolledCourses').doc(courseId);
+    const previous=norm(enroll.notificationStatus);
+    const courseTitle=safeTitle(course);
+    const codeId=norm(enroll.codeId || code?.id || '');
+    const codeLabel=norm(code?.code || enroll.codeUsed || '');
+
+    const suspensionUntil = tsDate(code?.suspendedUntil || enroll.blockedUntil);
+    const autoSuspensionExpired = previous==='suspended' && suspensionUntil && suspensionUntil.getTime() <= now();
+    if(status==='active' && previous==='suspended'){
+      if(autoSuspensionExpired){
+        await writeNotification(userId,{title:'انتهت مدة إيقاف اشتراكك',body:`انتهت مدة الإيقاف الخاصة باشتراكك في دورة ${courseTitle}، وتم السماح لك بالعودة إلى الدورة تلقائيًا.`,type:'code_suspension_expired',data:{route:'course',courseId,codeId,code:codeLabel,suspensionEndedAt:suspensionUntil.toISOString()},dedupeKey:notificationKey(['suspension_expired',courseId,codeId,suspensionUntil.getTime()])});
+      } else {
+        await writeNotification(userId,{title:'تم إلغاء إيقاف اشتراكك',body:`تم إلغاء إيقاف اشتراكك في دورة ${courseTitle} من قبل المشرف وأصبح بإمكانك الدخول إليها من جديد.`,type:'code_unsuspended',data:{route:'course',courseId,codeId,code:codeLabel},dedupeKey:notificationKey(['unsuspended',courseId,codeId,String(enroll.accessUpdatedAt||now())])});
+      }
+    }
+    if(status==='suspended'){
+      const until=tsDate(code?.suspendedUntil || enroll.blockedUntil);
+      const token=String(until?.getTime()||'permanent');
+      const mode=code?.suspensionMode || (until?'timed':'permanent');
+      await writeNotification(userId,{title:'تم إيقاف اشتراكك',body:until?`تم إيقاف اشتراكك في دورة ${courseTitle} حتى ${until.toLocaleString('ar-SA',{timeZone:'Asia/Riyadh'})}.`:`تم إيقاف اشتراكك في دورة ${courseTitle} حتى إلغاء الإيقاف من المشرف.`,reason:enroll.accessBlockReason||enroll.blockReason||code?.suspensionReason||'',type:'code_suspended',data:{route:'course',courseId,codeId,code:codeLabel,suspendedUntil:until?.toISOString()||null,suspensionMode:mode},dedupeKey:notificationKey(['suspended',courseId,codeId,token,enroll.accessBlockReason||enroll.blockReason||code?.suspensionReason||''])});
+    }
+    if(status==='deleted'){
+      await writeNotification(userId,{title:'تم حذف اشتراكك',body:`تم حذف اشتراكك في دورة ${courseTitle}، وتم إخراجك منها.`,reason:enroll.accessBlockReason||enroll.blockReason||'تم حذف الاشتراك من قبل المشرف.',type:'code_deleted',data:{route:'course',courseId,codeId,code:codeLabel},dedupeKey:notificationKey(['deleted',courseId,codeId,enroll.accessUpdatedAt||'deleted'])});
+    } else if(status==='expired'){
+      const end=tsDate(code?.endTime || enroll.endsAt || enroll.subscriptionEndAt);
+      const token=end?.getTime()||'expired';
+      await writeNotification(userId,{title:'مبارك انتهاء اشتراكك',body:`نبارك لك انتهاء اشتراكك في دورة ${courseTitle}، ونشكرك على اشتراكك وثقتك بنا. يمكنك تجديد الاشتراك بكود جديد في أي وقت.`,type:'subscription_expired',data:{route:'course',courseId,codeId,code:codeLabel,endedAt:end?.toISOString()||null},dedupeKey:notificationKey(['expired',courseId,codeId,token])});
+    } else if(status==='active' && enroll.subscriptionSuccessNotified!==true){
+      await writeNotification(userId,{title:'تم الاشتراك في الدورة بنجاح',body:`تم تسجيل اشتراكك في دورة ${courseTitle} بنجاح. نتمنى لك تجربة تعليمية ممتعة.`,type:'subscription_success',data:{route:'course',courseId,codeId,code:codeLabel},dedupeKey:notificationKey(['subscription_success',courseId,codeId])});
+    }
+    if(status!==previous || enroll.notificationStatus===undefined){
+      await ref.set({notificationStatus:status,notificationCodeId:codeId,notificationStatusCheckedAt:FIELD.serverTimestamp()},{merge:true}).catch(()=>{});
+      if(status==='active' && enroll.subscriptionSuccessNotified!==true) await ref.set({subscriptionSuccessNotified:true},{merge:true}).catch(()=>{});
+    }
+  }
+
+  async function syncCompletions(userId,courseMap){
+    const lessonsDone=await dbx.collection('users').doc(userId).collection('completedLessons').get().catch(()=>null);
+    const doneL=new Set((lessonsDone?.docs||[]).filter(d=>!(d.data()||{}).cheatDetected).map(d=>d.id));
+    const quizzesDone=await dbx.collection('userStats').doc(userId).collection('completedQuizzes').get().catch(()=>null);
+    const doneQ=new Set((quizzesDone?.docs||[]).map(d=>d.id));
+    for(const [cid,course] of courseMap){
+      const [ls,qs]=await Promise.all([
+        dbx.collection('courses').doc(cid).collection('lessons').get().catch(()=>null),
+        dbx.collection('courses').doc(cid).collection('quizzes').get().catch(()=>null)
+      ]);
+      const ln=ls?.docs||[], qn=qs?.docs||[];
+      if(ln.length && ln.every(d=>doneL.has(d.id))){
+        const fp=ln.map(d=>d.id).sort().join('|');
+        await writeNotification(userId,{title:'أكملت جميع حصص الدورة',body:`أحسنت! أكملت جميع الحصص الموجودة حاليًا في دورة ${safeTitle(course)}.`,type:'course_lessons_complete',data:{route:'course',courseId:cid},dedupeKey:notificationKey(['lessons_complete',cid,fp])});
+      }
+      if(qn.length && qn.every(d=>doneQ.has(d.id))){
+        const fp=qn.map(d=>d.id).sort().join('|');
+        await writeNotification(userId,{title:'أكملت جميع اختبارات الدورة',body:`أحسنت! أكملت جميع الاختبارات الموجودة حاليًا في دورة ${safeTitle(course)}.`,type:'course_quizzes_complete',data:{route:'course',courseId:cid},dedupeKey:notificationKey(['quizzes_complete',cid,fp])});
+      }
+    }
+  }
+
+  async function notifyAssignmentEventsForUser(userId,courseMap){
+    const enrolled=await dbx.collection('users').doc(userId).collection('enrolledCourses').get().catch(()=>null);
+    for(const ed of (enrolled?.docs||[])){
+      const cid=ed.id;if(!courseMap.has(cid))continue;
+      const as=await dbx.collection('courses').doc(cid).collection('assignments').get().catch(()=>null);
+      for(const aDoc of (as?.docs||[])){
+        const a=aDoc.data()||{},subs=Array.isArray(a.submissions)?a.submissions:[];
+        for(let i=0;i<subs.length;i++){
+          const s=subs[i]||{};if(String(s.userId)!==String(userId))continue;
+          const wid=String(s.workId||s.id||`legacy_${i}`);
+          if(s.approved){
+            await writeNotification(userId,{title:'تم اعتماد عملك',body:`تم اعتماد عملك في واجب ${norm(a.titleAr||a.title)||'الواجب'} من المشرف.`,type:'assignment_approved',data:{route:'assignment',courseId:cid,assignmentId:aDoc.id,workId:wid},dedupeKey:notificationKey(['assignment_approved',cid,aDoc.id,wid])});
+          }
+        }
+      }
+    }
+  }
+
+  async function getAdminIds(){
+    const a=await dbx.collection('users').where('role','==','admin').get().catch(()=>null);
+    return (a?.docs||[]).map(d=>d.id);
+  }
+  async function notifyPendingAssignmentsToAdmins(courseMap){
+    const admins=await getAdminIds(); if(!admins.length)return;
+    for(const [cid,course] of courseMap){
+      const as=await dbx.collection('courses').doc(cid).collection('assignments').get().catch(()=>null);
+      for(const aDoc of (as?.docs||[])){
+        const a=aDoc.data()||{},subs=Array.isArray(a.submissions)?a.submissions:[];
+        for(let i=0;i<subs.length;i++){
+          const s=subs[i]||{};if(s.approved||!s.userId||!s.uploadedAt)continue;
+          const wid=String(s.workId||s.id||`legacy_${i}`);
+          for(const aid of admins){
+            await writeNotification(aid,{title:'عمل واجب جديد بانتظار الاعتماد',body:`رفع ${norm(s.userName)||'طالب'} عملًا جديدًا في واجب ${norm(a.titleAr||a.title)||'الواجب'} داخل دورة ${safeTitle(course)}.`,type:'assignment_submitted',data:{route:'assignment',courseId:cid,assignmentId:aDoc.id,workId:wid},dedupeKey:notificationKey(['assignment_submitted',cid,aDoc.id,wid,aid])});
+          }
+        }
+      }
+    }
+  }
+
+  async function markLogin(user){
+    if(!user?.uid)return;
+    const session=window.__v32LoginSession || '';
+    if(session===user.uid && sessionStorage.getItem(sessionKey(user.uid,'sent'))==='1')return;
+    const sid = `${Date.now()}_${Math.random().toString(36).slice(2,8)}`;
+    window.__v32LoginSession=user.uid;
+    if(sessionStorage.getItem(sessionKey(user.uid,'sent'))===sid)return;
+    const dt=new Date();
+    const ok=await writeNotification(user.uid,{title:'تم تسجيل الدخول إلى حسابك',body:`تم تسجيل الدخول إلى حسابك في ${dt.toLocaleString('ar-SA',{timeZone:'Asia/Riyadh'})}.`,type:'login_notice',data:{loginAt:dt.toISOString()},dedupeKey:`login_session_${sid}`});
+    if(ok)sessionStorage.setItem(sessionKey(user.uid,'sent'),'1');
+  }
+
+  async function syncUser(user){
+    if(!user?.uid)return;
+    const courses=await currentCoursesMap().catch(()=>new Map());
+    const enrolled=await dbx.collection('users').doc(user.uid).collection('enrolledCourses').get().catch(()=>null);
+    for(const ed of (enrolled?.docs||[])) await syncSubscriptionForUser(user.uid,ed.id,ed.data()||{},courses);
+    await syncCompletions(user.uid,courses);
+    await notifyAssignmentEventsForUser(user.uid,courses);
+    if(window.isAdmin) await notifyPendingAssignmentsToAdmins(courses);
+    if(!window.isAdmin){
+      // Filter out notifications for deleted courses by rebuilding the cache the UI reads.
+      const snap=await dbx.collection('users').doc(user.uid).collection('notifications').get().catch(()=>null);
+      if(snap){
+        const valid=[];
+        for(const d of snap.docs){
+          const n={id:d.id,...(d.data()||{})};const cid=norm(n?.data?.courseId);if(!cid||courses.has(cid))valid.push(n);
+        }
+        if(Array.isArray(window.aaNotificationsCache)){window.aaNotificationsCache=valid;window.aaRenderNotifications?.();}
+      }
+    }
+  }
+
+  let timer=null;
+  async function boot(user){
+    clearTimeout(timer);
+    if(!user){return;}
+    // Wait for profile/admin resolution before scanning.
+    await sleep(500);
+    await markLogin(user);
+    await syncUser(user);
+    timer=setTimeout(()=>syncUser(user).catch(()=>{}),45000);
+  }
+
+  // One auth listener for automatic notifications; existing listeners remain for the UI.
+  if(!window.__v32AutoNotifBound){
+    window.__v32AutoNotifBound=true;
+    authx.onAuthStateChanged(user=>{
+      if(!user){clearTimeout(timer);window.__v32LoginSession='';return;}
+      boot(user).catch(e=>console.warn('v32 auto notifications',e));
+    });
+  }
+
+  // Re-scan after important mutations to existing platform data.
+  ['saveLesson','saveQuiz','saveAssignment','approveSubmission','saveAssignmentWorkEdit'].forEach(name=>{
+    const fn=window[name];
+    if(typeof fn!=='function' || fn.__v32AutoWrapped)return;
+    window[name]=async function(){const r=await fn.apply(this,arguments);setTimeout(()=>syncUser(authx.currentUser).catch(()=>{}),700);return r};
+    window[name].__v32AutoWrapped=true;
+  });
+
+  // When a new enrollment is completed, the existing enrollment flow writes the document. A listener
+  // detects it and immediately generates the success notification once.
+  if(!window.__v32EnrollWatch && authx.currentUser){
+    window.__v32EnrollWatch=true;
+    dbx.collection('users').doc(authx.currentUser.uid).collection('enrolledCourses').onSnapshot(()=>syncUser(authx.currentUser).catch(()=>{}),()=>{});
+  }
+
+  // Filter notification views to current platform content only, including course-linked assignments/lessons/quizzes.
+  window.v32NotificationIsCurrent = async n => {
+    const d=n?.data||{},cid=norm(d.courseId);if(!cid)return true;
+    const c=await dbx.collection('courses').doc(cid).get().catch(()=>null);if(!c?.exists)return false;
+    if(d.lessonId){const x=await c.ref.collection('lessons').doc(String(d.lessonId)).get().catch(()=>null);if(!x?.exists)return false;}
+    if(d.quizId){const x=await c.ref.collection('quizzes').doc(String(d.quizId)).get().catch(()=>null);if(!x?.exists)return false;}
+    if(d.assignmentId){const x=await c.ref.collection('assignments').doc(String(d.assignmentId)).get().catch(()=>null);if(!x?.exists)return false;}
+    return true;
+  };
+})();
+</script>
 
 </body>
 </html>
