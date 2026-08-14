@@ -4235,7 +4235,7 @@ body.aa-notifications-open #coursesPage,body.aa-notifications-open footer,body.a
                     const reply=m.replyToText?`<div class="reply-block"><div class="ru">${escapeHtml(m.replyToName||'زائر')}</div><div class="rt">${escapeHtml(m.replyToText)}</div></div>`:'';
                     const gallery=images.length?`<div class="message-gallery">${images.map(u=>`<img src="${escapeHtml(u)}" alt="صورة" onclick="openChatMessageGallery('${courseId}','${doc.id}')">`).join('')}</div>`:'';
                     const actions=`<div class="msg-actions"><button onclick='replyTo(${JSON.stringify(doc.id)},${JSON.stringify(m.userName||"زائر")},${JSON.stringify((m.message||"").slice(0,120))})' title="رد"><i class="fas fa-reply"></i></button>${mine?`<button onclick="editChatMessage('${courseId}','${doc.id}')" title="تعديل"><i class="fas fa-edit"></i></button>`:''}${(mine||isAdmin)?`<button onclick="deleteChatMessage('${courseId}','${doc.id}')" title="حذف"><i class="fas fa-trash"></i></button>`:''}</div>`;
-                    html+=`<div class="chat-msg ${mine?'sent':'received'}" data-message-id="${doc.id}">${!mine?`<div class="msg-header"><span class="u">${escapeHtml(m.userName||'زائر')}</span></div>`:''}${reply}<div class="t">${escapeHtml(m.message||'')}${m.edited?'<span class="edited-label">(معدلة)</span>':''}</div>${gallery}<div class="msg-time">${time}</div>${actions}</div>`;
+                    html+=`<div class="chat-msg ${mine?'sent':'received'}" data-message-id="${doc.id}" data-user-id="${escapeHtml(m.userId||'')}">${!mine?`<div class="msg-header"><span class="u">${escapeHtml(m.userName||'زائر')}</span></div>`:''}${reply}<div class="t">${escapeHtml(m.message||'')}${m.edited?'<span class="edited-label">(معدلة)</span>':''}</div>${gallery}<div class="msg-time">${time}</div>${actions}</div>`;
                 });
                 container.innerHTML=html; container.scrollTop=container.scrollHeight;
             },err=>{console.error(err);container.innerHTML='<p style="color:#e74c3c;text-align:center;padding:30px;">حدث خطأ في تحميل الدردشة.</p>';});
@@ -6818,7 +6818,7 @@ body.aa-notifications-open #coursesPage,body.aa-notifications-open footer,body.a
                 try {
                     await currentUser.updateProfile({ displayName: name });
                     await db.collection('users').doc(currentUser.uid).set({
-                        uid: currentUser.uid, email: currentUser.email, displayName: name, gender: gender, phone: code + phone, createdAt: firebase.firestore.FieldValue.serverTimestamp()
+                        uid: currentUser.uid, email: currentUser.email, displayName: name, gender: gender, phone: code + phone, profilePublic: true, createdAt: firebase.firestore.FieldValue.serverTimestamp()
                     });
                     if (authPopup) authPopup.classList.remove('active');
                 } catch (error) {
@@ -7185,7 +7185,7 @@ body.aa-notifications-open #coursesPage,body.aa-notifications-open footer,body.a
     chatUnsubscribe=db.collection('courses').doc(courseId).collection('chat').orderBy('createdAt','asc').onSnapshot(snapshot=>{
       if(snapshot.empty){container.innerHTML='<p style="color:var(--text-muted);text-align:center;padding:30px;">لا توجد رسائل.</p>';return;}
       let html='',lastDate='';const uid=currentUser?.uid||null;
-      snapshot.forEach(doc=>{const m=doc.data()||{};const date=m.createdAt?.toDate?m.createdAt.toDate():(m.createdAt?.seconds?new Date(m.createdAt.seconds*1000):new Date());const dateKey=date.toLocaleDateString('ar-SA',{year:'numeric',month:'long',day:'numeric'});if(dateKey!==lastDate){html+=`<div style="text-align:center;margin:15px 0;font-size:.8rem;color:var(--text-muted);"><span style="background:var(--bg-card);padding:5px 15px;border-radius:20px;">${escapeHtml(dateKey)}</span></div>`;lastDate=dateKey;}const mine=m.userId===uid,images=Array.isArray(m.imageUrls)?m.imageUrls:(m.imageUrl?[m.imageUrl]:[]),time=date.toLocaleTimeString('ar-SA',{hour:'2-digit',minute:'2-digit'});const deleted=!!m.deleted;const reply=m.replyToText?`<div class="reply-block"><div class="ru">${escapeHtml(m.replyToName||'زائر')}</div><div class="rt">${escapeHtml(m.replyToText)}</div></div>`:'';const gallery=(!deleted&&images.length)?`<div class="message-gallery">${images.map(u=>`<img src="${escapeHtml(u)}" alt="صورة" onclick="openChatMessageGallery('${courseId}','${doc.id}')">`).join('')}</div>`:'';let body='';if(deleted&&!isAdmin){body='<div class="t" style="color:var(--text-muted);font-style:italic;"><i class="fas fa-ban"></i> هذه الرسالة محذوفة</div>';}else{body=`${deleted?'<div style="color:#e74c3c;font-size:.78rem;font-weight:800;margin-bottom:5px;"><i class="fas fa-trash"></i> تم حذف هذه الرسالة</div>':''}<div class="t">${escapeHtml(m.message||'')}${m.edited?'<span class="edited-label">(معدلة)</span>':''}</div>${gallery}`;}const actions=deleted?'':`<div class="msg-actions"><button onclick='replyTo(${JSON.stringify(doc.id)},${JSON.stringify(m.userName||'زائر')},${JSON.stringify((m.message||'').slice(0,120))})' title="رد"><i class="fas fa-reply"></i></button>${mine?`<button onclick="editChatMessage('${courseId}','${doc.id}')" title="تعديل"><i class="fas fa-edit"></i></button>`:''}${(mine||isAdmin)?`<button onclick="deleteChatMessage('${courseId}','${doc.id}')" title="حذف"><i class="fas fa-trash"></i></button>`:''}</div>`;html+=`<div class="chat-msg ${mine?'sent':'received'} ${deleted?'deleted-message':''}" data-message-id="${doc.id}">${!mine?`<div class="msg-header"><span class="u">${escapeHtml(m.userName||'زائر')}</span></div>`:''}${reply}${body}<div class="msg-time">${time}</div>${actions}</div>`;});
+      snapshot.forEach(doc=>{const m=doc.data()||{};const date=m.createdAt?.toDate?m.createdAt.toDate():(m.createdAt?.seconds?new Date(m.createdAt.seconds*1000):new Date());const dateKey=date.toLocaleDateString('ar-SA',{year:'numeric',month:'long',day:'numeric'});if(dateKey!==lastDate){html+=`<div style="text-align:center;margin:15px 0;font-size:.8rem;color:var(--text-muted);"><span style="background:var(--bg-card);padding:5px 15px;border-radius:20px;">${escapeHtml(dateKey)}</span></div>`;lastDate=dateKey;}const mine=m.userId===uid,images=Array.isArray(m.imageUrls)?m.imageUrls:(m.imageUrl?[m.imageUrl]:[]),time=date.toLocaleTimeString('ar-SA',{hour:'2-digit',minute:'2-digit'});const deleted=!!m.deleted;const reply=m.replyToText?`<div class="reply-block"><div class="ru">${escapeHtml(m.replyToName||'زائر')}</div><div class="rt">${escapeHtml(m.replyToText)}</div></div>`:'';const gallery=(!deleted&&images.length)?`<div class="message-gallery">${images.map(u=>`<img src="${escapeHtml(u)}" alt="صورة" onclick="openChatMessageGallery('${courseId}','${doc.id}')">`).join('')}</div>`:'';let body='';if(deleted&&!isAdmin){body='<div class="t" style="color:var(--text-muted);font-style:italic;"><i class="fas fa-ban"></i> هذه الرسالة محذوفة</div>';}else{body=`${deleted?'<div style="color:#e74c3c;font-size:.78rem;font-weight:800;margin-bottom:5px;"><i class="fas fa-trash"></i> تم حذف هذه الرسالة</div>':''}<div class="t">${escapeHtml(m.message||'')}${m.edited?'<span class="edited-label">(معدلة)</span>':''}</div>${gallery}`;}const actions=deleted?'':`<div class="msg-actions"><button onclick='replyTo(${JSON.stringify(doc.id)},${JSON.stringify(m.userName||'زائر')},${JSON.stringify((m.message||'').slice(0,120))})' title="رد"><i class="fas fa-reply"></i></button>${mine?`<button onclick="editChatMessage('${courseId}','${doc.id}')" title="تعديل"><i class="fas fa-edit"></i></button>`:''}${(mine||isAdmin)?`<button onclick="deleteChatMessage('${courseId}','${doc.id}')" title="حذف"><i class="fas fa-trash"></i></button>`:''}</div>`;html+=`<div class="chat-msg ${mine?'sent':'received'} ${deleted?'deleted-message':''}" data-message-id="${doc.id}" data-user-id="${escapeHtml(m.userId||'')}">${!mine?`<div class="msg-header"><span class="u">${escapeHtml(m.userName||'زائر')}</span></div>`:''}${reply}${body}<div class="msg-time">${time}</div>${actions}</div>`;});
       container.innerHTML=html;container.scrollTop=container.scrollHeight;
     },err=>{console.error(err);container.innerHTML='<p style="color:#e74c3c;text-align:center;padding:30px;">حدث خطأ في تحميل الدردشة.</p>';});
   };
@@ -13630,6 +13630,422 @@ const oldApprove=window.approveSubmission;if(typeof oldApprove==='function'&&!ol
 // Expiry/suspension-expiry notifications for all enrollments, even outside a course page.
 if(!window.__aaNotifPollV17){window.__aaNotifPollV17=setInterval(async()=>{try{if(!currentUser||isAdmin)return;const enrollSnap=await db.collection('users').doc(currentUser.uid).collection('enrolledCourses').get();const now=Date.now();for(const ed of enrollSnap.docs){const courseId=ed.id,e=ed.data()||{},codeId=e.codeId;if(!codeId||e.codeDeleted)continue;const cs=await db.collection('courses').doc(courseId).collection('codes').doc(codeId).get();if(!cs.exists){await notifyOnceV(currentUser.uid,{title:'مبارك انتهاء اشتراكك',body:'نبارك لك إكمال فترة اشتراكك، ونشكرك على اشتراكك في الدورة والاستفادة من محتواها. يمكنك التجديد بكود جديد للعودة إلى الدورة.',type:'subscription_expired',data:{courseId,route:'course'}},`subscription_expired_${courseId}_${codeId}`);continue}const c=cs.data()||{},end=asDateV(c.endTime),until=asDateV(c.suspendedUntil);if(end&&end.getTime()<=now)await notifyOnceV(currentUser.uid,{title:'مبارك انتهاء اشتراكك',body:'نبارك لك إكمال فترة اشتراكك، ونشكرك على اشتراكك في هذه الدورة. يمكنك تجديد الاشتراك بكود جديد للعودة إلى الدورة.',type:'subscription_expired',data:{route:'course',courseId}},`subscription_expired_${courseId}_${codeId}`);if(c.disabled&&until&&until.getTime()<=now)await notifyOnceV(currentUser.uid,{title:'انتهت مدة إيقاف الاشتراك',body:'انتهت مدة إيقاف اشتراكك ويمكنك الوصول إلى الدورة مرة أخرى.',type:'suspension_expired',data:{route:'course',courseId}},`suspension_expired_${courseId}_${codeId}_${until.getTime()}`)}}catch(e){console.warn(e)}},20000)}
 
+})();
+</script>
+
+
+<!-- ===== FINAL PRIVACY + AUTHORITATIVE ACCOUNT-NAME PATCH v21 ===== -->
+<script id="final-privacy-and-name-authority-v21">
+(function(){
+'use strict';
+const $=id=>document.getElementById(id);
+const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const canonicalName=u=>{
+  const n=u?.displayName||u?.name||u?.fullName;
+  return String(n||'مستخدم').trim()||'مستخدم';
+};
+const canonicalPhoto=u=>u?.photoURL||u?.photoUrl||u?.photo||u?.avatarUrl||'';
+const profileCache=window.__aaCanonicalUserNameCache=window.__aaCanonicalUserNameCache||{};
+const pending=new Map();
+
+/* 1) Missing privacy flag means PUBLIC, and newly created accounts are explicitly public. */
+async function ensureDefaultPublicProfile(){
+  try{
+    if(!currentUser)return;
+    const ref=db.collection('users').doc(currentUser.uid),snap=await ref.get();
+    if(!snap.exists||snap.data()?.profilePublic===undefined){
+      await ref.set({profilePublic:true,updatedAt:firebase.firestore.FieldValue.serverTimestamp()},{merge:true});
+      currentUserProfile={...(currentUserProfile||{}),profilePublic:true};
+    }
+  }catch(e){console.warn('profile public default',e)}
+}
+
+/* 2) One authoritative user-name source. Never fall back to the email address. */
+async function getCanonicalUser(uid){
+  uid=String(uid||'');
+  if(!uid)return {name:'مستخدم',photo:'',profilePublic:true};
+  if(profileCache[uid])return profileCache[uid];
+  if(pending.has(uid))return pending.get(uid);
+  const task=(async()=>{
+    try{
+      const snap=await db.collection('users').doc(uid).get();
+      const p=snap.exists?(snap.data()||{}):{};
+      const val={uid,name:canonicalName(p),photo:canonicalPhoto(p),profilePublic:p.profilePublic!==false,email:p.email||''};
+      profileCache[uid]=val;return val;
+    }catch(e){const val={uid,name:'مستخدم',photo:'',profilePublic:true};profileCache[uid]=val;return val;}
+    finally{pending.delete(uid)}
+  })();
+  pending.set(uid,task);return task;
+}
+window.__aaGetCanonicalUser=getCanonicalUser;
+
+/* 3) Keep the current-user UI strictly on the display name chosen in the profile. */
+if(typeof window.updateAuthAccountButton==='function'){
+  const oldAuthBtn=window.updateAuthAccountButton;
+  window.updateAuthAccountButton=function(user=currentUser,profile=currentUserProfile||{}){
+    if(!user||!document.getElementById('authToggleBtn'))return oldAuthBtn?.apply(this,arguments);
+    const clean={...profile,displayName:profile?.displayName||profile?.name||user?.displayName||'مستخدم'};
+    const photo=profile?.photoURL||profile?.photoUrl||profile?.photo||user?.photoURL||'';
+    const btn=document.getElementById('authToggleBtn');
+    const avatar=photo?`<span class="auth-user-avatar"><img src="${esc(photo)}" alt="${esc(clean.displayName)}"></span>`:`<span class="auth-user-avatar"><i class="fas fa-user"></i></span>`;
+    btn.innerHTML=`${avatar}<span id="authLabel" class="auth-user-name">${esc(canonicalName(clean))}</span>`;
+    btn.title=canonicalName(clean);
+  };
+}
+
+/* 4) Force privacy behavior through the final profile entry points. Admins can always see everything. */
+const oldAAOpen=window.aaOpenProfile;
+window.aaOpenProfile=async function(uid,opts={}){
+  const target=String(uid||''); if(!target||!currentUser)return;
+  const snap=await db.collection('users').doc(target).get();
+  if(!snap.exists){return showCustomAlert?.('غير متاح','الحساب غير موجود.');}
+  const p=snap.data()||{},self=target===String(currentUser.uid),admin=!!isAdmin;
+  const isPrivate=!self&&!admin&&p.profilePublic===false;
+  window.__aaViewingPrivateProfile=isPrivate;
+  try{
+    if(typeof oldAAOpen==='function')await oldAAOpen.call(this,target,opts);
+    if(typeof window.__renderAuthoritativeProfile==='function')await window.__renderAuthoritativeProfile(target,self);
+  }catch(e){console.error('authoritative aaOpenProfile v21',e)}
+};
+window.openUserProfilePage=()=>currentUser&&window.aaOpenProfile(currentUser.uid,{kind:'self'});
+window.openPublicProfileFinal=uid=>uid&&window.aaOpenProfile(uid,{kind:uid===currentUser?.uid?'self':'public'});
+window.viewProfileByUserId=window.openPublicProfileFinal;
+window.openStudentProfile=window.openPublicProfileFinal;
+window.openAnanasV10Profile=window.openPublicProfileFinal;
+window.openChatProfileV13=uid=>window.aaOpenProfile(uid,{kind:'chat'});
+window.openChatProfileV12=window.openChatProfileV13;
+
+/* 5) Re-render private profiles with only name/photo and the glass privacy curtain for non-admin viewers. */
+async function enforcePrivateProfileView(){
+  const uid=String(window.profileState?.uid||window.__aaViewedProfileUid||'');
+  const page=$('aaRebuiltProfilePage');
+  if(!page||!page.classList.contains('active')||!uid||uid===String(currentUser?.uid||'')||isAdmin)return;
+  const snap=await db.collection('users').doc(uid).get().catch(()=>null);if(!snap?.exists)return;
+  const p=snap.data()||{};if(p.profilePublic!==false)return;
+  const name=canonicalName(p),photo=canonicalPhoto(p);
+  $('aaProfileName')&&( $('aaProfileName').textContent=name );
+  const av=$('aaProfileAvatar');if(av)av.innerHTML=photo?`<img src="${esc(photo)}" alt="${esc(name)}">`:esc(name.charAt(0));
+  $('aaProfileEmail')&&($('aaProfileEmail').textContent='حساب خاص');
+  $('aaProfileBadge')&&($('aaProfileBadge').innerHTML='<i class="fas fa-lock"></i> حساب خاص');
+  ['aaProfileXP','aaProfileLessons','aaProfileQuizzes','aaProfileWorks'].forEach(id=>$(id)&&($(id).textContent='—'));
+  const nameRow=`<div class="aa-profile-row"><strong>الاسم</strong><span>${esc(name)}</span></div>`;
+  $('aaProfileData')&&($('aaProfileData').innerHTML=nameRow);
+  const curtain=`<div class="aa-private-curtain-v21"><div class="aa-private-blur-v21"></div><div class="aa-private-card-v21"><i class="fas fa-lock"></i><strong>هذا الحساب خاص</strong><span>لا تظهر بيانات هذا الحساب إلا لصاحبه والمشرف.</span></div></div>`;
+  ['aaProfileCourses','aaProfileLessonList','aaProfileQuizList','aaProfileActivity','aaProfileGallery'].forEach(id=>$(id)&&($(id).innerHTML=curtain));
+}
+
+/* 6) Live name/photo hydration for every assignment/chat surface. */
+async function hydrateNames(root=document){
+  const nodes=[...root.querySelectorAll?.('[data-profile-uid], [data-user-id], .assignment-v2-card[data-user], .assignment-work-card[data-user-id]')||[]];
+  const ids=[...new Set(nodes.map(n=>String(n.dataset.profileUid||n.dataset.userId||n.dataset.user||'')).filter(Boolean))];
+  if(!ids.length)return;
+  const profiles=await Promise.all(ids.map(getCanonicalUser));
+  const map=new Map(profiles.map(p=>[p.uid,p]));
+  nodes.forEach(node=>{
+    const uid=String(node.dataset.profileUid||node.dataset.userId||node.dataset.user||'');if(!uid)return;
+    const p=map.get(uid);if(!p)return;
+    node.querySelectorAll?.('.assignment-submitter-name').forEach(el=>el.textContent=p.name);
+    node.querySelectorAll?.('.assignment-submitter-avatar').forEach(el=>{el.innerHTML=p.photo?`<img src="${esc(p.photo)}" alt="">`:`<span>${esc(p.name.charAt(0))}</span>`});
+    node.querySelectorAll?.('.chat-profile-name,.msg-header .u').forEach(el=>el.textContent=p.name);
+    node.querySelectorAll?.('.chat-profile-avatar').forEach(el=>{el.innerHTML=p.photo?`<img src="${esc(p.photo)}" alt="">`:`<i class="fas fa-user"></i>`});
+    node.querySelectorAll?.('.assignment-v2-body>strong').forEach(el=>el.textContent=p.name);
+  });
+}
+window.__aaHydrateCanonicalNames=hydrateNames;
+
+/* Assignment filter buttons: use live account names, not stale submission.userName. */
+async function refreshAssignmentFilterNames(){
+  const root=document.querySelector('#assignmentDetailContent,#courseAssignmentDetailPage');if(root)await hydrateNames(root);
+  document.querySelectorAll('.assignment-v2-card[data-user]').forEach(async card=>{const uid=card.dataset.user;if(!uid)return;const p=await getCanonicalUser(uid);const strong=card.querySelector('.assignment-v2-body>strong');if(strong)strong.textContent=p.name;});
+  document.querySelectorAll('.assignment-v2-filters button[data-u]').forEach(async b=>{const uid=b.dataset.u;if(!uid)return;const p=await getCanonicalUser(uid);b.textContent=p.name;});
+}
+window.__aaRefreshAssignmentCanonicalNames=refreshAssignmentFilterNames;
+
+/* Chat: always resolve display name by userId. Also fix reply names after hydration. */
+async function refreshChatCanonicalNames(){
+  const msgs=[...document.querySelectorAll('.chat-msg[data-user-id]')];
+  for(const msg of msgs){
+    const uid=msg.dataset.userId;if(!uid)continue;
+    const p=await getCanonicalUser(uid);
+    msg.querySelectorAll('.chat-profile-name,.msg-header .u').forEach(el=>el.textContent=p.name);
+    msg.querySelectorAll('.chat-profile-avatar').forEach(el=>{el.innerHTML=p.photo?`<img src="${esc(p.photo)}" alt="">`:`<i class="fas fa-user"></i>`});
+  }
+}
+window.__aaRefreshChatCanonicalNames=refreshChatCanonicalNames;
+
+/* 7) Notification recipient search/list uses the chosen name only. */
+const oldRenderUsers=window.renderUsersV;
+window.renderUsersV=async function(){
+  const fn=oldRenderUsers?.apply(this,arguments); if(fn&&typeof fn.then==='function')await fn;
+  const box=$('aaNotifUserListV');if(!box)return;
+  const q=String($('aaNotifUserSearchV')?.value||'').trim().toLocaleLowerCase('ar');
+  const arr=(window.__aaNotifUsersV||[]).filter(u=>!q||canonicalName(u).toLocaleLowerCase('ar').includes(q));
+  box.innerHTML=arr.length?arr.map(u=>{const n=canonicalName(u),p=canonicalPhoto(u);return `<label class="aa-recipient-row"><input type="checkbox" value="${esc(u.id)}"><span class="aa-recipient-avatar">${p?`<img src="${esc(p)}" alt="">`:esc(n.charAt(0))}</span><span class="aa-recipient-copy"><strong>${esc(n)}</strong></span></label>`}).join(''):'<div class="aa-notif-empty">لا توجد حسابات مطابقة.</div>';
+};
+
+/* 8) Keep the admin directory authoritative and expose private status but never hide private accounts from admin. */
+const oldDir=window.loadDirectory;
+if(typeof oldDir==='function')window.loadDirectory=async function(){const r=await oldDir.apply(this,arguments);if(isAdmin)try{await new Promise(res=>setTimeout(res,50));}catch(_){}return r};
+
+/* 9) Ensure any login with an older user document gets the default public flag once. */
+const normalizeAuthTimer=setInterval(()=>{if(currentUser&&currentUserProfile)ensureDefaultPublicProfile();},6000);window.__aaNormalizePublicTimer=normalizeAuthTimer;
+
+/* 10) Mutation observer catches every dynamically-rendered name field. */
+let running=false;
+const obs=new MutationObserver(async()=>{if(running)return;running=true;try{await hydrateNames(document);await refreshChatCanonicalNames();await enforcePrivateProfileView();}finally{running=false}});
+obs.observe(document.body,{subtree:true,childList:true});
+setTimeout(async()=>{await ensureDefaultPublicProfile();await hydrateNames(document);await refreshChatCanonicalNames();await enforcePrivateProfileView();},800);
+setInterval(async()=>{if(document.visibilityState!=='visible')return;try{await hydrateNames(document);await refreshChatCanonicalNames();await enforcePrivateProfileView();}catch(_){}},4000);
+
+/* 11) Privacy curtain style. */
+const st=document.createElement('style');st.id='final-privacy-v21-style';st.textContent=`
+.aa-private-curtain-v21{position:relative;min-height:250px;border:1px solid var(--border);border-radius:20px;overflow:hidden;background:var(--bg-card);display:grid;place-items:center;padding:22px;}
+.aa-private-blur-v21{position:absolute;inset:-24px;background:radial-gradient(circle at 30% 30%,rgba(108,92,231,.28),transparent 45%),radial-gradient(circle at 70% 70%,rgba(9,132,227,.18),transparent 50%),var(--bg-secondary);filter:blur(22px);opacity:.68;transform:scale(1.1);}
+.aa-private-card-v21{position:relative;z-index:1;width:min(480px,100%);padding:24px;border:1px solid rgba(255,255,255,.16);border-radius:20px;background:rgba(255,255,255,.18);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);box-shadow:0 18px 50px rgba(0,0,0,.16);display:grid;gap:8px;text-align:center;}
+.aa-private-card-v21 i{color:var(--accent1);font-size:1.7rem}.aa-private-card-v21 strong{font-size:1.15rem}.aa-private-card-v21 span{color:var(--text-muted);line-height:1.85;font-size:.86rem;}
+`;
+document.head.appendChild(st);
+})();
+</script>
+
+
+<!-- ===== FINAL MOBILE-FIRST LAYOUT + NAVIGATION FIX v22 ===== -->
+<style id="aa-mobile-first-v22">
+@media (max-width:768px){
+  :root{
+    --aa-mobile-top:var(--nav-height-mobile,70px);
+    --aa-mobile-bottom:calc(var(--mobile-bottom-nav-content-height,66px) + env(safe-area-inset-bottom));
+    --aa-mobile-content-height:calc(100dvh - var(--aa-mobile-top) - var(--aa-mobile-bottom));
+  }
+  html,body{width:100%;height:100%;max-width:100%;overflow:hidden!important;overscroll-behavior:none!important;}
+  body{position:relative;padding:0!important;margin:0!important;}
+  .navbar{
+    position:fixed!important;inset:0 0 auto 0!important;height:var(--aa-mobile-top)!important;
+    min-height:var(--aa-mobile-top)!important;max-height:var(--aa-mobile-top)!important;
+    z-index:20000!important;overflow:visible!important;
+  }
+  .nav-container{height:100%!important;overflow:visible!important;}
+  .nav-actions-top{position:relative!important;z-index:20001!important;overflow:visible!important;}
+  .aa-notifications-wrap,.aa-notifications-btn{position:relative!important;z-index:20010!important;pointer-events:auto!important;}
+  #mobileBottomNav{
+    position:fixed!important;inset:auto 0 0 0!important;height:var(--aa-mobile-bottom)!important;
+    min-height:var(--aa-mobile-bottom)!important;z-index:20000!important;
+    overflow:hidden!important;pointer-events:auto!important;
+  }
+
+  /* Main courses page is one single scroll region between the bars. */
+  #coursesPage{
+    position:fixed!important;top:var(--aa-mobile-top)!important;bottom:var(--aa-mobile-bottom)!important;
+    left:0!important;right:0!important;width:100%!important;height:auto!important;min-height:0!important;
+    margin:0!important;padding:0!important;overflow-y:auto!important;overflow-x:hidden!important;
+    -webkit-overflow-scrolling:touch!important;overscroll-behavior:contain!important;z-index:100!important;
+    box-sizing:border-box!important;
+  }
+  #coursesPage>.container{padding:14px 12px 24px!important;min-height:100%!important;box-sizing:border-box!important;}
+
+  /* Course detail is a viewport; exactly one active child scrolls inside it. */
+  #courseDetailView{
+    position:fixed!important;top:var(--aa-mobile-top)!important;bottom:var(--aa-mobile-bottom)!important;
+    left:0!important;right:0!important;width:100vw!important;height:auto!important;min-height:0!important;
+    margin:0!important;padding:0!important;overflow:hidden!important;z-index:1200!important;
+    border-radius:0!important;box-sizing:border-box!important;
+  }
+  #courseDetailView>.course-details-header{display:none!important;}
+  #courseDetailView>.course-overview,
+  #courseDetailView>#courseDashboard,
+  #courseDetailView>#courseLessonsPage,
+  #courseDetailView>#courseLessonPlayerPage,
+  #courseDetailView>#courseQuizzesPage,
+  #courseDetailView>#courseAssignmentsPage,
+  #courseDetailView>#courseAssignmentDetailPage,
+  #courseDetailView>#courseFilesPage,
+  #courseDetailView>#courseChatPage,
+  #courseDetailView>#courseLearningView,
+  #courseDetailView>#fullChatPage{
+    position:absolute!important;inset:0!important;width:100%!important;height:100%!important;
+    min-height:0!important;max-height:none!important;box-sizing:border-box!important;
+    overflow-y:auto!important;overflow-x:hidden!important;-webkit-overflow-scrolling:touch!important;
+    overscroll-behavior:contain!important;padding:14px 12px 24px!important;
+  }
+  #courseDetailView>.course-overview{display:none;}
+  #courseDetailView>#courseDashboard{display:none;}
+  #courseDetailView>#courseLessonsPage,#courseDetailView>#courseLessonPlayerPage{display:none;}
+  #courseDetailView>#courseQuizzesPage,#courseDetailView>#courseAssignmentsPage,#courseDetailView>#courseChatPage,#courseDetailView>#courseFilesPage{display:none;}
+  #courseDetailView>#courseAssignmentDetailPage{display:none;}
+
+  /* Do not create nested viewport scroll hosts on phone. */
+  .aa-mobile-scroll-host{max-height:none!important;min-height:0!important;}
+  #courseDetailView>.course-overview,
+  #courseDetailView>#courseDashboard,
+  #courseDetailView>#courseLessonsPage,
+  #courseDetailView>#courseLessonPlayerPage,
+  #courseDetailView>#courseQuizzesPage,
+  #courseDetailView>#courseAssignmentsPage,
+  #courseDetailView>#courseAssignmentDetailPage,
+  #courseDetailView>#courseFilesPage,
+  #courseDetailView>#courseChatPage,
+  #courseDetailView>#fullChatPage,
+  #coursesPage,
+  #aaRebuiltProfilePage,
+  #aaNotificationsPage{
+    scrollbar-width:thin!important;
+    scrollbar-color:rgba(108,92,231,.85) rgba(108,92,231,.10)!important;
+  }
+  #courseDetailView>.course-overview::-webkit-scrollbar,
+  #courseDetailView>#courseDashboard::-webkit-scrollbar,
+  #courseDetailView>#courseLessonsPage::-webkit-scrollbar,
+  #courseDetailView>#courseLessonPlayerPage::-webkit-scrollbar,
+  #courseDetailView>#courseQuizzesPage::-webkit-scrollbar,
+  #courseDetailView>#courseAssignmentsPage::-webkit-scrollbar,
+  #courseDetailView>#courseAssignmentDetailPage::-webkit-scrollbar,
+  #courseDetailView>#courseFilesPage::-webkit-scrollbar,
+  #courseDetailView>#courseChatPage::-webkit-scrollbar,
+  #coursesPage::-webkit-scrollbar,
+  #aaRebuiltProfilePage::-webkit-scrollbar,
+  #aaNotificationsPage::-webkit-scrollbar{width:7px!important;}
+
+  /* Notifications: independent full content page between the fixed bars. */
+  #aaNotificationsPage{
+    position:fixed!important;top:var(--aa-mobile-top)!important;bottom:var(--aa-mobile-bottom)!important;
+    left:0!important;right:0!important;width:100vw!important;height:auto!important;min-height:0!important;
+    display:none!important;overflow:hidden!important;z-index:50000!important;padding:0!important;
+    box-sizing:border-box!important;
+  }
+  #aaNotificationsPage.active{display:block!important;visibility:visible!important;pointer-events:auto!important;}
+  #aaNotificationsPage .aa-notifications-page-inner{
+    position:absolute!important;inset:0!important;width:100%!important;height:100%!important;min-height:0!important;
+    overflow-y:auto!important;overflow-x:hidden!important;-webkit-overflow-scrolling:touch!important;
+    overscroll-behavior:contain!important;box-sizing:border-box!important;padding:12px 12px 24px!important;
+  }
+  #aaNotificationsPage .aa-notifications-page-head{position:sticky!important;top:0!important;z-index:3!important;background:var(--bg-primary)!important;padding-top:4px!important;}
+  .aa-notifications-dropdown{z-index:50010!important;}
+  #aaNotificationDetailModal,#aaCodeReasonModal{z-index:60000!important;}
+
+  /* Profile: one scroll region between bars. */
+  #aaRebuiltProfilePage{
+    position:fixed!important;top:var(--aa-mobile-top)!important;bottom:var(--aa-mobile-bottom)!important;
+    left:0!important;right:0!important;width:100vw!important;height:auto!important;min-height:0!important;
+    max-height:none!important;overflow-y:auto!important;overflow-x:hidden!important;
+    -webkit-overflow-scrolling:touch!important;overscroll-behavior:contain!important;z-index:45000!important;
+    padding:12px!important;box-sizing:border-box!important;
+  }
+  #aaRebuiltProfilePage.active{display:block!important;}
+
+  /* Full-screen auth overlay stays above the whole interface. */
+  .auth-popup{z-index:70000!important;max-height:calc(var(--aa-content-height,100dvh) - 20px)!important;overflow-y:auto!important;}
+  .custom-alert-modal,.edit-modal,.profile-self-modal,.gallery-viewer,.platform-image-viewer,.file-viewer-overlay{z-index:70000!important;}
+
+  /* Text on phone: keep words intact and let sentences wrap normally. */
+  p,h1,h2,h3,h4,h5,h6,span,label,strong,small,button,.btn,.auth-btn,
+  .course-card,.full-page-card,.assignment-work-card,.chat-msg,.profile-list-item{
+    word-break:normal!important;overflow-wrap:break-word!important;white-space:normal!important;
+    max-width:100%!important;
+  }
+  button,.btn,.nav-btn,.auth-btn{white-space:nowrap!important;}
+  .course-card .course-body h3{line-height:1.45!important;}
+  .course-card .course-body p{line-height:1.75!important;}
+}
+</style>
+<script id="aa-mobile-first-v22-js">
+(function(){
+  'use strict';
+  const $=id=>document.getElementById(id);
+  const isPhone=()=>window.matchMedia('(max-width:768px)').matches;
+
+  function syncPhoneLayout(){
+    if(!isPhone()) return;
+    const top=($('mobileBottomNav')?.getBoundingClientRect().height||66);
+    document.documentElement.style.setProperty('--aa-mobile-bottom',`${Math.max(66,Math.ceil(top))}px`);
+    document.documentElement.style.setProperty('--aa-mobile-top',`${Math.max(56,Math.ceil($('mobileBottomNav')?($('mobileBottomNav').previousElementSibling?.tagName==='NAV'?document.querySelector('.navbar')?.getBoundingClientRect().height:70):70))}px`);
+  }
+  syncPhoneLayout();
+  window.addEventListener('resize',syncPhoneLayout,{passive:true});
+  window.addEventListener('orientationchange',()=>setTimeout(syncPhoneLayout,150),{passive:true});
+
+  /* Notification button: bind with both click and pointerup so mobile browsers never lose the handler. */
+  function bindNotifications(){
+    const btn=$('aaNotificationsBtn'),drop=$('aaNotificationsDropdown');
+    if(!btn||btn.dataset.v22bound==='1')return;
+    btn.dataset.v22bound='1';
+    const toggle=e=>{
+      e?.preventDefault?.();e?.stopPropagation?.();
+      if(!drop)return;
+      const open=!drop.classList.contains('active');
+      drop.classList.toggle('active',open);
+      btn.classList.toggle('active',open);
+      if(open){
+        drop.style.display='block';
+        try{window.aaRenderNotifications?.()}catch(_){}
+      }else drop.style.removeProperty('display');
+    };
+    btn.addEventListener('click',toggle,{capture:true});
+    btn.addEventListener('pointerup',e=>{if(e.pointerType==='touch')toggle(e)},{capture:true,passive:false});
+    btn.addEventListener('touchend',e=>toggle(e),{capture:true,passive:false});
+  }
+  bindNotifications();
+  setTimeout(bindNotifications,300);
+  setTimeout(bindNotifications,1000);
+
+  /* Independent notification page on phone. */
+  function openNotificationsPage(){
+    const p=$('aaNotificationsPage');if(!p)return;
+    $('aaNotificationsDropdown')?.classList.remove('active');
+    $('aaNotificationsBtn')?.classList.remove('active');
+    p.classList.add('active');p.setAttribute('aria-hidden','false');
+    document.body.classList.add('aa-notifications-open');
+    try{window.aaRenderNotifications?.()}catch(_){}
+  }
+  window.aaOpenAllMobileSafe=openNotificationsPage;
+  const all=$('aaOpenAllNotificationsBtn');
+  if(all&&!all.dataset.v22bound){
+    all.dataset.v22bound='1';
+    const go=e=>{e?.preventDefault?.();e?.stopPropagation?.();openNotificationsPage();};
+    all.addEventListener('click',go,{capture:true});
+    all.addEventListener('pointerup',e=>{if(e.pointerType==='touch')go(e)},{capture:true,passive:false});
+  }
+
+  /* Force the course overview to be a real page, bypassing legacy wrappers. */
+  function showOverview(){
+    if(!window.activeCourseId)return;
+    const ids=['courseDashboard','courseLessonsPage','courseLessonPlayerPage','courseQuizzesPage','courseAssignmentsPage','courseAssignmentDetailPage','courseFilesPage','courseChatPage','courseLearningView','fullChatPage'];
+    ids.forEach(id=>{const el=$(id);if(!el)return;el.classList.remove('active');if(['courseDashboard','courseQuizzesPage','courseAssignmentsPage','courseChatPage','courseFilesPage'].includes(id))el.style.display='none';else if(['courseLessonsPage','courseLessonPlayerPage','courseAssignmentDetailPage'].includes(id))el.style.display='none';});
+    const ov=$('courseOverviewContainer');if(ov){ov.style.display='block';ov.classList.add('active');}
+    window.currentCoursePage='overview';
+    try{window.persistCourseState?.()}catch(_){}
+    try{window.setMobileNavActive?.('overview')}catch(_){}
+  }
+  document.addEventListener('click',e=>{
+    const b=e.target.closest?.('#courseDashboard .dashboard-btn');
+    if(!b)return;
+    const txt=(b.textContent||'').trim();
+    if(txt.includes('نبذة الدورة')){e.preventDefault();e.stopImmediatePropagation();showOverview();}
+  },true);
+
+  /* On logout, rebuild the base state instead of leaving hidden profile/course fragments behind. */
+  function resetAfterLogout(){
+    $('aaNotificationsPage')?.classList.remove('active');
+    $('aaNotificationDetailModal')?.classList.remove('active');
+    $('aaNotificationsDropdown')?.classList.remove('active');
+    document.body.classList.remove('aa-notifications-open');
+    ['aaRebuiltProfilePage','ananasCanonicalProfilePage','ananasV10ProfilePage','userProfilePage'].forEach(id=>$(id)?.classList.remove('active'));
+    const cp=$('coursesPage');if(cp){cp.style.display='block';cp.classList.remove('active');cp.scrollTop=0;}
+    const grid=$('coursesGridContainer');if(grid)grid.style.display='grid';
+    $('coursesListPageHeader')?.classList.remove('course-list-header-hidden');
+    const detail=$('courseDetailView');if(detail)detail.style.display='none';
+    const auth=$('authPopup');if(auth)auth.classList.remove('active');
+    document.querySelectorAll('.admin-only').forEach(el=>el.classList.remove('show'));
+    try{window.mobileNavigate?.('courses')}catch(_){}
+    try{window.renderCourses?.()}catch(_){}
+  }
+  if(auth&& !window.__aaLogoutBaseResetBound){
+    window.__aaLogoutBaseResetBound=true;
+    auth.onAuthStateChanged(user=>{if(!user)setTimeout(resetAfterLogout,0);});
+  }
+
+  /* Make the mobile content viewport resize exactly to the bars when the safe area changes. */
+  if(window.visualViewport){
+    window.visualViewport.addEventListener('resize',syncPhoneLayout,{passive:true});
+  }
 })();
 </script>
 </body>
