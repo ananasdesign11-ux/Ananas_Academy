@@ -6697,39 +6697,8 @@ body.aa-notifications-open #coursesPage,body.aa-notifications-open footer,body.a
         document.getElementById('userProfileLogoutBtn')?.addEventListener('click', () => { document.getElementById('userProfileModal')?.classList.remove('active'); auth.signOut(); });
         if (authCloseBtn) authCloseBtn.addEventListener('click', () => { if (authPopup) authPopup.classList.remove('active'); });
 
-        // ===== إشعار تسجيل الدخول: يبدأ من هذه اللحظة فقط =====
-        let aaLoginNotifyLock = { uid: null, at: 0 };
-        async function aaNotifyLoginSuccess(user) {
-            if (!user?.uid) return;
-            const now = Date.now();
-            // حماية من النقر المزدوج/تكرار الاستدعاء في نفس عملية الدخول.
-            if (aaLoginNotifyLock.uid === user.uid && now - aaLoginNotifyLock.at < 5000) return;
-            aaLoginNotifyLock = { uid: user.uid, at: now };
-            try {
-                const loginTime = new Date().toLocaleString('ar-SA', {
-                    year: 'numeric', month: 'long', day: 'numeric',
-                    hour: '2-digit', minute: '2-digit', second: '2-digit'
-                });
-                await window.aaAddNotification?.(user.uid, {
-                    title: 'تم تسجيل الدخول إلى حسابك',
-                    body: `تم تسجيل الدخول إلى حسابك بنجاح في ${loginTime}. إذا لم تكن أنت من قام بتسجيل الدخول، يُرجى مراجعة أمان حسابك.`,
-                    type: 'login_success',
-                    data: {
-                        source: 'auth',
-                        loginAt: new Date().toISOString(),
-                        uid: user.uid
-                    }
-                });
-            } catch (e) { console.warn('login notification', e); }
-        }
-
-        if (document.getElementById('googleSignInBtn')) document.getElementById('googleSignInBtn').addEventListener('click', async () => {
-            try {
-                const result = await auth.signInWithPopup(provider);
-                await aaNotifyLoginSuccess(result?.user);
-            } catch (err) {
-                if (authStatus) authStatus.textContent = 'Error: ' + err.message;
-            }
+        if (document.getElementById('googleSignInBtn')) document.getElementById('googleSignInBtn').addEventListener('click', () => {
+            auth.signInWithPopup(provider).catch(err => { if (authStatus) authStatus.textContent = 'Error: ' + err.message; });
         });
 
         if (document.getElementById('emailSignInBtn')) document.getElementById('emailSignInBtn').addEventListener('click', async () => {
@@ -6741,14 +6710,12 @@ body.aa-notifications-open #coursesPage,body.aa-notifications-open footer,body.a
             if (pass.length < 6) return authStatus.textContent = 'Password must be at least 6 characters';
 
             try {
-                const credential = await auth.signInWithEmailAndPassword(email, pass);
-                await aaNotifyLoginSuccess(credential?.user);
+                await auth.signInWithEmailAndPassword(email, pass);
                 if (authStatus) authStatus.textContent = 'Logging in...';
             } catch (error) {
                 if (error.code === 'auth/user-not-found' || error.code === 'auth/invalid-credential' || error.code === 'auth/wrong-password') {
                     try {
-                        const createdCredential = await auth.createUserWithEmailAndPassword(email, pass);
-                        await aaNotifyLoginSuccess(createdCredential?.user);
+                        await auth.createUserWithEmailAndPassword(email, pass);
                         if (authStatus) authStatus.textContent = 'Account created successfully!';
                     } catch (createError) {
                         if (authStatus) authStatus.textContent = 'Error creating account: ' + createError.message;
@@ -13484,7 +13451,7 @@ const s=document.createElement('style');s.textContent=`
   function aaTime(v){const d=aaDate(v);return d&&!isNaN(d.getTime())?d.toLocaleString('ar-SA',{dateStyle:'medium',timeStyle:'short'}):'—'}
   function aaGoCourses(){try{window.aaEjectFromCourse?.();}catch(_){try{window.mobileNavigate?.('courses')}catch(__){}}}
   function aaRenderNotificationItem(n,all=false){
-    const icon=n.type==='login_success'?'fa-right-to-bracket':n.type==='code_deleted'?'fa-user-slash':n.type==='code_suspended'?'fa-pause-circle':n.type==='suspension_expired'?'fa-unlock':n.type==='subscription_expired'?'fa-calendar-xmark':n.type==='assignment_submitted'?'fa-images':n.type==='assignment_approved'?'fa-circle-check':n.type==='subscription_success'?'fa-graduation-cap':n.type==='course_lessons_complete'?'fa-circle-check':n.type==='course_quizzes_complete'?'fa-list-check':'fa-bell';
+    const icon=n.type==='code_deleted'?'fa-user-slash':n.type==='code_suspended'?'fa-pause-circle':n.type==='suspension_expired'?'fa-unlock':n.type==='subscription_expired'?'fa-calendar-xmark':n.type==='assignment_submitted'?'fa-images':n.type==='assignment_approved'?'fa-circle-check':n.type==='subscription_success'?'fa-graduation-cap':n.type==='course_lessons_complete'?'fa-circle-check':n.type==='course_quizzes_complete'?'fa-list-check':'fa-bell';
     return `<div class="aa-notif-item ${n.read?'':'unread'}" data-notification-id="${esc(n.id)}"><div class="aa-notif-icon"><i class="fas ${icon}"></i></div><div class="aa-notif-copy"><div class="aa-notif-title">${!n.read?'<span class="aa-notification-dot"></span>':''}<span>${esc(n.title||'إشعار')}</span></div><div class="aa-notif-preview">${esc(n.body||'')}</div><div class="aa-notif-time">${esc(aaTime(n.createdAt))}</div></div></div>`;
   }
   function aaRenderNotifications(){
@@ -13497,7 +13464,14 @@ const s=document.createElement('style');s.textContent=`
   }
   async function aaStartNotificationListener(uid){
     aaNotificationUnsub?.();aaNotificationUnsub=null;aaNotificationsCache=[];aaRenderNotifications();if(!uid)return;
-    try{aaNotificationUnsub=db.collection('users').doc(uid).collection('notifications').onSnapshot(snap=>{aaNotificationsCache=snap.docs.map(d=>({id:d.id,...(d.data()||{})}));aaRenderNotifications()},e=>console.warn('notifications listener',e))}catch(e){console.warn('notifications',e)}
+    try{aaNotificationUnsub=db.collection('users').doc(uid).collection('notifications').onSnapshot(async snap=>{
+      const raw=snap.docs.map(d=>({id:d.id,...(d.data()||{})}));
+      const courseIds=[...new Set(raw.map(n=>String(n?.data?.courseId||'').trim()).filter(Boolean))];
+      const exists={};
+      await Promise.all(courseIds.map(async cid=>{try{exists[cid]=(await db.collection('courses').doc(cid).get()).exists}catch(_){exists[cid]=true}}));
+      aaNotificationsCache=raw.filter(n=>{const cid=String(n?.data?.courseId||'').trim();return !cid||exists[cid]!==false;});
+      aaRenderNotifications();
+    },e=>console.warn('notifications listener',e))}catch(e){console.warn('notifications',e)}
   }
   async function aaMarkNotificationRead(id){if(!currentUser||!id)return;try{await db.collection('users').doc(currentUser.uid).collection('notifications').doc(id).set({read:true,readAt:firebase.firestore.FieldValue.serverTimestamp()},{merge:true})}catch(e){console.warn(e)}}
   async function aaOpenNotification(id){
@@ -13506,7 +13480,7 @@ const s=document.createElement('style');s.textContent=`
     $('aaNotificationDetailTitle').textContent=n.title||'إشعار';
     $('aaNotificationDetailBody').textContent=n.body||'';
     const meta=$('aaNotificationDetailMeta');
-    meta.innerHTML=`<span>${esc(n.type==='login_success'?'تسجيل دخول':n.type==='code_deleted'?'إزالة اشتراك':n.type==='code_suspended'?'إيقاف اشتراك':n.type==='assignment_submitted'?'عمل واجب جديد':n.type==='assignment_approved'?'اعتماد عمل':n.type==='subscription_expired'?'انتهاء اشتراك':n.type==='suspension_expired'?'انتهاء الإيقاف':'إشعار')}</span><span>${esc(aaTime(n.createdAt))}</span>`;
+    meta.innerHTML=`<span>${esc(n.type==='code_deleted'?'إزالة اشتراك':n.type==='code_suspended'?'إيقاف اشتراك':n.type==='assignment_submitted'?'عمل واجب جديد':n.type==='assignment_approved'?'اعتماد عمل':n.type==='subscription_expired'?'انتهاء اشتراك':n.type==='suspension_expired'?'انتهاء الإيقاف':'إشعار')}</span><span>${esc(aaTime(n.createdAt))}</span>`;
     const reason=$('aaNotificationDetailReason');
     if(n.reason){reason.style.display='block';reason.innerHTML=`<strong>السبب</strong><div style="margin-top:5px;line-height:1.8;">${esc(n.reason)}</div>`}else{reason.style.display='none';reason.innerHTML=''}
     const oldAction=document.getElementById('aaNotificationActionBtn');oldAction?.remove();
@@ -13840,289 +13814,589 @@ const st=document.createElement('style');st.id='final-privacy-v21-style';st.text
 document.head.appendChild(st);
 })();
 </script>
-</body>
-</html>
 
 
-<!-- ===== FINAL UX / MOBILE NOTIFICATIONS / COURSE NAVIGATION / CODE-LINKED NOTIFICATIONS v22 ===== -->
-<style id="aa-final-v22-ux-style">
-/* Notification dropdown: never exceed the viewport on phones. */
-#aaNotificationsDropdown{z-index:25000!important;max-width:calc(100vw - 24px)!important;box-sizing:border-box!important;}
-#aaNotificationDetailModal,#aaCodeReasonModal{z-index:26000!important;}
-body.aa-notifications-open{overflow:hidden!important;overscroll-behavior:none!important;}
-@media(max-width:768px){
-  .aa-notifications-wrap{position:static!important;width:40px!important;min-width:40px!important;}
-  #aaNotificationsDropdown{position:fixed!important;top:calc(var(--nav-height-mobile,70px) + 8px)!important;left:12px!important;right:12px!important;inset-inline-start:12px!important;inset-inline-end:12px!important;width:auto!important;max-width:none!important;max-height:calc(100dvh - var(--nav-height-mobile,70px) - 66px - 20px)!important;overflow:hidden!important;border-radius:18px!important;}
-  #aaNotificationsDropdown .aa-notif-list{max-height:calc(100dvh - var(--nav-height-mobile,70px) - 66px - 150px)!important;overflow-y:auto!important;overscroll-behavior:contain!important;-webkit-overflow-scrolling:touch!important;}
-  #aaNotificationsPage{top:var(--nav-height-mobile,70px)!important;bottom:calc(var(--mobile-bottom-nav-content-height,66px) + env(safe-area-inset-bottom))!important;left:0!important;right:0!important;inset-inline:0!important;width:100vw!important;height:auto!important;max-height:none!important;z-index:24000!important;overflow:hidden!important;box-sizing:border-box!important;}
-  #aaNotificationsPage .aa-notifications-page-inner{height:100%!important;max-height:none!important;overflow-y:auto!important;overflow-x:hidden!important;overscroll-behavior:contain!important;-webkit-overflow-scrolling:touch!important;padding:12px 12px 20px!important;box-sizing:border-box!important;}
-  #aaNotificationDetailModal{top:var(--nav-height-mobile,70px)!important;bottom:calc(var(--mobile-bottom-nav-content-height,66px) + env(safe-area-inset-bottom))!important;left:0!important;right:0!important;inset-inline:0!important;padding:10px!important;align-items:center!important;justify-content:center!important;box-sizing:border-box!important;}
-  #aaNotificationDetailModal .aa-notification-detail-box{width:min(100%,620px)!important;max-width:none!important;max-height:calc(100dvh - var(--nav-height-mobile,70px) - var(--mobile-bottom-nav-content-height,66px) - 20px)!important;overflow-y:auto!important;box-sizing:border-box!important;}
-  .aa-admin-notification-tools{margin-bottom:12px!important;}
-}
-
-/* Keep the notification center and detail modal on top of every page without exposing the page below. */
-body.aa-notifications-open #coursesPage,
-body.aa-notifications-open #courseDetailView,
-body.aa-notifications-open footer,
-body.aa-notifications-open .custom-alert-modal,
-body.aa-notifications-open .edit-modal:not(#aaCodeReasonModal){visibility:hidden!important;pointer-events:none!important;}
-
-/* Admin notification composer. */
-.aa-admin-notification-tools{position:relative!important;}
-.aa-admin-notification-tools .aa-admin-compose-head{display:flex;align-items:center;justify-content:space-between;gap:10px;}
-.aa-admin-compose-toggle{width:38px;height:38px;border-radius:50%;border:1px solid var(--border);background:var(--bg-secondary);color:var(--text-primary);cursor:pointer;display:inline-grid;place-items:center;flex:0 0 38px;transition:.2s;}
-.aa-admin-compose-toggle:hover{border-color:var(--accent1);color:var(--accent1);transform:translateY(-1px);}
-.aa-admin-compose-body{display:none;margin-top:12px;}
-.aa-admin-notification-tools.expanded .aa-admin-compose-body{display:block;}
-.aa-admin-notification-tools.expanded .aa-admin-compose-toggle i{transform:rotate(180deg);}
-.aa-admin-notification-tools .aa-admin-compose-summary{margin:4px 0 0;color:var(--text-muted);font-size:.78rem;line-height:1.7;}
-
-/* Smooth mobile scrolling for content pages. */
-@media(max-width:768px){
-  #coursesPage,#courseDetailView,#courseDetailView > .course-overview,#courseDetailView > #courseDashboard,
-  #courseLessonsPage,#courseLessonPlayerPage,#courseQuizzesPage,#courseAssignmentsPage,#courseAssignmentDetailPage,
-  #courseFilesPage,#courseChatPage,#fullChatPage,.assignment-detail-page,
-  #aaNotificationsPage .aa-notifications-page-inner{scroll-behavior:smooth;scrollbar-width:thin;scrollbar-color:rgba(108,92,231,.82) rgba(108,92,231,.08);}
-  #coursesPage::-webkit-scrollbar,#courseDetailView::-webkit-scrollbar,#courseOverviewContainer::-webkit-scrollbar,#courseDashboard::-webkit-scrollbar,
-  #courseLessonsPage::-webkit-scrollbar,#courseLessonPlayerPage::-webkit-scrollbar,#courseQuizzesPage::-webkit-scrollbar,#courseAssignmentsPage::-webkit-scrollbar,
-  #courseAssignmentDetailPage::-webkit-scrollbar,#courseFilesPage::-webkit-scrollbar,#courseChatPage::-webkit-scrollbar,#fullChatPage::-webkit-scrollbar,
-  #aaNotificationsPage .aa-notifications-page-inner::-webkit-scrollbar{width:7px!important;}
+<!-- ===== FINAL MOBILE + NOTIFICATIONS + COURSE NAVIGATION PATCH v22 ===== -->
+<style id="aa-final-mobile-v22">
+@media (max-width: 768px){
+  :root{--aa-top-v22:var(--nav-height-mobile,70px);--aa-bottom-v22:calc(66px + env(safe-area-inset-bottom));--aa-safe-v22:calc(100dvh - var(--aa-top-v22) - var(--aa-bottom-v22));}
+  html,body{height:100%;min-height:100%;overflow:hidden!important;}
+  body{padding:0!important;margin:0!important;}
+  .navbar{position:fixed!important;top:0!important;left:0!important;right:0!important;height:var(--aa-top-v22)!important;z-index:200000!important;}
+  .mobile-bottom-nav{position:fixed!important;left:0!important;right:0!important;bottom:0!important;height:var(--aa-bottom-v22)!important;z-index:200001!important;}
+  #coursesPage{position:fixed!important;top:var(--aa-top-v22)!important;bottom:var(--aa-bottom-v22)!important;left:0!important;right:0!important;width:auto!important;height:auto!important;min-height:0!important;max-height:none!important;padding:0!important;overflow-y:auto!important;overflow-x:hidden!important;-webkit-overflow-scrolling:touch!important;overscroll-behavior:contain!important;}
+  #courseDetailView{position:fixed!important;top:var(--aa-top-v22)!important;bottom:var(--aa-bottom-v22)!important;left:0!important;right:0!important;width:auto!important;height:auto!important;min-height:0!important;max-height:none!important;margin:0!important;padding:0!important;border:0!important;border-radius:0!important;overflow:hidden!important;}
+  #courseDetailView>.course-overview,#courseDetailView>#courseDashboard,#courseDetailView>#courseLessonsPage,#courseDetailView>#courseLessonPlayerPage,#courseDetailView>#courseQuizzesPage,#courseDetailView>#courseAssignmentsPage,#courseDetailView>#courseFilesPage,#courseDetailView>#courseChatPage,#courseDetailView>#fullChatPage,#courseAssignmentDetailPage,#courseLearningView{
+    max-height:none!important;min-height:0!important;height:100%!important;overflow-y:auto!important;overflow-x:hidden!important;-webkit-overflow-scrolling:touch!important;overscroll-behavior:contain!important;box-sizing:border-box!important;padding-bottom:24px!important;
+  }
+  #courseDetailView>#courseLearningView{height:100%!important;}
+  #aaRebuiltProfilePage,#ananasCanonicalProfilePage,#ananasV10ProfilePage,#userProfilePage{position:fixed!important;top:var(--aa-top-v22)!important;bottom:var(--aa-bottom-v22)!important;left:0!important;right:0!important;height:auto!important;max-height:none!important;overflow-y:auto!important;overflow-x:hidden!important;-webkit-overflow-scrolling:touch!important;}
+  #aaNotificationsPage{position:fixed!important;top:var(--aa-top-v22)!important;bottom:var(--aa-bottom-v22)!important;left:0!important;right:0!important;inset-inline:0!important;width:auto!important;height:auto!important;max-height:none!important;z-index:190000!important;overflow:hidden!important;}
+  #aaNotificationsPage .aa-notifications-page-inner{height:100%!important;max-height:none!important;overflow-y:auto!important;overflow-x:hidden!important;-webkit-overflow-scrolling:touch!important;box-sizing:border-box!important;padding-bottom:28px!important;}
+  #aaNotificationDetailModal{position:fixed!important;top:var(--aa-top-v22)!important;bottom:var(--aa-bottom-v22)!important;left:0!important;right:0!important;inset-inline:0!important;width:auto!important;height:auto!important;z-index:195000!important;padding:12px!important;align-items:center!important;}
+  #aaNotificationDetailModal .aa-notification-detail-box{max-height:calc(var(--aa-safe-v22) - 24px)!important;overflow-y:auto!important;-webkit-overflow-scrolling:touch!important;}
+  .aa-notifications-dropdown{position:fixed!important;top:calc(var(--aa-top-v22) + 8px)!important;right:12px!important;left:12px!important;inset-inline:auto 12px!important;width:auto!important;max-width:calc(100vw - 24px)!important;max-height:min(70dvh,520px)!important;overflow:hidden!important;z-index:210000!important;}
+  .aa-notifications-dropdown .aa-notif-list{max-height:calc(min(70dvh,520px) - 118px)!important;overflow-y:auto!important;-webkit-overflow-scrolling:touch!important;overflow-x:hidden!important;}
+  .aa-notifications-wrap{position:relative!important;z-index:210001!important;}
+  .aa-mobile-scroll-host{max-height:none!important;height:100%!important;overflow-y:auto!important;overflow-x:hidden!important;}
+  .aa-notification-detail-body,.aa-notification-detail-title,.aa-notif-preview,.aa-notif-copy,.aa-notification-detail-meta{overflow-wrap:anywhere!important;word-break:normal!important;}
+  .aa-admin-notification-tools{max-height:none!important;overflow:visible!important;}
+  #aaAdminNotificationToolsV{max-height:none!important;}
 }
 </style>
-
-<script id="aa-final-v22-ux-script">
+<script id="aa-final-v22">
 (function(){
-  'use strict';
-  const E=id=>document.getElementById(id);
-  const esc=v=>String(v??'').replace(/[&<>'"]/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[m]));
-  const asDate=v=>{try{if(!v)return null;const d=v.toDate?v.toDate():new Date(v);return isNaN(d.getTime())?null:d}catch(_){return null}};
-  const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+'use strict';
+const $=id=>document.getElementById(id);
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 
-  /* ---------- 1) Notification button: capture clicks on mobile so the dropdown always opens. ---------- */
-  if(!window.__aaV22NotificationButtonBound){
-    window.__aaV22NotificationButtonBound=true;
-    document.addEventListener('click',function(e){
-      const btn=e.target.closest?.('#aaNotificationsBtn');
-      if(!btn)return;
-      e.preventDefault();e.stopPropagation();
-      const drop=E('aaNotificationsDropdown');
-      if(!drop)return;
-      const opening=!drop.classList.contains('active');
-      drop.classList.toggle('active',opening);
-      btn.classList.toggle('active',opening);
-      if(opening&&typeof window.aaRenderNotifications==='function')window.aaRenderNotifications();
-    },true);
+/* ---------- Notification dropdown: mobile-safe, always openable ---------- */
+function positionNotifDropdown(){
+  const btn=$('aaNotificationsBtn'),drop=$('aaNotificationsDropdown');
+  if(!btn||!drop)return;
+  if(window.innerWidth<=768){
+    drop.style.position='fixed';
+    drop.style.top=(getComputedStyle(document.documentElement).getPropertyValue('--nav-height-mobile').trim()||'70px');
+    drop.style.top=`calc(${drop.style.top} + 8px)`;
+    drop.style.left='12px';drop.style.right='12px';drop.style.width='auto';
+    drop.style.maxWidth='calc(100vw - 24px)';
+  }else{
+    drop.style.position='absolute';drop.style.left='';drop.style.right='0';drop.style.width='';drop.style.maxWidth='';
   }
+}
+function openNotifDropdown(){
+  const d=$('aaNotificationsDropdown'),b=$('aaNotificationsBtn');if(!d||!b)return;
+  positionNotifDropdown();d.classList.add('active');b.classList.add('active');
+}
+function toggleNotifDropdownV22(e){e?.preventDefault();e?.stopPropagation();const d=$('aaNotificationsDropdown'),b=$('aaNotificationsBtn');if(!d||!b)return; if(d.classList.contains('active')){d.classList.remove('active');b.classList.remove('active');}else openNotifDropdown();}
+const nb=$('aaNotificationsBtn');
+if(nb&&!nb.dataset.v22Bound){nb.dataset.v22Bound='1';nb.addEventListener('click',e=>{e.preventDefault();e.stopImmediatePropagation();toggleNotifDropdownV22(e)},true);}
+window.addEventListener('resize',positionNotifDropdown,{passive:true});
+window.addEventListener('orientationchange',()=>setTimeout(positionNotifDropdown,80),{passive:true});
+positionNotifDropdown();
 
-  /* ---------- 2) Notification page is a real modal-page; detail opens above it, not over courses. ---------- */
-  function closeNotificationDetail(){E('aaNotificationDetailModal')?.classList.remove('active');}
-  function closeNotificationPage(){
-    E('aaNotificationsPage')?.classList.remove('active');
-    document.body.classList.remove('aa-notifications-open');
-    document.body.style.overflow='';
-  }
-  window.__aaV22CloseNotificationPage=closeNotificationPage;
-  window.__aaV22CloseNotificationDetail=closeNotificationDetail;
-
-  E('aaNotificationDetailClose')?.addEventListener('click',closeNotificationDetail);
-  E('aaCloseNotificationsPage')?.addEventListener('click',function(){closeNotificationPage();closeNotificationDetail();});
-
-  /* ---------- 3) Admin compose panel: collapsible arrow with notifications directly underneath. ---------- */
-  function prepareAdminCompose(){
-    const wrap=E('aaAdminNotificationToolsV');
-    if(!wrap||wrap.dataset.v22Ready==='1')return;
-    wrap.dataset.v22Ready='1';
-    const h3=wrap.querySelector('h3');
-    const p=wrap.querySelector('p');
-    const grid=wrap.querySelector('.aa-admin-notification-grid');
-    const actions=wrap.querySelector('.aa-notif-compose-actions');
-    if(!h3)return;
-    const head=document.createElement('div');head.className='aa-admin-compose-head';
-    const titleWrap=document.createElement('div');titleWrap.style.minWidth='0';
-    titleWrap.appendChild(h3);if(p){p.classList.add('aa-admin-compose-summary');titleWrap.appendChild(p);}
-    const toggle=document.createElement('button');toggle.type='button';toggle.className='aa-admin-compose-toggle';toggle.setAttribute('aria-expanded','false');toggle.title='فتح أو إخفاء إرسال الإشعار';toggle.innerHTML='<i class="fas fa-chevron-down"></i>';
-    head.appendChild(titleWrap);head.appendChild(toggle);
-    const body=document.createElement('div');body.className='aa-admin-compose-body';
-    if(grid)body.appendChild(grid);if(actions)body.appendChild(actions);
-    wrap.innerHTML='';wrap.appendChild(head);wrap.appendChild(body);
-    toggle.addEventListener('click',function(){const open=!wrap.classList.contains('expanded');wrap.classList.toggle('expanded',open);toggle.setAttribute('aria-expanded',String(open));});
-  }
-  const adminComposeObserver=new MutationObserver(()=>prepareAdminCompose());
-  if(E('aaNotificationsPage'))adminComposeObserver.observe(E('aaNotificationsPage'),{subtree:true,childList:true});
-  setTimeout(prepareAdminCompose,300);setTimeout(prepareAdminCompose,1200);setTimeout(prepareAdminCompose,2200);
-
-  /* ---------- 4) Final mobile course viewport: content only lives between top and bottom bars. ---------- */
-  function setMobileViewportHeight(){
-    if(window.innerWidth>768)return;
-    const top=parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--nav-height-mobile'))||70;
-    const bottom=parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--mobile-bottom-nav-content-height'))||66;
-    document.documentElement.style.setProperty('--aa-v22-content-top',top+'px');
-    document.documentElement.style.setProperty('--aa-v22-content-bottom',bottom+'px');
-    document.documentElement.style.setProperty('--aa-v22-content-height',`calc(100dvh - ${top}px - ${bottom}px - env(safe-area-inset-bottom))`);
-  }
-  setMobileViewportHeight();window.addEventListener('resize',setMobileViewportHeight,{passive:true});window.addEventListener('orientationchange',()=>setTimeout(setMobileViewportHeight,100),{passive:true});
-
-  /* ---------- 5) Prevent duplicate course entry clicks on mobile and force a clean overview. ---------- */
-  let openingCoursePromise=null,openingCourseId=null;
-  const currentOpenCourse=window.openCourse;
-  if(typeof currentOpenCourse==='function'&&!currentOpenCourse.__aaV22Wrapped){
-    const wrapped=async function(courseId){
-      if(openingCoursePromise&&String(openingCourseId)===String(courseId))return openingCoursePromise;
-      openingCourseId=courseId;
-      openingCoursePromise=Promise.resolve().then(()=>currentOpenCourse.apply(this,arguments)).finally(()=>{openingCoursePromise=null;openingCourseId=null;});
-      return openingCoursePromise;
-    };
-    wrapped.__aaV22Wrapped=true;window.openCourse=wrapped;
-  }
-
-  window.__aaV22ShowOverview=function(){
-    if(!window.activeCourseId)return;
-    const detail=E('courseDetailView'),overview=E('courseOverviewContainer'),dashboard=E('courseDashboard');
-    if(!detail||!overview)return;
-    detail.style.display='flex';
-    document.querySelectorAll('#courseDetailView > *').forEach(el=>{
-      if(el===overview)el.style.display='block';
-      else if(el===dashboard)el.style.display='none';
-      else if(el.classList?.contains('course-details-header'))el.style.display='none';
-      else {el.style.display='none';el.classList?.remove('active');}
-    });
-    overview.style.display='block';overview.classList.remove('active');
-    window.currentCoursePage='overview';
-    try{document.querySelector('#courseOverviewContainer')?.scrollTo({top:0,behavior:'smooth'});}catch(_){ }
-    try{window.setMobileNavActive?.('overview')}catch(_){ }
+/* ---------- Notification details must always open over the notifications page ---------- */
+const originalOpenNotification=window.aaOpenNotification;
+if(typeof originalOpenNotification==='function'&&!originalOpenNotification.__v22){
+  const wrap=async function(id){
+    const page=$('aaNotificationsPage');
+    const wasClosed=!page?.classList.contains('active');
+    if(wasClosed){$('aaNotificationsDropdown')?.classList.remove('active');$('aaNotificationsBtn')?.classList.remove('active');page?.classList.add('active');document.body.classList.add('aa-notifications-open');}
+    await originalOpenNotification.apply(this,arguments);
   };
+  wrap.__v22=true;window.aaOpenNotification=wrap;
+}
 
-  if(!window.__aaV22CourseClicksBound){
-    window.__aaV22CourseClicksBound=true;
-    document.addEventListener('click',function(e){
-      const overviewBtn=e.target.closest?.('#courseDashboard .dashboard-btn');
-      if(overviewBtn&&/نبذة الدورة/.test(overviewBtn.textContent||'')){
-        e.preventDefault();e.stopImmediatePropagation();window.__aaV22ShowOverview?.();return;
-      }
-      const start=e.target.closest?.('#startLearningBtn');
-      if(start){
-        e.preventDefault();e.stopImmediatePropagation();
-        if(window.activeCourseId)window.switchCoursePage?.('dashboard');
-        return;
-      }
-    },true);
-  }
+/* ---------- Robust independent notification filter: only notifications tied to current courses/content ---------- */
+async function courseExistsV22(courseId){
+  if(!courseId)return true;
+  try{return (await db.collection('courses').doc(String(courseId)).get()).exists}catch(_){return false}
+}
+async function purgeInvalidCourseNotificationsV22(){
+  if(!currentUser||!Array.isArray(window.aaNotificationsCache))return;
+}
 
-  /* ---------- 6) Logout always leaves the current page immediately. ---------- */
-  function leaveToCourses(){try{window.aaEjectFromCourse?.();}catch(_){}try{window.mobileNavigate?.('courses');}catch(_){}
-    const detail=E('courseDetailView');if(detail)detail.style.display='none';
-    const grid=E('coursesGridContainer');if(grid)grid.style.display='grid';
-  }
-  if(window.signOutUser&&!window.signOutUser.__aaV22Logout){
-    const old=window.signOutUser;const fn=async function(){leaveToCourses();await sleep(20);return old.apply(this,arguments)};fn.__aaV22Logout=true;window.signOutUser=fn;
-  }
-  if(auth?.signOut&&!auth.signOut.__aaV22Logout){
-    const original=auth.signOut.bind(auth);const fn=async function(){leaveToCourses();await sleep(20);return original()};fn.__aaV22Logout=true;auth.signOut=fn;
-  }
+/* Filter the currently rendered cache without touching unrelated admin/general messages. */
+function notificationCourseIdV22(n){return String(n?.data?.courseId||'').trim()||null;}
+async function renderCurrentNotificationsV22(){
+  if(typeof window.aaRenderNotifications!=='function')return;
+}
 
-  /* ---------- 7) Code-linked subscription lifecycle notifications. ---------- */
-  async function notifyOnce(uid,payload,key){
-    if(!uid||typeof window.aaAddNotification!=='function')return;
-    const data={...(payload.data||{}),subscriptionNotificationKey:key};
-    try{await window.aaAddNotification(uid,{...payload,data,dedupeKey:key});}catch(_){ }
-  }
-  async function currentEnrollmentState(uid,courseId){
-    const ref=db.collection('users').doc(uid).collection('enrolledCourses').doc(courseId);const s=await ref.get();return {ref,s,data:s.exists?(s.data()||{}):null};
-  }
-  async function syncCurrentSubscriptionNotifications(uid){
-    if(!uid||!currentUser||isAdmin)return;
+/* ---------- Login notification: exactly once per browser session per account ---------- */
+async function sendLoginNotificationV22(user){
+  try{
+    if(!user||typeof window.aaAddNotification!=='function')return;
+    const key=`aa_login_notice_${user.uid}`;
+    if(sessionStorage.getItem(key))return;
+    sessionStorage.setItem(key,'1');
+    const now=new Date();
+    const when=now.toLocaleString('ar-SA',{dateStyle:'full',timeStyle:'short',timeZone:'Asia/Riyadh'});
+    await window.aaAddNotification(user.uid,{title:'تم تسجيل الدخول إلى حسابك',body:`تم تسجيل دخول إلى حسابك في منصة أناناس أكاديمي بتاريخ ${when}. إذا لم تكن أنت من قام بتسجيل الدخول، ننصحك بمراجعة أمان حسابك.`,type:'login_notice',data:{route:'notifications',loginAt:now.toISOString()},dedupeKey:`login_${user.uid}_${now.toISOString().slice(0,10)}`});
+  }catch(e){console.warn('login notification',e)}
+}
+
+/* ---------- Reliable logout: leave every page, then sign out ---------- */
+async function safeLogoutV22(){
+  try{document.querySelectorAll('.aa-notification-detail-modal,#aaNotificationsPage,.profile-self-modal,.custom-alert-modal,.auth-popup').forEach(x=>x.classList.remove('active'));}catch(_){ }
+  try{window.__aaNotifEnrollUnsub?.();window.__aaNotifEnrollUnsub=null;}catch(_){ }
+  try{window.aaEjectFromCourse?.('تم تسجيل الخروج من الحساب.');}catch(_){ }
+  try{window.mobileNavigate?.('courses');}catch(_){ }
+  try{window.switchCoursePage?.('overview');}catch(_){ }
+  try{if(currentUser)sessionStorage.removeItem(`aa_login_notice_${currentUser.uid}`);}catch(_){}
+  try{await auth.signOut();}catch(_){ }
+  try{window.mobileNavigate?.('courses');}catch(_){ }
+}
+window.__aaSafeLogoutV22=safeLogoutV22;
+
+/* Bind any logout button that is currently used by the rebuilt profile UI. */
+function bindLogoutV22(){
+  document.querySelectorAll('#aaProfileLogout,#userProfileLogoutBtn,[data-action="logout"]').forEach(btn=>{
+    if(btn.dataset.v22Logout)return;btn.dataset.v22Logout='1';
+    btn.addEventListener('click',async e=>{e.preventDefault();e.stopImmediatePropagation();await safeLogoutV22()},true);
+  });
+}
+bindLogoutV22();setTimeout(bindLogoutV22,700);setTimeout(bindLogoutV22,1800);
+
+/* ---------- Course navigation: prevent double-clicks and always show the overview first ---------- */
+let courseNavBusy=false;
+const baseOpenCourse=window.openCourse;
+if(typeof baseOpenCourse==='function'&&!baseOpenCourse.__v22){
+  const wrappedOpenCourse=async function(courseId){
+    if(courseNavBusy)return;
+    courseNavBusy=true;
     try{
-      const courseDocs=await db.collection('users').doc(uid).collection('enrolledCourses').get();
-      for(const ed of courseDocs.docs){
-        const courseId=ed.id,e=ed.data()||{};const codeId=e.codeId||null;
-        if(!codeId)continue;
-        const courseSnap=await db.collection('courses').doc(courseId).get();
-        if(!courseSnap.exists)continue; // deleted course = no notification source
-        const course=courseSnap.data()||{};const courseTitle=course.titleAr||course.title||'الدورة';
-        const codeSnap=await db.collection('courses').doc(courseId).collection('codes').doc(codeId).get();
-        const now=Date.now();
-        if(!codeSnap.exists){
-          if(e.codeDeleted===true)continue; // deletion notification is already emitted by the delete action
-          const end=asDate(e.subscriptionEndAt)||asDate(e.endTime)||null;
-          if(end&&end.getTime()<=now){
-            await notifyOnce(uid,{title:'مبارك انتهاء اشتراكك',body:`نبارك لك انتهاء اشتراكك في ${courseTitle}، ونشكرك على اشتراكك واستفادتك من الدورة. يمكنك تجديد الاشتراك بكود جديد.`,type:'subscription_expired',data:{route:'course',courseId,codeId,courseTitle,codeStatus:'missing',subscriptionStartAt:e.enrolledAt||null,subscriptionEndAt:end.toISOString()}},`subscription_expired_${courseId}_${codeId}_${end.getTime()}`);
-          }
-          continue;
-        }
-        const c=codeSnap.data()||{};const start=asDate(c.startTime),end=asDate(c.endTime),until=asDate(c.suspendedUntil);
-        const base={courseId,codeId,code:c.code||codeId,courseTitle,codeStatus:c.disabled?'suspended':(end&&end.getTime()<=now?'expired':'active'),subscriptionStartAt:start?.toISOString()||null,subscriptionEndAt:end?.toISOString()||null,suspendedUntil:until?.toISOString()||null,suspensionReason:c.suspensionReason||null};
-        if(c.disabled){
-          const disabledKey=`code_suspended_${courseId}_${codeId}_${c.suspensionUpdatedAt?.seconds||String(c.suspensionUpdatedAt||'')}`;
-          // The explicit suspension action already sends this notification. This key simply prevents a duplicate if the poll sees it again.
-          if(e.accessBlocked===true && !aaNotificationsCache.some(n=>n.type==='code_suspended'&&String(n.data?.courseId)===String(courseId)&&String(n.data?.codeId)===String(codeId)&&String(n.data?.subscriptionNotificationKey||'')===disabledKey)){
-            await notifyOnce(uid,{title:'تم إيقاف اشتراكك',body:until?`تم إيقاف اشتراكك في ${courseTitle} حتى ${until.toLocaleString('ar-SA',{timeZone:'Asia/Riyadh'})}.`:`تم إيقاف اشتراكك في ${courseTitle} حتى إلغاء الإيقاف من المشرف.`,reason:c.suspensionReason||'',type:'code_suspended',data:base},disabledKey);
-          }
-          if(until&&until.getTime()<=now){
-            const key=`suspension_expired_${courseId}_${codeId}_${until.getTime()}`;
-            await notifyOnce(uid,{title:'انتهت مدة إيقاف الاشتراك',body:`انتهت مدة إيقاف اشتراكك في ${courseTitle} ويمكنك الدخول إلى الدورة مرة أخرى.`,type:'suspension_expired',data:{...base,codeStatus:'active'}},key);
-          }
-        }
-        if(end&&end.getTime()<=now){
-          const key=`subscription_expired_${courseId}_${codeId}_${end.getTime()}`;
-          await notifyOnce(uid,{title:'مبارك انتهاء اشتراكك',body:`نبارك لك انتهاء اشتراكك في ${courseTitle}، ونشكرك على اشتراكك واستفادتك من الدورة. يمكنك تجديد الاشتراك بكود جديد.`,type:'subscription_expired',data:{...base,codeStatus:'expired'}},key);
+      const result=await baseOpenCourse.apply(this,arguments);
+      const detail=$('courseDetailView'),overview=$('courseOverviewContainer');
+      if(detail&&overview&&detail.style.display!=='none'&&window.innerWidth<=768){
+        detail.style.display='flex';overview.style.display='block';
+        ['courseDashboard','courseLessonsPage','courseLessonPlayerPage','courseQuizzesPage','courseAssignmentsPage','courseChatPage','courseFilesPage'].forEach(id=>{const el=$(id);if(!el)return;el.classList.remove('active');if(id==='courseQuizzesPage'||id==='courseAssignmentsPage'||id==='courseChatPage'||id==='courseFilesPage')el.style.display='none';});
+      }
+      return result;
+    }finally{setTimeout(()=>{courseNavBusy=false},120)}
+  };
+  wrappedOpenCourse.__v22=true;window.openCourse=wrappedOpenCourse;
+}
+
+const baseSwitch=window.switchCoursePage;
+if(typeof baseSwitch==='function'&&!baseSwitch.__v22){
+  const wrappedSwitch=function(page){
+    const res=baseSwitch.apply(this,arguments);
+    if(window.innerWidth<=768){
+      const detail=$('courseDetailView');
+      if(detail&&detail.style.display!=='none'){
+        const pageMap={overview:'courseOverviewContainer',dashboard:'courseDashboard',learning:'courseLessonsPage',quizzes:'courseQuizzesPage',assignments:'courseAssignmentsPage',chat:'courseChatPage',files:'courseFilesPage'};
+        const visible=pageMap[page];
+        Object.values(pageMap).forEach(id=>{const e=$(id);if(!e)return;if(id===visible){e.style.display=(id==='courseQuizzesPage'||id==='courseAssignmentsPage'||id==='courseChatPage'||id==='courseFilesPage')?'block':'block';e.classList.add('active')}else{e.classList.remove('active');if(id!=='courseOverviewContainer'&&id!=='courseDashboard')e.style.display='none';}});
+        if(page==='overview'){$('courseOverviewContainer')&&( $('courseOverviewContainer').style.display='block');$('courseDashboard')&&( $('courseDashboard').style.display='none');}
+        if(page==='dashboard'){$('courseDashboard')&&( $('courseDashboard').style.display='flex');$('courseOverviewContainer')&&( $('courseOverviewContainer').style.display='none');}
+      }
+    }
+    return res;
+  };
+  wrappedSwitch.__v22=true;window.switchCoursePage=wrappedSwitch;
+}
+
+/* Make the primary course buttons respond to pointerup as well as click without requiring a second click. */
+document.addEventListener('pointerup',e=>{
+  const b=e.target.closest?.('.course-card .btn-primary,.course-card [data-course-id],[data-course-open]');
+  if(!b)return;
+  const courseId=b.dataset.courseId||b.getAttribute('data-course-open');
+  if(!courseId)return;
+  if(b.dataset.v22Handled)return;
+  if(window.innerWidth<=768){e.preventDefault();e.stopImmediatePropagation();b.dataset.v22Handled='1';window.openCourse?.(courseId);setTimeout(()=>delete b.dataset.v22Handled,500);}
+},true);
+
+/* Ensure overview/dashboard buttons on mobile work on first press. */
+document.addEventListener('pointerup',e=>{
+  const b=e.target.closest?.('#startLearningBtn,.dashboard-btn');
+  if(!b||window.innerWidth>768)return;
+  if(b.id==='startLearningBtn'){e.preventDefault();e.stopImmediatePropagation();if(window.activeCourseId)window.switchCoursePage?.('dashboard');}
+  else if(b.classList.contains('dashboard-btn')){
+    const oc=b.getAttribute('onclick')||'';const m=oc.match(/switchCoursePage\(['"]([^'"]+)/);if(m){e.preventDefault();e.stopImmediatePropagation();window.switchCoursePage?.(m[1]);}
+  }
+},true);
+
+/* Auth state: login notice once per session. */
+auth?.onAuthStateChanged?.(u=>{if(u){setTimeout(()=>sendLoginNotificationV22(u),900);setTimeout(bindLogoutV22,300)}});
+
+/* ---------- Course-linked notifications are filtered in aaStartNotificationListener above. ---------- */
+
+/* Keep notifications detail modal attached visually to the notification page on mobile. */
+document.addEventListener('click',e=>{
+  const item=e.target.closest?.('#aaNotifDropdownList .aa-notif-item,#aaNotificationsAllList .aa-notif-item');
+  if(item){const page=$('aaNotificationsPage');if(page&&!page.classList.contains('active'))page.classList.add('active');}
+},true);
+
+})();
+</script>
+
+<!-- ===== FINAL REBUILD v24: notifications + mobile course shell ===== -->
+<style id="aa-final-rebuild-v24-style">
+@media (max-width:768px){
+  html,body{width:100%;max-width:100%;overflow:hidden!important;overscroll-behavior:none!important;}
+  body{padding:0!important;margin:0!important;}
+  .navbar{position:fixed!important;top:0!important;left:0!important;right:0!important;height:var(--nav-height-mobile,70px)!important;z-index:250000!important;}
+  .mobile-bottom-nav{position:fixed!important;left:0!important;right:0!important;bottom:0!important;height:calc(var(--mobile-bottom-nav-content-height,66px) + env(safe-area-inset-bottom))!important;z-index:250000!important;}
+  #coursesPage{position:fixed!important;top:var(--nav-height-mobile,70px)!important;bottom:calc(var(--mobile-bottom-nav-content-height,66px) + env(safe-area-inset-bottom))!important;left:0!important;right:0!important;width:auto!important;height:auto!important;min-height:0!important;max-height:none!important;overflow-y:auto!important;overflow-x:hidden!important;-webkit-overflow-scrolling:touch!important;overscroll-behavior:contain!important;padding:0!important;margin:0!important;}
+  #coursesPage>.container{padding:16px 14px 24px!important;min-height:100%!important;}
+  #courseDetailView{position:fixed!important;top:var(--nav-height-mobile,70px)!important;bottom:calc(var(--mobile-bottom-nav-content-height,66px) + env(safe-area-inset-bottom))!important;left:0!important;right:0!important;width:auto!important;height:auto!important;min-height:0!important;max-height:none!important;margin:0!important;padding:0!important;border:0!important;border-radius:0!important;overflow:hidden!important;background:var(--bg-primary)!important;z-index:200000!important;}
+  #courseDetailView>.course-details-header{display:none!important;}
+  #courseDetailView>.course-overview,#courseDetailView>#courseDashboard,#courseDetailView>#courseLessonsPage,#courseDetailView>#courseLessonPlayerPage,#courseDetailView>#courseQuizzesPage,#courseDetailView>#courseAssignmentsPage,#courseDetailView>#courseAssignmentDetailPage,#courseDetailView>#courseFilesPage,#courseDetailView>#courseChatPage,#courseDetailView>#courseLearningView,#courseDetailView>#fullChatPage{position:absolute!important;inset:0!important;width:100%!important;height:100%!important;min-height:0!important;max-height:none!important;box-sizing:border-box!important;overflow-y:auto!important;overflow-x:hidden!important;-webkit-overflow-scrolling:touch!important;overscroll-behavior:contain!important;margin:0!important;padding:14px!important;}
+  #courseDetailView>.course-overview{display:none!important;}
+  #courseDetailView>#courseDashboard{display:none!important;align-items:stretch!important;justify-content:flex-start!important;}
+  #courseDetailView>#courseLessonsPage,#courseDetailView>#courseLessonPlayerPage,#courseDetailView>#courseQuizzesPage,#courseDetailView>#courseAssignmentsPage,#courseAssignmentDetailPage,#courseDetailView>#courseFilesPage,#courseDetailView>#courseChatPage,#courseDetailView>#courseLearningView,#courseDetailView>#fullChatPage{display:none!important;}
+  #courseDetailView>.course-overview.is-mobile-active,#courseDetailView>#courseDashboard.is-mobile-active,#courseDetailView>#courseLessonsPage.is-mobile-active,#courseDetailView>#courseLessonPlayerPage.is-mobile-active,#courseDetailView>#courseQuizzesPage.is-mobile-active,#courseDetailView>#courseAssignmentsPage.is-mobile-active,#courseAssignmentDetailPage.is-mobile-active,#courseDetailView>#courseFilesPage.is-mobile-active,#courseDetailView>#courseChatPage.is-mobile-active,#courseDetailView>#courseLearningView.is-mobile-active,#courseDetailView>#fullChatPage.is-mobile-active{display:block!important;}
+  #courseDetailView>#courseDashboard.is-mobile-active{display:flex!important;}
+  #courseDetailView>#courseLearningView.is-mobile-active,#courseDetailView>#fullChatPage.is-mobile-active{display:flex!important;}
+  #courseDetailView #courseOverviewContainer{padding:0!important;height:auto!important;overflow:visible!important;}
+  #courseDetailView #courseOverviewContainer .overview-hero{margin:0 0 20px!important;padding:24px 16px!important;}
+  #courseDetailView #courseDashboard .dashboard-grid{grid-template-columns:1fr!important;margin:10px 0 20px!important;gap:12px!important;max-width:none!important;}
+  #courseDetailView #courseDashboard .dashboard-btn{min-height:104px!important;padding:18px 14px!important;}
+  #courseDetailView .page-title{gap:10px!important;}
+  #courseDetailView .page-title h2{font-size:1.2rem!important;line-height:1.5!important;}
+  #courseDetailView .full-page-actions{gap:8px!important;}
+
+  /* Notifications are a complete independent layer between the fixed bars. */
+  body.aa-notifications-open{overflow:hidden!important;}
+  #aaFinalNotificationsRoot{position:fixed!important;top:var(--nav-height-mobile,70px)!important;bottom:calc(var(--mobile-bottom-nav-content-height,66px) + env(safe-area-inset-bottom))!important;left:0!important;right:0!important;width:auto!important;height:auto!important;z-index:400000!important;background:var(--bg-primary)!important;display:none!important;overflow:hidden!important;box-sizing:border-box!important;}
+  #aaFinalNotificationsRoot.is-open{display:block!important;}
+  #aaFinalNotificationsRoot .aa-final-page-scroll{height:100%!important;overflow-y:auto!important;overflow-x:hidden!important;-webkit-overflow-scrolling:touch!important;overscroll-behavior:contain!important;padding:12px!important;box-sizing:border-box!important;}
+  #aaFinalNotifDropdown{position:fixed!important;top:calc(var(--nav-height-mobile,70px) + 8px)!important;left:12px!important;right:12px!important;width:auto!important;max-width:none!important;max-height:min(70dvh,520px)!important;overflow:hidden!important;z-index:410000!important;display:none!important;background:var(--bg-card)!important;border:1px solid var(--border)!important;border-radius:20px!important;box-shadow:0 24px 70px rgba(0,0,0,.3)!important;}
+  #aaFinalNotifDropdown.is-open{display:block!important;}
+  #aaFinalNotifDropdown .aa-final-list{max-height:calc(min(70dvh,520px) - 115px)!important;overflow-y:auto!important;-webkit-overflow-scrolling:touch!important;}
+  #aaFinalNotifDetail{position:fixed!important;top:var(--nav-height-mobile,70px)!important;bottom:calc(var(--mobile-bottom-nav-content-height,66px) + env(safe-area-inset-bottom))!important;left:0!important;right:0!important;width:auto!important;height:auto!important;z-index:420000!important;background:rgba(0,0,0,.58)!important;display:none!important;align-items:center!important;justify-content:center!important;padding:12px!important;box-sizing:border-box!important;}
+  #aaFinalNotifDetail.is-open{display:flex!important;}
+  #aaFinalNotifDetail .aa-final-detail-box{width:min(620px,100%)!important;max-height:calc(100dvh - var(--nav-height-mobile,70px) - var(--mobile-bottom-nav-content-height,66px) - 24px)!important;overflow-y:auto!important;-webkit-overflow-scrolling:touch!important;background:var(--bg-card)!important;border:1px solid var(--border)!important;border-radius:22px!important;box-sizing:border-box!important;padding:18px!important;}
+  #aaFinalAdminPanel{position:relative!important;}
+  #aaFinalAdminPanel .aa-final-admin-body{max-height:none!important;overflow:visible!important;}
+  #aaFinalAdminPanel.collapsed .aa-final-admin-body{display:none!important;}
+  #aaFinalAdminPanel.collapsed{padding-bottom:10px!important;}
+  #aaFinalAdminPanel .aa-final-admin-body{display:block!important;}
+  #aaFinalAdminPanel.collapsed .aa-final-admin-body{display:none!important;}
+  #aaFinalAdminPanel .aa-final-recipient-list{max-height:180px!important;overflow-y:auto!important;-webkit-overflow-scrolling:touch!important;}
+}
+@media(min-width:769px){
+  #aaFinalNotifDropdown{position:absolute!important;}
+}
+.aa-final-badge{position:absolute;top:-3px;inset-inline-end:-3px;min-width:18px;height:18px;padding:0 5px;border-radius:999px;background:#e74c3c;color:#fff;font-size:.68rem;font-weight:900;display:none;align-items:center;justify-content:center;border:2px solid var(--bg-secondary);box-shadow:0 4px 12px rgba(231,76,60,.3);z-index:2;}
+.aa-final-badge.show{display:flex;}
+</style>
+
+<script id="aa-final-rebuild-v24-script">
+(function(){
+'use strict';
+const $=id=>document.getElementById(id);
+const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+try{if(window.__aaNotifPollV17)clearInterval(window.__aaNotifPollV17);}catch(_){ }
+const currentUid=()=>String(window.currentUser?.uid||'');
+function tsDate(v){try{return v?.toDate?v.toDate():(v?new Date(v):null)}catch(_){return null}}
+function existsDoc(path){return db.doc(path).get().then(s=>s.exists).catch(()=>false)}
+function canonicalUserName(u){return String(u?.displayName||u?.name||u?.profileName||u?.username||u?.email?.split('@')[0]||'مستخدم').trim()||'مستخدم'}
+function currentCourseIdsFromArray(data){return Array.isArray(data?.enrolledCourses)?data.enrolledCourses:[]}
+
+/* ------------------------------------------------------------------
+   FINAL notification UI: rebuilt from scratch. Old notification DOM is
+   removed so no previous listener can conflict with this interface.
+------------------------------------------------------------------- */
+function removeOldNotificationUI(){
+  ['aaNotificationsWrap','aaNotificationsPage','aaNotificationDetailModal','aaCodeReasonModal','aaNotificationsDropdown'].forEach(id=>{$(id)?.remove()});
+}
+removeOldNotificationUI();
+
+function createNotificationUI(){
+  if($('aaFinalNotificationsRoot'))return;
+  const root=document.createElement('div');root.id='aaFinalNotificationsRoot';
+  root.innerHTML=`
+    <div class="aa-final-page-scroll">
+      <div class="aa-final-page-head" style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:14px;padding-bottom:12px;border-bottom:1px solid var(--border);">
+        <h2 style="margin:0;color:var(--accent1);font-size:1.35rem;">كل الإشعارات</h2>
+        <div style="display:flex;gap:8px;align-items:center;">
+          <button type="button" id="aaFinalMarkAll" class="full-page-back-btn" style="padding:8px 12px;">تحديد الكل كمقروء</button>
+          <button type="button" id="aaFinalClosePage" class="full-page-back-btn" style="width:42px;height:42px;padding:0;border-radius:50%;"><i class="fas fa-xmark"></i></button>
+        </div>
+      </div>
+      <div id="aaFinalAdminMount"></div>
+      <div id="aaFinalAllList" style="max-width:860px;margin:0 auto;display:grid;gap:10px;"></div>
+    </div>`;
+  document.body.appendChild(root);
+
+  const drop=document.createElement('div');drop.id='aaFinalNotifDropdown';
+  drop.innerHTML=`
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:12px 14px;border-bottom:1px solid var(--border);">
+      <strong>الإشعارات الجديدة</strong><button type="button" id="aaFinalDropAllRead" style="border:1px solid var(--border);background:var(--bg-secondary);color:var(--text-primary);border-radius:999px;padding:6px 10px;font:inherit;font-size:.72rem;font-weight:800;cursor:pointer;">تحديد الكل كمقروء</button>
+    </div>
+    <div class="aa-final-list" id="aaFinalDropList"></div>
+    <div style="padding:10px;border-top:1px solid var(--border);"><button type="button" id="aaFinalOpenAll" class="aa-notif-open-all">عرض كل الإشعارات</button></div>`;
+  document.body.appendChild(drop);
+
+  const detail=document.createElement('div');detail.id='aaFinalNotifDetail';
+  detail.innerHTML=`<div class="aa-final-detail-box"><div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;border-bottom:1px solid var(--border);padding-bottom:12px;"><div><h3 id="aaFinalDetailTitle" style="margin:0;font-size:1.08rem;line-height:1.7;"></h3><div id="aaFinalDetailMeta" style="color:var(--text-muted);font-size:.74rem;margin-top:6px;"></div></div><button type="button" id="aaFinalDetailClose" class="full-page-back-btn" style="width:40px;height:40px;padding:0;border-radius:50%;"><i class="fas fa-xmark"></i></button></div><div id="aaFinalDetailBody" style="padding-top:14px;line-height:2;white-space:pre-wrap;overflow-wrap:anywhere;"></div><div id="aaFinalDetailReason" style="display:none;margin-top:14px;padding:12px;border:1px solid rgba(231,76,60,.18);background:rgba(231,76,60,.06);border-radius:14px;"></div><div id="aaFinalDetailActions" style="display:grid;gap:8px;margin-top:14px;"></div></div>`;
+  document.body.appendChild(detail);
+
+  const nav=document.querySelector('.nav-actions-top');
+  if(nav && !$('aaFinalNotifWrap')){
+    const wrap=document.createElement('div');wrap.id='aaFinalNotifWrap';wrap.className='aa-notifications-wrap';wrap.style.position='relative';wrap.innerHTML=`<button type="button" class="aa-notifications-btn" id="aaFinalNotifBtn" aria-label="الإشعارات" title="الإشعارات"><i class="fas fa-bell"></i><span class="aa-final-badge" id="aaFinalBadge">0</span></button>`;
+    const theme=$('themeToggle'); if(theme)theme.insertAdjacentElement('afterend',wrap); else nav.appendChild(wrap);
+  }
+}
+createNotificationUI();
+
+let notifUnsub=null, notifCache=[], notifOpen=false, notifDetailId=null;
+function notificationIcon(type){
+ const m={code_deleted:'fa-user-slash',code_suspended:'fa-pause-circle',suspension_expired:'fa-unlock',subscription_expired:'fa-calendar-xmark',subscription_success:'fa-graduation-cap',assignment_submitted:'fa-images',assignment_approved:'fa-circle-check',course_lessons_complete:'fa-circle-check',course_quizzes_complete:'fa-list-check',login_notice:'fa-right-to-bracket'};
+ return m[type]||'fa-bell';
+}
+function renderNotifItem(n){return `<button type="button" class="aa-notif-item ${n.read?'':'unread'}" data-final-notification-id="${esc(n.id)}" style="width:100%;text-align:start;border:0;display:flex;gap:10px;align-items:flex-start;padding:12px;border-radius:14px;background:${n.read?'transparent':'rgba(108,92,231,.08)'};color:var(--text-primary);font:inherit;cursor:pointer;"><span style="width:36px;height:36px;flex:0 0 36px;border-radius:11px;background:rgba(108,92,231,.12);color:var(--accent1);display:grid;place-items:center;"><i class="fas ${notificationIcon(n.type)}"></i></span><span style="min-width:0;flex:1;"><strong style="display:flex;align-items:center;gap:7px;font-size:.84rem;line-height:1.5;">${n.read?'':'<i style="width:7px;height:7px;border-radius:50%;background:#e74c3c;display:inline-block;"></i>'}${esc(n.title||'إشعار')}</strong><span style="display:block;color:var(--text-muted);font-size:.77rem;line-height:1.55;margin-top:3px;">${esc(n.body||'')}</span><small style="display:block;color:var(--text-muted);font-size:.67rem;margin-top:4px;">${esc(tsDate(n.createdAt)?.toLocaleString('ar-SA',{dateStyle:'medium',timeStyle:'short'})||'')}</small></span></button>`}
+function renderNotificationLists(){
+ const sorted=[...notifCache].sort((a,b)=>(tsDate(b.createdAt)?.getTime()||0)-(tsDate(a.createdAt)?.getTime()||0));
+ const unread=sorted.filter(n=>!n.read);
+ const badge=$('aaFinalBadge');if(badge){badge.textContent=unread.length>99?'99+':String(unread.length);badge.classList.toggle('show',unread.length>0)}
+ const dl=$('aaFinalDropList');if(dl)dl.innerHTML=unread.length?unread.slice(0,8).map(renderNotifItem).join(''):'<div style="padding:26px;text-align:center;color:var(--text-muted);">لا توجد إشعارات جديدة.</div>';
+ const al=$('aaFinalAllList');if(al)al.innerHTML=sorted.length?sorted.map(renderNotifItem).join(''):'<div style="padding:50px;text-align:center;color:var(--text-muted);">لا توجد إشعارات.</div>';
+ if(dl)dl.querySelectorAll('[data-final-notification-id]').forEach(b=>{b.onclick=()=>openFinalNotification(b.dataset.finalNotificationId)});
+ if(al)al.querySelectorAll('[data-final-notification-id]').forEach(b=>{b.onclick=()=>openFinalNotification(b.dataset.finalNotificationId)});
+}
+async function validNotification(n){
+ const d=n.data||{}; const cid=String(d.courseId||'').trim(); if(!cid)return true;
+ try{
+   const course=await db.collection('courses').doc(cid).get(); if(!course.exists)return false;
+   if(d.assignmentId && !(await db.collection('courses').doc(cid).collection('assignments').doc(String(d.assignmentId)).get()).exists)return false;
+   if(d.quizId && !(await db.collection('courses').doc(cid).collection('quizzes').doc(String(d.quizId)).get()).exists)return false;
+   if(d.lessonId && !(await db.collection('courses').doc(cid).collection('lessons').doc(String(d.lessonId)).get()).exists)return false;
+   return true;
+ }catch(_){return false}
+}
+async function startNotificationListener(uid){
+ notifUnsub?.();notifUnsub=null;notifCache=[];renderNotificationLists();if(!uid)return;
+ notifUnsub=db.collection('users').doc(uid).collection('notifications').onSnapshot(async snap=>{
+   const raw=snap.docs.map(d=>({id:d.id,...(d.data()||{})}));
+   const checked=[];for(const n of raw){if(await validNotification(n))checked.push(n)}
+   notifCache=checked;renderNotificationLists();
+ },e=>console.warn('final notifications listener',e));
+}
+async function addNotification(uid,payload){
+ if(!uid)return;
+ const data={...(payload.data||{})};
+ if(data.courseId){if(!(await existsDoc(`courses/${data.courseId}`)))return;}
+ const ref=db.collection('users').doc(String(uid)).collection('notifications');
+ const dedupe=payload.dedupeKey?String(payload.dedupeKey).replace(/[^a-zA-Z0-9_-]/g,'_').slice(0,130):'';
+ if(dedupe){const doc=ref.doc('auto_'+dedupe);if((await doc.get()).exists)return;try{const sameType=await ref.where('type','==',payload.type||'general').limit(80).get();const duplicate=sameType.docs.some(d=>{const x=d.data()||{},xd=x.data||{};return String(xd.courseId||'')===String(data.courseId||'')&&String(xd.codeId||'')===String(data.codeId||'')&&String(xd.assignmentId||'')===String(data.assignmentId||'')&&String(xd.workId||'')===String(data.workId||'')});if(duplicate)return;}catch(_){ }await doc.set({title:payload.title||'إشعار',body:payload.body||'',reason:payload.reason||'',type:payload.type||'general',data:{...data,dedupeKey:dedupe},read:false,createdAt:firebase.firestore.FieldValue.serverTimestamp()});return;}
+ await ref.add({title:payload.title||'إشعار',body:payload.body||'',reason:payload.reason||'',type:payload.type||'general',data,read:false,createdAt:firebase.firestore.FieldValue.serverTimestamp()});
+}
+window.aaAddNotification=addNotification;
+window.aaNotifyUsers=async(uids,payload)=>{for(const uid of [...new Set((uids||[]).map(String).filter(Boolean))])await addNotification(uid,payload)};
+async function markRead(id){if(!currentUid())return;await db.collection('users').doc(currentUid()).collection('notifications').doc(id).set({read:true,readAt:firebase.firestore.FieldValue.serverTimestamp()},{merge:true}).catch(()=>{});}
+async function openFinalNotification(id){
+ const n=notifCache.find(x=>x.id===id);if(!n)return;notifDetailId=id;await markRead(id);renderNotificationLists();
+ const d=$('aaFinalNotifDetail');d.classList.add('is-open');
+ $('aaFinalDetailTitle').textContent=n.title||'إشعار';$('aaFinalDetailBody').textContent=n.body||'';$('aaFinalDetailMeta').textContent=`${n.type||'إشعار'} • ${tsDate(n.createdAt)?.toLocaleString('ar-SA',{dateStyle:'full',timeStyle:'short'})||''}`;
+ const r=$('aaFinalDetailReason');if(n.reason){r.style.display='block';r.innerHTML='<strong>السبب</strong><div style="margin-top:5px;line-height:1.8;">'+esc(n.reason)+'</div>';}else{r.style.display='none';r.innerHTML='';}
+ const actions=$('aaFinalDetailActions');actions.innerHTML='';const data=n.data||{};
+ const addAction=(label,fn)=>{const b=document.createElement('button');b.type='button';b.className='aa-notif-open-all';b.textContent=label;b.onclick=fn;actions.appendChild(b)};
+ if(data.route==='assignment'&&data.courseId&&data.assignmentId){addAction('فتح الواجب',async()=>{closeFinalDetail();closeFinalPage();await window.openCourse?.(data.courseId);setTimeout(()=>window.openAssignmentDetail?.(data.courseId,data.assignmentId,true),180);});}
+ if((n.type==='subscription_expired'||n.type==='code_deleted')&&data.courseId){addAction(n.type==='subscription_expired'?'تجديد الاشتراك':'وضع كود جديد',async()=>{closeFinalDetail();closeFinalPage();window.mobileNavigate?.('courses');await sleep(120);window.aaOpenEnrollmentForNotification?.(data.courseId);});}
+ if(n.type==='course_lessons_complete'||n.type==='course_quizzes_complete'){
+   if(data.courseId)addAction('فتح الدورة',async()=>{closeFinalDetail();closeFinalPage();await window.openCourse?.(data.courseId);});
+ }
+}
+function closeFinalDetail(){$('aaFinalNotifDetail')?.classList.remove('is-open');}
+function openFinalPage(){closeFinalDetail();$('aaFinalNotifDropdown')?.classList.remove('is-open');$('aaFinalNotificationsRoot')?.classList.add('is-open');document.body.classList.add('aa-notifications-open');renderNotificationLists();if(isAdmin)buildAdminPanel();}
+function closeFinalPage(){$('aaFinalNotificationsRoot')?.classList.remove('is-open');document.body.classList.remove('aa-notifications-open');closeFinalDetail();}
+function toggleFinalDropdown(){const d=$('aaFinalNotifDropdown');if(d.classList.contains('is-open'))d.classList.remove('is-open');else d.classList.add('is-open');}
+$('aaFinalNotifBtn')?.addEventListener('click',e=>{e.preventDefault();e.stopPropagation();toggleFinalDropdown()});
+$('aaFinalOpenAll')?.addEventListener('click',openFinalPage);
+$('aaFinalDropAllRead')?.addEventListener('click',async()=>{await markAllRead();});
+$('aaFinalMarkAll')?.addEventListener('click',async()=>{await markAllRead();});
+$('aaFinalClosePage')?.addEventListener('click',closeFinalPage);
+$('aaFinalDetailClose')?.addEventListener('click',closeFinalDetail);
+document.addEventListener('click',e=>{const wrap=$('aaFinalNotifWrap'),drop=$('aaFinalNotifDropdown');if(drop?.classList.contains('is-open')&&wrap&&!wrap.contains(e.target))drop.classList.remove('is-open')});
+async function markAllRead(){const uid=currentUid();if(!uid)return;const unread=notifCache.filter(n=>!n.read);if(!unread.length)return;const batch=db.batch();unread.forEach(n=>batch.set(db.collection('users').doc(uid).collection('notifications').doc(n.id),{read:true,readAt:firebase.firestore.FieldValue.serverTimestamp()},{merge:true}));await batch.commit().catch(()=>{});}
+
+/* ------------------------------------------------------------------
+   Admin sender rebuilt with collapsible arrow and current-platform data.
+------------------------------------------------------------------- */
+let adminPanelBuilt=false;
+async function loadCurrentUsers(){const snap=await db.collection('users').get();return snap.docs.map(d=>({id:d.id,...(d.data()||{})})).filter(u=>u.id!==currentUid());}
+async function getCourseStudents(cid){if(!cid)return[];const snap=await db.collection('users').get();return snap.docs.filter(d=>{const a=d.data()?.enrolledCourses;return Array.isArray(a)&&a.some(x=>String(typeof x==='string'?x:x?.courseId||'')===String(cid))}).map(d=>d.id)}
+async function getAllEnrolledStudents(){const snap=await db.collection('users').get();return snap.docs.filter(d=>Array.isArray(d.data()?.enrolledCourses)&&d.data().enrolledCourses.length>0).map(d=>d.id).filter(id=>id!==currentUid());}
+function buildAdminPanel(){if(!isAdmin||adminPanelBuilt)return;adminPanelBuilt=true;const mount=$('aaFinalAdminMount');if(!mount)return;const p=document.createElement('section');p.id='aaFinalAdminPanel';p.style.cssText='max-width:980px;margin:0 auto 16px;padding:14px;border:1px solid var(--border);border-radius:20px;background:var(--bg-card);';p.innerHTML=`<button type="button" id="aaFinalAdminToggle" style="width:100%;display:flex;align-items:center;justify-content:space-between;gap:10px;border:0;background:transparent;color:var(--text-primary);font:inherit;font-weight:900;cursor:pointer;padding:4px 0;"><span><i class="fas fa-paper-plane" style="color:var(--accent1);margin-inline-end:7px;"></i>إرسال إشعار من المشرف</span><i class="fas fa-chevron-up" id="aaFinalAdminArrow"></i></button><div class="aa-final-admin-body" id="aaFinalAdminBody" style="margin-top:12px;"><div style="color:var(--text-muted);font-size:.78rem;line-height:1.7;margin-bottom:12px;">اختر حسابات محددة أو طلاب دورة معينة أو جميع الطلاب المشتركين أو جميع من سجل في المنصة.</div><div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;"><label>المستلمون<select id="aaFinalAudience" style="width:100%;margin-top:6px;min-height:44px;padding:10px;border:1px solid var(--border);border-radius:12px;background:var(--bg-primary);color:var(--text-primary);font:inherit;"><option value="specific">حسابات محددة</option><option value="course">طلاب دورة معينة</option><option value="enrolled">كل الطلاب المشتركين</option><option value="all">كل من سجل في المنصة</option></select></label><label id="aaFinalCourseField" style="display:none;">الدورة<select id="aaFinalCourse" style="width:100%;margin-top:6px;min-height:44px;padding:10px;border:1px solid var(--border);border-radius:12px;background:var(--bg-primary);color:var(--text-primary);font:inherit;"></select></label><div style="grid-column:1/-1;" id="aaFinalSpecificField"><div style="display:flex;gap:8px;flex-wrap:wrap;"><input id="aaFinalUserSearch" placeholder="البحث باسم الحساب" style="flex:1;min-width:180px;min-height:44px;padding:10px;border:1px solid var(--border);border-radius:12px;background:var(--bg-primary);color:var(--text-primary);font:inherit;"><button type="button" id="aaFinalSelectVisible" class="full-page-back-btn">تحديد الظاهر</button><button type="button" id="aaFinalClearVisible" class="full-page-back-btn">إلغاء</button></div><div id="aaFinalUserList" class="aa-final-recipient-list" style="display:grid;gap:4px;margin-top:8px;border:1px solid var(--border);border-radius:14px;padding:6px;"></div><small id="aaFinalSelectedCount" style="display:block;color:var(--text-muted);margin-top:5px;">تم تحديد 0 حساب</small></div><label>العنوان<input id="aaFinalTitle" placeholder="عنوان الإشعار" style="width:100%;margin-top:6px;min-height:44px;padding:10px;border:1px solid var(--border);border-radius:12px;background:var(--bg-primary);color:var(--text-primary);font:inherit;"></label><label>النوع<select id="aaFinalType" style="width:100%;margin-top:6px;min-height:44px;padding:10px;border:1px solid var(--border);border-radius:12px;background:var(--bg-primary);color:var(--text-primary);font:inherit;"><option value="admin_message">رسالة من المشرف</option><option value="announcement">إعلان</option><option value="reminder">تذكير</option><option value="important">تنبيه مهم</option></select></label><label style="grid-column:1/-1;">المحتوى<textarea id="aaFinalBody" rows="5" placeholder="محتوى الإشعار" style="width:100%;margin-top:6px;padding:10px;border:1px solid var(--border);border-radius:12px;background:var(--bg-primary);color:var(--text-primary);font:inherit;line-height:1.8;"></textarea></label></div><div style="display:flex;justify-content:flex-end;margin-top:12px;"><button type="button" class="aa-notif-open-all" id="aaFinalSend">إرسال الإشعار</button></div></div>`;mount.appendChild(p);
+ const body=$('aaFinalAdminBody'),arrow=$('aaFinalAdminArrow');$('aaFinalAdminToggle').onclick=()=>{p.classList.toggle('collapsed');arrow.className=p.classList.contains('collapsed')?'fas fa-chevron-down':'fas fa-chevron-up'};
+ const aud=$('aaFinalAudience');aud.onchange=()=>{$('aaFinalCourseField').style.display=aud.value==='course'?'block':'none';$('aaFinalSpecificField').style.display=aud.value==='specific'?'block':'none'};
+ let users=[];
+ const renderUsers=()=>{const q=String($('aaFinalUserSearch').value||'').trim().toLocaleLowerCase('ar');const arr=users.filter(u=>canonicalUserName(u).toLocaleLowerCase('ar').includes(q));$('aaFinalUserList').innerHTML=arr.length?arr.map(u=>`<label style="display:flex;align-items:center;gap:8px;padding:7px;border-radius:10px;cursor:pointer;"><input type="checkbox" value="${esc(u.id)}"><span style="width:30px;height:30px;border-radius:50%;overflow:hidden;background:var(--accent-gradient);color:#fff;display:grid;place-items:center;font-weight:900;">${u.photoURL?`<img src="${esc(u.photoURL)}" alt="" style="width:100%;height:100%;object-fit:cover;">`:esc(canonicalUserName(u).slice(0,1))}</span><span style="min-width:0;display:flex;flex-direction:column;"><strong style="font-size:.8rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(canonicalUserName(u))}</strong><small style="color:var(--text-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(u.email||'')}</small></span></label>`).join(''):'<div style="padding:18px;text-align:center;color:var(--text-muted);">لا توجد حسابات مطابقة.</div>';};
+ $('aaFinalUserSearch').oninput=renderUsers;
+ $('aaFinalSelectVisible').onclick=()=>{$('aaFinalUserList').querySelectorAll('input').forEach(i=>i.checked=true);updateCount()};$('aaFinalClearVisible').onclick=()=>{$('aaFinalUserList').querySelectorAll('input').forEach(i=>i.checked=false);updateCount()};$('aaFinalUserList').onchange=updateCount;function updateCount(){$('aaFinalSelectedCount').textContent=`تم تحديد ${$('aaFinalUserList').querySelectorAll('input:checked').length} حساب`}
+ (async()=>{users=await loadCurrentUsers();renderUsers();const cs=await db.collection('courses').get();$('aaFinalCourse').innerHTML='<option value="">اختر الدورة</option>'+cs.docs.map(d=>`<option value="${esc(d.id)}">${esc(d.data()?.titleAr||d.data()?.title||'دورة')}</option>`).join('')})();
+ $('aaFinalSend').onclick=async()=>{const title=$('aaFinalTitle').value.trim(),bodyText=$('aaFinalBody').value.trim();if(!title||!bodyText)return showCustomAlert?.('تنبيه','اكتب عنوان الإشعار ومحتواه.');let ids=[];try{if(aud.value==='specific')ids=[...$('aaFinalUserList').querySelectorAll('input:checked')].map(x=>x.value);if(aud.value==='course')ids=await getCourseStudents($('aaFinalCourse').value);if(aud.value==='enrolled')ids=await getAllEnrolledStudents();if(aud.value==='all')ids=(await loadCurrentUsers()).map(u=>u.id);ids=[...new Set(ids)].filter(Boolean);if(!ids.length)return showCustomAlert?.('تنبيه','لا يوجد مستلمون.');$('aaFinalSend').disabled=true;for(const uid of ids)await addNotification(uid,{title,body:bodyText,type:$('aaFinalType').value,data:{source:'admin',senderUid:currentUid()}});showCustomAlert?.('تم الإرسال',`تم إرسال الإشعار إلى ${ids.length} حساب.`);$('aaFinalTitle').value='';$('aaFinalBody').value='';$('aaFinalUserList').querySelectorAll('input').forEach(i=>i.checked=false);updateCount();}catch(e){console.error(e);showCustomAlert?.('خطأ','تعذر إرسال الإشعار.')}finally{$('aaFinalSend').disabled=false;}};
+}
+
+/* ------------------------------------------------------------------
+   Current-platform auto notifications and strict dedupe.
+------------------------------------------------------------------- */
+function autoKey(type,courseId,codeId,extra=''){return [type,courseId||'none',codeId||'none',extra||'none'].join('_')}
+async function getCurrentEnrollment(courseId,uid=currentUid()){if(!uid||!courseId)return null;const s=await db.collection('users').doc(uid).collection('enrolledCourses').doc(courseId).get().catch(()=>null);return s?.exists?{id:courseId,...(s.data()||{})}:null}
+async function getCurrentCode(courseId,codeId){if(!courseId||!codeId)return null;const s=await db.collection('courses').doc(courseId).collection('codes').doc(codeId).get().catch(()=>null);return s?.exists?{id:codeId,...(s.data()||{})}:null}
+async function maybeNotifyLogin(user){if(!user)return;const key='aa_login_final_'+user.uid;const sessionToken=sessionStorage.getItem(key);if(sessionToken)return;sessionStorage.setItem(key,'1');const d=new Date();await addNotification(user.uid,{title:'تم تسجيل الدخول إلى حسابك',body:`تم تسجيل الدخول إلى حسابك في منصة أناناس أكاديمي بتاريخ ${d.toLocaleString('ar-SA',{dateStyle:'full',timeStyle:'short',timeZone:'Asia/Riyadh'})}. إذا لم تكن أنت من قام بتسجيل الدخول، يرجى مراجعة أمان حسابك.`,type:'login_notice',data:{route:'notifications',loginAt:d.toISOString()},dedupeKey:`login_${user.uid}_${d.toISOString().slice(0,10)}`});}
+
+async function validateAllCourseCompletions(uid){if(!uid)return;const usersLessons=await db.collection('users').doc(uid).collection('completedLessons').get().catch(()=>null);const doneL=new Set(usersLessons?.docs.map(d=>d.id)||[]);const statQ=await db.collection('userStats').doc(uid).collection('completedQuizzes').get().catch(()=>null);const doneQ=new Set(statQ?.docs.map(d=>d.id)||[]);const courses=await db.collection('courses').get().catch(()=>null);if(!courses)return;for(const cdoc of courses.docs){const cid=cdoc.id;const lessons=await cdoc.ref.collection('lessons').get().catch(()=>null);if(lessons?.size&&lessons.docs.every(d=>doneL.has(d.id)))await addNotification(uid,{title:'أكملت جميع حصص الدورة',body:`أكملت جميع الحصص الموجودة حاليًا في دورة ${cdoc.data()?.titleAr||'الدورة'}. أحسنت!`,type:'course_lessons_complete',data:{route:'course',courseId:cid},dedupeKey:autoKey('lessons_complete',cid,'','current')});const qs=await cdoc.ref.collection('quizzes').get().catch(()=>null);if(qs?.size&&qs.docs.every(d=>doneQ.has(d.id)))await addNotification(uid,{title:'أكملت جميع اختبارات الدورة',body:`أكملت جميع الاختبارات الموجودة حاليًا في دورة ${cdoc.data()?.titleAr||'الدورة'}. أحسنت!`,type:'course_quizzes_complete',data:{route:'course',courseId:cid},dedupeKey:autoKey('quizzes_complete',cid,'','current')})}}
+
+async function scanCurrentEnrollments(){
+  const uid=currentUid();
+  if(!uid||isAdmin)return;
+  const snap=await db.collection('users').doc(uid).collection('enrolledCourses').get().catch(()=>null);
+  if(!snap)return;
+  const now=Date.now();
+  for(const ed of snap.docs){
+    const cid=ed.id;
+    const enrollment=ed.data()||{};
+    const course=await db.collection('courses').doc(cid).get().catch(()=>null);
+    if(!course?.exists)continue;
+    const courseTitle=course.data()?.titleAr||'الدورة';
+    const codeId=String(enrollment.codeId||'');
+    let code=codeId?await getCurrentCode(cid,codeId):null;
+    if(!code){
+      const allCodes=await db.collection('courses').doc(cid).collection('codes').get().catch(()=>null);
+      const match=allCodes?.docs?.find(d=>Array.isArray(d.data()?.usedBy)&&d.data().usedBy.map(String).includes(uid));
+      if(match)code={id:match.id,...(match.data()||{})};
+    }
+
+    if(enrollment.codeDeleted===true){
+      await addNotification(uid,{title:'تم حذف اشتراكك',body:`تم حذف اشتراكك في دورة ${courseTitle}، ويمكنك استخدام كود جديد عند رغبتك في العودة.`,reason:enrollment.accessBlockReason||enrollment.blockReason||'',type:'code_deleted',data:{route:'course',courseId:cid,codeId},dedupeKey:autoKey('code_deleted',cid,codeId)});
+      if(String(activeCourseId)===String(cid))window.aaEjectFromCourseV24?.();
+      continue;
+    }
+    if(!code)continue;
+
+    const until=tsDate(code.suspendedUntil);
+    const suspensionActive=!!code.disabled&&(!until||until.getTime()>now);
+    if(suspensionActive){
+      await addNotification(uid,{title:'تم إيقاف اشتراكك',body:`تم إيقاف اشتراكك في دورة ${courseTitle}${until?' حتى '+until.toLocaleString('ar-SA'):''}.`,reason:code.suspensionReason||'تم إيقاف الاشتراك من قبل المشرف.',type:'code_suspended',data:{route:'course',courseId:cid,codeId,suspendedUntil:code.suspendedUntil},dedupeKey:autoKey('code_suspended',cid,codeId)});
+      if(String(activeCourseId)===String(cid))window.aaEjectFromCourseV24?.();
+      continue;
+    }
+    if(code.disabled&&until&&until.getTime()<=now){
+      await addNotification(uid,{title:'انتهت مدة إيقاف الاشتراك',body:`انتهت مدة إيقاف اشتراكك في دورة ${courseTitle} ويمكنك الوصول إليها مرة أخرى.`,reason:code.suspensionReason||'',type:'suspension_expired',data:{route:'course',courseId:cid,codeId},dedupeKey:autoKey('suspension_expired',cid,codeId,String(until.getTime()))});
+    }
+
+    const end=tsDate(code.endTime);
+    if(end&&end.getTime()<=now){
+      await addNotification(uid,{title:'مبارك انتهاء اشتراكك',body:`نبارك لك انتهاء اشتراكك في دورة ${courseTitle}، ونشكرك على اشتراكك وثقتك بنا. يمكنك تجديد الاشتراك بكود جديد عند رغبتك في العودة.`,type:'subscription_expired',data:{route:'course',courseId:cid,codeId},dedupeKey:autoKey('subscription_expired',cid,codeId)});
+      if(String(activeCourseId)===String(cid))window.aaEjectFromCourseV24?.();
+    }
+  }
+}
+
+async function scanCurrentAssignmentEvents(){
+  const courses=await db.collection('courses').get().catch(()=>null);if(!courses)return;
+  const admins=await db.collection('users').where('role','==','admin').get().catch(()=>null);
+  const adminIds=admins?admins.docs.map(d=>d.id):[];if(!adminIds.length)return;
+  for(const c of courses.docs){
+    const cid=c.id,courseTitle=c.data()?.titleAr||'الدورة';
+    const as=await c.ref.collection('assignments').get().catch(()=>null);if(!as)continue;
+    for(const a of as.docs){
+      const ad=a.data()||{};const submissions=Array.isArray(ad.submissions)?ad.submissions:[];
+      for(let i=0;i<submissions.length;i++){
+        const sub=submissions[i]||{};const wid=String(sub.workId||sub.id||`legacy_${i}`);const uid=String(sub.userId||sub.uid||'');if(!uid)continue;
+        const base={route:'assignment',courseId:cid,assignmentId:a.id,workId:wid};
+        await window.aaNotifyUsers?.(adminIds,{title:'عمل واجب جديد بانتظار الاعتماد',body:`رفع طالب عملًا جديدًا في واجب ${ad.titleAr||'الواجب'} ضمن دورة ${courseTitle}.`,type:'assignment_submitted',data:base,dedupeKey:`assignment_submitted_${cid}_${a.id}_${wid}`});
+        const approved= sub.approved===true || sub.status==='approved' || sub.isApproved===true;
+        if(approved){
+          await addNotification(uid,{title:'تم اعتماد عملك',body:`تم اعتماد عملك في واجب ${ad.titleAr||'الواجب'} من المشرف.`,type:'assignment_approved',data:base,dedupeKey:`assignment_approved_${cid}_${a.id}_${wid}`});
         }
       }
-    }catch(e){console.warn('v22 subscription notifications',e)}
-  }
-  window.__aaV22SyncSubscriptionNotifications=syncCurrentSubscriptionNotifications;
-
-  if(!window.__aaV22LifecyclePoll){
-    window.__aaV22LifecyclePoll=setInterval(()=>{if(currentUser&&!isAdmin)syncCurrentSubscriptionNotifications(currentUser.uid)},30000);
-    if(currentUser&&!isAdmin)setTimeout(()=>syncCurrentSubscriptionNotifications(currentUser.uid),800);
-  }
-  if(!window.__aaV22AuthLifecycleBound){
-    window.__aaV22AuthLifecycleBound=true;
-    auth.onAuthStateChanged(user=>{if(user&&!isAdmin)setTimeout(()=>syncCurrentSubscriptionNotifications(user.uid),900);});
-  }
-
-  /* ---------- 8) Keep notification details above the notification page, and keep page open under them. ---------- */
-  if(!window.__aaV22NotificationDetailNavBound){
-    window.__aaV22NotificationDetailNavBound=true;
-    document.addEventListener('click',function(e){
-      const item=e.target.closest?.('#aaNotificationsPage .aa-notif-item');if(!item)return;
-      // The original handler opens the detail. We only make the layering explicit.
-      setTimeout(()=>{if(E('aaNotificationDetailModal')?.classList.contains('active')){E('aaNotificationDetailModal').style.display='flex';E('aaNotificationDetailModal').style.zIndex='26000';}},0);
-    },true);
-  }
-
-})();
-</script>
-
-
-<!-- ===== FINAL CODE UNSUSPEND NOTIFICATION PATCH v22 ===== -->
-<script id="aa-v22-code-unsuspend-notification">
-(function(){
-  'use strict';
-  if(window.__aaV22UnsuspendNotifBound)return;
-  window.__aaV22UnsuspendNotifBound=true;
-  const oldToggle=window.toggleEnrollmentCode;
-  if(typeof oldToggle!=='function')return;
-  const asDate=v=>{try{if(!v)return null;const d=v.toDate?v.toDate():new Date(v);return isNaN(d.getTime())?null:d}catch(_){return null}};
-  const escName=v=>String(v||'الدورة');
-  const fn=async function(codeId,currentSuspended){
-    let before=null,courseId=window.activeCourseId||null;
-    try{if(isAdmin&&courseId){const ss=await db.collection('courses').doc(courseId).collection('codes').doc(codeId).get();if(ss.exists)before=ss.data()||{}}}catch(_){ }
-    const result=await oldToggle.apply(this,arguments);
-    if(currentSuspended&&isAdmin&&courseId&&before){
-      try{
-        const courseSnap=await db.collection('courses').doc(courseId).get();
-        if(!courseSnap.exists)return result;
-        const course=courseSnap.data()||{},courseTitle=course.titleAr||course.title||'الدورة';
-        const users=[...new Set([...(Array.isArray(before.usedBy)?before.usedBy:[]),...(Array.isArray(before.usedByInfo)?before.usedByInfo:[])].map(x=>String(typeof x==='string'?x:x?.uid||'')).filter(Boolean))];
-        const nowKey=Date.now();
-        for(const uid of users){
-          try{await window.aaAddNotification?.(uid,{title:'تم إلغاء إيقاف اشتراكك',body:`تم إلغاء إيقاف اشتراكك في ${courseTitle} وأصبح بإمكانك الدخول إلى الدورة مرة أخرى.`,type:'code_unsuspended',data:{route:'course',courseId,codeId,code:before.code||codeId,courseTitle,codeStatus:'active',previousSuspendedUntil:asDate(before.suspendedUntil)?.toISOString()||null},dedupeKey:`code_unsuspended_${courseId}_${codeId}_${nowKey}_${uid}`});}catch(_){ }
-        }
-      }catch(e){console.warn('unsuspend notification',e)}
     }
-    return result;
+  }
+}
+
+/* A suspended enrollment cannot bypass the suspension with another code. Deleted/expired subscriptions may renew. */
+const __aaOldRenewOpen=window.aaOpenEnrollmentForNotification;
+if(typeof __aaOldRenewOpen==='function'&&!__aaOldRenewOpen.__v24Guarded){
+  const guardedRenew=async function(courseId){
+    try{
+      const en=await getCurrentEnrollment(courseId);
+      if(en && en.codeDeleted!==true && en.accessBlocked===true){
+        const code=await getCurrentCode(courseId,en.codeId);
+        const until=tsDate(code?.suspendedUntil);
+        const active=!!code?.disabled&&(!until||until.getTime()>Date.now());
+        if(active){showCustomAlert?.('لا يمكن التجديد','هذا الاشتراك موقوف حاليًا من المشرف. لا يمكن استخدام كود آخر حتى يتم إلغاء الإيقاف.');return;}
+      }
+    }catch(_){ }
+    return __aaOldRenewOpen.apply(this,arguments);
   };
-  fn.__aaV22UnsuspendNotif=true;window.toggleEnrollmentCode=fn;
+  guardedRenew.__v24Guarded=true;window.aaOpenEnrollmentForNotification=guardedRenew;
+}
+
+function completionFingerprint(ids){return [...ids].sort().join('|').slice(0,500)}
+async function validateAllCourseCompletions(uid){
+  if(!uid)return;
+  const usersLessons=await db.collection('users').doc(uid).collection('completedLessons').get().catch(()=>null);
+  const doneL=new Set(usersLessons?.docs.map(d=>d.id)||[]);
+  const statQ=await db.collection('userStats').doc(uid).collection('completedQuizzes').get().catch(()=>null);
+  const doneQ=new Set(statQ?.docs.map(d=>d.id)||[]);
+  const courses=await db.collection('courses').get().catch(()=>null);if(!courses)return;
+  for(const cdoc of courses.docs){
+    const cid=cdoc.id, title=cdoc.data()?.titleAr||'الدورة';
+    const lessons=await cdoc.ref.collection('lessons').get().catch(()=>null);
+    if(lessons?.size){const ids=lessons.docs.map(d=>d.id);if(ids.every(id=>doneL.has(id)))await addNotification(uid,{title:'أكملت جميع حصص الدورة',body:`أكملت جميع الحصص الموجودة حاليًا في دورة ${title}. أحسنت!`,type:'course_lessons_complete',data:{route:'course',courseId:cid},dedupeKey:`lessons_complete_${cid}_${completionFingerprint(ids)}`});}
+    const qs=await cdoc.ref.collection('quizzes').get().catch(()=>null);
+    if(qs?.size){const ids=qs.docs.map(d=>d.id);if(ids.every(id=>doneQ.has(id)))await addNotification(uid,{title:'أكملت جميع اختبارات الدورة',body:`أكملت جميع الاختبارات الموجودة حاليًا في دورة ${title}. أحسنت!`,type:'course_quizzes_complete',data:{route:'course',courseId:cid},dedupeKey:`quizzes_complete_${cid}_${completionFingerprint(ids)}`});}
+  }
+}
+
+/* Subscription success hook: notify only when the current code is actually assigned to the current enrollment. */
+function patchEnrollmentSuccess(){const names=['enrollInCourse','submitEnrollmentCode','completeEnrollment','activateEnrollment'];for(const name of names){const fn=window[name];if(typeof fn!=='function'||fn.__v24Wrapped)continue;window[name]=async function(){const r=await fn.apply(this,arguments);try{const cid=activeCourseId;const e=await getCurrentEnrollment(cid);if(e?.codeId){const course=await db.collection('courses').doc(cid).get();await addNotification(currentUid(),{title:'تم الاشتراك في الدورة بنجاح',body:`تم تسجيل اشتراكك بنجاح في دورة ${course.data()?.titleAr||'الدورة'}. نتمنى لك تجربة تعليمية موفقة.`,type:'subscription_success',data:{route:'course',courseId:cid,codeId:e.codeId},dedupeKey:autoKey('subscription_success',cid,e.codeId)});}}catch(_){ }return r};window[name].__v24Wrapped=true;}}
+
+/* Assignment submission/admin approval hooks use the current assignment only. */
+function patchAssignmentNotifications(){
+ const submitters=['submitAssignment','uploadAssignmentWork','saveAssignmentWork','saveProfileWork'];submitters.forEach(name=>{const fn=window[name];if(typeof fn!=='function'||fn.__v24Wrapped) return;window[name]=async function(){const args=arguments;const courseId=args[0]||activeCourseId;const assignmentId=args[1]||window.activeAssignmentDetailId;const result=await fn.apply(this,args);try{if(courseId&&assignmentId){const a=await db.collection('courses').doc(courseId).collection('assignments').doc(String(assignmentId)).get();if(a.exists){const adminIds=await db.collection('users').where('role','==','admin').get().catch(()=>null);const uids=adminIds?adminIds.docs.map(d=>d.id):[];await addNotification(uids,{title:'عمل واجب جديد بانتظار الاعتماد',body:`رفع طالب عملًا جديدًا في واجب ${a.data()?.titleAr||'الواجب'}.`,type:'assignment_submitted',data:{route:'assignment',courseId,assignmentId},dedupeKey:`assignment_submitted_${courseId}_${assignmentId}_${currentUid()}_${Date.now()}`})}}}catch(_){}return result};window[name].__v24Wrapped=true;});
+ const approve=window.approveSubmission;if(typeof approve==='function'&&!approve.__v24Wrapped){window.approveSubmission=async function(courseId,assignmentId,workId){const a=await db.collection('courses').doc(courseId).collection('assignments').doc(String(assignmentId)).get().catch(()=>null);let uid='';if(a?.exists){const subs=Array.isArray(a.data()?.submissions)?a.data().submissions:[];const sub=subs.find((x,i)=>(x.workId||x.id||`legacy_${i}`)===workId);uid=String(sub?.userId||'')}const r=await approve.apply(this,arguments);if(uid){await addNotification(uid,{title:'تم اعتماد عملك',body:`تم اعتماد عملك في واجب ${a?.data()?.titleAr||'الواجب'} من المشرف.`,type:'assignment_approved',data:{route:'assignment',courseId,assignmentId,workId},dedupeKey:`assignment_approved_${courseId}_${assignmentId}_${workId}`})}return r};window.approveSubmission.__v24Wrapped=true;}}
+
+patchEnrollmentSuccess(); patchAssignmentNotifications();
+
+/* Login/session and periodic current-platform notification scan. */
+let lastAuthUid='';
+auth?.onAuthStateChanged?.(async u=>{if(!u){lastAuthUid='';return;}if(u.uid!==lastAuthUid){lastAuthUid=u.uid;sessionStorage.removeItem('aa_login_final_'+u.uid);await sleep(500);await maybeNotifyLogin(u);}startNotificationListener(u.uid);buildAdminPanel();if(!isAdmin){await scanCurrentEnrollments();await validateAllCourseCompletions(u.uid);}else{await scanCurrentAssignmentEvents();}});
+setInterval(()=>{if(currentUser&&!isAdmin){scanCurrentEnrollments();validateAllCourseCompletions(currentUid());} if(currentUser&&isAdmin)scanCurrentAssignmentEvents();},25000);
+
+/* ------------------------------------------------------------------
+   Final mobile course navigation: one state at a time, first tap wins.
+------------------------------------------------------------------- */
+function mobileCourseLayer(page){
+ if(window.innerWidth>768)return;
+ const ids={overview:'courseOverviewContainer',dashboard:'courseDashboard',learning:'courseLessonsPage',lessonPlayer:'courseLessonPlayerPage',quizzes:'courseQuizzesPage',assignments:'courseAssignmentsPage',assignmentDetail:'courseAssignmentDetailPage',files:'courseFilesPage',chat:'courseChatPage',fullChatPage:'fullChatPage'};
+ const detail=$('courseDetailView');if(!detail)return;
+ Object.values(ids).forEach(id=>{$(id)?.classList.remove('is-mobile-active')});
+ const el=$(ids[page]||page);if(el){el.classList.add('is-mobile-active');el.scrollTop=0;}
+ detail.style.display='flex';
+}
+const originalOpenCourseV24=window.openCourse;
+if(typeof originalOpenCourseV24==='function'&&!originalOpenCourseV24.__v24){window.openCourse=async function(courseId){const r=await originalOpenCourseV24.apply(this,arguments);if(window.innerWidth<=768){mobileCourseLayer('overview');}return r};window.openCourse.__v24=true;}
+const originalSwitchV24=window.switchCoursePage;
+if(typeof originalSwitchV24==='function'&&!originalSwitchV24.__v24){window.switchCoursePage=function(page){const r=originalSwitchV24.apply(this,arguments);if(window.innerWidth<=768)mobileCourseLayer(page);return r};window.switchCoursePage.__v24=true;}
+$('startLearningBtn')?.addEventListener('click',e=>{if(window.innerWidth<=768){e.preventDefault();e.stopPropagation();mobileCourseLayer('dashboard');}},true);
+document.addEventListener('click',e=>{if(window.innerWidth>768)return;const b=e.target.closest?.('#courseDashboard .dashboard-btn');if(!b)return;const m=(b.getAttribute('onclick')||'').match(/switchCoursePage\(['"]([^'"]+)/);if(!m)return;e.preventDefault();e.stopPropagation();window.switchCoursePage?.(m[1]);},true);
+
+/* First-tap course navigation: capture the actual course button before legacy handlers can compete. */
+document.addEventListener('click',e=>{
+  if(window.innerWidth>768)return;
+  const b=e.target.closest?.('.course-card .btn-primary,[data-course-open]');
+  if(!b)return;
+  let cid=b.getAttribute('data-course-open')||b.dataset.courseId||'';
+  if(!cid){const raw=b.getAttribute('onclick')||'';const m=raw.match(/openCourse\(['"]([^'"]+)/);if(m)cid=m[1];}
+  if(!cid)return;
+  e.preventDefault();e.stopImmediatePropagation();window.openCourse?.(cid);
+},true);
+
+document.addEventListener('click',e=>{
+  if(window.innerWidth>768)return;
+  const b=e.target.closest?.('#startLearningBtn');
+  if(!b)return;
+  e.preventDefault();e.stopImmediatePropagation();if(activeCourseId)window.switchCoursePage?.('dashboard');
+},true);
+
+/* Immediate ejection to the main courses page. */
+window.aaEjectFromCourseV24=function(){try{document.body.classList.remove('aa-notifications-open');closeFinalPage();closeFinalDetail();}catch(_){ }try{$('courseDetailView').style.display='none';}catch(_){ }try{window.mobileNavigate?.('courses');}catch(_){try{$('coursesPage').style.display='block';}catch(__){}}};
+
+/* A safe logout that always leaves every UI first. */
+window.aaSafeLogoutV24=async function(){
+  const uid=currentUid();
+  try{notifUnsub?.();notifUnsub=null;}catch(_){ }
+  try{if(uid)sessionStorage.removeItem('aa_login_final_'+uid);}catch(_){ }
+  try{window.aaEjectFromCourseV24();}catch(_){ }
+  try{closeFinalPage();}catch(_){ }
+  try{await auth.signOut();}catch(e){console.warn(e)}
+  try{window.mobileNavigate?.('courses');}catch(_){ }
+};
+
+document.addEventListener('click',e=>{
+  const b=e.target.closest?.('#aaProfileLogout,#aaProfileLogoutBtn,#userProfileLogoutBtn,[data-action="logout"]');
+  if(!b)return;
+  e.preventDefault();e.stopImmediatePropagation();window.aaSafeLogoutV24?.();
+},true);
+
 })();
 </script>
+
+</body>
+</html>
