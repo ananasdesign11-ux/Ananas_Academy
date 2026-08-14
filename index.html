@@ -15201,5 +15201,81 @@ const pl=$('profilePhoneLabel');if(pl)pl.innerHTML=(pl.textContent||'رقم ال
 
 })();
 </script>
+
+<script id="aa-login-notification-final-v32">
+(function(){
+  'use strict';
+  const KEY_PREFIX='aa_login_session_v32_';
+  let lastAuthUid='';
+  let activeWrite=null;
+
+  function getCurrentUserSafe(){
+    try{
+      return (typeof auth!=='undefined' && auth?.currentUser) || window.currentUser || null;
+    }catch(_){
+      return window.currentUser || null;
+    }
+  }
+
+  async function writeLoginNotification(user){
+    if(!user?.uid)return;
+    const key=KEY_PREFIX+String(user.uid);
+    if(sessionStorage.getItem(key))return;
+    if(activeWrite)return activeWrite;
+
+    activeWrite=(async()=>{
+      try{
+        const ref=db.collection('users').doc(String(user.uid)).collection('notifications').doc();
+        const now=new Date();
+        const name=user.displayName || window.currentUserProfile?.displayName || 'مستخدم';
+        await ref.set({
+          title:'تم تسجيل الدخول إلى حسابك',
+          body:`مرحبًا ${name}، تم تسجيل الدخول إلى حسابك في منصة أناناس أكاديمي بتاريخ ${now.toLocaleString('ar-SA',{dateStyle:'full',timeStyle:'short',timeZone:'Asia/Riyadh'})}.`,
+          type:'login_notice',
+          data:{
+            route:'notifications',
+            loginAt:now.toISOString(),
+            uid:String(user.uid),
+            source:'auth_login'
+          },
+          read:false,
+          createdAt:firebase.firestore.FieldValue.serverTimestamp()
+        });
+        sessionStorage.setItem(key,'1');
+      }catch(err){
+        console.error('فشل إنشاء إشعار تسجيل الدخول:',err);
+        // لا نضع علامة نجاح حتى تتم محاولة الكتابة مرة أخرى لاحقًا.
+      }finally{
+        activeWrite=null;
+      }
+    })();
+
+    return activeWrite;
+  }
+
+  auth?.onAuthStateChanged?.(async user=>{
+    if(!user){
+      lastAuthUid='';
+      return;
+    }
+    // نتعامل فقط مع انتقال دخول جديد، ولا نكرر الإشعار مع مستمعات Firebase المتعددة.
+    if(String(user.uid)!==String(lastAuthUid)){
+      lastAuthUid=String(user.uid);
+      await writeLoginNotification(user);
+    }
+  });
+
+  // إذا كان المستخدم قد سجل الدخول قبل تحميل هذه الرقعة، نفّذ محاولة واحدة بعد استقرار auth.
+  setTimeout(()=>{
+    const u=getCurrentUserSafe();
+    if(u && String(u.uid)!==String(lastAuthUid)){
+      lastAuthUid=String(u.uid);
+      writeLoginNotification(u);
+    }
+  },1200);
+
+  window.aaForceLoginNotificationV32=()=>writeLoginNotification(getCurrentUserSafe());
+})();
+</script>
 </body>
 </html>
