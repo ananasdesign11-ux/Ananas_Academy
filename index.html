@@ -1946,6 +1946,21 @@ label[for*="En"], input[id*="En"], textarea[id*="En"] { display:none !important;
   }
 }
 </style>
+
+<style id="aa-notifications-v17-style">
+body.aa-notifications-open #coursesPage,body.aa-notifications-open footer,body.aa-notifications-open #courseDetailView,body.aa-notifications-open .course-details-view,body.aa-notifications-open #quizOverlay{visibility:hidden!important;pointer-events:none!important}
+#aaNotificationsPage{inset:var(--nav-height-desktop,80px) 0 0 0!important;z-index:12000!important;background:var(--bg-primary)!important;overflow:hidden!important}
+#aaNotificationsPage .aa-notifications-page-inner{height:100%;overflow-y:auto;overflow-x:hidden;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;scrollbar-width:thin;padding-bottom:28px}
+.aa-admin-notification-tools{max-width:980px;margin:0 auto 18px;padding:16px;border:1px solid var(--border);border-radius:22px;background:linear-gradient(135deg,rgba(108,92,231,.07),var(--bg-card));box-shadow:var(--shadow)}
+.aa-admin-notification-tools h3{margin:0 0 5px;color:var(--accent1);font-size:1rem}.aa-admin-notification-tools p{margin:0;color:var(--text-muted);font-size:.78rem;line-height:1.7}
+.aa-admin-notification-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:13px}.aa-admin-notification-grid .full{grid-column:1/-1}
+.aa-admin-notification-field{display:grid;gap:6px}.aa-admin-notification-field label{font-size:.8rem;font-weight:800}
+.aa-admin-notification-field input,.aa-admin-notification-field select,.aa-admin-notification-field textarea{width:100%;min-height:44px;padding:10px 12px;border:1px solid var(--border);border-radius:13px;background:var(--bg-primary);color:var(--text-primary);font:inherit;outline:none}.aa-admin-notification-field textarea{min-height:110px;resize:vertical;line-height:1.8}
+.aa-recipient-tools{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:8px}.aa-recipient-tools input{flex:1;min-width:180px}.aa-recipient-tools button{border:1px solid var(--border);background:var(--bg-secondary);color:var(--text-primary);border-radius:11px;padding:8px 11px;font:inherit;font-size:.75rem;font-weight:800;cursor:pointer}
+.aa-recipient-list{max-height:230px;overflow:auto;border:1px solid var(--border);border-radius:14px;background:var(--bg-secondary);padding:7px;display:grid;gap:5px}.aa-recipient-row{display:flex;align-items:center;gap:8px;padding:8px 9px;border-radius:11px;cursor:pointer}.aa-recipient-row:hover{background:rgba(108,92,231,.07)}.aa-recipient-row input{width:17px;height:17px;min-width:17px}.aa-recipient-avatar{width:30px;height:30px;border-radius:50%;overflow:hidden;background:var(--accent-gradient);color:#fff;display:grid;place-items:center;font-size:.75rem;font-weight:900;flex:0 0 30px}.aa-recipient-avatar img{width:100%;height:100%;object-fit:cover}.aa-recipient-copy{min-width:0;display:flex;flex-direction:column}.aa-recipient-copy strong{font-size:.8rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.aa-recipient-copy small{color:var(--text-muted);font-size:.7rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.aa-notif-selection-note{color:var(--text-muted);font-size:.74rem;margin-top:6px}.aa-notif-compose-actions{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end;margin-top:12px}.aa-notif-compose-actions button{min-height:44px;padding:9px 14px;border-radius:12px;border:1px solid var(--border);background:var(--bg-secondary);color:var(--text-primary);font:inherit;font-weight:900;cursor:pointer}.aa-notif-compose-actions .primary{background:var(--accent-gradient);color:#fff;border-color:transparent}.aa-notif-compose-actions .success{color:#22c55e;border-color:#22c55e}
+@media(max-width:768px){#aaNotificationsPage{inset:var(--nav-height-mobile,70px) 0 calc(var(--mobile-bottom-nav-content-height,66px) + env(safe-area-inset-bottom)) 0!important}.aa-admin-notification-grid{grid-template-columns:1fr}.aa-admin-notification-grid .full{grid-column:auto}}
+</style>
 </head>
 <body class="light-mode">
     
@@ -2406,6 +2421,7 @@ label[for*="En"], input[id*="En"], textarea[id*="En"] { display:none !important;
     <div class="edit-modal" id="enrollCodeModal">
         <button onclick="document.getElementById('enrollCodeModal').classList.remove('active')" style="position:static; float:left; font-size:1.5rem; background:none; border:none; color:var(--text-muted); cursor:pointer;">&times;</button>
         <h3 id="enrollCodeTitle">أدخل كود الاشتراك</h3>
+        <div id="enrollCourseName" style="display:none;padding:10px 12px;border:1px solid var(--border);border-radius:14px;background:rgba(108,92,231,.06);color:var(--text-primary);font-weight:900;text-align:center;"></div>
         <div style="display:flex; flex-direction:column; gap:15px;">
             <p id="enrollCodeDesc" style="color:var(--text-muted);">الرجاء إدخال الكود المخصص للوصول إلى محتوى هذه الدورة.</p>
             <input type="text" id="enrollCodeInput" placeholder="اكتب الكود هنا..." style="width:100%; padding:12px; border-radius:var(--radius); border:1px solid var(--border); background:var(--bg-secondary); color:var(--text-primary); font-family:inherit; text-align:center; font-size:1.2rem; letter-spacing:2px;">
@@ -3530,6 +3546,10 @@ label[for*="En"], input[id*="En"], textarea[id*="En"] { display:none !important;
                     
                     // Reset fields and show the agreement inside the same code-entry modal.
                     input.value = '';
+                    window.pendingEnrollmentCourseId = courseId;
+                    const courseNameEl = document.getElementById('enrollCourseName');
+                    const courseTitle = (coursesData.find(c=>c.id===courseId)?.titleAr) || '';
+                    if(courseNameEl){ courseNameEl.textContent = courseTitle ? `الدورة: ${courseTitle}` : ''; courseNameEl.style.display = courseTitle ? 'block' : 'none'; }
                     const termsBox = document.getElementById('enrollCodeTermsAgreement');
                     const termsCheck = document.getElementById('enrollCodeTermsAgree');
                     const termsLink = document.getElementById('enrollCodeTermsLink');
@@ -3552,6 +3572,8 @@ label[for*="En"], input[id*="En"], textarea[id*="En"] { display:none !important;
 
                     const cleanup = () => {
                         modal.classList.remove('active');
+                        const nameBox=document.getElementById('enrollCourseName');
+                        if(nameBox){nameBox.textContent='';nameBox.style.display='none';}
                         submitBtn.onclick = null;
                         const termsBox = document.getElementById('enrollCodeTermsAgreement');
                         const termsCheck = document.getElementById('enrollCodeTermsAgree');
@@ -3661,6 +3683,7 @@ label[for*="En"], input[id*="En"], textarea[id*="En"] { display:none !important;
                                 termsSnapshot: courseTerms.slice(),
                                 termsVersion: termsSnap.exists ? (termsSnap.data()?.termsUpdatedAt || null) : null
                             });
+                            try{await window.aaAddNotification?.(currentUser.uid,{title:'تم الاشتراك في الدورة بنجاح',body:'تم تسجيل اشتراكك في الدورة بنجاح ويمكنك الآن بدء التعلم.',type:'subscription_success',data:{route:'course',courseId,codeId:codeDoc.id},dedupeKey:`subscription_success_${courseId}_${codeDoc.id}`})}catch(_){}
 
                             isEnrolled = true;
                             userEnrollmentMap[courseId] = { enrolledAt: new Date(), codeUsed: enteredCode };
@@ -5120,6 +5143,17 @@ label[for*="En"], input[id*="En"], textarea[id*="En"] { display:none !important;
                 window.lessonProgressCache=window.lessonProgressCache||{};window.lessonProgressCache[lessonId]={percent:100,position:dur,duration:dur};
                 renderLessonPlayerList();await refreshLessonDoneIndicators();await renderLessonCompletionStatus(courseId,lessonId);
                 if(result.newlyCompleted){
+                    try{
+                        if(currentUser&&!isAdmin&&window.aaAddNotification){
+                            const currentLessons=await db.collection('courses').doc(courseId).collection('lessons').get();
+                            const doneNow=await db.collection('users').doc(currentUser.uid).collection('completedLessons').get();
+                            const lessonIds=new Set(currentLessons.docs.map(d=>d.id));
+                            const completedCount=doneNow.docs.filter(d=>lessonIds.has(d.id)&&!d.data()?.cheatDetected).length;
+                            if(currentLessons.size&&completedCount>=currentLessons.size){
+                                await window.aaAddNotification(currentUser.uid,{title:'أكملت جميع حصص الدورة',body:'أكملت جميع الحصص الموجودة حاليًا في هذه الدورة.',type:'course_lessons_complete',data:{route:'course',courseId},dedupeKey:`lessons_complete_${courseId}`});
+                            }
+                        }
+                    }catch(notifErr){console.warn('lesson completion notification',notifErr)}
                     showCustomAlert(result.cheatDetected?'تم إكمال الحصة بدون XP':'تم إكمال الحصة',result.cheatDetected?'تم اكتشاف تقديم كبير إلى نهاية الفيديو، لذلك لن تحصل على نقاط XP لهذه الحصة.':'تمت مشاهدة الحصة حتى النهاية وحصلت على نقاط الخبرة مرة واحدة فقط.');
                 }
             }catch(error){
@@ -7354,6 +7388,47 @@ label[for*="En"], input[id*="En"], textarea[id*="En"] { display:none !important;
       list.innerHTML='<div style="color:var(--text-muted);">لا توجد شروط وأحكام مضافة حاليًا.</div>';
       modal.classList.add('active');
     }
+  };
+
+
+  // ------------------------------------------------------------
+  // Notification-driven enrollment / renewal modal.
+  // ------------------------------------------------------------
+  window.aaOpenEnrollmentForNotification=async function(courseId){
+    if(!courseId||!currentUser)return;
+    try{
+      const modal=document.getElementById('enrollCodeModal'),input=document.getElementById('enrollCodeInput'),submitBtn=document.getElementById('enrollCodeSubmitBtn'),termsBox=document.getElementById('enrollCodeTermsAgreement'),termsCheck=document.getElementById('enrollCodeTermsAgree'),termsLink=document.getElementById('enrollCodeTermsLink'),nameBox=document.getElementById('enrollCourseName');
+      const snap=await db.collection('courses').doc(courseId).get();
+      if(!snap.exists){showCustomAlert?.('تعذر التجديد','الدورة لم تعد موجودة.');return;}
+      const course=snap.data()||{},courseTitle=course.titleAr||course.name||'الدورة',courseTerms=Array.isArray(course.termsAndConditions)?course.termsAndConditions:[];
+      window.pendingEnrollmentCourseId=courseId;
+      if(nameBox){nameBox.textContent=`الدورة: ${courseTitle}`;nameBox.style.display='block';}
+      input.value='';termsCheck.checked=false;termsBox.style.display=courseTerms.length?'flex':'none';
+      termsLink.onclick=async ev=>{ev.preventDefault();window.pendingEnrollmentCourseId=courseId;await window.openEnrollmentTermsPreview?.();};
+      modal.classList.add('active');input.focus();
+      if(submitBtn.__aaRenewHandler)submitBtn.removeEventListener('click',submitBtn.__aaRenewHandler);
+      let busy=false;
+      const handler=async()=>{
+        if(busy)return;busy=true;submitBtn.disabled=true;
+        try{
+          const codeVal=input.value.trim();if(!codeVal){showCustomAlert?.('تنبيه','أدخل كود الاشتراك.');return;}
+          const snaps=await db.collection('courses').doc(courseId).collection('codes').where('code','==',codeVal).get();let codeDoc=null;const now=Date.now();
+          snaps.forEach(doc=>{const d=doc.data()||{},st=d.startTime?.toDate?d.startTime.toDate():new Date(d.startTime||0),en=d.endTime?.toDate?d.endTime.toDate():new Date(8640000000000000),su=d.suspendedUntil?.toDate?d.suspendedUntil.toDate():(d.suspendedUntil?new Date(d.suspendedUntil):null),disabled=!!d.disabled&&(!su||su.getTime()>now),revoked=Array.isArray(d.revokedUsers)&&d.revokedUsers.some(x=>String(typeof x==='string'?x:x?.uid)===String(currentUser.uid));if(!disabled&&!revoked&&st.getTime()<=now&&en.getTime()>=now&&Number(d.usedCount||0)<Number(d.maxUses||1))codeDoc=doc;});
+          if(!codeDoc)throw Error('الكود غير صحيح أو منتهي الصلاحية أو مستخدم بالكامل.');
+          if(courseTerms.length&&!termsCheck.checked)throw Error('يجب الموافقة على جميع الشروط والأحكام للمتابعة.');
+          const ps=await db.collection('users').doc(currentUser.uid).get(),prof=ps.exists?(ps.data()||{}):{};const usedByInfo={uid:currentUser.uid,email:prof.email||currentUser.email||'',name:prof.displayName||prof.name||currentUser.displayName||'مستخدم',phone:prof.phone||'',gender:prof.gender||''};
+          await db.runTransaction(async tx=>{const ref=db.collection('courses').doc(courseId).collection('codes').doc(codeDoc.id),fresh=await tx.get(ref);if(!fresh.exists)throw Error('الكود غير موجود.');const d=fresh.data()||{};if(Number(d.usedCount||0)>=Number(d.maxUses||1))throw Error('تم استخدام الكود بالفعل.');const rv=Array.isArray(d.revokedUsers)&&d.revokedUsers.some(x=>String(typeof x==='string'?x:x?.uid)===String(currentUser.uid));if(rv)throw Error('لا يمكن استخدام هذا الكود لهذا الحساب.');tx.update(ref,{usedCount:1,usedBy:[currentUser.uid],usedByInfo:[usedByInfo]});});
+          await db.collection('users').doc(currentUser.uid).collection('enrolledCourses').doc(courseId).set({enrolledAt:firebase.firestore.FieldValue.serverTimestamp(),codeUsed:codeVal,codeId:codeDoc.id,codeDeleted:false,accessBlocked:false,accessBlockReason:null,blockedUntil:null,termsAccepted:courseTerms.length?true:false,termsAcceptedAt:courseTerms.length?firebase.firestore.FieldValue.serverTimestamp():null,termsSnapshot:courseTerms.slice(),termsVersion:course.termsUpdatedAt||null},{merge:true});
+          try{await window.aaAddNotification?.(currentUser.uid,{title:'تم تجديد اشتراكك بنجاح',body:`تم تجديد اشتراكك في ${courseTitle} بنجاح. نتمنى لك تجربة تعليمية ممتعة ومثمرة.`,type:'subscription_success',data:{route:'course',courseId,codeId:codeDoc.id},dedupeKey:`subscription_renewed_${courseId}_${codeDoc.id}_${Date.now()}`});}catch(_){ }
+          modal.classList.remove('active');input.value='';termsCheck.checked=false;termsBox.style.display='none';if(nameBox){nameBox.textContent='';nameBox.style.display='none';}
+          submitBtn.removeEventListener('click',handler);submitBtn.__aaRenewHandler=null;submitBtn.disabled=false;
+          enrollmentMapLoadedAt=0;try{await refreshUserEnrollmentMap?.(true)}catch(_){}try{await renderCourses?.()}catch(_){};
+          showCustomAlert?.('تم التجديد',`تم تجديد الاشتراك في ${courseTitle} بنجاح.`);
+        }catch(e){showCustomAlert?.('خطأ',e.message||'تعذر إتمام التجديد.');}
+        finally{busy=false;submitBtn.disabled=false;}
+      };
+      submitBtn.__aaRenewHandler=handler;submitBtn.addEventListener('click',handler);
+    }catch(e){console.error(e);showCustomAlert?.('خطأ','تعذر فتح واجهة التجديد: '+e.message);}
   };
 
   // ------------------------------------------------------------
@@ -10432,7 +10507,7 @@ async function openAssignmentDetailV2(courseId,assignmentId){
   content.querySelectorAll('[data-work-approve]').forEach(b=>b.onclick=()=>window.approveSubmission(courseId,assignmentId,b.dataset.workApprove).then(()=>openAssignmentDetailV2(courseId,assignmentId)));
   content.querySelectorAll('[data-work-delete]').forEach(b=>b.onclick=()=>window.deleteAssignmentWork(courseId,assignmentId,b.dataset.workDelete).then(()=>openAssignmentDetailV2(courseId,assignmentId)));
   content.querySelectorAll('.assignment-filter').forEach(b=>b.onclick=()=>{content.querySelectorAll('.assignment-filter').forEach(x=>x.classList.toggle('active',x===b));content.querySelectorAll('.assignment-v2-card').forEach(c=>c.style.display=(!b.dataset.u||c.dataset.user===b.dataset.u)?'':'none');});
-  $('assignmentV2Upload')?.addEventListener('change',async e=>{const files=[...(e.target.files||[])];if(!files.length||!currentUser)return;const st=$('assignmentV2Status');st.textContent='جاري رفع الصور...';try{const urls=[];for(const f of files){const u=await uploadImage(f);if(!u)throw Error('upload');urls.push(u);}const latest=await getAssignmentData(courseId,assignmentId);if(!latest)throw Error('missing');const arr=Array.isArray(latest.data.submissions)?[...latest.data.submissions]:[];arr.push({workId:crypto.randomUUID?crypto.randomUUID():`work_${Date.now()}`,userId:currentUser.uid,userName:currentUser.displayName||'طالب',images:urls,approved:false,xpGranted:false,uploadedAt:new Date().toISOString()});await latest.ref.update({submissions:arr});await openAssignmentDetailV2(courseId,assignmentId);}catch(err){console.error(err);st.textContent='تعذر رفع العمل.'}finally{e.target.value=''}});
+  $('assignmentV2Upload')?.addEventListener('change',async e=>{const files=[...(e.target.files||[])];if(!files.length||!currentUser)return;const st=$('assignmentV2Status');st.textContent='جاري رفع الصور...';try{const urls=[];for(const f of files){const u=await uploadImage(f);if(!u)throw Error('upload');urls.push(u);}const latest=await getAssignmentData(courseId,assignmentId);if(!latest)throw Error('missing');const arr=Array.isArray(latest.data.submissions)?[...latest.data.submissions]:[];const newWorkId=crypto.randomUUID?crypto.randomUUID():`work_${Date.now()}_${Math.random().toString(36).slice(2)}`;arr.push({workId:newWorkId,userId:currentUser.uid,userName:currentUser.displayName||'طالب',images:urls,approved:false,xpGranted:false,uploadedAt:new Date().toISOString()});await latest.ref.update({submissions:arr});try{const admins=await window.aaGetAdminRecipients?.()||[];for(const uid of admins)await window.aaAddNotification?.(uid,{title:'تم رفع عمل جديد للمراجعة',body:`قام ${currentUser.displayName||'طالب'} برفع عمل جديد في ${latest.data?.titleAr||'الواجب'} ويحتاج إلى اعتمادك.`,type:'assignment_submitted',data:{route:'assignment',courseId,assignmentId,workId:newWorkId,userId:currentUser.uid}})}catch(notifyErr){console.warn('assignment upload notification',notifyErr)}await openAssignmentDetailV2(courseId,assignmentId);}catch(err){console.error(err);st.textContent='تعذر رفع العمل.'}finally{e.target.value=''}});
 }
 window.openAssignmentDetail=openAssignmentDetailV2;
 
@@ -13376,7 +13451,7 @@ const s=document.createElement('style');s.textContent=`
   function aaTime(v){const d=aaDate(v);return d&&!isNaN(d.getTime())?d.toLocaleString('ar-SA',{dateStyle:'medium',timeStyle:'short'}):'—'}
   function aaGoCourses(){try{window.aaEjectFromCourse?.();}catch(_){try{window.mobileNavigate?.('courses')}catch(__){}}}
   function aaRenderNotificationItem(n,all=false){
-    const icon=n.type==='code_deleted'?'fa-user-slash':n.type==='code_suspended'?'fa-pause-circle':'fa-bell';
+    const icon=n.type==='code_deleted'?'fa-user-slash':n.type==='code_suspended'?'fa-pause-circle':n.type==='suspension_expired'?'fa-unlock':n.type==='subscription_expired'?'fa-calendar-xmark':n.type==='assignment_submitted'?'fa-images':n.type==='assignment_approved'?'fa-circle-check':n.type==='subscription_success'?'fa-graduation-cap':n.type==='course_lessons_complete'?'fa-circle-check':n.type==='course_quizzes_complete'?'fa-list-check':'fa-bell';
     return `<div class="aa-notif-item ${n.read?'':'unread'}" data-notification-id="${esc(n.id)}"><div class="aa-notif-icon"><i class="fas ${icon}"></i></div><div class="aa-notif-copy"><div class="aa-notif-title">${!n.read?'<span class="aa-notification-dot"></span>':''}<span>${esc(n.title||'إشعار')}</span></div><div class="aa-notif-preview">${esc(n.body||'')}</div><div class="aa-notif-time">${esc(aaTime(n.createdAt))}</div></div></div>`;
   }
   function aaRenderNotifications(){
@@ -13392,23 +13467,55 @@ const s=document.createElement('style');s.textContent=`
     try{aaNotificationUnsub=db.collection('users').doc(uid).collection('notifications').onSnapshot(snap=>{aaNotificationsCache=snap.docs.map(d=>({id:d.id,...(d.data()||{})}));aaRenderNotifications()},e=>console.warn('notifications listener',e))}catch(e){console.warn('notifications',e)}
   }
   async function aaMarkNotificationRead(id){if(!currentUser||!id)return;try{await db.collection('users').doc(currentUser.uid).collection('notifications').doc(id).set({read:true,readAt:firebase.firestore.FieldValue.serverTimestamp()},{merge:true})}catch(e){console.warn(e)}}
-  async function aaOpenNotification(id){const n=aaNotificationsCache.find(x=>x.id===id);if(!n)return;await aaMarkNotificationRead(id);$('aaNotificationDetailTitle').textContent=n.title||'إشعار';$('aaNotificationDetailBody').textContent=n.body||'';const meta=$('aaNotificationDetailMeta');meta.innerHTML=`<span>${esc(n.type==='code_deleted'?'إزالة اشتراك':n.type==='code_suspended'?'إيقاف اشتراك':'إشعار')}</span><span>${esc(aaTime(n.createdAt))}</span>`;const reason=$('aaNotificationDetailReason');if(n.reason){reason.style.display='block';reason.innerHTML=`<strong>السبب</strong><div style="margin-top:5px;line-height:1.8;">${esc(n.reason)}</div>`}else{reason.style.display='none';reason.innerHTML=''}$('aaNotificationDetailModal').classList.add('active')}
+  async function aaOpenNotification(id){
+    const n=aaNotificationsCache.find(x=>x.id===id);if(!n)return;
+    await aaMarkNotificationRead(id);
+    $('aaNotificationDetailTitle').textContent=n.title||'إشعار';
+    $('aaNotificationDetailBody').textContent=n.body||'';
+    const meta=$('aaNotificationDetailMeta');
+    meta.innerHTML=`<span>${esc(n.type==='code_deleted'?'إزالة اشتراك':n.type==='code_suspended'?'إيقاف اشتراك':n.type==='assignment_submitted'?'عمل واجب جديد':n.type==='assignment_approved'?'اعتماد عمل':n.type==='subscription_expired'?'انتهاء اشتراك':n.type==='suspension_expired'?'انتهاء الإيقاف':'إشعار')}</span><span>${esc(aaTime(n.createdAt))}</span>`;
+    const reason=$('aaNotificationDetailReason');
+    if(n.reason){reason.style.display='block';reason.innerHTML=`<strong>السبب</strong><div style="margin-top:5px;line-height:1.8;">${esc(n.reason)}</div>`}else{reason.style.display='none';reason.innerHTML=''}
+    const oldAction=document.getElementById('aaNotificationActionBtn');oldAction?.remove();
+    $('aaNotificationDetailModal').classList.add('active');
+    const data=n.data||{};
+    let label='';let action='';
+    if(data.route==='assignment'&&data.courseId&&data.assignmentId){label='فتح الواجب';action='assignment'}
+    else if(data.route==='course'&&data.courseId&&n.type!=='code_deleted'&&n.type!=='subscription_expired'){label='فتح الدورة';action='course'}
+    if(n.type==='code_deleted'||n.type==='subscription_expired'){label=n.type==='code_deleted'?'وضع كود جديد':'تجديد الاشتراك';action='renew'}
+    if(label){
+      const box=$('aaNotificationDetailModal').querySelector('.aa-notification-detail-box');
+      const btn=document.createElement('button');btn.id='aaNotificationActionBtn';btn.className='aa-notif-open-all';btn.style.marginTop='14px';btn.textContent=label;
+      btn.onclick=async()=>{
+        $('aaNotificationDetailModal').classList.remove('active');$('aaNotificationsPage')?.classList.remove('active');document.body.classList.remove('aa-notifications-open');
+        if(action==='assignment'){await window.openCourse?.(data.courseId);setTimeout(()=>window.openAssignmentDetail?.(data.courseId,data.assignmentId),120)}
+        else if(action==='course'){await window.openCourse?.(data.courseId)}
+        else if(action==='renew'){
+          try{await window.mobileNavigate?.('courses')}catch(_){}
+          setTimeout(()=>window.aaOpenEnrollmentForNotification?.(data.courseId),180);
+        }
+      };
+      box.appendChild(btn);
+    }
+  }
   async function aaMarkAllRead(){if(!currentUser)return;const unread=aaNotificationsCache.filter(x=>!x.read);if(!unread.length)return;const batch=db.batch();unread.forEach(n=>batch.set(db.collection('users').doc(currentUser.uid).collection('notifications').doc(n.id),{read:true,readAt:firebase.firestore.FieldValue.serverTimestamp()},{merge:true}));try{await batch.commit()}catch(e){console.warn(e)}}
-  function aaOpenAll(){ $('aaNotificationsDropdown')?.classList.remove('active');$('aaNotificationsBtn')?.classList.remove('active');$('aaNotificationsPage')?.classList.add('active');aaRenderNotifications();}
-  async function aaAddNotification(uid,{title,body,reason='',type='general',data={}}){if(!uid)return;try{await db.collection('users').doc(String(uid)).collection('notifications').add({title,body,reason,type,data,read:false,createdAt:firebase.firestore.FieldValue.serverTimestamp()})}catch(e){console.warn('add notification',uid,e)}}
+  function aaOpenAll(){ $('aaNotificationsDropdown')?.classList.remove('active');$('aaNotificationsBtn')?.classList.remove('active');$('aaNotificationsPage')?.classList.add('active');document.body.classList.add('aa-notifications-open');aaRenderNotifications();}
+  async function aaAddNotification(uid,{title,body,reason='',type='general',data={},dedupeKey=''}){if(!uid)return;try{const ref=db.collection('users').doc(String(uid)).collection('notifications');if(dedupeKey){const id='auto_'+String(dedupeKey).replace(/[^a-zA-Z0-9_-]/g,'_').slice(0,120);const t=ref.doc(id);if((await t.get()).exists)return;await t.set({title,body,reason,type,data:{...data,dedupeKey},read:false,createdAt:firebase.firestore.FieldValue.serverTimestamp()})}else await ref.add({title,body,reason,type,data,read:false,createdAt:firebase.firestore.FieldValue.serverTimestamp()})}catch(e){console.warn('add notification',uid,e)}}
   async function aaNotifyUsers(uids,payload){const list=[...new Set((uids||[]).map(x=>String(typeof x==='string'?x:x?.uid||'')).filter(Boolean))];for(const uid of list)await aaAddNotification(uid,payload)}
   function aaAskReason(action,codeLabel){return new Promise(resolve=>{aaReasonResolver=resolve;$('aaCodeReasonTitle').textContent=action==='delete'?'سبب حذف الاشتراك':'سبب إيقاف الاشتراك';$('aaCodeReasonText').textContent=`سيتم إرسال السبب إلى الحساب المرتبط بالكود: ${codeLabel||'الكود'}.`;$('aaCodeReasonInput').value='';$('aaCodeReasonModal').classList.add('active');setTimeout(()=>$('aaCodeReasonInput')?.focus(),50)})}
   function aaCloseReason(result){$('aaCodeReasonModal').classList.remove('active');const r=aaReasonResolver;aaReasonResolver=null;if(r)r(result)}
   $('aaCodeReasonCancel')?.addEventListener('click',()=>aaCloseReason(null));$('aaCodeReasonConfirm')?.addEventListener('click',()=>{const reason=$('aaCodeReasonInput').value.trim();if(!reason)return showCustomAlert?.('تنبيه','اكتب سبب الإجراء قبل المتابعة.');aaCloseReason(reason)});
   $('aaNotificationDetailClose')?.addEventListener('click',()=>$('aaNotificationDetailModal').classList.remove('active'));
   $('aaOpenAllNotificationsBtn')?.addEventListener('click',aaOpenAll);
-  $('aaCloseNotificationsPage')?.addEventListener('click',()=>$('aaNotificationsPage').classList.remove('active'));
+  $('aaCloseNotificationsPage')?.addEventListener('click',()=>{$('aaNotificationsPage').classList.remove('active');document.body.classList.remove('aa-notifications-open')});
   $('aaMarkAllReadBtn')?.addEventListener('click',aaMarkAllRead);
   $('aaNotificationsBtn')?.addEventListener('click',e=>{e.stopPropagation();$('aaNotificationsDropdown').classList.toggle('active');$('aaNotificationsBtn').classList.toggle('active')});
   document.addEventListener('click',e=>{const w=$('aaNotificationsWrap');if(w&&!w.contains(e.target)){$('aaNotificationsDropdown')?.classList.remove('active');$('aaNotificationsBtn')?.classList.remove('active')}});
 
   // Inject notification button next to theme/light-dark button without changing the existing navbar.
-  const navTop=document.querySelector('.nav-actions-top');
+  const notifPageObserver=$('aaNotificationsPage');if(notifPageObserver){new MutationObserver(()=>document.body.classList.toggle('aa-notifications-open',notifPageObserver.classList.contains('active'))).observe(notifPageObserver,{attributes:true,attributeFilter:['class']})}
+  window.aaAddNotification=aaAddNotification;
+const navTop=document.querySelector('.nav-actions-top');
   if(navTop&&!$('aaNotificationsWrap').parentElement){const theme=$('themeToggle');if(theme)theme.insertAdjacentElement('afterend',$('aaNotificationsWrap'));else navTop.appendChild($('aaNotificationsWrap'));}
 
   // Keep the current course access listener, but also react to the enrollment flags used by code deletion/blocking.
@@ -13424,7 +13531,7 @@ const s=document.createElement('style');s.textContent=`
     try{
       const batch=db.batch();for(const uid of [...new Set(users.map(String))]){const er=db.collection('users').doc(uid).collection('enrolledCourses').doc(activeCourseId);batch.set(er,{codeDeleted:true,accessBlocked:true,accessBlockReason:reason,blockReason:reason,accessUpdatedAt:firebase.firestore.FieldValue.serverTimestamp()},{merge:true});}
       if(users.length)await batch.commit();
-      await aaNotifyUsers(users,{title:'تم حذف اشتراكك',body:'تم حذف اشتراكك في الدورة المرتبط بهذا الكود، وتم إخراجك من الدورة.',reason,type:'code_deleted',data:{courseId:activeCourseId,codeId,code:codeLabel}});
+      await aaNotifyUsers(users,{title:'تم حذف اشتراكك',body:'تم حذف اشتراكك في الدورة المرتبط بهذا الكود، وتم إخراجك من الدورة.',reason,type:'code_deleted',data:{courseId:activeCourseId,codeId,code:codeLabel,route:'course'}});
       await ref.delete();await window.loadCodesForCourse?.(activeCourseId);showCustomAlert?.('تم الحذف','تم حذف الكود وإلغاء اشتراكات الحسابات المرتبطة به وإرسال إشعار لهم.');
       if(currentUser&&!isAdmin&&users.some(u=>String(u)===String(currentUser.uid)))aaEjectFromCourse('تم حذف اشتراكك من الدورة.');
     }catch(e){console.error(e);showCustomAlert?.('خطأ','تعذر حذف الكود: '+e.message)}
@@ -13446,7 +13553,7 @@ const s=document.createElement('style');s.textContent=`
       const mode=$('courseSuspendDuration').value,reason=$('courseSuspendReason').value.trim();let until=null;
       if(mode==='custom'){const raw=$('courseSuspendUntil').value;const m=raw&&raw.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/);if(!m)return showCustomAlert?.('تنبيه','حدد تاريخ ووقت صحيحين.');until=new Date(`${m[1]}-${m[2]}-${m[3]}T${m[4]}:00+03:00`);if(isNaN(until.getTime())||until.getTime()<=Date.now())return showCustomAlert?.('تنبيه','وقت الانتهاء يجب أن يكون في المستقبل.')}
       else if(mode!=='permanent'){const days=({ '1d':1,'3d':3,'7d':7,'14d':14,'30d':30})[mode];if(!days)return showCustomAlert?.('تنبيه','اختر مدة صحيحة.');until=new Date(Date.now()+days*86400000)}
-      const id=window.__aaCodeSuspendTarget,ref=db.collection('courses').doc(activeCourseId).collection('codes').doc(id);this.disabled=true;try{const ss=await ref.get();if(!ss.exists)throw Error('الكود غير موجود');const c=ss.data()||{};const users=[...new Set((Array.isArray(c.usedBy)?c.usedBy:[]).map(String).filter(Boolean))];const payload={disabled:true,isSuspended:true,status:'suspended',state:'suspended',suspensionStatus:'suspended',suspendedUntil:until?firebase.firestore.Timestamp.fromDate(until):null,suspensionReason:reason||'تم إيقاف الاشتراك من قبل المشرف.',suspensionMode:mode,suspensionUpdatedAt:firebase.firestore.FieldValue.serverTimestamp(),suspensionUpdatedBy:currentUser?.uid||null};await ref.update(payload);const batch=db.batch();for(const uid of users)batch.set(db.collection('users').doc(uid).collection('enrolledCourses').doc(activeCourseId),{accessBlocked:true,blockedUntil:until?firebase.firestore.Timestamp.fromDate(until):null,accessBlockReason:reason||'تم إيقاف الاشتراك من قبل المشرف.',blockReason:reason||'تم إيقاف الاشتراك من قبل المشرف.',accessUpdatedAt:firebase.firestore.FieldValue.serverTimestamp()},{merge:true});if(users.length)await batch.commit();await aaNotifyUsers(users,{title:'تم إيقاف اشتراكك',body:until?'تم إيقاف اشتراكك في الدورة مؤقتًا حتى الموعد المحدد.':'تم إيقاف اشتراكك في الدورة حتى يتم إلغاء الإيقاف من المشرف.',reason:reason||'تم إيقاف الاشتراك من قبل المشرف.',type:'code_suspended',data:{courseId:activeCourseId,codeId:id,code:c.code||id,suspendedUntil:until?until.toISOString():null}});$('courseAccessSuspendModal')?.classList.remove('active');await window.loadCodesForCourse?.(activeCourseId);showCustomAlert?.('تم الإيقاف',until?`تم إيقاف الاشتراك حتى ${until.toLocaleString('ar-SA',{timeZone:'Asia/Riyadh'})}.`:'تم إيقاف الاشتراك حتى إلغائه يدويًا.')}catch(err){console.error(err);showCustomAlert?.('خطأ','تعذر إيقاف الكود: '+err.message)}finally{this.disabled=false}
+      const id=window.__aaCodeSuspendTarget,ref=db.collection('courses').doc(activeCourseId).collection('codes').doc(id);this.disabled=true;try{const ss=await ref.get();if(!ss.exists)throw Error('الكود غير موجود');const c=ss.data()||{};const users=[...new Set((Array.isArray(c.usedBy)?c.usedBy:[]).map(String).filter(Boolean))];const payload={disabled:true,isSuspended:true,status:'suspended',state:'suspended',suspensionStatus:'suspended',suspendedUntil:until?firebase.firestore.Timestamp.fromDate(until):null,suspensionReason:reason||'تم إيقاف الاشتراك من قبل المشرف.',suspensionMode:mode,suspensionUpdatedAt:firebase.firestore.FieldValue.serverTimestamp(),suspensionUpdatedBy:currentUser?.uid||null};await ref.update(payload);const batch=db.batch();for(const uid of users)batch.set(db.collection('users').doc(uid).collection('enrolledCourses').doc(activeCourseId),{accessBlocked:true,blockedUntil:until?firebase.firestore.Timestamp.fromDate(until):null,accessBlockReason:reason||'تم إيقاف الاشتراك من قبل المشرف.',blockReason:reason||'تم إيقاف الاشتراك من قبل المشرف.',accessUpdatedAt:firebase.firestore.FieldValue.serverTimestamp()},{merge:true});if(users.length)await batch.commit();await aaNotifyUsers(users,{title:'تم إيقاف اشتراكك',body:until?'تم إيقاف اشتراكك في الدورة مؤقتًا حتى الموعد المحدد.':'تم إيقاف اشتراكك في الدورة حتى يتم إلغاء الإيقاف من المشرف.',reason:reason||'تم إيقاف الاشتراك من قبل المشرف.',type:'code_suspended',data:{courseId:activeCourseId,codeId:id,code:c.code||id,suspendedUntil:until?until.toISOString():null,route:'course'}});$('courseAccessSuspendModal')?.classList.remove('active');await window.loadCodesForCourse?.(activeCourseId);showCustomAlert?.('تم الإيقاف',until?`تم إيقاف الاشتراك حتى ${until.toLocaleString('ar-SA',{timeZone:'Asia/Riyadh'})}.`:'تم إيقاف الاشتراك حتى إلغائه يدويًا.')}catch(err){console.error(err);showCustomAlert?.('خطأ','تعذر إيقاف الكود: '+err.message)}finally{this.disabled=false}
     }
   }
 
@@ -13468,7 +13575,7 @@ const s=document.createElement('style');s.textContent=`
         const c=ss.data()||{},users=[...new Set((Array.isArray(c.usedBy)?c.usedBy:[]).map(String).filter(Boolean))],rs=reason||'تم إيقاف الاشتراك من قبل المشرف.';
         await ref.update({disabled:true,isSuspended:true,status:'suspended',state:'suspended',suspensionStatus:'suspended',suspendedUntil:until?firebase.firestore.Timestamp.fromDate(until):null,suspensionReason:rs,suspensionMode:mode,suspensionUpdatedAt:firebase.firestore.FieldValue.serverTimestamp(),suspensionUpdatedBy:currentUser?.uid||null});
         const batch=db.batch();for(const uid of users)batch.set(db.collection('users').doc(uid).collection('enrolledCourses').doc(activeCourseId),{accessBlocked:true,blockedUntil:until?firebase.firestore.Timestamp.fromDate(until):null,accessBlockReason:rs,blockReason:rs,accessUpdatedAt:firebase.firestore.FieldValue.serverTimestamp()},{merge:true});if(users.length)await batch.commit();
-        await aaNotifyUsers(users,{title:'تم إيقاف اشتراكك',body:until?'تم إيقاف اشتراكك في الدورة مؤقتًا حتى الموعد المحدد.':'تم إيقاف اشتراكك في الدورة حتى إلغاء الإيقاف من المشرف.',reason:rs,type:'code_suspended',data:{courseId:activeCourseId,codeId:id,code:c.code||id,suspendedUntil:until?until.toISOString():null}});
+        await aaNotifyUsers(users,{title:'تم إيقاف اشتراكك',body:until?'تم إيقاف اشتراكك في الدورة مؤقتًا حتى الموعد المحدد.':'تم إيقاف اشتراكك في الدورة حتى إلغاء الإيقاف من المشرف.',reason:rs,type:'code_suspended',data:{courseId:activeCourseId,codeId:id,code:c.code||id,suspendedUntil:until?until.toISOString():null,route:'course'}});
         $('courseAccessSuspendModal')?.classList.remove('active');await window.loadCodesForCourse?.(activeCourseId);showCustomAlert?.('تم الإيقاف',until?`تم إيقاف الاشتراك حتى ${until.toLocaleString('ar-SA',{timeZone:'Asia/Riyadh'})}.`:'تم إيقاف الاشتراك حتى إلغائه يدويًا.');
       }catch(err){console.error(err);showCustomAlert?.('خطأ','تعذر إيقاف الكود: '+err.message)}finally{btn.disabled=false;btn.innerHTML=old;btn.dataset.aaFinalCapture='0'}
     })();
@@ -13490,6 +13597,39 @@ const s=document.createElement('style');s.textContent=`
 
   // Ensure ejection checks also react to a deleted enrollment flag/code deletion for the active course.
   if(!window.__aaNotifVisibilityGuard){window.__aaNotifVisibilityGuard=true;document.addEventListener('visibilitychange',()=>{if(!document.hidden&&currentUser&&window.activeCourseId&&!isAdmin)window.aaInspectEnrollment?.(window.activeCourseId).catch(()=>{})})}
+})();
+</script>
+
+<script id="aa-admin-notification-center-v17">
+(function(){
+'use strict';
+const E=id=>document.getElementById(id), escV=v=>String(v??'').replace(/[&<>'"]/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[m]));
+const asDateV=v=>{try{return v?.toDate?v.toDate():(v?new Date(v):null)}catch(_){return null}};
+async function getAdminRecipientsV(){const out=new Set();try{const m=await db.collection('admins').doc('main').get();const emails=(m.data()?.adminEmails||[]).map(x=>String(x).trim().toLowerCase()).filter(Boolean);if(isAdmin&&currentUser)out.add(String(currentUser.uid));if(emails.length){const u=await db.collection('users').get();u.forEach(d=>{if(emails.includes(String(d.data()?.email||'').trim().toLowerCase()))out.add(d.id)})}}catch(_){if(isAdmin&&currentUser)out.add(String(currentUser.uid))}return [...out]}
+window.aaGetAdminRecipients=getAdminRecipientsV;
+async function collectCourseStudentsV(courseId){const ids=new Set();try{const snap=await db.collection('users').get();for(const u of snap.docs){const e=await u.ref.collection('enrolledCourses').doc(courseId).get();if(e.exists&&!e.data()?.codeDeleted)ids.add(u.id)}}catch(_){}ids.delete(String(currentUser?.uid||''));return [...ids]}
+async function collectEnrolledV(){const ids=new Set();try{const users=await db.collection('users').get();for(const u of users.docs){const e=await u.ref.collection('enrolledCourses').get();if(e.docs.some(d=>!d.data()?.codeDeleted))ids.add(u.id)}}catch(_){}ids.delete(String(currentUser?.uid||''));return [...ids]}
+async function loadUsersV(){try{const s=await db.collection('users').get();window.__aaNotifUsersV=s.docs.map(d=>({id:d.id,...(d.data()||{})})).filter(u=>u.id!==String(currentUser?.uid||'')).sort((a,b)=>String(a.displayName||a.name||'').localeCompare(String(b.displayName||b.name||''),'ar'));renderUsersV()}catch(_){E('aaNotifUserListV')&&(E('aaNotifUserListV').innerHTML='<div class="aa-notif-empty">تعذر تحميل الحسابات.</div>')}}
+function renderUsersV(){const box=E('aaNotifUserListV');if(!box)return;const q=String(E('aaNotifUserSearchV')?.value||'').trim().toLowerCase();const arr=(window.__aaNotifUsersV||[]).filter(u=>!q||String(u.displayName||u.name||'').toLowerCase().includes(q));box.innerHTML=arr.length?arr.map(u=>{const n=u.displayName||u.name||'مستخدم',p=u.photoURL||u.photoUrl||u.photo||'';return `<label class="aa-recipient-row"><input type="checkbox" value="${escV(u.id)}"><span class="aa-recipient-avatar">${p?`<img src="${escV(p)}" alt="">`:escV(String(n).slice(0,1))}</span><span class="aa-recipient-copy"><strong>${escV(n)}</strong><small>${escV(u.email||u.id)}</small></span></label>`}).join(''):'<div class="aa-notif-empty">لا توجد حسابات مطابقة.</div>'}
+async function setupAdminCenterV(){if(!isAdmin||E('aaAdminNotificationToolsV'))return;const page=E('aaNotificationsPage'),inner=page?.querySelector('.aa-notifications-page-inner');if(!inner)return;const wrap=document.createElement('section');wrap.id='aaAdminNotificationToolsV';wrap.className='aa-admin-notification-tools';wrap.innerHTML=`<h3><i class="fas fa-paper-plane"></i> إرسال إشعار من المشرف</h3><p>يمكنك إرسال إشعار إلى حسابات محددة، طلاب دورة، جميع المسجلين في الدورات أو جميع حسابات المنصة.</p><div class="aa-admin-notification-grid"><div class="aa-admin-notification-field"><label>نوع المستلمين</label><select id="aaNotifAudienceV"><option value="specific">حسابات محددة</option><option value="course">طلاب دورة معينة</option><option value="enrolled">كل الطلاب المسجلين في دورات</option><option value="all">كل حسابات المنصة</option></select></div><div class="aa-admin-notification-field" id="aaNotifCourseFieldV" style="display:none"><label>الدورة</label><select id="aaNotifCourseSelectV"><option value="">اختر الدورة</option></select></div><div class="aa-admin-notification-field full" id="aaNotifSpecificFieldV"><label>الحسابات المحددة</label><div class="aa-recipient-tools"><input id="aaNotifUserSearchV" placeholder="بحث بالاسم"><button type="button" id="aaNotifSelectAllV">تحديد الظاهر</button><button type="button" id="aaNotifClearAllV">إلغاء التحديد</button></div><div class="aa-recipient-list" id="aaNotifUserListV"></div><div class="aa-notif-selection-note" id="aaNotifSelectionV">تم تحديد 0 حساب</div></div><div class="aa-admin-notification-field"><label>عنوان الإشعار</label><input id="aaNotifTitleV" placeholder="العنوان"></div><div class="aa-admin-notification-field"><label>النوع</label><select id="aaNotifTypeV"><option value="admin_message">رسالة من المشرف</option><option value="announcement">إعلان</option><option value="reminder">تذكير</option><option value="important">تنبيه مهم</option></select></div><div class="aa-admin-notification-field full"><label>المحتوى</label><textarea id="aaNotifBodyV" placeholder="تفاصيل الإشعار"></textarea></div></div><div class="aa-notif-compose-actions"><button class="primary" type="button" id="aaNotifSendV"><i class="fas fa-paper-plane"></i> إرسال</button></div>`;inner.insertBefore(wrap,inner.querySelector('.aa-notifications-all-list'));const aud=E('aaNotifAudienceV');aud.onchange=()=>{const v=aud.value;E('aaNotifCourseFieldV').style.display=v==='course'?'grid':'none';E('aaNotifSpecificFieldV').style.display=v==='specific'?'grid':'none'};E('aaNotifUserSearchV').oninput=renderUsersV;E('aaNotifSelectAllV').onclick=()=>{document.querySelectorAll('#aaNotifUserListV input[type=checkbox]').forEach(x=>x.checked=true);E('aaNotifSelectionV').textContent=`تم تحديد ${document.querySelectorAll('#aaNotifUserListV input:checked').length} حساب`};E('aaNotifClearAllV').onclick=()=>{document.querySelectorAll('#aaNotifUserListV input[type=checkbox]').forEach(x=>x.checked=false);E('aaNotifSelectionV').textContent='تم تحديد 0 حساب'};E('aaNotifUserListV').addEventListener('change',()=>E('aaNotifSelectionV').textContent=`تم تحديد ${document.querySelectorAll('#aaNotifUserListV input:checked').length} حساب`);
+ const cs=await db.collection('courses').get().catch(()=>null);if(cs){cs.docs.forEach(d=>{const o=document.createElement('option');o.value=d.id;o.textContent=d.data()?.titleAr||'دورة';E('aaNotifCourseSelectV').appendChild(o)})}
+ await loadUsersV();
+ E('aaNotifSendV').onclick=async()=>{const btn=E('aaNotifSendV'),title=E('aaNotifTitleV').value.trim(),body=E('aaNotifBodyV').value.trim(),audience=aud.value;if(!title||!body)return showCustomAlert?.('تنبيه','اكتب العنوان والمحتوى.');let ids=[];try{if(audience==='specific')ids=[...document.querySelectorAll('#aaNotifUserListV input:checked')].map(x=>x.value);if(audience==='course')ids=await collectCourseStudentsV(E('aaNotifCourseSelectV').value);if(audience==='enrolled')ids=await collectEnrolledV();if(audience==='all'){const u=await db.collection('users').get();ids=u.docs.map(d=>d.id).filter(x=>x!==String(currentUser?.uid||''))}ids=[...new Set(ids)].filter(Boolean);if(!ids.length)return showCustomAlert?.('تنبيه','لا يوجد مستلمون.');btn.disabled=true;const batch=db.batch();for(const uid of ids){const ref=db.collection('users').doc(uid).collection('notifications').doc();batch.set(ref,{title,body,type:E('aaNotifTypeV').value,data:{source:'admin',senderUid:currentUser?.uid||null},read:false,createdAt:firebase.firestore.FieldValue.serverTimestamp()})}await batch.commit();showCustomAlert?.('تم الإرسال',`تم إرسال الإشعار إلى ${ids.length} حساب.`);E('aaNotifTitleV').value='';E('aaNotifBodyV').value='';document.querySelectorAll('#aaNotifUserListV input:checked').forEach(x=>x.checked=false);E('aaNotifSelectionV').textContent='تم تحديد 0 حساب'}catch(err){console.error(err);showCustomAlert?.('خطأ','تعذر إرسال الإشعار: '+err.message)}finally{btn.disabled=false}}
+}
+const obsPage=E('aaNotificationsPage');if(obsPage){new MutationObserver(()=>{document.body.classList.toggle('aa-notifications-open',obsPage.classList.contains('active'));if(obsPage.classList.contains('active')&&isAdmin)setTimeout(setupAdminCenterV,0)}).observe(obsPage,{attributes:true,attributeFilter:['class']})}
+setTimeout(()=>setupAdminCenterV(),1400);
+
+async function notifyOnceV(uid,payload,key){return window.aaAddNotification?.(uid,{...payload,dedupeKey:key})}
+
+// All current quizzes completed.
+const oldQuiz=window.submitQuiz;if(typeof oldQuiz==='function'&&!oldQuiz.__aaNotifV17){const fn=async function(){const r=await oldQuiz.apply(this,arguments);try{if(currentUser&&!isAdmin&&activeCourseId){const qs=await db.collection('courses').doc(activeCourseId).collection('quizzes').get(),done=await db.collection('userStats').doc(currentUser.uid).collection('completedQuizzes').get(),ids=new Set(qs.docs.map(d=>d.id));const c=done.docs.filter(d=>ids.has(d.id)).length;if(qs.size&&c>=qs.size)await notifyOnceV(currentUser.uid,{title:'أكملت جميع اختبارات الدورة',body:'أكملت جميع الاختبارات الموجودة حاليًا في هذه الدورة.',type:'course_quizzes_complete',data:{route:'course',courseId:activeCourseId}},`quizzes_complete_${activeCourseId}`)}}catch(e){console.warn(e)}return r};fn.__aaNotifV17=true;window.submitQuiz=fn}
+
+// Approval to student.
+const oldApprove=window.approveSubmission;if(typeof oldApprove==='function'&&!oldApprove.__aaNotifV17){const fn=async function(courseId,assignmentId,workId){const r0=await getAssignmentData(courseId,assignmentId).catch(()=>null);let sub=null;if(r0){const ss=Array.isArray(r0.data?.submissions)?r0.data.submissions:[];const i=ss.findIndex((x,j)=>(typeof submissionWorkId==='function'?submissionWorkId(x,j):(x.workId||x.id||`legacy_${j}`))===workId);if(i>=0)sub=ss[i]}const r=await oldApprove.apply(this,arguments);try{if(sub?.userId)await notifyOnceV(sub.userId,{title:'تم اعتماد عملك',body:`تم اعتماد عملك في ${r0.data?.titleAr||'الواجب'} من المشرف.`,type:'assignment_approved',data:{route:'assignment',courseId,assignmentId,workId}},`assignment_approved_${courseId}_${assignmentId}_${workId}`)}catch(e){console.warn(e)}return r};fn.__aaNotifV17=true;window.approveSubmission=fn}
+
+// Expiry/suspension-expiry notifications for all enrollments, even outside a course page.
+if(!window.__aaNotifPollV17){window.__aaNotifPollV17=setInterval(async()=>{try{if(!currentUser||isAdmin)return;const enrollSnap=await db.collection('users').doc(currentUser.uid).collection('enrolledCourses').get();const now=Date.now();for(const ed of enrollSnap.docs){const courseId=ed.id,e=ed.data()||{},codeId=e.codeId;if(!codeId||e.codeDeleted)continue;const cs=await db.collection('courses').doc(courseId).collection('codes').doc(codeId).get();if(!cs.exists){await notifyOnceV(currentUser.uid,{title:'مبارك انتهاء اشتراكك',body:'نبارك لك إكمال فترة اشتراكك، ونشكرك على اشتراكك في الدورة والاستفادة من محتواها. يمكنك التجديد بكود جديد للعودة إلى الدورة.',type:'subscription_expired',data:{courseId,route:'course'}},`subscription_expired_${courseId}_${codeId}`);continue}const c=cs.data()||{},end=asDateV(c.endTime),until=asDateV(c.suspendedUntil);if(end&&end.getTime()<=now)await notifyOnceV(currentUser.uid,{title:'مبارك انتهاء اشتراكك',body:'نبارك لك إكمال فترة اشتراكك، ونشكرك على اشتراكك في هذه الدورة. يمكنك تجديد الاشتراك بكود جديد للعودة إلى الدورة.',type:'subscription_expired',data:{route:'course',courseId}},`subscription_expired_${courseId}_${codeId}`);if(c.disabled&&until&&until.getTime()<=now)await notifyOnceV(currentUser.uid,{title:'انتهت مدة إيقاف الاشتراك',body:'انتهت مدة إيقاف اشتراكك ويمكنك الوصول إلى الدورة مرة أخرى.',type:'suspension_expired',data:{route:'course',courseId}},`suspension_expired_${courseId}_${codeId}_${until.getTime()}`)}}catch(e){console.warn(e)}},20000)}
+
 })();
 </script>
 </body>
