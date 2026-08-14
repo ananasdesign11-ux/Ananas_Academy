@@ -2408,8 +2408,21 @@ body.aa-notifications-open #coursesPage,body.aa-notifications-open footer,body.a
                 <label id="profileGenderLabel"></label><select id="profileGender"><option value="male" id="optMale"></option><option value="female" id="optFemale"></option></select>
                 <label id="profilePhoneLabel"></label>
                 <div style="display:flex; gap:8px;">
-                    <select id="countryCode" style="width:40%;"><option value="+966">🇸🇦 +966</option><option value="+971">🇦🇪 +971</option><option value="+965">🇰🇼 +965</option><option value="+974">🇶🇦 +974</option><option value="+973">🇧🇭 +973</option><option value="+968">🇴🇲 +968</option><option value="+20">🇪🇬 +20</option><option value="+1">🇺🇸 +1</option></select>
+                    <select id="countryCode" style="width:40%;"><option value="+966">🇸🇦 +966</option><option value="+971">🇦🇪 +971</option><option value="+965">🇰🇼 +965</option><option value="+974">🇶🇦 +974</option><option value="+973">🇧🇭 +973</option><option value="+968">🇴🇲 +968</option><option value="+20">🇪🇬 +20</option><option value="+962">🇯🇴 +962</option><option value="+964">🇮🇶 +964</option><option value="+961">🇱🇧 +961</option><option value="+970">🇵🇸 +970</option><option value="+963">🇸🇾 +963</option><option value="+967">🇾🇪 +967</option><option value="+218">🇱🇾 +218</option><option value="+216">🇹🇳 +216</option><option value="+213">🇩🇿 +213</option><option value="+212">🇲🇦 +212</option><option value="+222">🇲🇷 +222</option><option value="+249">🇸🇩 +249</option><option value="+252">🇸🇴 +252</option><option value="+253">🇩🇯 +253</option><option value="+269">🇰🇲 +269</option></select>
                     <input type="text" id="profilePhone" placeholder="" style="width:60%;">
+                </div>
+                <div id="profilePhotoField" style="margin-top:12px;">
+                    <label style="display:block;font-weight:700;margin-bottom:6px;">الصورة الشخصية (اختياري)</label>
+                    <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+                        <div id="profilePhotoPreview" style="width:60px;height:60px;border-radius:18px;background:linear-gradient(135deg,#6c5ce7,#0984e3);color:#fff;display:grid;place-items:center;font-weight:900;font-size:1.4rem;overflow:hidden;border:1px solid var(--border);">
+                            <i class="fas fa-user"></i>
+                        </div>
+                        <label for="profilePhotoInput" style="display:inline-flex;align-items:center;gap:8px;padding:9px 14px;border:1px solid var(--border);background:var(--bg-secondary);border-radius:999px;cursor:pointer;font-weight:700;color:var(--text-primary);">
+                            <i class="fas fa-camera"></i> إضافة صورة
+                        </label>
+                        <input id="profilePhotoInput" type="file" accept="image/*" style="display:none;">
+                        <span style="color:var(--text-muted);font-size:.78rem;">إذا لم تضف صورة، سيُستخدم رمز حسابك تلقائيًا.</span>
+                    </div>
                 </div>
                 <button class="btn" id="saveProfileBtn" style="width:100%; padding:12px; background:var(--accent-gradient); color:#fff; border:none; border-radius:var(--btn-radius); font-weight:700; margin-top:15px; cursor:pointer;"></button>
             </div>
@@ -14732,7 +14745,7 @@ body.aaN27-lock-scroll{overflow:hidden!important;}
     for(const c of state.courses){const as=await db.collection('courses').doc(c.id).collection('assignments').get().catch(()=>null);for(const aDoc of (as?.docs||[])){const a=aDoc.data()||{},subs=Array.isArray(a.submissions)?a.submissions:[];for(let i=0;i<subs.length;i++){const s=subs[i]||{},wid=s.workId||s.id||`legacy_${i}`;if(s.approved||!s.userId||!s.uploadedAt)continue;const t=new Date(s.uploadedAt).getTime();if(Number.isFinite(t)&&nowMs()-t>7*86400000)continue;for(const aid of ids)await addN27(aid,{title:'عمل واجب جديد بانتظار الاعتماد',body:`رفع ${s.userName||'طالب'} عملًا جديدًا في واجب ${a.titleAr||'الواجب'} داخل دورة ${c.titleAr||'الدورة'}.`,type:'assignment_submitted',data:{route:'assignment',courseId:c.id,assignmentId:aDoc.id,workId:wid}},`assignment_submitted_${c.id}_${aDoc.id}_${wid}_${aid}`);}}}
   }
 
-  async function loginNotice(){const u=uid();if(!u)return;let sk=sessionStorage.getItem('aa_login_session_key');if(!sk){sk=(crypto.randomUUID?.()||('s_'+Date.now()+'_'+Math.random().toString(36).slice(2)));sessionStorage.setItem('aa_login_session_key',sk);}const key=`login_${u}_${sk}`;await addN27(u,{title:'تم تسجيل الدخول إلى حسابك',body:`تم تسجيل الدخول إلى حسابك في ${new Date().toLocaleString('ar-SA')}.`,type:'login_notice',data:{loginAt:new Date().toISOString()}},key)}
+  async function loginNotice(){const u=uid();if(!u)return;const key=`login_${u}_${new Date().toISOString().slice(0,10)}`;await addN27(u,{title:'تم تسجيل الدخول إلى حسابك',body:`تم تسجيل الدخول إلى حسابك في ${new Date().toLocaleString('ar-SA')}.`,type:'login_notice',data:{loginAt:new Date().toISOString()}},key)}
 
   function patchCourseClicks(){
     const grid=$('coursesGridContainer');if(grid){grid.querySelectorAll('.course-enroll-action button').forEach(old=>{if(old.dataset.n27Bound)return;const clone=old.cloneNode(true);clone.removeAttribute('onclick');clone.dataset.n27Bound='1';const m=old.getAttribute('onclick')?.match(/openCourse\(['"]([^'"]+)['"]\)/);const cid=m?.[1]||old.closest('.course-enroll-action')?.dataset.courseId||'';clone.addEventListener('click',e=>{e.preventDefault();e.stopPropagation();safeOpenCourse(cid);},{once:false});old.replaceWith(clone);});}
@@ -14787,308 +14800,245 @@ body.aaN27-lock-scroll{overflow:hidden!important;}
 })();
 </script>
 
-</body>
 
 
-<!-- ===== FINAL UI REBUILD v28 ===== -->
-<style id="aa-v28-final-ui-css">
-/* ---------- Notification dropdown/page: clean, screenshot-like, viewport-safe ---------- */
-#aaN27Dropdown{
-  position:fixed!important;
-  display:none!important;
-  z-index:700000!important;
-  width:min(430px,calc(100vw - 24px))!important;
-  max-width:calc(100vw - 24px)!important;
-  height:min(620px,calc(100dvh - 96px))!important;
-  max-height:calc(100dvh - 96px)!important;
-  overflow:hidden!important;
-  background:var(--bg-card)!important;
-  color:var(--text-primary)!important;
-  border:1px solid var(--border)!important;
-  border-radius:22px!important;
-  box-shadow:0 28px 80px rgba(0,0,0,.24)!important;
-  direction:rtl!important;
-}
-#aaN27Dropdown.open{display:flex!important;flex-direction:column!important;}
-#aaN27Dropdown .aaN27-head{min-height:68px;padding:13px 16px;border-bottom:1px solid var(--border);background:var(--bg-card);}
-#aaN27Dropdown .aaN27-head h3{font-size:1.05rem!important;font-weight:900!important;}
-#aaN27Dropdown .aaN27-actions{gap:7px!important;}
-#aaN27Dropdown .aaN27-mini{min-height:38px;padding:7px 11px!important;border-radius:999px!important;font-size:.76rem!important;white-space:nowrap!important;}
-#aaN27Dropdown .aaN27-list{padding:10px!important;display:flex;flex-direction:column;gap:7px;overflow-y:auto!important;overflow-x:hidden!important;-webkit-overflow-scrolling:touch!important;overscroll-behavior:contain!important;scrollbar-width:thin;}
-.aaN27-dropdown-footer{padding:10px 12px;border-top:1px solid var(--border);flex:0 0 auto;background:var(--bg-card);}
-.aaN27-dropdown-footer button{width:100%;min-height:42px;border:0;border-radius:13px;background:var(--accent-gradient);color:#fff;font:inherit;font-weight:900;cursor:pointer;}
-.aaN27-item{width:100%;display:flex!important;align-items:flex-start;gap:10px;padding:12px 11px!important;border:1px solid var(--border)!important;border-radius:15px!important;background:var(--bg-secondary)!important;color:var(--text-primary)!important;text-align:right!important;cursor:pointer!important;transition:.18s!important;}
-.aaN27-item:hover{transform:translateY(-1px);border-color:var(--accent1)!important;}
-.aaN27-item.unread{background:linear-gradient(90deg,rgba(108,92,231,.10),var(--bg-secondary))!important;border-color:rgba(108,92,231,.28)!important;}
-.aaN27-item-title{font-weight:900!important;display:block!important;line-height:1.55!important;}
-.aaN27-item-body{display:block!important;color:var(--text-muted)!important;line-height:1.7!important;margin-top:2px!important;font-size:.78rem!important;display:-webkit-box!important;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden!important;}
-.aaN27-item-time{display:block!important;color:var(--text-muted)!important;font-size:.68rem!important;margin-top:5px!important;}
-.aaN27-icon{width:34px;height:34px;flex:0 0 34px;border-radius:11px;display:grid;place-items:center;background:rgba(108,92,231,.11);color:var(--accent1)!important;}
-.aaN27-item-main{min-width:0;flex:1;}
-#aaN27Page{position:fixed!important;display:none!important;inset:var(--nav-height-desktop,80px) 0 0 0!important;z-index:699000!important;background:var(--bg-primary)!important;overflow:hidden!important;direction:rtl!important;}
-#aaN27Page.open{display:flex!important;flex-direction:column!important;}
-#aaN27Page .aaN27-page-inner{height:100%!important;min-height:0!important;display:flex!important;flex-direction:column!important;}
-#aaN27Page .aaN27-page-top{flex:0 0 auto!important;background:var(--bg-secondary)!important;border-bottom:1px solid var(--border)!important;padding:20px clamp(18px,4vw,72px)!important;}
-#aaN27Page .aaN27-page-top-row{max-width:1240px;margin:0 auto;}
-#aaN27Page .aaN27-page-top-row h2{font-size:1.65rem!important;font-weight:900!important;color:var(--accent1)!important;}
-#aaN27Page .aaN27-page-body{flex:1!important;min-height:0!important;overflow-y:auto!important;overflow-x:hidden!important;-webkit-overflow-scrolling:touch!important;overscroll-behavior:contain!important;padding:24px clamp(18px,5vw,72px) 34px!important;scrollbar-width:thin;}
-#aaN27Page .aaN27-page-body > *{max-width:1180px!important;margin-left:auto!important;margin-right:auto!important;}
-#aaN27SendPanel{margin:0 auto 18px!important;border:1px solid var(--border)!important;border-radius:22px!important;background:linear-gradient(135deg,rgba(108,92,231,.08),var(--bg-card))!important;box-shadow:var(--shadow)!important;overflow:hidden!important;}
-#aaN27SendPanel .aaN27-send-toggle{min-height:58px!important;padding:14px 18px!important;font-size:1rem!important;}
-#aaN27SendPanel .aaN27-send-body{padding:0 18px 18px!important;}
-#aaN27SendPanel.open .aaN27-send-body{display:block!important;}
-#aaN27AllList{display:grid;gap:12px;padding-bottom:24px;}
-#aaN27AllList:empty{display:block;}
-#aaN27AllList .aaN27-item{min-height:76px;padding:14px 15px!important;}
-#aaN27AllList .aaN27-item-body{-webkit-line-clamp:3!important;}
-.aaN27-empty{padding:58px 20px!important;text-align:center!important;color:var(--text-muted)!important;font-size:.95rem!important;}
-#aaN27Detail{position:fixed!important;inset:0!important;z-index:31020!important;background:transparent!important;display:none!important;align-items:center!important;justify-content:center!important;padding:20px!important;}
-#aaN27Detail.open{display:flex!important;}
-#aaN27Detail .aaN27-detail-card{width:min(640px,100%)!important;max-height:min(78dvh,760px)!important;overflow:auto!important;background:var(--bg-card)!important;border:1px solid var(--border)!important;border-radius:24px!important;box-shadow:0 30px 90px rgba(0,0,0,.28)!important;}
+<!-- ===== V28 FINAL UI REBUILD ===== -->
+<style id="aa-v28-final-style">
+  /* ===== Notification UI rebuilt from scratch ===== */
+  #aaN28Wrap{position:relative;display:inline-flex;align-items:center;flex:0 0 auto;z-index:250010;}
+  #aaN28Bell{position:relative;width:40px;height:40px;border:0;border-radius:50%;background:transparent;color:var(--text-muted);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:1.15rem;transition:.2s;}
+  #aaN28Bell:hover,#aaN28Bell.is-open{color:var(--accent1);background:rgba(108,92,231,.10)}
+  #aaN28Badge{position:absolute;top:-2px;inset-inline-end:-2px;min-width:20px;height:20px;padding:0 5px;border-radius:999px;background:linear-gradient(135deg,#ff4d6d,#e74c3c);color:#fff;font-size:.68rem;font-weight:900;display:none;align-items:center;justify-content:center;border:2px solid var(--bg-secondary);box-shadow:0 5px 15px rgba(231,76,60,.28)}
+  #aaN28Badge.show{display:flex}
+  #aaN28Dropdown{position:fixed;top:0;left:0;right:auto;width:min(430px,calc(100vw - 20px));background:var(--bg-card);border:1px solid var(--border);border-radius:24px;box-shadow:0 26px 75px rgba(28,33,60,.22);z-index:300000;display:none;overflow:hidden;backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px)}
+  #aaN28Dropdown.open{display:block}
+  .aaN28-drop-head{padding:16px 17px 13px;display:flex;align-items:center;justify-content:space-between;gap:12px;border-bottom:1px solid var(--border);background:linear-gradient(180deg,rgba(108,92,231,.05),transparent)}
+  .aaN28-drop-title{font-size:1.05rem;font-weight:900;margin:0}
+  .aaN28-link-btn{border:1px solid var(--border);background:transparent;color:var(--text-primary);padding:8px 12px;border-radius:999px;font:inherit;font-weight:800;cursor:pointer;white-space:nowrap}
+  .aaN28-link-btn:hover{border-color:var(--accent1);color:var(--accent1)}
+  .aaN28-drop-list{max-height:min(58dvh,480px);overflow-y:auto;padding:8px;overscroll-behavior:contain}
+  .aaN28-empty{padding:36px 16px;text-align:center;color:var(--text-muted);font-size:.9rem}
+  .aaN28-item{width:100%;display:flex;gap:11px;align-items:flex-start;padding:12px 11px;border:1px solid transparent;border-radius:16px;background:transparent;color:var(--text-primary);font:inherit;text-align:start;cursor:pointer}
+  .aaN28-item:hover{background:rgba(108,92,231,.06);border-color:var(--border)}
+  .aaN28-item.unread{background:rgba(108,92,231,.065)}
+  .aaN28-item-icon{width:40px;height:40px;flex:0 0 40px;border-radius:13px;background:rgba(108,92,231,.11);color:var(--accent1);display:grid;place-items:center}
+  .aaN28-item-main{min-width:0;flex:1}.aaN28-item-title{font-weight:900;font-size:.86rem;line-height:1.5;display:flex;align-items:center;gap:6px}.aaN28-dot{width:8px;height:8px;border-radius:50%;background:#e74c3c;flex:0 0 8px}.aaN28-item-body{margin-top:3px;color:var(--text-muted);font-size:.76rem;line-height:1.7;overflow-wrap:anywhere}.aaN28-item-time{margin-top:5px;color:var(--text-muted);font-size:.68rem}
+  .aaN28-drop-foot{padding:11px;border-top:1px solid var(--border)}
+  #aaN28OpenAll{width:100%;min-height:52px;border:0;border-radius:16px;background:linear-gradient(135deg,#6c5ce7,#0984e3);color:#fff;font:inherit;font-weight:900;font-size:1.02rem;cursor:pointer;box-shadow:0 8px 22px rgba(108,92,231,.18)}
+  #aaN28OpenAll:hover{transform:translateY(-1px)}
 
-/* ---------- New-account profile setup ---------- */
-#aaRegisterPhotoWrap{display:grid;grid-template-columns:auto 1fr;gap:12px;align-items:center;padding:12px;border:1px dashed var(--border);border-radius:16px;background:var(--bg-secondary);margin-top:8px;}
-#aaRegisterPhotoPreview{width:58px;height:58px;border-radius:50%;overflow:hidden;display:grid;place-items:center;background:var(--accent-gradient);color:#fff;font-size:1.25rem;font-weight:900;}
-#aaRegisterPhotoPreview img{width:100%;height:100%;object-fit:cover;display:block;}
-#aaRegisterPhotoPick{display:inline-flex;align-items:center;justify-content:center;min-height:42px;padding:8px 13px;border:1px solid var(--border);border-radius:999px;background:var(--bg-card);color:var(--text-primary);font:inherit;font-weight:800;cursor:pointer;}
-#aaRegisterPhotoNote{display:block;color:var(--text-muted);font-size:.73rem;margin-top:4px;line-height:1.65;}
-#countryCode{min-width:155px!important;font-family:inherit!important;direction:rtl!important;}
-#profilePhone{direction:ltr!important;text-align:left!important;}
-@media(max-width:768px){#aaRegisterPhotoWrap{grid-template-columns:auto 1fr;}#countryCode{min-width:145px!important;}}
+  /* Full notifications page - screenshot style */
+  #aaN28Page{position:fixed;inset:var(--nav-height-desktop,80px) 0 0 0;z-index:310000;background:var(--bg-primary);display:none;overflow:hidden}
+  #aaN28Page.open{display:block}
+  .aaN28-page-scroll{height:100%;overflow-y:auto;overflow-x:hidden;padding:24px clamp(16px,5vw,72px) 36px;box-sizing:border-box;-webkit-overflow-scrolling:touch;overscroll-behavior:contain}
+  .aaN28-page-head{display:flex;align-items:center;justify-content:space-between;gap:12px;padding-bottom:14px;border-bottom:1px solid var(--border);margin-bottom:20px}
+  .aaN28-page-head h2{margin:0;color:var(--accent1);font-size:1.7rem;font-weight:900}
+  .aaN28-close-circle{width:48px;height:48px;border-radius:50%;border:1px solid var(--border);background:var(--bg-card);color:var(--text-muted);cursor:pointer;font-size:1.15rem;box-shadow:0 8px 20px rgba(0,0,0,.06)}
+  .aaN28-send-panel{max-width:1120px;margin:0 auto 18px;border:1px solid var(--border);border-radius:26px;background:linear-gradient(145deg,rgba(108,92,231,.055),var(--bg-card));box-shadow:var(--shadow);overflow:hidden}
+  .aaN28-send-toggle{width:100%;display:flex;justify-content:space-between;align-items:center;gap:12px;padding:18px 20px;border:0;background:transparent;color:var(--text-primary);font:inherit;font-weight:900;font-size:1.08rem;cursor:pointer;text-align:start}
+  .aaN28-send-toggle i{transition:transform .2s;color:var(--accent1)}.aaN28-send-panel.collapsed .aaN28-send-toggle i{transform:rotate(180deg)}
+  .aaN28-send-body{padding:0 20px 20px;display:grid;gap:14px}.aaN28-send-panel.collapsed .aaN28-send-body{display:none}
+  .aaN28-send-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}.aaN28-send-field{display:grid;gap:6px}.aaN28-send-field.full{grid-column:1/-1}.aaN28-send-field label{font-size:.84rem;font-weight:900}.aaN28-send-field input,.aaN28-send-field select,.aaN28-send-field textarea{width:100%;min-height:46px;border:1px solid var(--border);border-radius:15px;background:var(--bg-primary);color:var(--text-primary);padding:10px 12px;font:inherit;outline:none}.aaN28-send-field textarea{min-height:120px;resize:vertical;line-height:1.85}.aaN28-recipient-tools{display:flex;gap:8px;flex-wrap:wrap}.aaN28-recipient-tools input{flex:1;min-width:180px}.aaN28-small-action{border:1px solid var(--border);background:var(--bg-secondary);color:var(--text-primary);border-radius:12px;padding:8px 11px;font:inherit;font-weight:800;cursor:pointer}.aaN28-recipient-list{max-height:230px;overflow:auto;border:1px solid var(--border);border-radius:16px;background:var(--bg-secondary);padding:7px;display:grid;gap:5px}.aaN28-recipient-row{display:flex;align-items:center;gap:9px;padding:8px 9px;border-radius:12px;cursor:pointer}.aaN28-recipient-row:hover{background:rgba(108,92,231,.06)}.aaN28-recipient-row input{width:17px;height:17px}.aaN28-rec-avatar{width:32px;height:32px;border-radius:50%;overflow:hidden;display:grid;place-items:center;color:#fff;font-weight:900;background:linear-gradient(135deg,#6c5ce7,#0984e3);flex:0 0 32px}.aaN28-rec-avatar img{width:100%;height:100%;object-fit:cover}.aaN28-rec-copy{min-width:0;display:flex;flex-direction:column}.aaN28-rec-copy strong{font-size:.8rem}.aaN28-rec-copy small{color:var(--text-muted);font-size:.7rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.aaN28-send-actions{display:flex;justify-content:flex-end;gap:8px}.aaN28-primary{min-height:46px;padding:10px 16px;border:0;border-radius:14px;background:linear-gradient(135deg,#6c5ce7,#0984e3);color:#fff;font:inherit;font-weight:900;cursor:pointer}
+  .aaN28-all-list{max-width:1120px;margin:0 auto;display:grid;gap:11px}.aaN28-all-list .aaN28-item{background:var(--bg-card);border:1px solid var(--border);padding:14px 16px;border-radius:18px;box-shadow:0 5px 16px rgba(0,0,0,.03)}
 
-/* ---------- Avatar initials: deterministic, distinct colors ---------- */
-.aa-initial-avatar{display:grid;place-items:center;border-radius:50%;color:#fff;font-weight:900;line-height:1;user-select:none;}
+  /* Detail modal */
+  #aaN28Detail{position:fixed;inset:0;z-index:500000;display:none;align-items:center;justify-content:center;padding:20px;background:rgba(20,24,40,.12);backdrop-filter:blur(11px);-webkit-backdrop-filter:blur(11px)}
+  #aaN28Detail.open{display:flex}
+  .aaN28-detail-card{width:min(650px,100%);max-height:min(82vh,760px);overflow:auto;background:var(--bg-card);border:1px solid var(--border);border-radius:26px;box-shadow:0 35px 100px rgba(21,25,50,.24);padding:22px}
+  .aaN28-detail-head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;padding-bottom:14px;border-bottom:1px solid var(--border)}
+  .aaN28-detail-title{font-size:1.2rem;font-weight:900}.aaN28-detail-meta{margin-top:4px;color:var(--text-muted);font-size:.75rem}.aaN28-detail-body{padding:18px 0;line-height:2;font-size:.95rem;white-space:pre-wrap}.aaN28-detail-reason{padding:12px;border:1px solid rgba(231,76,60,.18);background:rgba(231,76,60,.06);border-radius:15px;line-height:1.8}.aaN28-detail-actions{display:flex;gap:8px;flex-wrap:wrap}.aaN28-detail-actions button{flex:1;min-width:150px;min-height:46px;border:1px solid var(--border);background:var(--bg-secondary);color:var(--text-primary);border-radius:14px;font:inherit;font-weight:900;cursor:pointer}.aaN28-detail-actions .primary{border-color:transparent;color:#fff;background:linear-gradient(135deg,#6c5ce7,#0984e3)}
 
-/* ---------- Global modal curtain: preserve colors, blur everything behind, freeze all base UI ---------- */
-body.aa-modal-lock{overflow:hidden!important;touch-action:none!important;}
-body.aa-modal-lock::before{
-  content:"";position:fixed;inset:0;z-index:30000!important;
-  background:rgba(128,128,128,.08)!important;
-  backdrop-filter:blur(14px) saturate(1.04)!important;
-  -webkit-backdrop-filter:blur(14px) saturate(1.04)!important;
-  pointer-events:auto!important;
-}
-body.aa-modal-lock .navbar,
-body.aa-modal-lock #mobileBottomNav{filter:blur(14px) saturate(1.04)!important;}
-body.aa-modal-lock #coursesPage,
-body.aa-modal-lock #courseDetailView,
-body.aa-modal-lock #aaN27Page{pointer-events:none!important;}
-body.aa-modal-lock .edit-modal.active,
-body.aa-modal-lock .auth-popup.active,
-body.aa-modal-lock .custom-alert-modal.active,
-body.aa-modal-lock #quizOverlay.active,
-body.aa-modal-lock .gallery-viewer.active,
-body.aa-modal-lock .platform-image-viewer.active,
-body.aa-modal-lock .file-viewer-overlay.active,
-body.aa-modal-lock .ananas-modal-overlay.active,
-body.aa-modal-lock #aaN27Detail.open,
-body.aa-modal-lock #userProfileModal.active{z-index:30050!important;}
-/* Existing modal backdrops keep their own colors but become translucent instead of gray walls. */
-body.aa-modal-lock .custom-alert-modal,
-body.aa-modal-lock .gallery-viewer,
-body.aa-modal-lock .platform-image-viewer,
-body.aa-modal-lock .file-viewer-overlay{background:transparent!important;backdrop-filter:none!important;-webkit-backdrop-filter:none!important;}
-body.aa-modal-lock .custom-alert-box,
-body.aa-modal-lock .edit-modal,
-body.aa-modal-lock .auth-popup,
-body.aa-modal-lock #userProfileModal .custom-alert-box{box-shadow:0 30px 90px rgba(0,0,0,.30)!important;}
-@media(max-width:768px){
-  body.aa-modal-lock::before{top:0;bottom:0;}
-  body.aa-modal-lock .edit-modal.active,
-  body.aa-modal-lock .auth-popup.active,
-  body.aa-modal-lock #aaN27Detail.open{max-height:calc(100dvh - 24px)!important;}
-}
+  /* Global modal freeze + glass curtain, includes bars on mobile and top bar on desktop. */
+  body.aa-v28-modal-open{overflow:hidden!important;touch-action:none!important}
+  body.aa-v28-modal-open::before{content:"";position:fixed;inset:0;background:rgba(160,170,190,.08);backdrop-filter:blur(9px) saturate(.98);-webkit-backdrop-filter:blur(9px) saturate(.98);z-index:480000;pointer-events:auto}
+  body.aa-v28-modal-open .navbar,body.aa-v28-modal-open .mobile-bottom-nav{filter:blur(8px);pointer-events:none!important;}
+  body.aa-v28-modal-open #coursesPage,body.aa-v28-modal-open #courseDetailView,body.aa-v28-modal-open #courseLearningView,body.aa-v28-modal-open footer{pointer-events:none!important;}
+  body.aa-v28-modal-open .custom-alert-modal.active,body.aa-v28-modal-open .edit-modal.active,body.aa-v28-modal-open .auth-popup.active,body.aa-v28-modal-open #quizOverlay.active,body.aa-v28-modal-open #courseFileViewer.active,body.aa-v28-modal-open #aaCoursePortfolioModal.active,body.aa-v28-modal-open .ananas-modal-overlay.active,body.aa-v28-modal-open .ananas-quiz-v2.active,body.aa-v28-modal-open .ananas-v10-overlay.active{z-index:490000!important}
 
-/* ---------- Video fullscreen orientation ---------- */
-body.aa-video-landscape-active{overflow:hidden!important;}
-body.aa-video-landscape-active #lessonVideoWrapper:fullscreen,
-body.aa-video-landscape-active #videoPlayerWrapper:fullscreen{width:100vw!important;height:100vh!important;max-width:none!important;max-height:none!important;border-radius:0!important;}
-@media(max-width:768px){
-  body.aa-video-landscape-active #lessonVideoWrapper,
-  body.aa-video-landscape-active #videoPlayerWrapper{background:#000!important;}
-}
+  /* Mobile */
+  @media(max-width:768px){
+    #aaN28Dropdown{top:0;left:0;right:auto;width:min(430px,calc(100vw - 20px));max-width:calc(100vw - 20px);max-height:min(68dvh,520px)}
+    .aaN28-drop-list{max-height:calc(min(68dvh,520px) - 116px)}
+    #aaN28Page{top:var(--nav-height-mobile,70px);bottom:calc(var(--mobile-bottom-nav-content-height,66px) + env(safe-area-inset-bottom));inset-inline:0}
+    .aaN28-page-scroll{padding:12px 10px 22px}
+    .aaN28-page-head h2{font-size:1.35rem}.aaN28-page-head{margin-bottom:13px}.aaN28-close-circle{width:42px;height:42px}
+    .aaN28-send-grid{grid-template-columns:1fr}.aaN28-send-field.full{grid-column:auto}.aaN28-send-body{padding-inline:12px}.aaN28-send-toggle{padding:15px 13px}.aaN28-recipient-list{max-height:190px}
+    #aaN28Detail{padding:10px}.aaN28-detail-card{max-height:calc(100dvh - var(--nav-height-mobile,70px) - var(--mobile-bottom-nav-content-height,66px) - 20px);padding:17px;border-radius:21px}
+    body.aa-v28-modal-open .navbar,body.aa-v28-modal-open .mobile-bottom-nav{z-index:480001!important}
+  }
 
-/* ---------- Home logo ---------- */
-.logo{cursor:pointer!important;}
-body.aaN27-lock-scroll{overflow:hidden!important;touch-action:none!important;}
-@media(max-width:768px){
-  #aaN27Page{top:var(--nav-height-mobile,70px)!important;bottom:calc(var(--mobile-bottom-nav-content-height,66px) + env(safe-area-inset-bottom))!important;inset-inline-start:0!important;inset-inline-end:0!important;height:auto!important;}
-  #aaN27Page .aaN27-page-body{padding-bottom:28px!important;}
-}
+  /* Signup photo + phone optional */
+  #profilePhoneLabel::after{content:' (اختياري)';color:var(--text-muted);font-size:.82em;font-weight:500}
+  #profilePhotoPreview img{width:100%;height:100%;object-fit:cover;display:block}
+
+  /* Home logo */
+  .logo{cursor:pointer}
 </style>
 
-<style id="aa-v28-notification-final-touches">
-#aaN27Dropdown .aaN27-head h3::after{content:"";}
-@media(max-width:768px){
-  #aaN27Dropdown{top:calc(var(--nav-height-mobile,70px) + 8px)!important;left:12px!important;right:12px!important;width:auto!important;max-width:none!important;height:min(72dvh,560px)!important;max-height:calc(100dvh - var(--nav-height-mobile,70px) - 78px)!important;}
+<script id="aa-v28-final-js">
+(function(){
+'use strict';
+const $=id=>document.getElementById(id);
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const uid=()=>window.currentUser?.uid||null;
+const dateOf=v=>{try{return v?.toDate?v.toDate():(v?new Date(v):null)}catch(_){return null}};
+const avatarColors=['#6c5ce7','#0984e3','#00b894','#e17055','#d63031','#fdcb6e','#a29bfe','#e84393','#00cec9','#2d3436'];
+function avatarColor(seed){let h=0;const s=String(seed||'');for(let i=0;i<s.length;i++)h=(h*31+s.charCodeAt(i))>>>0;return avatarColors[h%avatarColors.length];}
+function avatarInitial(name){return String(name||'مستخدم').trim().charAt(0)||'م';}
+function avatarMarkup(name,photo,seed,sizeClass=''){if(photo)return `<img src="${esc(photo)}" alt="">`;return `<span class="aa-v28-initial-avatar ${sizeClass}" style="background:${avatarColor(seed||name)}">${esc(avatarInitial(name))}</span>`;}
+
+/* ---------- Remove every legacy notification UI and prevent its return. ---------- */
+function removeLegacy(){
+  ['aaN27Wrap','aaN27Dropdown','aaN27Page','aaN27Detail','aaFinalNotifWrap','aaFinalNotifDropdown','aaFinalNotificationsRoot','aaFinalNotifDetail','aaNotificationsWrap','aaNotificationsPage','aaNotificationDetailModal','aaNotificationsDropdown','aaCodeReasonModal','aaAdminNotificationToolsV'].forEach(id=>$(id)?.remove());
+  document.querySelectorAll('.aa-notifications-page,.aa-notification-detail-modal,.aa-code-reason-modal').forEach(e=>e.remove());
 }
+removeLegacy();
+const legacyObserver=new MutationObserver(()=>{
+  ['aaN27Wrap','aaN27Dropdown','aaN27Page','aaN27Detail','aaFinalNotifWrap','aaFinalNotifDropdown','aaFinalNotificationsRoot','aaFinalNotifDetail','aaNotificationsWrap','aaNotificationsPage','aaNotificationDetailModal','aaNotificationsDropdown','aaCodeReasonModal','aaAdminNotificationToolsV'].forEach(id=>$(id)?.remove());
+});
+legacyObserver.observe(document.body,{childList:true,subtree:true});
+
+const state={notifications:[],courses:[],users:[],selected:new Set(),sendOpen:true,mode:'specific',unsub:null};
+function notificationDate(n){const d=dateOf(n.createdAt);return d?d.toLocaleString('ar-SA',{dateStyle:'medium',timeStyle:'short'}):''}
+function iconFor(type){return ({login_notice:'fa-right-to-bracket',subscription_success:'fa-graduation-cap',course_lessons_complete:'fa-circle-check',course_quizzes_complete:'fa-list-check',assignment_submitted:'fa-images',assignment_approved:'fa-circle-check',code_suspended:'fa-pause-circle',code_unsuspended:'fa-unlock',code_suspension_expired:'fa-unlock',suspension_expired:'fa-unlock',code_deleted:'fa-user-slash',subscription_expired:'fa-calendar-xmark',admin_manual:'fa-paper-plane',announcement:'fa-bullhorn',important:'fa-triangle-exclamation'})[type]||'fa-bell'}
+function validNotification(n){const d=n.data||{};const cid=d.courseId;if(cid&&!state.courses.some(c=>c.id===String(cid)))return false;return true}
+function sorted(){return state.notifications.filter(validNotification).sort((a,b)=>(dateOf(b.createdAt)?.getTime()||0)-(dateOf(a.createdAt)?.getTime()||0))}
+function itemHtml(n){return `<button type="button" class="aaN28-item ${n.read?'':'unread'}" data-aa-v28-notif="${esc(n.id)}"><span class="aaN28-item-icon"><i class="fas ${iconFor(n.type)}"></i></span><span class="aaN28-item-main"><span class="aaN28-item-title">${n.read?'':'<span class="aaN28-dot"></span>'}${esc(n.title||'إشعار')}</span><span class="aaN28-item-body">${esc(n.body||'')}</span><span class="aaN28-item-time">${esc(notificationDate(n))}</span></span></button>`}
+function buildUi(){
+  const nav=document.querySelector('.nav-actions-top'),theme=$('themeToggle');
+  if(nav&&!$('aaN28Wrap')){
+    const wrap=document.createElement('div');wrap.id='aaN28Wrap';wrap.innerHTML='<button type="button" id="aaN28Bell" aria-label="الإشعارات" title="الإشعارات"><i class="fas fa-bell"></i><span id="aaN28Badge"></span></button>';
+    if(theme)theme.insertAdjacentElement('afterend',wrap);else nav.appendChild(wrap);
+  }
+  if(!$('aaN28Dropdown')){const d=document.createElement('div');d.id='aaN28Dropdown';d.innerHTML='<div class="aaN28-drop-head"><h3 class="aaN28-drop-title">الإشعارات الجديدة</h3><button type="button" class="aaN28-link-btn" id="aaN28DropRead">تحديد الكل كمقروء</button></div><div class="aaN28-drop-list" id="aaN28DropList"></div><div class="aaN28-drop-foot"><button type="button" id="aaN28OpenAll">عرض كل الإشعارات</button></div>';document.body.appendChild(d)}
+  if(!$('aaN28Page')){const p=document.createElement('div');p.id='aaN28Page';p.innerHTML='<div class="aaN28-page-scroll"><div class="aaN28-page-head"><h2>كل الإشعارات</h2><button type="button" class="aaN28-close-circle" id="aaN28PageClose" aria-label="إغلاق"><i class="fas fa-xmark"></i></button></div><section class="aaN28-send-panel" id="aaN28SendPanel" style="display:none"><button type="button" class="aaN28-send-toggle" id="aaN28SendToggle"><span>إرسال إشعار جديد</span><i class="fas fa-chevron-up"></i></button><div class="aaN28-send-body"><div class="aaN28-send-grid"><div class="aaN28-send-field"><label>نوع المستلمين</label><select id="aaN28SendMode"><option value="specific">حسابات محددة</option><option value="course">طلاب دورة معينة</option><option value="enrolled">كل الطلاب المشتركين في الدورات</option><option value="all">كل الحسابات المسجلة</option></select></div><div class="aaN28-send-field" id="aaN28CourseWrap" style="display:none"><label>الدورة</label><select id="aaN28CourseSelect"><option value="">اختر الدورة</option></select></div><div class="aaN28-send-field full" id="aaN28SpecificWrap"><label>الحسابات المحددة</label><div class="aaN28-recipient-tools"><input id="aaN28UserSearch" placeholder="بحث بالاسم"><button type="button" class="aaN28-small-action" id="aaN28SelectVisible">تحديد الظاهر</button><button type="button" class="aaN28-small-action" id="aaN28ClearVisible">إلغاء التحديد</button></div><div class="aaN28-recipient-list" id="aaN28UserList"></div><div style="color:var(--text-muted);font-size:.74rem;margin-top:6px" id="aaN28SelectedNote">تم تحديد 0 حساب</div></div><div class="aaN28-send-field full"><label>عنوان الإشعار</label><input id="aaN28SendTitle" placeholder="العنوان"></div><div class="aaN28-send-field full"><label>المحتوى</label><textarea id="aaN28SendBody" placeholder="تفاصيل الإشعار"></textarea></div><div class="aaN28-send-field"><label>نوع الإشعار</label><select id="aaN28SendType"><option value="admin_manual">رسالة من المشرف</option><option value="announcement">إعلان</option><option value="reminder">تذكير</option><option value="important">تنبيه مهم</option></select></div></div><div class="aaN28-send-actions"><button type="button" class="aaN28-primary" id="aaN28SendBtn"><i class="fas fa-paper-plane"></i> إرسال</button></div></div></section><div class="aaN28-all-list" id="aaN28AllList"></div></div>';document.body.appendChild(p)}
+  if(!$('aaN28Detail')){const d=document.createElement('div');d.id='aaN28Detail';d.innerHTML='<div class="aaN28-detail-card"><div class="aaN28-detail-head"><div><div class="aaN28-detail-title" id="aaN28DetailTitle"></div><div class="aaN28-detail-meta" id="aaN28DetailMeta"></div></div><button type="button" class="aaN28-close-circle" id="aaN28DetailClose"><i class="fas fa-xmark"></i></button></div><div class="aaN28-detail-body" id="aaN28DetailBody"></div><div class="aaN28-detail-reason" id="aaN28DetailReason" style="display:none"></div><div class="aaN28-detail-actions" id="aaN28DetailActions"></div></div>';document.body.appendChild(d)}
+}
+function render(){
+  const all=sorted(),unread=all.filter(n=>!n.read),badge=$('aaN28Badge');
+  if(badge){badge.textContent=unread.length>99?'99+':String(unread.length);badge.classList.toggle('show',unread.length>0)}
+  const dl=$('aaN28DropList');if(dl)dl.innerHTML=unread.length?unread.slice(0,8).map(itemHtml).join(''):'<div class="aaN28-empty">لا توجد إشعارات جديدة.</div>';
+  const al=$('aaN28AllList');if(al)al.innerHTML=all.length?all.map(itemHtml).join(''):'<div class="aaN28-empty">لا توجد إشعارات.</div>';
+}
+async function refreshCourses(){try{const s=await db.collection('courses').get();state.courses=s.docs.map(d=>({id:d.id,...(d.data()||{})}));}catch(_){state.courses=[]}}
+async function listen(){state.unsub?.();state.unsub=null;state.notifications=[];render();const u=uid();if(!u)return;state.unsub=db.collection('users').doc(u).collection('notifications').onSnapshot(s=>{state.notifications=s.docs.map(d=>({id:d.id,...(d.data()||{})}));render()},e=>console.warn('v28 notifications',e))}
+async function read(id){const u=uid();if(!u||!id)return;await db.collection('users').doc(u).collection('notifications').doc(id).set({read:true,readAt:firebase.firestore.FieldValue.serverTimestamp()},{merge:true}).catch(()=>{})}
+async function readAll(){const u=uid();if(!u)return;const list=state.notifications.filter(n=>!n.read);for(let i=0;i<list.length;i+=400){const b=db.batch();list.slice(i,i+400).forEach(n=>b.set(db.collection('users').doc(u).collection('notifications').doc(n.id),{read:true,readAt:firebase.firestore.FieldValue.serverTimestamp()},{merge:true}));await b.commit().catch(()=>{})}}
+function lockModal(){document.body.classList.add('aa-v28-modal-open')}
+function unlockModal(){if(!document.querySelector('#aaN28Detail.open, .custom-alert-modal.active, .edit-modal.active, .auth-popup.active, #quizOverlay.active, #courseFileViewer.active, #aaCoursePortfolioModal.active, .ananas-modal-overlay.active, .ananas-quiz-v2.active, .ananas-v10-overlay.active'))document.body.classList.remove('aa-v28-modal-open')}
+function closeDetail(){$('aaN28Detail')?.classList.remove('open');unlockModal()}
+function openPage(){closeDetail();$('aaN28Dropdown')?.classList.remove('open');$('aaN28Bell')?.classList.remove('is-open');$('aaN28Page')?.classList.add('open');document.body.classList.add('aa-notifications-open') ;if(isAdmin){$('aaN28SendPanel').style.display='block';}render()}
+function closePage(){$('aaN28Page')?.classList.remove('open');closeDetail();document.body.classList.remove('aa-notifications-open')}
+async function openDetail(id){const n=state.notifications.find(x=>x.id===id);if(!n)return;await read(id);$('aaN28Page')?.classList.add('open');document.body.classList.add('aa-notifications-open');const d=n.data||{};$('aaN28DetailTitle').textContent=n.title||'إشعار';$('aaN28DetailMeta').textContent=`${n.type||'إشعار'} • ${notificationDate(n)}`;$('aaN28DetailBody').textContent=n.body||'';const rr=$('aaN28DetailReason');rr.style.display=n.reason?'block':'none';rr.innerHTML=n.reason?`<strong>السبب</strong><div style="margin-top:5px">${esc(n.reason)}</div>`:'';const actions=$('aaN28DetailActions');actions.innerHTML='';
+  if(n.type==='code_deleted'||n.type==='subscription_expired'){
+    const cid=d.courseId||'';const b=document.createElement('button');b.className='primary';b.textContent=n.type==='code_deleted'?'وضع كود جديد':'تجديد الاشتراك';b.onclick=async()=>{closeDetail();closePage();if(cid&&window.aaOpenEnrollmentForNotification){await window.aaOpenEnrollmentForNotification(cid)}else if(cid){try{await window.openCourse?.(cid)}catch(_){}}};actions.appendChild(b)
+  }
+  if(n.type==='assignment_submitted'&&d.courseId&&d.assignmentId){const b=document.createElement('button');b.className='primary';b.textContent='فتح الواجب';b.onclick=async()=>{closeDetail();closePage();try{await window.openAssignmentDetail?.(d.courseId,d.assignmentId)}catch(_){}};actions.appendChild(b)}
+  if(n.type==='assignment_approved'&&d.courseId&&d.assignmentId){const b=document.createElement('button');b.className='primary';b.textContent='فتح الواجب';b.onclick=async()=>{closeDetail();closePage();try{await window.openAssignmentDetail?.(d.courseId,d.assignmentId)}catch(_){}};actions.appendChild(b)}
+  $('aaN28Detail').classList.add('open');lockModal();
+}
+async function loadUsers(){if(state.users.length)return;try{const s=await db.collection('users').get();state.users=s.docs.map(d=>({id:d.id,...(d.data()||{})})).filter(u=>u.id!==uid()).sort((a,b)=>String(a.displayName||a.name||a.email||'').localeCompare(String(b.displayName||b.name||b.email||''),'ar'))}catch(_){state.users=[]}}
+function renderRecipients(){const box=$('aaN28UserList'),search=String($('aaN28UserSearch')?.value||'').trim().toLowerCase();if(!box)return;let us=state.users.filter(u=>!search||String(u.displayName||u.name||u.email||'').toLowerCase().includes(search));box.innerHTML=us.length?us.slice(0,300).map(u=>`<label class="aaN28-recipient-row"><input type="checkbox" data-aa-v28-rec="${esc(u.id)}" ${state.selected.has(u.id)?'checked':''}><span class="aaN28-rec-avatar">${avatarMarkup(u.displayName||u.name||u.email||'مستخدم',u.photoURL||u.photoUrl||u.photo,u.id)}</span><span class="aaN28-rec-copy"><strong>${esc(u.displayName||u.name||'مستخدم')}</strong><small>${esc(u.email||'')}</small></span></label>`).join(''):'<div class="aaN28-empty">لا توجد حسابات مطابقة.</div>';box.querySelectorAll('[data-aa-v28-rec]').forEach(c=>c.addEventListener('change',()=>{if(c.checked)state.selected.add(c.dataset.aaV28Rec);else state.selected.delete(c.dataset.aaV28Rec);updateSelected()}));updateSelected()}
+function updateSelected(){const n=$('aaN28SelectedNote');if(n)n.textContent=`تم تحديد ${state.selected.size} حساب`}
+async function fillSendData(){const sel=$('aaN28CourseSelect');if(sel){sel.innerHTML='<option value="">اختر الدورة</option>'+state.courses.map(c=>`<option value="${esc(c.id)}">${esc(c.titleAr||c.title||'دورة')}</option>`).join('')}await loadUsers();renderRecipients()}
+async function getRecipients(){const mode=$('aaN28SendMode')?.value||'specific';if(mode==='specific')return [...state.selected];if(mode==='all')return state.users.map(u=>u.id);if(mode==='enrolled'){const out=[];for(const u of state.users){const e=await db.collection('users').doc(u.id).collection('enrolledCourses').get().catch(()=>null);if(e&&!e.empty&&e.docs.some(d=>{const x=d.data()||{};return !x.codeDeleted&&!x.accessBlocked}))out.push(u.id)}return out}if(mode==='course'){const cid=$('aaN28CourseSelect')?.value;return cid?await (async()=>{const out=[];for(const u of state.users){const e=await db.collection('users').doc(u.id).collection('enrolledCourses').doc(cid).get().catch(()=>null);if(e?.exists&&!e.data()?.codeDeleted&&!e.data()?.accessBlocked)out.push(u.id)}return out})():[]}return []}
+async function sendManual(){if(!isAdmin)return;const title=$('aaN28SendTitle').value.trim(),body=$('aaN28SendBody').value.trim(),type=$('aaN28SendType').value;if(!title||!body)return showCustomAlert?.('تنبيه','اكتب عنوان الإشعار ومحتواه.');const ids=await getRecipients();if(!ids.length)return showCustomAlert?.('تنبيه','لم يتم اختيار أي حساب.');for(const id of ids){const ref=db.collection('users').doc(id).collection('notifications').doc();await ref.set({title,body,type,data:{manual:true,sentBy:uid()},read:false,createdAt:firebase.firestore.FieldValue.serverTimestamp()}).catch(()=>{})}showCustomAlert?.('تم الإرسال','تم إرسال الإشعار بنجاح.');$('aaN28SendTitle').value='';$('aaN28SendBody').value='';state.selected.clear();renderRecipients()}
+function bind(){
+  function positionDropdown(){
+    const d=$('aaN28Dropdown'), b=$('aaN28Bell');
+    if(!d||!b||!d.classList.contains('open')) return;
+    const r=b.getBoundingClientRect();
+    const margin=10, gap=8;
+    const width=Math.min(430, window.innerWidth-margin*2);
+    d.style.width=width+'px';
+    let left=r.right-width;
+    left=Math.max(margin, Math.min(left, window.innerWidth-width-margin));
+    let top=r.bottom+gap;
+    if(top+d.offsetHeight>window.innerHeight-margin){
+      top=Math.max(margin, r.top-gap-d.offsetHeight);
+    }
+    d.style.left=Math.round(left)+'px';
+    d.style.top=Math.round(top)+'px';
+    d.style.right='auto';
+  }
+  window.aaN28PositionDropdown=positionDropdown;
+  $('aaN28Bell')?.addEventListener('click',e=>{e.preventDefault();e.stopPropagation();const d=$('aaN28Dropdown');const open=d.classList.toggle('open');$('aaN28Bell').classList.toggle('is-open',open);if(open){positionDropdown();requestAnimationFrame(positionDropdown);render()}});
+  $('aaN28DropRead')?.addEventListener('click',async e=>{e.preventDefault();await readAll();render()});
+  $('aaN28OpenAll')?.addEventListener('click',e=>{e.preventDefault();openPage();});
+  $('aaN28PageClose')?.addEventListener('click',closePage);
+  $('aaN28DetailClose')?.addEventListener('click',closeDetail);
+  $('aaN28SendToggle')?.addEventListener('click',()=>{const p=$('aaN28SendPanel');p.classList.toggle('collapsed');});
+  $('aaN28SendMode')?.addEventListener('change',async e=>{const v=e.target.value;$('aaN28SpecificWrap').style.display=v==='specific'?'grid':'none';$('aaN28CourseWrap').style.display=v==='course'?'grid':'none';state.selected.clear();await fillSendData()});
+  $('aaN28UserSearch')?.addEventListener('input',renderRecipients);
+  $('aaN28SelectVisible')?.addEventListener('click',()=>{document.querySelectorAll('#aaN28UserList input[data-aa-v28-rec]').forEach(c=>{c.checked=true;state.selected.add(c.dataset.aaV28Rec)});updateSelected()});
+  $('aaN28ClearVisible')?.addEventListener('click',()=>{document.querySelectorAll('#aaN28UserList input[data-aa-v28-rec]').forEach(c=>{c.checked=false;state.selected.delete(c.dataset.aaV28Rec)});updateSelected()});
+  $('aaN28SendBtn')?.addEventListener('click',sendManual);
+  document.addEventListener('click',e=>{const item=e.target.closest?.('[data-aa-v28-notif]');if(item){e.preventDefault();e.stopPropagation();openDetail(item.dataset.aaV28Notif);return;}const d=$('aaN28Dropdown'),w=$('aaN28Wrap');if(d?.classList.contains('open')&&w&&!w.contains(e.target)&&!d.contains(e.target)){$('aaN28Bell').classList.remove('is-open');d.classList.remove('open');}} ,true);
+  window.addEventListener('resize',()=>window.aaN28PositionDropdown?.(),{passive:true});
+  window.addEventListener('scroll',()=>window.aaN28PositionDropdown?.(),{passive:true,capture:true});
+}
+async function init(){removeLegacy();buildUi();bind();await refreshCourses();listen();if(isAdmin){$('aaN28SendPanel').style.display='block';$('aaN28SendPanel').classList.remove('collapsed');await fillSendData()}}
+if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init,{once:true});else init();
+
+/* ---------- Global modal curtain + freeze ---------- */
+function checkModalLock(){
+  const selectors=['#aaN28Detail.open','.custom-alert-modal.active','.edit-modal.active','.auth-popup.active','#quizOverlay.active','#courseFileViewer.active','#aaCoursePortfolioModal.active','.ananas-modal-overlay.active','.ananas-quiz-v2.active','.ananas-v10-overlay.active','#enrollTermsModal.active','#enrollTermsPreviewModal.active'];
+  const active=selectors.some(s=>document.querySelector(s));
+  document.body.classList.toggle('aa-v28-modal-open',active);
+}
+const lockObs=new MutationObserver(checkModalLock);lockObs.observe(document.body,{subtree:true,childList:true,attributes:true,attributeFilter:['class','style']});
+checkModalLock();
+
+/* ---------- Signup: required name/gender, optional phone, photo/default avatar ---------- */
+function setupSignup(){
+  const old=$('saveProfileBtn');
+  if(!old||old.dataset.aaV28Signup)return;
+  const btn=old.cloneNode(true);btn.dataset.aaV28Signup='1';old.replaceWith(btn);
+  const file=$('profilePhotoInput'),preview=$('profilePhotoPreview');
+  const drawPreview=()=>{const name=$('profileName')?.value.trim()||window.currentUserProfile?.displayName||currentUser?.displayName||'مستخدم';const url=window.__aaSignupPhotoUrl||window.currentUser?.photoURL||'';if(preview)preview.innerHTML=avatarMarkup(name,url,window.currentUser?.uid||name)};
+  file?.addEventListener('change',()=>{const f=file.files?.[0];if(f){window.__aaSignupPhotoFile=f;const r=new FileReader();r.onload=()=>{if(preview)preview.innerHTML=`<img src="${r.result}" alt="">`};r.readAsDataURL(f)}else{window.__aaSignupPhotoFile=null;drawPreview()}});
+  $('profileName')?.addEventListener('input',drawPreview);
+  btn.addEventListener('click',async()=>{
+    btn.disabled=true;btn.textContent='جارٍ الحفظ...';
+    const name=$('profileName')?.value.trim()||'';const gender=$('profileGender')?.value||'';const code=$('countryCode')?.value||'+966';const phone=$('profilePhone')?.value.trim()||'';
+    if(!name||!gender){if($('authStatus'))$('authStatus').textContent='الاسم والجنس مطلوبان لإتمام التسجيل.';btn.disabled=false;btn.textContent='إتمام التسجيل';return}
+    if(!window.currentUser){btn.disabled=false;return}
+    try{
+      let photo=window.currentUser.photoURL||'';if(window.__aaSignupPhotoFile){photo=await uploadImage(window.__aaSignupPhotoFile)||photo}
+      await currentUser.updateProfile({displayName:name,photoURL:photo||null});
+      await db.collection('users').doc(currentUser.uid).set({uid:currentUser.uid,email:currentUser.email||'',displayName:name,gender,phone:phone?(code+phone):'',photoURL:photo||'',profilePublic:true,createdAt:firebase.firestore.FieldValue.serverTimestamp()},{merge:true});
+      currentUserProfile=Object.assign({},currentUserProfile,{uid:currentUser.uid,email:currentUser.email||'',displayName:name,gender,phone:phone?(code+phone):'',photoURL:photo||'',profilePublic:true});
+      if(typeof updateAuthAccountButton==='function')updateAuthAccountButton(currentUser,currentUserProfile);
+      $('authPopup')?.classList.remove('active');
+      window.__signupCompleted=true;
+    }catch(err){if($('authStatus'))$('authStatus').textContent='حدث خطأ أثناء حفظ البيانات: '+(err.message||err)}
+    finally{btn.disabled=false;btn.textContent='إتمام التسجيل'}
+  });
+}
+setupSignup();
+
+/* ---------- Avatar update after any auth/profile refresh ---------- */
+window.aaV28RefreshAvatar=function(){if(!currentUser)return;const p=currentUserProfile||{};const name=p.displayName||currentUser.displayName||currentUser.email?.split('@')[0]||'مستخدم';const photo=p.photoURL||p.photoUrl||p.photo||currentUser.photoURL||'';const b=$('authToggleBtn');if(!b)return;b.innerHTML=`${photo?`<span class="auth-user-avatar"><img src="${esc(photo)}" alt=""></span>`:`<span class="auth-user-avatar" style="background:${avatarColor(currentUser.uid)}">${esc(avatarInitial(name))}</span>`}<span id="authLabel" class="auth-user-name">${esc(name)}</span>`;b.title=name}
+if(auth?.onAuthStateChanged)auth.onAuthStateChanged(async u=>{setTimeout(async()=>{if(u){window.aaV28RefreshAvatar();if(window.isAdmin||isAdmin){$('aaN28SendPanel').style.display='block';if($('aaN28SendPanel').classList.contains('collapsed')===false)$('aaN28SendPanel').classList.remove('collapsed');await refreshCourses();await fillSendData()}}},600)});
+
+/* ---------- Logo always returns to courses home ---------- */
+const logo=$('.logo');if(logo&&!logo.dataset.aaV28Home){logo.dataset.aaV28Home='1';logo.addEventListener('click',e=>{e.preventDefault();e.stopPropagation();closeDetail?.();$('aaN28Page')?.classList.remove('open');document.body.classList.remove('aa-notifications-open');try{activeCourseId=null;activeLessonId=null;}catch(_){}try{document.querySelector('#courseDetailView')?.style.setProperty('display','none','important')}catch(_){}try{mobileNavigate?.('courses')}catch(_){}try{renderCourses?.()}catch(_){}window.scrollTo?.(0,0);})}
+
+/* ---------- Fullscreen video: landscape on phones, portrait back on exit ---------- */
+function forceFullscreenButton(id,wrapperId){const old=$(id);if(!old||old.dataset.aaV28Fs)return;const b=old.cloneNode(true);b.dataset.aaV28Fs='1';old.replaceWith(b);b.addEventListener('click',async e=>{e.preventDefault();e.stopPropagation();const el=$(wrapperId);if(!el)return;try{if(!document.fullscreenElement){await el.requestFullscreen?.();if(window.innerWidth<=768&&screen.orientation?.lock)try{await screen.orientation.lock('landscape')}catch(_){}}else{await document.exitFullscreen?.()}}catch(_){try{if(!document.fullscreenElement)await el.requestFullscreen?.()}catch(__){}}})}
+forceFullscreenButton('lessonFullscreenBtn','lessonVideoWrapper');forceFullscreenButton('fullscreenBtn','videoPlayerWrapper');
+document.addEventListener('fullscreenchange',async()=>{if(!document.fullscreenElement){try{if(screen.orientation?.unlock)screen.orientation.unlock()}catch(_){}}});
+
+/* ---------- Make the registration phone truly optional in visible labels ---------- */
+const pl=$('profilePhoneLabel');if(pl)pl.innerHTML=(pl.textContent||'رقم الهاتف')+' <span style="color:var(--text-muted);font-size:.82em;font-weight:500">(اختياري)</span>';
+
+})();
+</script>
+<style id="aa-v28-avatar-style">
+.aa-v28-initial-avatar{width:100%;height:100%;display:grid;place-items:center;color:#fff;font-weight:900;border-radius:inherit}
+#authToggleBtn .auth-user-avatar{background:var(--accent-gradient);display:grid;place-items:center;color:#fff}
+#authToggleBtn .auth-user-avatar .aa-v28-initial-avatar{border-radius:50%}
 </style>
-
-<script id="aa-v28-notification-labels">
-(function(){
- const patch=()=>{const h=document.querySelector('#aaN27Dropdown .aaN27-head h3');if(h)h.textContent='الإشعارات الجديدة';const b=document.getElementById('aaN27AllRead');if(b)b.textContent='تحديد الكل كمقروء';const p=document.getElementById('aaN27PageRead');if(p)p.textContent='تحديد الكل كمقروء';};
- patch();new MutationObserver(patch).observe(document.body,{subtree:true,childList:true});
-})();
-</script>
-
-<script id="aa-v28-final-ui-js">
-(function(){
-  'use strict';
-  const $=id=>document.getElementById(id);
-  const esc=s=>String(s??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]));
-  const colorPalette=['#6c5ce7','#0984e3','#16a085','#e17055','#8e44ad','#2d98da','#d35400','#27ae60','#c0392b','#3742fa','#0097e6','#6d4c41'];
-  function nameOf(u){return String(u?.displayName||u?.name||u?.profileName||u?.username||u?.email?.split('@')[0]||'مستخدم').trim()||'مستخدم';}
-  function avatarColor(uid=''){let n=0;for(const ch of String(uid)){n=(n*31+ch.charCodeAt(0))>>>0;}return colorPalette[n%colorPalette.length];}
-  function avatarMarkup(user, sizeClass=''){const name=nameOf(user),photo=user?.photoURL||user?.photoUrl||user?.photo||'';if(photo)return `<span class="aa-initial-avatar ${sizeClass}"><img src="${esc(photo)}" alt="" style="width:100%;height:100%;object-fit:cover;display:block;border-radius:50%"></span>`;return `<span class="aa-initial-avatar ${sizeClass}" style="background:${avatarColor(user?.uid||name)}">${esc(name.slice(0,1))}</span>`;}
-
-  /* ---------- Notification visuals ---------- */
-  function retrofitDropdown(){
-    const d=$('aaN27Dropdown');if(!d)return;
-    if(!d.querySelector('.aaN27-dropdown-footer')){const f=document.createElement('div');f.className='aaN27-dropdown-footer';f.innerHTML='<button type="button" id="aaN27OpenAllFooter">عرض كل الإشعارات</button>';d.appendChild(f);}
-  }
-  retrofitDropdown();
-  document.addEventListener('click',function(e){
-    if(e.target.closest('#aaN27OpenAllFooter')){e.preventDefault();e.stopPropagation();window.__aaN27OpenPage?.(true);}
-  },true);
-
-  /* Patch existing buildUI once it creates the notification DOM. */
-  const patchNotificationDOM=()=>{
-    retrofitDropdown();
-    const send=$('aaN27SendPanel');
-    if(send&&!send.querySelector('.aaN27-send-toggle')?.textContent.includes('إرسال إشعار جديد')){}
-  };
-  const mo=new MutationObserver(patchNotificationDOM);mo.observe(document.body,{childList:true,subtree:true});
-
-  /* Expose wrappers used by the existing notification implementation. */
-  window.__aaN27OpenPage=window.__aaN27OpenPage||function(){const page=$('aaN27Page');if(page){page.classList.add('open');document.body.classList.add('aaN27-lock-scroll');if(window.innerWidth<=768){page.style.top=getComputedStyle(document.documentElement).getPropertyValue('--nav-height-mobile')||'70px';} }};
-
-  /* ---------- Mark notification read immediately when opened ---------- */
-  const markDetailRead=()=>{
-    const detail=$('aaN27Detail');if(!detail)return;
-    detail.querySelectorAll('[data-n27-id]').forEach(()=>{});
-  };
-
-  /* ---------- Registration countries + optional phone + optional photo ---------- */
-  const countries=[
-    ['+966','🇸🇦','السعودية'],['+971','🇦🇪','الإمارات'],['+965','🇰🇼','الكويت'],['+974','🇶🇦','قطر'],['+973','🇧🇭','البحرين'],['+968','🇴🇲','عُمان'],['+20','🇪🇬','مصر'],['+964','🇮🇶','العراق'],['+962','🇯🇴','الأردن'],['+961','🇱🇧','لبنان'],['+963','🇸🇾','سوريا'],['+970','🇵🇸','فلسطين'],['+967','🇾🇪','اليمن'],['+212','🇲🇦','المغرب'],['+213','🇩🇿','الجزائر'],['+216','🇹🇳','تونس'],['+218','🇱🇾','ليبيا'],['+249','🇸🇩','السودان'],['+252','🇸🇴','الصومال'],['+253','🇩🇯','جيبوتي'],['+222','🇲🇷','موريتانيا'],['+269','🇰🇲','جزر القمر']
-  ];
-  function ensureRegistrationUI(){
-    const country=$('countryCode'),phone=$('profilePhone'),gender=$('profileGender'),name=$('profileName');
-    if(country){country.innerHTML=countries.map(([code,flag,name])=>`<option value="${code}">${flag} ${name} ${code}</option>`).join('');country.setAttribute('aria-label','مفتاح الدولة');}
-    if(phone){phone.required=false;phone.closest('div')?.querySelector('label')?.setAttribute('data-optional','اختياري');}
-    if(name)name.required=true;if(gender)gender.required=true;
-    if($('aaRegisterPhotoWrap'))return;
-    if(!gender)return;
-    const wrap=document.createElement('div');wrap.id='aaRegisterPhotoWrap';wrap.innerHTML='<div id="aaRegisterPhotoPreview"></div><div><label style="margin:0 0 6px;font-weight:800;display:block">صورة الحساب <span style="font-weight:500;color:var(--text-muted)">(اختياري)</span></label><label id="aaRegisterPhotoPick" for="profilePhotoFile"><i class="fas fa-image" style="margin-inline-end:6px"></i>إضافة صورة</label><span id="aaRegisterPhotoNote">إن لم تضف صورة، ستستخدم صورة Google إن وجدت، أو أول حرف من اسمك.</span><input type="file" id="profilePhotoFile" accept="image/*" hidden></div>';
-    const genderParent=gender.closest('.modal-form');if(genderParent){const phoneWrap=phone?.closest('div');if(phoneWrap?.parentElement)phoneWrap.parentElement.insertAdjacentElement('afterend',wrap);else genderParent.appendChild(wrap);}
-    const preview=$('aaRegisterPhotoPreview'),input=$('profilePhotoFile');
-    const refresh=()=>{const u=currentUser;const nm=$('profileName')?.value.trim()||u?.displayName||'م';const ph=u?.photoURL||currentUserProfile?.photoURL||currentUserProfile?.photoUrl||'';preview.innerHTML=ph?`<img src="${esc(ph)}" alt="">`:`<span class="aa-initial-avatar" style="width:100%;height:100%;background:${avatarColor(u?.uid||nm)}">${esc(nm.slice(0,1))}</span>`;};
-    $('profileName')?.addEventListener('input',refresh);refresh();
-    input?.addEventListener('change',()=>{const f=input.files?.[0];if(!f){refresh();return;}const url=URL.createObjectURL(f);preview.innerHTML=`<img src="${url}" alt="">`;});
-  }
-  ensureRegistrationUI();
-  new MutationObserver(ensureRegistrationUI).observe(document.body,{childList:true,subtree:true});
-
-  /* Replace the old registration save handler so phone is optional and photo is supported. */
-  function replaceRegistrationSave(){
-    const old=$('saveProfileBtn');if(!old||old.dataset.v28Bound)return;
-    const btn=old.cloneNode(true);btn.dataset.v28Bound='1';old.replaceWith(btn);
-    btn.addEventListener('click',async()=>{
-      const name=$('profileName')?.value.trim()||'',gender=$('profileGender')?.value||'';
-      const code=$('countryCode')?.value||'+966',phone=$('profilePhone')?.value.trim()||'';
-      if(!name||!gender){if($('authStatus'))$('authStatus').textContent='الاسم والجنس مطلوبان.';return;}
-      btn.disabled=true;btn.textContent='جاري حفظ البيانات...';
-      try{
-        const u=currentUser;if(!u)throw new Error('لم يتم تسجيل الدخول');
-        let photo=u.photoURL||'';const file=$('profilePhotoFile')?.files?.[0];if(file){photo=await window.uploadImage(file);if(!photo)throw new Error('تعذر رفع الصورة');}
-        await u.updateProfile({displayName:name,photoURL:photo||null});
-        const data={uid:u.uid,email:u.email||'',displayName:name,gender,phone:phone?code+phone:'',photoURL:photo||'',photoUrl:photo||'',profilePublic:true,createdAt:window.firebase?.firestore?.FieldValue?.serverTimestamp?.()};
-        await db.collection('users').doc(u.uid).set(data,{merge:true});
-        currentUserProfile={...(currentUserProfile||{}),...data};
-        updateAuthAccountButton?.(u,currentUserProfile);
-        $('authPopup')?.classList.remove('active');
-      }catch(err){console.error(err);if($('authStatus'))$('authStatus').textContent='تعذر حفظ البيانات: '+(err?.message||err)}finally{btn.disabled=false;btn.textContent='إتمام التسجيل';}
-    });
-  }
-  replaceRegistrationSave();new MutationObserver(replaceRegistrationSave).observe(document.body,{childList:true,subtree:true});
-
-  /* ---------- Use chosen user name + deterministic initials in the header avatar ---------- */
-  function refreshHeaderAvatar(){
-    const u=currentUser,profile=currentUserProfile||{},b=$('authToggleBtn');if(!b||!u)return;
-    const name=nameOf(profile||u),photo=profile.photoURL||profile.photoUrl||profile.photo||u.photoURL||'';
-    b.innerHTML=photo?`<span class="auth-user-avatar"><img src="${esc(photo)}" alt=""></span><span id="authLabel" class="auth-user-name">${esc(name)}</span>`:`<span class="auth-user-avatar aa-initial-avatar" style="background:${avatarColor(u.uid||name)}">${esc(name.slice(0,1))}</span><span id="authLabel" class="auth-user-name">${esc(name)}</span>`;
-  }
-  if(auth?.onAuthStateChanged){auth.onAuthStateChanged(u=>{setTimeout(refreshHeaderAvatar,80);setTimeout(ensureRegistrationUI,120);});}
-
-  /* ---------- Home: logo always returns to main courses page ---------- */
-  document.addEventListener('click',e=>{
-    const logo=e.target.closest('.logo');if(!logo)return;e.preventDefault();e.stopPropagation();
-    try{window.closeAssignmentDetail?.();}catch(_){ }
-    try{document.getElementById('aaN27Detail')?.classList.remove('open');document.getElementById('aaN27Page')?.classList.remove('open');document.getElementById('aaN27Dropdown')?.classList.remove('open');}catch(_){ }
-    document.body.classList.remove('aaN27-lock-scroll','aa-modal-lock');
-    const detail=$('courseDetailView');if(detail){detail.style.display='none';}
-    const courses=$('coursesPage');if(courses){courses.style.display='block';try{courses.scrollTo({top:0,behavior:'smooth'});}catch(_){courses.scrollTop=0;}}
-    try{window.mobileNavigate?.('courses')}catch(_){ }
-  },true);
-
-  /* ---------- Video fullscreen + orientation ---------- */
-  async function enterFs(el){
-    if(!el)return;
-    try{await el.requestFullscreen?.({navigationUI:'hide'});}catch(_){try{await el.requestFullscreen?.();}catch(__){}}
-    document.body.classList.add('aa-video-landscape-active');
-    try{if(window.innerWidth<=768&&screen.orientation?.lock)await screen.orientation.lock('landscape');}catch(_){ }
-  }
-  async function exitFs(){
-    try{if(document.fullscreenElement)await document.exitFullscreen?.();}catch(_){ }
-    document.body.classList.remove('aa-video-landscape-active');
-    try{if(window.innerWidth<=768&&screen.orientation?.lock)await screen.orientation.lock('portrait');else screen.orientation?.unlock?.();}catch(_){try{screen.orientation?.unlock?.()}catch(__){}}
-  }
-  async function toggleFs(el){if(document.fullscreenElement)await exitFs();else await enterFs(el);}
-  function bindFs(id,wrapperId){const b=$(id),el=$(wrapperId);if(!b||!el||b.dataset.v28Fs)return;b.dataset.v28Fs='1';b.addEventListener('click',e=>{e.preventDefault();e.stopImmediatePropagation();toggleFs(el);},true);}
-  bindFs('lessonFullscreenBtn','lessonVideoWrapper');bindFs('fullscreenBtn','videoPlayerWrapper');
-  document.addEventListener('fullscreenchange',()=>{if(!document.fullscreenElement){document.body.classList.remove('aa-video-landscape-active');try{if(window.innerWidth<=768&&screen.orientation?.lock)screen.orientation.lock('portrait').catch(()=>screen.orientation?.unlock?.());else screen.orientation?.unlock?.()}catch(_){}}});
-
-  /* ---------- Final dropdown positioning + immediate read-state paint ---------- */
-  function placeDropdownV28(){
-    const d=$('aaN27Dropdown'),b=$('aaN27Bell');if(!d||!b||!d.classList.contains('open'))return;
-    if(window.innerWidth<=768){d.style.left='12px';d.style.right='12px';d.style.top='calc(var(--nav-height-mobile,70px) + 8px)';d.style.width='auto';return;}
-    const r=b.getBoundingClientRect(),w=Math.min(430,window.innerWidth-24),left=Math.max(12,Math.min(r.right-w,window.innerWidth-w-12));
-    d.style.width=w+'px';d.style.left=left+'px';d.style.right='auto';d.style.top=Math.min(window.innerHeight-84,d.getBoundingClientRect().height?Math.max(10,r.bottom+8):r.bottom+8)+'px';
-  }
-  document.addEventListener('click',e=>{
-    if(e.target.closest('#aaN27Bell'))setTimeout(placeDropdownV28,0);
-    if(e.target.closest('#aaN27AllRead,#aaN27PageRead'))setTimeout(()=>{try{window.__aaN27Refresh?.()}catch(_){ }},120);
-  },true);
-  window.addEventListener('resize',()=>setTimeout(placeDropdownV28,0));
-
-  /* ---------- Global modal curtain/lock ---------- */
-  const modalSelectors=['.edit-modal.active','.auth-popup.active','.custom-alert-modal.active','#userProfileModal.active','#quizOverlay.active','.gallery-viewer.active','.platform-image-viewer.active','.file-viewer-overlay.active','.ananas-modal-overlay.active','#aaN27Detail.open','.ananas-quiz-v2.active'];
-  function syncModalLock(){
-    const open=modalSelectors.some(sel=>document.querySelector(sel));document.body.classList.toggle('aa-modal-lock',open);
-  }
-  const mm=new MutationObserver(syncModalLock);mm.observe(document.body,{subtree:true,attributes:true,attributeFilter:['class','style']});
-  document.addEventListener('click',()=>setTimeout(syncModalLock,0),true);syncModalLock();
-
-  window.__aaN27Refresh=()=>{try{const list=state?.notifications||[];const b=$('aaN27Badge');if(b){const n=list.filter(x=>!x.read);b.textContent=n.length>99?'99+':n.length;b.classList.toggle('show',n.length>0);} }catch(_){ }};
-
-  /* Make the notification page visually match the requested layout and guarantee safe mobile bounds. */
-  function patchNotificationOpen(){
-    const page=$('aaN27Page');if(!page)return;
-    if(page.classList.contains('open')){document.body.classList.remove('aa-modal-lock');page.style.zIndex='699000';}
-  }
-  new MutationObserver(patchNotificationOpen).observe(document.body,{subtree:true,attributes:true,attributeFilter:['class']});
-  patchNotificationOpen();
-})();
-</script>
-
-
-
-<script id="aa-v28-login-session-reset">
-(function(){
-  if(!auth?.onAuthStateChanged)return;
-  auth.onAuthStateChanged(u=>{if(!u){try{sessionStorage.removeItem('aa_login_session_key')}catch(_){}}});
-})();
-</script>
 
 </body>
 </html>
