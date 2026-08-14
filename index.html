@@ -14398,5 +14398,117 @@ document.addEventListener('click',e=>{
 })();
 </script>
 
+
+<!-- ===== FINAL HARD ISOLATION v25: notification overlays must never exist visually unless explicitly opened ===== -->
+<style id="aa-final-notification-isolation-v25">
+/* Hidden by default on every viewport. They become visible only through the explicit open classes. */
+#aaFinalNotificationsRoot,
+#aaFinalNotifDropdown,
+#aaFinalNotifDetail{
+  display:none !important;
+  visibility:hidden !important;
+  opacity:0 !important;
+  pointer-events:none !important;
+}
+#aaFinalNotificationsRoot.is-open{
+  display:block !important;
+  visibility:visible !important;
+  opacity:1 !important;
+  pointer-events:auto !important;
+}
+#aaFinalNotifDropdown.is-open{
+  display:block !important;
+  visibility:visible !important;
+  opacity:1 !important;
+  pointer-events:auto !important;
+}
+#aaFinalNotifDetail.is-open{
+  display:flex !important;
+  visibility:visible !important;
+  opacity:1 !important;
+  pointer-events:auto !important;
+}
+/* The old notification shell is never allowed to participate in layout. */
+#aaNotificationsWrap,
+#aaNotificationsPage,
+#aaNotificationDetailModal,
+#aaCodeReasonModal,
+#aaNotificationsDropdown,
+#aaFinalLegacyNotifications,
+.aa-notifications-page,
+.aa-notification-detail-modal{
+  display:none !important;
+  visibility:hidden !important;
+  pointer-events:none !important;
+}
+/* When the final notifications page is open, only it owns the safe content area. */
+body.aa-notifications-open #coursesPage,
+body.aa-notifications-open #courseDetailView{
+  visibility:hidden !important;
+  pointer-events:none !important;
+}
+@media(max-width:768px){
+  #aaFinalNotificationsRoot.is-open{
+    position:fixed !important;
+    top:var(--nav-height-mobile,70px) !important;
+    right:0 !important;
+    bottom:calc(var(--mobile-bottom-nav-content-height,66px) + env(safe-area-inset-bottom)) !important;
+    left:0 !important;
+    height:auto !important;
+    width:auto !important;
+    overflow:hidden !important;
+    z-index:400000 !important;
+  }
+  #aaFinalNotifDropdown.is-open{
+    position:fixed !important;
+    top:calc(var(--nav-height-mobile,70px) + 8px) !important;
+    right:12px !important;
+    left:12px !important;
+    width:auto !important;
+    max-width:calc(100vw - 24px) !important;
+    max-height:min(70dvh,520px) !important;
+    overflow:hidden !important;
+    z-index:410000 !important;
+  }
+  #aaFinalNotifDetail.is-open{
+    position:fixed !important;
+    top:var(--nav-height-mobile,70px) !important;
+    right:0 !important;
+    bottom:calc(var(--mobile-bottom-nav-content-height,66px) + env(safe-area-inset-bottom)) !important;
+    left:0 !important;
+    width:auto !important;
+    height:auto !important;
+    z-index:420000 !important;
+  }
+}
+</style>
+<script id="aa-final-notification-isolation-v25-script">
+(function(){
+  'use strict';
+  const legacyIds=['aaNotificationsWrap','aaNotificationsPage','aaNotificationDetailModal','aaCodeReasonModal','aaNotificationsDropdown'];
+  const removeLegacy=()=>{
+    legacyIds.forEach(id=>document.getElementById(id)?.remove());
+    document.querySelectorAll('.aa-notifications-page,.aa-notification-detail-modal').forEach(el=>el.remove());
+    const root=document.getElementById('aaFinalNotificationsRoot');
+    if(!root || !root.classList.contains('is-open')){
+      document.body.classList.remove('aa-notifications-open');
+    }
+  };
+  removeLegacy();
+  const mo=new MutationObserver(()=>removeLegacy());
+  mo.observe(document.body,{childList:true,subtree:true});
+  window.__aaFinalNotificationIsolationV25={removeLegacy};
+  // Prevent clicks meant for hidden notification layers from being intercepted.
+  document.addEventListener('click',e=>{
+    const root=document.getElementById('aaFinalNotificationsRoot');
+    const drop=document.getElementById('aaFinalNotifDropdown');
+    const detail=document.getElementById('aaFinalNotifDetail');
+    if(root && !root.classList.contains('is-open') && root.contains(e.target)) e.stopImmediatePropagation();
+    if(drop && !drop.classList.contains('is-open') && drop.contains(e.target)) e.stopImmediatePropagation();
+    if(detail && !detail.classList.contains('is-open') && detail.contains(e.target)) e.stopImmediatePropagation();
+  },true);
+})();
+</script>
+
 </body>
 </html>
