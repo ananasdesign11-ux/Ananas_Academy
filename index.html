@@ -5293,8 +5293,18 @@ window.AnanasTimers=window.AnanasTimers||(()=>{
                 const uid=card.dataset.userId,p=cache[uid]||{};
                 const nameEl=card.querySelector('.assignment-submitter-name');
                 const avatar=card.querySelector('.assignment-submitter-avatar');
-                if(nameEl&&p.name&&nameEl.textContent!==p.name)nameEl.textContent=p.name;
-                if(avatar&&p.photo){const img=avatar.querySelector('img');if(!img||img.getAttribute('src')!==p.photo)avatar.innerHTML=`<img src="${escapeHtml(p.photo)}" alt="">`;}
+                const btn=card.querySelector('.assignment-submitter[data-profile-uid]');
+                if(nameEl&&p.name)nameEl.textContent=p.name;
+                if(avatar)avatar.innerHTML=p.photo?`<img src="${escapeHtml(p.photo)}" alt="">`:`<i class="fas fa-user"></i>`;
+                if(btn&&btn.dataset.profileBound!=='1'){
+                    btn.dataset.profileBound='1';
+                    btn.addEventListener('click',e=>{
+                        const profileUid=btn.dataset.profileUid;if(!profileUid)return;
+                        e.preventDefault();e.stopPropagation();
+                        const point=typeof profileReturnPoint==='function'?profileReturnPoint():{type:'assignment-detail',courseId:activeCourseId,assignmentId:window.activeAssignmentDetailId||''};
+                        window.aaOpenProfile?.(profileUid,{kind:'assignment-work',returnPoint:point});
+                    },true);
+                }
             });
         }
 
@@ -5329,12 +5339,16 @@ window.AnanasTimers=window.AnanasTimers||(()=>{
         }
 
         window.openAssignmentDetail = async function(courseId, assignmentId) {
-            if(!courseId||!assignmentId)return showCustomAlert('خطأ','بيانات الواجب غير مكتملة.');
             if(!$('ananasCanonicalProfilePage')?.classList.contains('active')) window.__ananasProfileReturnPoint={type:'assignment-detail',courseId,assignmentId};
-            const page=document.getElementById('courseAssignmentDetailPage'),list=document.getElementById('courseAssignmentsPage');if(!page)return showCustomAlert('خطأ','واجهة الواجب غير متاحة حاليًا.');
-            window.activeCourseId=courseId;window.activeAssignmentDetailId=assignmentId;page.dataset.assignmentId=assignmentId;page.style.display='block';page.classList.add('active');if(list){list.style.display='none';list.classList.remove('active');}
-            const result=await getAssignmentData(courseId,assignmentId);if(!result){page.classList.remove('active');page.style.display='none';if(list)list.style.display='block';return showCustomAlert('خطأ','الواجب غير موجود.');}
-            const a=result.data||{};document.getElementById('assignmentDetailTitle').textContent=a.titleAr||'واجب';document.getElementById('assignmentDetailDesc').textContent=a.descAr||'';await refreshAssignmentDetail(courseId,assignmentId);
+            const page=document.getElementById('courseAssignmentDetailPage');
+            page.classList.add('active');
+            document.getElementById('courseAssignmentsPage').style.display='none';
+            const result=await getAssignmentData(courseId,assignmentId);
+            if(!result)return showCustomAlert('خطأ','الواجب غير موجود.');
+            const a=result.data;
+            document.getElementById('assignmentDetailTitle').textContent=a.titleAr || 'واجب';
+            document.getElementById('assignmentDetailDesc').textContent=a.descAr || '';
+            await refreshAssignmentDetail(courseId,assignmentId);
         };
 
         window.closeAssignmentDetail=function(){
@@ -5343,13 +5357,15 @@ window.AnanasTimers=window.AnanasTimers||(()=>{
             window.__ananasProfileReturnPoint={type:'assignments',courseId:activeCourseId||null};
         };
 
-        window.openAssignmentWorkViewer=async function(courseId,assignmentId,workId){
+        window.openAssignmentWorkViewer=async function(courseId,assignmentId,workId,options={}){
             const result=await getAssignmentData(courseId,assignmentId); if(!result)return;
             const submissions=Array.isArray(result.data.submissions)?result.data.submissions:[];
-            const target=String(workId);const index=submissions.findIndex((sub,i)=>new Set([String(submissionWorkId(sub,i)),String(sub.workId||''),String(sub.id||''),`legacy_${i}`,`legacy_${assignmentId}_${i}`]).has(target));
-            if(index<0)return;
+            const normalizedWorkId=String(workId||'');
+            const index=submissions.findIndex((sub,i)=>String(submissionWorkId(sub,i))===normalizedWorkId);
+            if(index<0)return showCustomAlert?.('غير متاح','لم يتم العثور على هذا العمل.');
             const sub=submissions[index]; if(!canSeeSubmission(sub))return showCustomAlert('غير متاح','هذا العمل لم تتم الموافقة عليه بعد.');
-            openPlatformGalleryViewer(submissionImages(sub),`${sub.userName||'عمل مرفوع'}${sub.approved?' — معتمد':''}`);
+            const imgs=submissionImages(sub);if(!imgs.length)return showCustomAlert?.('غير متاح','لا توجد ملفات لهذا العمل.');
+            openPlatformGalleryViewer(imgs,`${sub.userName||'عمل مرفوع'}${sub.approved?' — معتمد':''}`);
         };
 
         window.deleteAssignmentWork=async function(courseId,assignmentId,workId){
@@ -10857,13 +10873,15 @@ window.openUserProfilePage=async function(){
 };
 
 function ensureProfileEditorModal(){
- let m=$('ananasProfileEditor');if(m)return m;m=document.createElement('div');m.id='ananasProfileEditor';m.className='ananas-modal-overlay';m.innerHTML=`<div class="ananas-modal-card"><button type="button" class="ananas-modal-close" id="profileEditorClose"><i class="fas fa-xmark"></i></button><div class="ananas-modal-heading"><div class="ananas-modal-heading-icon"><i class="fas fa-user-pen"></i></div><div><h3>تعديل الملف الشخصي</h3><p>غيّر الصورة والاسم ورقم الهاتف وخصوصية ملفك.</p></div></div><div class="profile-edit-avatar"><div id="profileEditPreview">م</div><label class="ananas-primary-btn" for="profileEditPhoto"><i class="fas fa-camera"></i> تغيير الصورة</label><input id="profileEditPhoto" type="file" accept="image/*" hidden></div><div class="ananas-form-grid"><label class="ananas-field"><span>الاسم</span><input id="profileEditName" type="text"></label><label class="ananas-field"><span>رقم الهاتف</span><input id="profileEditPhone" type="text"></label></div><label class="ananas-toggle-row"><span><strong id="profileEditPublicLabel">حساب عام</strong><small id="profileEditPublicHint">حسابك عام افتراضيًا. عند جعله خاصًا تظهر للطلاب الصورة والاسم فقط، بينما تظهر جميع البيانات لصاحب الحساب وللمشرف.</small></span><input id="profileEditPublic" type="checkbox" checked><i></i></label><div class="ananas-modal-actions"><button type="button" class="ananas-secondary-btn" id="profileEditorCancel">إلغاء</button><button type="button" class="ananas-primary-btn" id="profileEditorSave"><i class="fas fa-check"></i> حفظ التعديلات</button></div></div>`;document.body.appendChild(m);
- $('profileEditorClose').onclick=()=>m.classList.remove('active');$('profileEditorCancel').onclick=()=>m.classList.remove('active');m.addEventListener('click',e=>{if(e.target===m)m.classList.remove('active')});const syncPrivacyLabel=()=>{const pub=!!$('profileEditPublic')?.checked;if($('profileEditPublicLabel'))$('profileEditPublicLabel').textContent=pub?'حساب عام':'حساب خاص';if($('profileEditPublicHint'))$('profileEditPublicHint').textContent=pub?'حسابك عام افتراضيًا. عند جعله خاصًا تظهر للطلاب الصورة والاسم فقط، بينما تظهر جميع البيانات لصاحب الحساب وللمشرف.':'حسابك الآن خاص. سيظهر للطلاب الاسم والصورة فقط، بينما تظهر جميع البيانات لصاحب الحساب وللمشرف.';};$('profileEditPublic')?.addEventListener('change',syncPrivacyLabel);syncPrivacyLabel();
+ let m=$('ananasProfileEditor');if(m)return m;m=document.createElement('div');m.id='ananasProfileEditor';m.className='ananas-modal-overlay';m.innerHTML=`<div class="ananas-modal-card"><button type="button" class="ananas-modal-close" id="profileEditorClose"><i class="fas fa-xmark"></i></button><div class="ananas-modal-heading"><div class="ananas-modal-heading-icon"><i class="fas fa-user-pen"></i></div><div><h3>تعديل الملف الشخصي</h3><p>غيّر الصورة والاسم ورقم الهاتف وخصوصية ملفك.</p></div></div><div class="profile-edit-avatar"><div id="profileEditPreview">م</div><label class="ananas-primary-btn" for="profileEditPhoto"><i class="fas fa-camera"></i> تغيير الصورة</label><input id="profileEditPhoto" type="file" accept="image/*" hidden></div><div class="ananas-form-grid"><label class="ananas-field"><span>الاسم</span><input id="profileEditName" type="text"></label><label class="ananas-field"><span>رقم الهاتف</span><input id="profileEditPhone" type="text"></label></div><label class="ananas-toggle-row" id="profilePrivacyToggleRow"><span><strong id="profileEditPublicLabel">حساب عام</strong><small>الحساب يكون عامًا افتراضيًا. عند جعله خاصًا، يظهر للطلاب الاسم والصورة فقط مع تمويه بقية البيانات، بينما تظهر البيانات الكاملة لصاحب الحساب وللمشرف.</small></span><input id="profileEditPublic" type="checkbox" checked><i></i></label><div class="ananas-modal-actions"><button type="button" class="ananas-secondary-btn" id="profileEditorCancel">إلغاء</button><button type="button" class="ananas-primary-btn" id="profileEditorSave"><i class="fas fa-check"></i> حفظ التعديلات</button></div></div>`;document.body.appendChild(m);
+ $('profileEditorClose').onclick=()=>m.classList.remove('active');$('profileEditorCancel').onclick=()=>m.classList.remove('active');m.addEventListener('click',e=>{if(e.target===m)m.classList.remove('active')});
+ const syncPrivacyLabel=()=>{const input=$('profileEditPublic'),label=$('profileEditPublicLabel');if(input&&label)label.textContent=input.checked?'حساب عام':'حساب خاص';};
+ $('profileEditPublic').addEventListener('change',syncPrivacyLabel);
  $('profileEditPhoto').addEventListener('change',()=>{const f=$('profileEditPhoto').files?.[0];if(f){const u=URL.createObjectURL(f);$('profileEditPreview').innerHTML=`<img src="${u}" alt="">`;}});
  $('profileEditorSave').onclick=async()=>{if(!currentUser)return;const btn=$('profileEditorSave');btn.disabled=true;try{const name=$('profileEditName').value.trim(),phone=$('profileEditPhone').value.trim(),pub=$('profileEditPublic').checked;if(!name)return showCustomAlert('تنبيه','اكتب الاسم.');let photo=currentUserProfile?.photoURL||currentUserProfile?.photoUrl||currentUserProfile?.photo||'';const f=$('profileEditPhoto').files?.[0];if(f){photo=await uploadImage(f);if(!photo)throw Error('photo');}await currentUser.updateProfile({displayName:name,photoURL:photo||null});await db.collection('users').doc(currentUser.uid).set({uid:currentUser.uid,email:currentUser.email||'',displayName:name,phone,photoURL:photo||'',profilePublic:pub,updatedAt:firebase.firestore.FieldValue.serverTimestamp()},{merge:true});currentUserProfile={...(currentUserProfile||{}),displayName:name,phone,photoURL:photo||'',profilePublic:pub};if($('authLabel'))$('authLabel').textContent=name;m.classList.remove('active');await window.openUserProfilePage();showCustomAlert('تم الحفظ','تم تحديث ملفك الشخصي.');}catch(e){console.error(e);showCustomAlert('خطأ','تعذر حفظ بيانات الملف الشخصي.');}finally{btn.disabled=false;}};
  return m;
 }
-function openProfileEditorFinal(uid){if(uid!==currentUser?.uid)return;const p=currentUserProfile||{},m=ensureProfileEditorModal(),photo=p.photoURL||p.photoUrl||p.photo||'',name=p.displayName||currentUser.displayName||'',phone=p.phone||'';$('profileEditName').value=name;$('profileEditPhone').value=phone;$('profileEditPublic').checked=p.profilePublic!==false;$('profileEditPreview').innerHTML=photo?`<img src="${esc(photo)}" alt="">`:esc(name.slice(0,1)||'م');$('profileEditPhoto').value='';$('profileEditPublic')?.dispatchEvent(new Event('change'));m.classList.add('active');}
+function openProfileEditorFinal(uid){if(uid!==currentUser?.uid)return;const p=currentUserProfile||{},m=ensureProfileEditorModal(),photo=p.photoURL||p.photoUrl||p.photo||'',name=p.displayName||currentUser.displayName||'',phone=p.phone||'';$('profileEditName').value=name;$('profileEditPhone').value=phone;$('profileEditPublic').checked=p.profilePublic!==false;$('profileEditPreview').innerHTML=photo?`<img src="${esc(photo)}" alt="">`:esc(name.slice(0,1)||'م');$('profileEditPhoto').value='';const label=$('profileEditPublicLabel');if(label)label.textContent=$('profileEditPublic').checked?'حساب عام':'حساب خاص';m.classList.add('active');}
 
 /* Account click always opens the page. */
 const account=$('authToggleBtn');if(account&&!account.dataset.finalProfileClick){account.dataset.finalProfileClick='1';account.addEventListener('click',e=>{if(!currentUser)return;e.preventDefault();e.stopImmediatePropagation();window.openUserProfilePage();},true);}
@@ -11420,11 +11438,10 @@ function ensureProfilePage(){
   <section class="aa-profile-panel full" id="aaProfileDirectoryPanel"><div class="aa-profile-section-head"><div><h2>الحسابات والطلاب</h2><p>هذه القائمة للمشرف فقط.</p></div><span id="aaProfileDirectoryCount"></span></div><div id="aaProfileDirectory" class="aa-profile-directory"></div></section>
  </div></div>`;
  document.body.appendChild(page);
- $('aaProfileBack').onclick=()=>window.__aaFastProfileOpenV36?.__back?.();
- $('aaProfileEdit').onclick=()=>openProfileEditorFinal?.(currentUser?.uid);
- $('aaProfileAddWork').onclick=()=>openPortfolioFromCourses();
- $('aaProfileLogout').onclick=async()=>{try{await auth?.signOut?.();}finally{showSignedOutAuthButton?.();}};
- ['aaProfileEdit','aaProfileAddWork','aaProfileLogout'].forEach(id=>{if($(id))$(id).style.display='none';});if($('aaProfileBack'))$('aaProfileBack').style.display='inline-flex';
+ $('aaProfileBack').onclick=e=>{e.preventDefault();e.stopPropagation();profileBack();};
+ $('aaProfileEdit').onclick=e=>{e.preventDefault();e.stopPropagation();if(profileState?.isSelf&&currentUser?.uid)openProfileEditorFinal?.(currentUser.uid);};
+ $('aaProfileAddWork').onclick=e=>{e.preventDefault();e.stopPropagation();if(profileState?.isSelf&&currentUser?.uid)window.openPersonalPortfolioAdd?.();};
+ $('aaProfileLogout').onclick=async e=>{e.preventDefault();e.stopPropagation();if(!profileState?.isSelf)return;if(typeof window.aaSafeLogoutV24==='function')return window.aaSafeLogoutV24();try{await auth?.signOut?.();}catch(err){console.error(err);}};
  return page;
 }
 function hideProfile(){const p=$('aaRebuiltProfilePage');if(p)p.classList.remove('active');document.body.classList.remove('aa-profile-open');}
@@ -11440,7 +11457,7 @@ async function openProfile(uid,opts={}){if(!currentUser||!uid)return triggerAuth
 
 function ensurePortfolioModal(){let m=$('aaCoursePortfolioModal');if(m)return m;m=document.createElement('div');m.id='aaCoursePortfolioModal';m.innerHTML=`<div class="aa-portfolio-modal-card"><div class="aa-portfolio-modal-head"><div class="aa-portfolio-modal-icon"><i class="fas fa-images"></i></div><div><h3>إضافة عمل إلى معرضي</h3><p>سيظهر العمل في ملفك الشخصي ومعرض أعمالك.</p></div><button type="button" class="aa-portfolio-close" id="aaPortfolioClose"><i class="fas fa-xmark"></i></button></div><div class="aa-portfolio-form"><label class="aa-portfolio-field"><span>عنوان العمل</span><input id="aaPortfolioTitle" type="text" placeholder="مثال: تصميم هوية بصرية"></label><label class="aa-portfolio-field"><span>نوع العمل</span><input id="aaPortfolioType" type="text" placeholder="مثال: شعار، واجهة، هوية"></label><label class="aa-portfolio-field full"><span>وصف العمل</span><textarea id="aaPortfolioDescription" placeholder="اكتب وصفًا مختصرًا عن العمل"></textarea></label><div class="aa-portfolio-field full"><span>صور العمل</span><label class="aa-portfolio-drop" for="aaPortfolioFiles"><i class="fas fa-cloud-arrow-up"></i><strong>اختر صور العمل</strong><span>يمكنك اختيار صورة أو عدة صور</span><div class="aa-portfolio-files" id="aaPortfolioFilesNames">لم يتم اختيار صور بعد</div></label><input id="aaPortfolioFiles" type="file" accept="image/*" multiple hidden></div></div><div id="aaPortfolioStatus" class="aa-portfolio-status"></div><div class="aa-portfolio-actions"><button type="button" class="aa-portfolio-cancel" id="aaPortfolioCancel">إلغاء</button><button type="button" class="aa-portfolio-save" id="aaPortfolioSave"><i class="fas fa-check"></i> إضافة إلى المعرض</button></div></div>`;document.body.appendChild(m);$('aaPortfolioClose').onclick=closePortfolioModal;$('aaPortfolioCancel').onclick=closePortfolioModal;$('aaPortfolioFiles').onchange=()=>{$('aaPortfolioFilesNames').textContent=[...($('aaPortfolioFiles').files||[])].map(f=>f.name).join(' • ')||'لم يتم اختيار صور بعد'};$('aaPortfolioSave').onclick=savePortfolioModal;m.addEventListener('click',e=>{if(e.target===m)closePortfolioModal()});return m;}
 function closePortfolioModal(){const m=$('aaCoursePortfolioModal');if(m)m.classList.remove('active');}
-function openPortfolioFromCourses(){if(!currentUser)return triggerAuth?.();const profile=$('aaRebuiltProfilePage');if(profile)profile.classList.add('active');document.body.classList.add('aa-profile-open');const m=ensurePortfolioModal();['aaPortfolioTitle','aaPortfolioType','aaPortfolioDescription'].forEach(id=>$(id).value='');$('aaPortfolioFiles').value='';$('aaPortfolioFilesNames').textContent='لم يتم اختيار صور بعد';$('aaPortfolioStatus').textContent='';$('aaPortfolioSave').disabled=false;m.classList.add('active');}
+function openPortfolioFromCourses(){if(!currentUser)return triggerAuth?.();hideLegacy();hideProfile();window.mobileNavigate?.('courses');$('coursesNavBtn')?.classList.add('active');const m=ensurePortfolioModal();['aaPortfolioTitle','aaPortfolioType','aaPortfolioDescription'].forEach(id=>$(id).value='');$('aaPortfolioFiles').value='';$('aaPortfolioFilesNames').textContent='لم يتم اختيار صور بعد';$('aaPortfolioStatus').textContent='';$('aaPortfolioSave').disabled=false;m.classList.add('active');}
 async function savePortfolioModal(){if(!currentUser)return triggerAuth?.();const title=$('aaPortfolioTitle').value.trim(),type=$('aaPortfolioType').value.trim(),description=$('aaPortfolioDescription').value.trim(),files=[...($('aaPortfolioFiles').files||[])],btn=$('aaPortfolioSave');if(!title)return showCustomAlert?.('تنبيه','اكتب عنوان العمل.');if(!type)return showCustomAlert?.('تنبيه','اكتب نوع العمل.');if(!files.length)return showCustomAlert?.('تنبيه','أضف صورة واحدة على الأقل.');btn.disabled=true;$('aaPortfolioStatus').textContent='جاري رفع الصور...';try{const urls=[];for(const f of files){const u=await uploadImage(f);if(!u)throw Error('upload');urls.push(u);}await db.collection('users').doc(currentUser.uid).collection('portfolioWorks').add({title,type,description,images:urls,createdAt:firebase.firestore.FieldValue.serverTimestamp(),updatedAt:firebase.firestore.FieldValue.serverTimestamp(),deleted:false});closePortfolioModal();showCustomAlert?.('تمت الإضافة','تمت إضافة العمل إلى معرضك الشخصي.');}catch(e){console.error('portfolio save',e);$('aaPortfolioStatus').textContent='تعذر إضافة العمل.';showCustomAlert?.('خطأ','تعذر إضافة العمل إلى المعرض.')}finally{btn.disabled=false}}
 
 window.aaOpenProfile=openProfile;window.aaProfileBack=profileBack;window.openUserProfilePage=()=>openProfile(currentUser?.uid,{kind:'self'});window.openPublicProfileFinal=uid=>openProfile(uid,{kind:'public',returnPoint:profileReturnPoint()});window.openAnanasV10Profile=window.openPublicProfileFinal;window.viewProfileByUserId=uid=>openProfile(uid,{kind:'public',returnPoint:profileReturnPoint()});window.openStudentProfile=window.openPublicProfileFinal;window.openChatProfileV13=uid=>openProfile(uid,{kind:'chat',returnPoint:profileReturnPoint()});window.openChatProfileV12=window.openChatProfileV13;window.openProfileWorkUpload=openPortfolioFromCourses;window.openPortfolioFromCourses=openPortfolioFromCourses;
@@ -12188,7 +12205,7 @@ async function authoritativeLiveProfile(uid){
         const s=submissions[i];
         if(!s || s.userId!==uid || s.deleted===true) continue;
         const images=Array.isArray(s.images)&&s.images.length?s.images.filter(Boolean):(s.imageUrl?[s.imageUrl]:Array.isArray(s.imageUrls)?s.imageUrls.filter(Boolean):[]);
-        const workId=typeof submissionWorkId==='function'?String(submissionWorkId(s,i)):String(s.workId||s.id||`legacy_${assignmentDoc.id}_${i}`);
+        const workId=String(s.workId||s.id||`legacy_${assignmentDoc.id}_${i}`);
         out.assignmentWorks.push({
           id:workId,workId,assignmentId:assignmentDoc.id,courseId:course.id,
           title:a.titleAr||a.title||'واجب',assignmentTitle:a.titleAr||a.title||'واجب',courseTitle,
@@ -12289,7 +12306,10 @@ if(typeof oldRefresh==='function' && !window.__liveAssignmentRefreshPatched){
 }
 
 /* Also handle renderers that call the local function directly by observing inserted work cards. */
-window.__aaDomObserverRegister?.(()=>{const root=document.getElementById('assignmentDetailContent');if(!root||root.dataset.aaHydratingSubmitters==='1')return;root.dataset.aaHydratingSubmitters='1';Promise.resolve(window.__refreshAssignmentSubmitterButtons(root)).finally(()=>{root.dataset.aaHydratingSubmitters='0';});});
+window.__aaDomObserverRegister?.(()=>{
+  const root=document.getElementById('assignmentDetailContent');
+  if(root)window.__refreshAssignmentSubmitterButtons(root);
+});
 
 })();
 </script>
@@ -12318,9 +12338,10 @@ async function renderAuthoritativeProfile(uid,isSelf){
     $id('aaProfileName').textContent=name;
     $id('aaProfileEmail').textContent=privateProfile?'حساب خاص':(u.email||'—');
     $id('aaProfileBadge').innerHTML=privateProfile?'<i class="fas fa-lock"></i> حساب خاص':'<i class="fas fa-eye"></i> ملف عام';
-    $id('aaProfileEdit').style.display=isSelf?'inline-flex':'none';
-    $id('aaProfileAddWork').style.display=isSelf?'inline-flex':'none';
-    $id('aaProfileLogout').style.display=isSelf?'inline-flex':'none';
+    const canManageOwnProfile=!!isSelf&&String(uid)===String(currentUser?.uid);
+    $id('aaProfileEdit').style.display=canManageOwnProfile?'inline-flex':'none';
+    $id('aaProfileAddWork').style.display=canManageOwnProfile?'inline-flex':'none';
+    $id('aaProfileLogout').style.display=canManageOwnProfile?'inline-flex':'none';
 
     if(privateProfile){
       $id('aaProfileXP').textContent='—';$id('aaProfileLessons').textContent='—';$id('aaProfileQuizzes').textContent='—';$id('aaProfileWorks').textContent='—';
@@ -12340,7 +12361,7 @@ async function renderAuthoritativeProfile(uid,isSelf){
       ['الحالة',u.profilePublic===false?'خاص':'عام'],['تاريخ التسجيل',dateAr(u.createdAt)]
     ].map(x=>`<div class="aa-profile-row"><strong>${esc(x[0])}</strong><span>${esc(x[1])}</span></div>`).join('');
 
-    $id('aaProfileCourses').innerHTML=rowList(live.courses.map(c=>`<div class="aa-profile-row"><div><strong>${esc(c.courseTitle||c.titleAr||c.title||'دورة')}</strong><small>${c.adminAuto?'الاشتراك: تلقائي بصلاحية المشرف<br>نهاية الاشتراك: طوال وجود الدورة':'تاريخ الاشتراك: '+esc(dateAr(c.enrolledAt))+'<br>تاريخ نهاية الكود: '+esc(c.codeEndTime?dateAr(c.codeEndTime):'بدون تاريخ نهاية')}</small></div><i class="fas fa-circle-check" style="color:#22c55e"></i></div>`),'لا توجد دورات مشتركة حاليًا.');
+    $id('aaProfileCourses').innerHTML=rowList(live.courses.map(c=>`<div class="aa-profile-row"><div><strong>${esc(c.titleAr||c.title||'دورة')}</strong><small>تاريخ الاشتراك: ${esc(dateAr(c.enrolledAt))}</small></div><i class="fas fa-circle-check" style="color:#22c55e"></i></div>`),'لا توجد دورات مشتركة حاليًا.');
     $id('aaProfileLessonList').innerHTML=rowList(live.lessons.slice().sort((a,b)=>new Date(b.completedAt||0)-new Date(a.completedAt||0)).map(x=>`<div class="aa-profile-row"><div><strong>${esc(x.title)}</strong><small>${esc(x.courseTitle)} · +${Number(x.xpEarned||0)} XP · ${esc(dateAr(x.completedAt))}</small></div></div>`),'لا توجد حصص مكتملة حاليًا.');
     $id('aaProfileQuizList').innerHTML=rowList(live.quizzes.slice().sort((a,b)=>new Date(b.passedAt||0)-new Date(a.passedAt||0)).map(x=>`<div class="aa-profile-row"><div><strong>${esc(x.title)}</strong><small>${Number(x.score||0)}% · +${Number(x.xpEarned||0)} XP · ${esc(dateAr(x.passedAt))}</small></div></div>`),'لا توجد اختبارات مكتملة حاليًا.');
 
@@ -12355,10 +12376,21 @@ async function renderAuthoritativeProfile(uid,isSelf){
     const cards=[...live.portfolio.map(x=>({kind:'portfolio',...x})),...live.assignmentWorks.map(x=>({kind:'assignment',...x}))];
     $id('aaProfileGallery').innerHTML=rowList(cards.map(x=>{
       const imgs=Array.isArray(x.images)?x.images.filter(Boolean):(x.imageUrl?[x.imageUrl]:[]),img=imgs[0]||'';
-      if(x.kind==='assignment')return `<article class="aa-profile-work"><div class="aa-profile-cover">${img?`<img src="${esc(img)}" alt="">`:'<i class="fas fa-images"></i>'}</div><div class="aa-profile-work-body"><strong>${esc(x.assignmentTitle||x.title||'واجب')}</strong><small>${esc(x.courseTitle||'')}<br>${x.approved?'✅ معتمد':'⏳ قيد المراجعة'}${imgs.length>1?` · ${imgs.length} صور`:''}</small><button type="button" class="aa-profile-view-work" data-course="${esc(x.courseId||'')}" data-assignment="${esc(x.assignmentId||'')}" data-work="${esc(x.workId||x.id||'')}"><i class="fas fa-eye"></i> عرض العمل</button></div></article>`;
-      return `<article class="aa-profile-work"><div class="aa-profile-cover">${img?`<img src="${esc(img)}" alt="">`:'<i class="fas fa-images"></i>'}</div><div class="aa-profile-work-body"><strong>${esc(x.title||'عمل')}</strong><small>${esc(x.type||'عمل شخصي')}${x.description?`<br>${esc(x.description)}`:''}${imgs.length>1?`<br>${imgs.length} صور`:''}</small></div></article>`;
+      if(x.kind==='assignment')return `<article class="aa-profile-work"><div class="aa-profile-cover">${img?`<img src="${esc(img)}" alt="">`:'<i class="fas fa-images"></i>'}</div><div class="aa-profile-work-body"><strong>${esc(x.assignmentTitle||x.title||'واجب')}</strong><small>${esc(x.courseTitle||'')}<br>${x.approved?'✅ معتمد':'⏳ قيد المراجعة'}${imgs.length>1?` · ${imgs.length} صور`:''}</small><button type="button" class="aa-profile-view-work" data-work-type="assignment" data-course="${esc(x.courseId||'')}" data-assignment="${esc(x.assignmentId||'')}" data-work="${esc(x.workId||x.id||'')}"><i class="fas fa-eye"></i> عرض العمل</button></div></article>`;
+      return `<article class="aa-profile-work"><div class="aa-profile-cover">${img?`<img src="${esc(img)}" alt="">`:'<i class="fas fa-images"></i>'}</div><div class="aa-profile-work-body"><strong>${esc(x.title||'عمل')}</strong><small>${esc(x.type||'عمل شخصي')}${x.description?`<br>${esc(x.description)}`:''}${imgs.length>1?`<br>${imgs.length} صور`:''}</small><button type="button" class="aa-profile-view-work" data-work-type="portfolio" data-work-id="${esc(x.id||'')}"><i class="fas fa-eye"></i> عرض العمل</button></div></article>`;
     }),'لا توجد أعمال منشورة حاليًا.');
-    $id('aaProfileGallery').querySelectorAll('.aa-profile-view-work').forEach(btn=>btn.onclick=()=>window.openAssignmentWorkViewer?.(btn.dataset.course,btn.dataset.assignment,btn.dataset.work));
+    $id('aaProfileGallery').querySelectorAll('.aa-profile-view-work').forEach(btn=>{
+      btn.onclick=async e=>{
+        e.preventDefault();e.stopPropagation();
+        if(btn.dataset.workType==='portfolio'){
+          const owner=uid;
+          try{const snap=await db.collection('users').doc(owner).collection('portfolioWorks').doc(btn.dataset.workId).get();const work=snap.exists?(snap.data()||{}):null;const imgs=Array.isArray(work?.images)?work.images.filter(Boolean):(work?.imageUrl?[work.imageUrl]:[]);if(imgs.length)openPlatformGalleryViewer(imgs,work?.title||'عمل شخصي');else showCustomAlert?.('غير متاح','لا توجد صور لهذا العمل.');}catch(err){console.error(err);showCustomAlert?.('خطأ','تعذر فتح العمل.');}
+          return;
+        }
+        const returnPoint=typeof profileReturnPoint==='function'?profileReturnPoint():null;
+        await window.openAssignmentWorkViewer?.(btn.dataset.course,btn.dataset.assignment,btn.dataset.work,{overlayOnly:true,returnPoint});
+      };
+    });
     if(typeof window.__refreshAssignmentSubmitterButtons==='function')await window.__refreshAssignmentSubmitterButtons(document);
     if(typeof window.__loadDirectory==='function')await window.__loadDirectory();
   }catch(err){
@@ -13234,16 +13266,12 @@ window.loadCodesForCourse=async function(courseId){
         <td>${esc(endTxt)}</td>
         <td>${used}/${max}</td>
         <td><span style="color:${st.color};font-weight:800">${st.label}</span></td>
-        <td><div class="code-actions">${toggle}${used?`<button class="code-action-btn" onclick="manageCodeUsers('${esc(d.id)}')">المستخدمون (${used})</button>`:''}<button class="code-action-btn" onclick="editEnrollmentCodeEnd('${esc(d.id)}')">تعديل النهاية</button><button class="code-action-btn danger" onclick="deleteEnrollmentCode('${esc(d.id)}')">حذف</button></div></td>
+        <td><div class="code-actions">${toggle}${used?`<button class="code-action-btn" onclick="manageCodeUsers('${esc(d.id)}')">المستخدمون (${used})</button>`:''}<button class="code-action-btn danger" onclick="deleteEnrollmentCode('${esc(d.id)}')">حذف</button></div></td>
       </tr>`);
     }
     tbody.innerHTML=rows.join('');
   }catch(e){console.error('load codes v11',e);tbody.innerHTML='<tr><td colspan="6" style="text-align:center;color:#e74c3c;padding:22px">تعذر تحميل الأكواد.</td></tr>';}
 };
-
-/* ---------- Edit enrollment code end date from code management ---------- */
-function ensureCodeEndEditModal(){let m=$('aaCodeEndEditModal');if(m)return m;m=document.createElement('div');m.id='aaCodeEndEditModal';m.className='custom-alert-modal';m.innerHTML=`<div class="custom-alert-box" style="max-width:520px;text-align:right"><button type="button" class="close-lightbox" id="aaCodeEndEditClose">×</button><h4>تعديل نهاية الكود</h4><p id="aaCodeEndEditCode" style="margin-bottom:14px"></p><label style="display:block;font-weight:800;margin-bottom:6px">تاريخ ووقت نهاية الكود</label><input id="aaCodeEndEditInput" type="datetime-local" style="width:100%;padding:11px;border-radius:12px;border:1px solid var(--border);background:var(--bg-secondary);color:var(--text-primary);font-family:inherit"><small style="display:block;color:var(--text-muted);margin-top:8px;line-height:1.7">اترك الحقل فارغًا لإزالة تاريخ النهاية وجعل الكود بلا تاريخ انتهاء.</small><div class="buttons" style="margin-top:18px"><button type="button" class="btn btn-secondary" id="aaCodeEndEditCancel">إلغاء</button><button type="button" class="btn btn-primary" id="aaCodeEndEditSave">حفظ</button></div></div>`;document.body.appendChild(m);$('aaCodeEndEditClose').onclick=()=>m.classList.remove('active');$('aaCodeEndEditCancel').onclick=()=>m.classList.remove('active');$('aaCodeEndEditSave').onclick=async()=>{const courseId=m.dataset.courseId,codeId=m.dataset.codeId,btn=$('aaCodeEndEditSave');if(!isAdmin||!courseId||!codeId)return;btn.disabled=true;try{const v=$('aaCodeEndEditInput').value.trim(),end=v?new Date(v):null;if(end&&isNaN(end.getTime()))throw Error('تاريخ غير صحيح');await db.collection('courses').doc(courseId).collection('codes').doc(codeId).update({endTime:end?firebase.firestore.Timestamp.fromDate(end):null,updatedAt:firebase.firestore.FieldValue.serverTimestamp()});m.classList.remove('active');await window.loadCodesForCourse(courseId);showCustomAlert?.('تم الحفظ','تم تحديث تاريخ نهاية الكود.');}catch(e){console.error(e);showCustomAlert?.('خطأ','تعذر تحديث تاريخ نهاية الكود: '+e.message)}finally{btn.disabled=false;}};return m;}
-window.editEnrollmentCodeEnd=async function(codeId){if(!isAdmin||!activeCourseId)return;const ref=db.collection('courses').doc(activeCourseId).collection('codes').doc(String(codeId)),snap=await ref.get();if(!snap.exists)return showCustomAlert?.('خطأ','الكود غير موجود.');const c=snap.data()||{},m=ensureCodeEndEditModal();m.dataset.courseId=activeCourseId;m.dataset.codeId=String(codeId);$('aaCodeEndEditCode').textContent=`الكود: ${c.code||codeId}`;const end=asDate(c.endTime);if(end){const p=n=>String(n).padStart(2,'0');$('aaCodeEndEditInput').value=`${end.getFullYear()}-${p(end.getMonth()+1)}-${p(end.getDate())}T${p(end.getHours())}:${p(end.getMinutes())}`;}else $('aaCodeEndEditInput').value='';m.classList.add('active');};
 
 /* ---------- Open the global suspension modal ---------- */
 window.toggleEnrollmentCode=async function(codeId,currentlySuspended){
@@ -13525,7 +13553,7 @@ const s=document.createElement('style');s.textContent=`
       const panel=(key,title)=>{const items=groups[key];return `<section class="code-lifecycle-panel"><h4><span>${title}</span><small>${items.length} كود</small></h4><div class="code-lifecycle-list">${items.length?items.map(({id,c})=>{
         const info=usedInfoV12(c),u=info[0]||{},name=u.name||'مستخدم',label=key==='used'?name:(c.code||id),state=expiredV12(c)?'منتهي':legacySuspendedV12(c)?'موقوف':key==='used'?'مستخدم':'غير مستخدم';
         const toggle=expiredV12(c)?'<button class="code-action-btn" disabled style="opacity:.55">منتهي</button>':legacySuspendedV12(c)?`<button class="code-action-btn success" onclick="toggleEnrollmentCode('${escV12(id)}',true);event.stopPropagation()">إلغاء الإيقاف</button>`:`<button class="code-action-btn danger" onclick="toggleEnrollmentCode('${escV12(id)}',false);event.stopPropagation()">إيقاف الكود</button>`;
-        const end=asDateV12(c.endTime),endText=end?end.toLocaleString('ar-SA',{timeZone:'Asia/Riyadh'}):'بدون نهاية';return `<div class="code-card-v12-wrap"><button type="button" class="code-card-v12 ${key}${legacySuspendedV12(c)?' suspended':''}" onclick="__codeDetail('${escV12(courseId)}','${escV12(id)}')"><span class="code-card-v12-main"><strong>${escV12(label)}</strong><small>${escV12(c.code||id)} · النهاية: ${escV12(endText)}</small></span><span class="code-card-v12-status">${escV12(state)}</span></button><div class="code-card-v12-actions">${toggle}<button class="code-action-btn" onclick="editEnrollmentCodeEnd('${escV12(id)}');event.stopPropagation()">تعديل النهاية</button><button class="code-action-btn danger" onclick="deleteEnrollmentCode('${escV12(id)}');event.stopPropagation()">حذف</button></div></div>`;}).join(''):'<div class="code-lifecycle-empty">لا توجد أكواد في هذه الفئة.</div>'}</div></section>`};
+        return `<div class="code-card-v12-wrap"><button type="button" class="code-card-v12 ${key}${legacySuspendedV12(c)?' suspended':''}" onclick="__codeDetail('${escV12(courseId)}','${escV12(id)}')"><span class="code-card-v12-main"><strong>${escV12(label)}</strong><small>${escV12(c.code||id)}</small></span><span class="code-card-v12-status">${escV12(state)}</span></button><div class="code-card-v12-actions">${toggle}<button class="code-action-btn danger" onclick="deleteEnrollmentCode('${escV12(id)}');event.stopPropagation()">حذف</button></div></div>`;}).join(''):'<div class="code-lifecycle-empty">لا توجد أكواد في هذه الفئة.</div>'}</div></section>`};
       board.innerHTML=panel('unused','غير مستخدمة')+panel('used','مستخدمة')+panel('expired','منتهية');
       if(oldTable)oldTable.style.display='none';
     }catch(e){console.error('code lifecycle v12',e);board.innerHTML='<div style="grid-column:1/-1;padding:22px;text-align:center;color:#e74c3c">تعذر تحميل الأكواد.</div>';}
@@ -15529,8 +15557,7 @@ if(!window.__aaStableNotifStarted){window.__aaStableNotifStarted=true;window.Ana
       }
     }
     out.portfolio=(portfolio?.docs||[]).map(d=>({id:d.id,...(d.data()||{})})).filter(x=>x.deleted!==true);
-    out.courses=[];for(const d of (enrolled?.docs||[])){const e=d.data()||{};if(!catalog.validCourseIds.has(d.id)||e.codeDeleted||e.accessBlocked)continue;let codeId=e.codeId||null,codeEndTime=e.codeEndTime||null;if(!codeId&&e.codeUsed){try{const q=await db.collection('courses').doc(d.id).collection('codes').where('code','==',e.codeUsed).limit(1).get();if(!q.empty)codeId=q.docs[0].id;}catch(_){}}if(codeId&&!codeEndTime){try{const cs=await db.collection('courses').doc(d.id).collection('codes').doc(String(codeId)).get();if(cs.exists)codeEndTime=cs.data()?.endTime||null;}catch(_){}}const ce=catalog.courseEntries.find(x=>x.course.id===d.id);out.courses.push({id:d.id,...e,courseTitle:ce?.courseTitle||ce?.course?.titleAr||'دورة',titleAr:ce?.course?.titleAr||ce?.course?.title||'دورة',codeId,codeEndTime});}
-    if(isAdmin&&String(uid)===String(currentUser?.uid||'')){out.courses=catalog.courseEntries.map(ce=>({id:ce.course.id,courseTitle:ce.courseTitle,titleAr:ce.course.titleAr||ce.course.title||'دورة',enrolledAt:null,adminAuto:true,codeId:null,codeEndTime:null}));}
+    out.courses=(enrolled?.docs||[]).map(d=>({id:d.id,...(d.data()||{})})).filter(x=>catalog.validCourseIds.has(x.id));
     for(const x of doneA.values()) if(catalog.assignmentMap.has(x.id)) out.xp+=num(x.xpEarned);
     return out;
   }
@@ -15546,8 +15573,6 @@ if(!window.__aaStableNotifStarted){window.__aaStableNotifStarted=true;window.Ana
 
   function renderData(uid,p,isSelf,live,requestToken){
     if(requestToken!==state.token)return;
-    ['aaProfileEdit','aaProfileAddWork','aaProfileLogout'].forEach(id=>{if($(id))$(id).style.display=isSelf?'inline-flex':'none';});
-    if($('aaProfileBack'))$('aaProfileBack').style.display='inline-flex';
     if(p.profilePublic===false&&!isSelf&&!isAdmin){
       ['aaProfileXP','aaProfileLessons','aaProfileQuizzes','aaProfileWorks'].forEach(id=>$(id)&&($(id).textContent='—'));
       $('aaProfileData')&&($('aaProfileData').innerHTML=`<div class="aa-profile-row"><strong>الاسم</strong><span>${esc(p.displayName||p.name||'مستخدم')}</span></div>`);
@@ -15560,7 +15585,7 @@ if(!window.__aaStableNotifStarted){window.__aaStableNotifStarted=true;window.Ana
     $('aaProfileQuizzes')&&($('aaProfileQuizzes').textContent=live.quizzes.length);
     $('aaProfileWorks')&&($('aaProfileWorks').textContent=live.portfolio.length+live.assignmentWorks.length);
     $('aaProfileData')&&($('aaProfileData').innerHTML=[['الاسم',p.displayName||p.name||'مستخدم'],['البريد الإلكتروني',isSelf?(p.email||currentUser?.email||'غير متوفر'):'غير متوفر'],['رقم الهاتف',p.phone||'غير مضاف'],['الجنس',p.gender==='female'?'أنثى':p.gender==='male'?'ذكر':'غير محدد'],['الحالة',p.profilePublic===false?'خاص':'عام'],['تاريخ التسجيل',dateText(p.createdAt)]].map(x=>`<div class="aa-profile-row"><strong>${esc(x[0])}</strong><span>${esc(x[1])}</span></div>`).join(''));
-    $('aaProfileCourses')&&($('aaProfileCourses').innerHTML=rowList(live.courses.map(c=>`<div class="aa-profile-row"><div><strong>${esc(c.courseTitle||c.titleAr||c.title||'دورة')}</strong><small>${c.adminAuto?'الاشتراك: تلقائي بصلاحية المشرف<br>نهاية الاشتراك: طوال وجود الدورة':'تاريخ الاشتراك: '+esc(dateText(c.enrolledAt))+'<br>تاريخ نهاية الكود: '+esc(c.codeEndTime?dateText(c.codeEndTime):'بدون تاريخ نهاية')}</small></div><i class="fas fa-circle-check" style="color:#22c55e"></i></div>`),'لا توجد دورات مشتركة حاليًا.'));
+    $('aaProfileCourses')&&($('aaProfileCourses').innerHTML=rowList(live.courses.map(c=>`<div class="aa-profile-row"><div><strong>${esc(c.titleAr||c.title||'دورة')}</strong><small>تاريخ الاشتراك: ${esc(dateText(c.enrolledAt))}</small></div><i class="fas fa-circle-check" style="color:#22c55e"></i></div>`),'لا توجد دورات مشتركة حاليًا.'));
     $('aaProfileLessonList')&&($('aaProfileLessonList').innerHTML=rowList(live.lessons.slice().sort((a,b)=>new Date(b.completedAt?.toDate?b.completedAt.toDate():b.completedAt||0)-new Date(a.completedAt?.toDate?a.completedAt.toDate():a.completedAt||0)).map(x=>`<div class="aa-profile-row"><div><strong>${esc(x.title)}</strong><small>${esc(x.courseTitle)} · +${num(x.xpEarned)} XP · ${esc(dateText(x.completedAt))}</small></div></div>`),'لا توجد حصص مكتملة حاليًا.'));
     $('aaProfileQuizList')&&($('aaProfileQuizList').innerHTML=rowList(live.quizzes.slice().sort((a,b)=>new Date(b.passedAt?.toDate?b.passedAt.toDate():b.passedAt||0)-new Date(a.passedAt?.toDate?a.passedAt.toDate():a.passedAt||0)).map(x=>`<div class="aa-profile-row"><div><strong>${esc(x.title)}</strong><small>${num(x.score)}% · +${num(x.xpEarned)} XP · ${esc(dateText(x.passedAt))}</small></div></div>`),'لا توجد اختبارات مكتملة حاليًا.'));
     const activities=[...live.lessons.map(x=>({t:`أكمل الحصة: ${x.title}`,d:x.completedAt})),...live.quizzes.map(x=>({t:`أكمل الاختبار: ${x.title}`,d:x.passedAt})),...live.assignmentWorks.map(x=>({t:`رفع عملًا في: ${x.assignmentTitle}`,d:x.uploadedAt})),...live.portfolio.map(x=>({t:`أضاف عملًا للمعرض: ${x.title||'عمل'}`,d:x.createdAt||x.uploadedAt}))].sort((a,b)=>new Date(b.d?.toDate?b.d.toDate():b.d||0)-new Date(a.d?.toDate?a.d.toDate():a.d||0));
@@ -15685,7 +15710,7 @@ if(!window.__aaStableNotifStarted){window.__aaStableNotifStarted=true;window.Ana
     return state.opening;
   }
 
-  window.__aaFastProfileOpenV36=open;window.__aaFastProfileOpenV36.__back=profileBackFast;
+  window.__aaFastProfileOpenV36=open;
   window.aaOpenProfile=open;
   window.openUserProfilePage=()=>currentUser?open(currentUser.uid,{kind:'self'}):triggerAuth?.();
   window.openPublicProfileFinal=uid=>open(uid,{kind:uid===currentUser?.uid?'self':'public',returnPoint:typeof profileReturnPoint==='function'?profileReturnPoint():null});
