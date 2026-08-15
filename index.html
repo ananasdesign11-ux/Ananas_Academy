@@ -16081,3 +16081,38 @@ if(window.__courseLiveUnsubs instanceof Map){
 </script>
 </body>
 </html>
+
+<script>
+/* Final direct binding for the course Files dashboard action: bypass legacy click wrappers. */
+(function(){
+  const bindFilesDashboardButton=()=>{
+    const buttons=[...document.querySelectorAll('#courseDashboard .dashboard-btn')];
+    const btn=buttons.find(b=>String(b.textContent||'').includes('ملفات الدورة')||String(b.textContent||'').includes('الملفات'));
+    if(!btn || btn.dataset.aaFilesFinalBound==='1') return;
+    btn.dataset.aaFilesFinalBound='1';
+    btn.removeAttribute('onclick');
+    const fresh=btn.cloneNode(true);
+    fresh.removeAttribute('onclick');
+    fresh.dataset.aaFilesFinalBound='1';
+    fresh.addEventListener('click',async e=>{
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      try{
+        if(!activeCourseId && window.activeCourseId) activeCourseId=window.activeCourseId;
+        const ok=await window.__openCourseFilesPage?.();
+        if(ok===false) console.warn('Files page could not be opened: missing course/page state');
+      }catch(err){
+        console.error('Final files dashboard navigation failed',err);
+        showCustomAlert?.('خطأ','تعذر فتح صفحة ملفات الدورة.');
+      }
+    },true);
+    btn.replaceWith(fresh);
+  };
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',bindFilesDashboardButton,{once:true});
+  else bindFilesDashboardButton();
+  const ob=new MutationObserver(()=>bindFilesDashboardButton());
+  ob.observe(document.getElementById('courseDashboard')||document.body,{subtree:true,childList:true});
+})();
+</script>
+
+        
