@@ -11457,7 +11457,6 @@ async function savePortfolioModal(){if(!currentUser)return triggerAuth?.();const
 window.aaOpenProfile=openProfile;window.aaProfileBack=profileBack;window.openUserProfilePage=()=>openProfile(currentUser?.uid,{kind:'self'});window.openPublicProfileFinal=uid=>openProfile(uid,{kind:'public',returnPoint:profileReturnPoint()});window.openAnanasV10Profile=window.openPublicProfileFinal;window.viewProfileByUserId=uid=>openProfile(uid,{kind:'public',returnPoint:profileReturnPoint()});window.openStudentProfile=window.openPublicProfileFinal;window.openChatProfileV13=uid=>openProfile(uid,{kind:'chat',returnPoint:profileReturnPoint()});window.openChatProfileV12=window.openChatProfileV13;window.openProfileWorkUpload=openPortfolioFromCourses;window.openPortfolioFromCourses=openPortfolioFromCourses;
 const account=$('authToggleBtn');if(account&&!account.dataset.aaFinal){account.dataset.aaFinal='1';account.addEventListener('click',e=>{if(!currentUser)return;e.preventDefault();e.stopImmediatePropagation();openProfile(currentUser.uid,{kind:'self'});},true)}
 document.addEventListener('click',async e=>{const dir=e.target.closest?.('[data-aa-uid]');if(dir){e.preventDefault();e.stopImmediatePropagation();await openProfile(dir.dataset.aaUid,{kind:'admin-directory'});return;}const n=e.target.closest?.('[data-profile-uid],.chat-profile-head,.chat-profile-avatar,.chat-profile-name,.chat-msg .msg-header .u,.chat-msg .msg-header');if(!n)return;let uid=n.dataset.profileUid||n.closest('[data-profile-uid]')?.dataset.profileUid;const msg=n.closest('.chat-msg');if(!uid&&msg?.dataset.messageId&&activeCourseId){try{const s=await db.collection('courses').doc(activeCourseId).collection('chat').doc(msg.dataset.messageId).get();uid=s.data()?.userId||''}catch(_){} }if(uid){e.preventDefault();e.stopImmediatePropagation();await openProfile(uid,{kind:'chat',returnPoint:profileReturnPoint()});}},true);
-document.addEventListener('click',e=>{const b=e.target.closest?.('.aa-profile-view-work');if(b)e.stopImmediatePropagation()},true);
 hideLegacy();
 })();
 </script>
@@ -11501,22 +11500,27 @@ hideLegacy();
   function wireSelfButtons(){
     const host=getProfileHost();if(!host)return;
     const edit=$p('aaProfileEdit'),add=$p('aaProfileAddWork'),logout=$p('aaProfileLogout');
-    if(edit){edit.onclick=e=>{e.preventDefault();e.stopImmediatePropagation();openSelfEdit();};}
+    if(edit){edit.onclick=e=>{e.preventDefault();e.stopImmediatePropagation();const target=String(window.profileState?.uid||currentUser?.uid||'');if(target&&target!==String(currentUser?.uid||'')&&isAdmin)openSelfEdit(target);else openSelfEdit(currentUser?.uid);};}
     if(add){add.onclick=e=>{e.preventDefault();e.stopImmediatePropagation();openSelfWork();};}
     if(logout&&currentUser&&!logout.dataset.profilePatched){logout.dataset.profilePatched='1';}
     ensureSelfModals();
   }
-  async function openSelfEdit(){
-    if(!currentUser)return triggerAuth?.();ensureSelfModals();
-    const snap=await db.collection('users').doc(currentUser.uid).get().catch(()=>null);const p=snap?.exists?(snap.data()||{}):(currentUserProfile||{});
+  async function openSelfEdit(targetUid=currentUser?.uid){
+    if(!currentUser)return triggerAuth?.();
+    targetUid=String(targetUid||currentUser.uid);
+    if(targetUid!==String(currentUser.uid)&&!isAdmin)return;
+    ensureSelfModals();
+    window.__aaEditingProfileUid=targetUid;
+    window.__aaEditingProfileIsAdminTarget=targetUid!==String(currentUser.uid);
+    const snap=await db.collection('users').doc(targetUid).get().catch(()=>null);const p=snap?.exists?(snap.data()||{}):(targetUid===String(currentUser.uid)?(currentUserProfile||{}):{});
     const name=p.displayName||currentUser.displayName||'',phone=p.phone||'',photo=p.photoURL||p.photoUrl||p.photo||currentUser.photoURL||'';
     $p('aaProfileEditName').value=name;$p('aaProfileEditPhone').value=phone;$p('aaProfileEditPrivate').checked=p.profilePublic===false;$p('aaProfilePrivacyLabel')&&($p('aaProfilePrivacyLabel').textContent=p.profilePublic===false?'الحساب خاص':'الحساب عام');$p('aaProfileEditPrivate').onchange=()=>{$p('aaProfilePrivacyLabel')&&($p('aaProfilePrivacyLabel').textContent=$p('aaProfileEditPrivate').checked?'الحساب خاص':'الحساب عام');};$p('aaProfileEditPhoto').value='';workEdit.photoFile=null;$p('aaProfileEditStatus').textContent='';$p('aaProfileEditPreview').innerHTML=photo?`<img src="${esc2(photo)}" alt="">`:esc2(name.slice(0,1)||'م');$p('aaProfileSelfEditModal').classList.add('active');
   }
   async function saveSelfProfile(){
-    if(!currentUser)return;const btn=$p('aaProfileEditSave');const status=$p('aaProfileEditStatus');const name=$p('aaProfileEditName').value.trim(),phone=$p('aaProfileEditPhone').value.trim();if(!name){status.textContent='اكتب الاسم أولًا.';return;}btn.disabled=true;status.textContent='جاري حفظ التعديلات...';
-    try{let photo=currentUser.photoURL||currentUserProfile?.photoURL||currentUserProfile?.photoUrl||currentUserProfile?.photo||'';if(workEdit.photoFile){photo=await uploadImage(workEdit.photoFile);if(!photo)throw Error('upload');}const profilePublic=!$p('aaProfileEditPrivate').checked;await currentUser.updateProfile({displayName:name,photoURL:photo||null});await db.collection('users').doc(currentUser.uid).set({uid:currentUser.uid,email:currentUser.email||'',displayName:name,phone,photoURL:photo||'',photoUrl:photo||'',profilePublic,updatedAt:firebase.firestore.FieldValue.serverTimestamp()},{merge:true});currentUserProfile={...(currentUserProfile||{}),displayName:name,phone,photoURL:photo||'',photoUrl:photo||'',profilePublic};
-      const avatar=$p('authToggleBtn')?.querySelector('.auth-user-avatar img');if(avatar&&photo)avatar.src=photo;const label=$p('authLabel');if(label)label.textContent=name;const nameNode=$p('aaProfileName');if(nameNode)nameNode.textContent=name;const emailNode=$p('aaProfileEmail');if(emailNode)emailNode.textContent=currentUser.email||'—';
-      $p('aaProfileSelfEditModal').classList.remove('active');status.textContent='';if(window.openUserProfilePage)await window.openUserProfilePage();showCustomAlert?.('تم الحفظ',profilePublic?'تم حفظ التعديلات. الحساب عام ويمكن للطلاب رؤية بيانات الملف الشخصي.':'تم حفظ التعديلات. الحساب خاص وسيظهر للطلاب الاسم والصورة فقط.');
+    if(!currentUser)return;const btn=$p('aaProfileEditSave');const status=$p('aaProfileEditStatus');const name=$p('aaProfileEditName').value.trim(),phone=$p('aaProfileEditPhone').value.trim();const targetUid=String(window.__aaEditingProfileUid||currentUser.uid);const adminTarget=targetUid!==String(currentUser.uid);if(adminTarget&&!isAdmin)return;if(!name){status.textContent='اكتب الاسم أولًا.';return;}btn.disabled=true;status.textContent='جاري حفظ التعديلات...';
+    try{let photo='';const currentSnap=await db.collection('users').doc(targetUid).get().catch(()=>null);const currentProfile=currentSnap?.exists?(currentSnap.data()||{}):{};photo=currentProfile.photoURL||currentProfile.photoUrl||currentProfile.photo||(adminTarget?'':(currentUser.photoURL||currentUserProfile?.photoURL||currentUserProfile?.photoUrl||currentUserProfile?.photo||''));if(workEdit.photoFile){photo=await uploadImage(workEdit.photoFile);if(!photo)throw Error('upload');}const profilePublic=!$p('aaProfileEditPrivate').checked;await db.collection('users').doc(targetUid).set({uid:targetUid,email:currentProfile.email||(adminTarget?'':(currentUser.email||'')),displayName:name,phone,photoURL:photo||'',photoUrl:photo||'',profilePublic,updatedAt:firebase.firestore.FieldValue.serverTimestamp()},{merge:true});if(!adminTarget){await currentUser.updateProfile({displayName:name,photoURL:photo||null});currentUserProfile={...(currentUserProfile||{}),displayName:name,phone,photoURL:photo||'',photoUrl:photo||'',profilePublic};const avatar=$p('authToggleBtn')?.querySelector('.auth-user-avatar img');if(avatar&&photo)avatar.src=photo;const label=$p('authLabel');if(label)label.textContent=name;}
+      const nameNode=$p('aaProfileName');if(nameNode)nameNode.textContent=name;const emailNode=$p('aaProfileEmail');if(emailNode)emailNode.textContent=adminTarget?(profilePublic===false?'حساب خاص':(currentProfile.email||'—')):(currentUser.email||'—');
+      $p('aaProfileSelfEditModal').classList.remove('active');status.textContent='';if(adminTarget){await window.aaOpenProfile?.(targetUid,{kind:'admin-directory',returnPoint:window.profileState?.returnPoint||null});}else if(window.openUserProfilePage){await window.openUserProfilePage();}showCustomAlert?.('تم الحفظ',profilePublic?'تم حفظ التعديلات. الحساب عام ويمكن للطلاب رؤية بيانات الملف الشخصي.':'تم حفظ التعديلات. الحساب خاص وسيظهر للطلاب الاسم والصورة فقط.');
     }catch(e){console.error('save profile self',e);status.textContent='تعذر حفظ التعديلات.';showCustomAlert?.('خطأ','تعذر حفظ تعديلات الملف الشخصي.')}finally{btn.disabled=false;}
   }
   function openSelfWork(){if(!currentUser)return triggerAuth?.();ensureSelfModals();['aaProfileWorkName','aaProfileWorkType','aaProfileWorkDesc'].forEach(id=>$p(id).value='');$p('aaProfileWorkFiles').value='';$p('aaProfileWorkFilesName').textContent='لم يتم اختيار صور بعد';$p('aaProfileWorkStatus').textContent='';$p('aaProfileWorkSave').disabled=false;$p('aaProfileSelfWorkModal').classList.add('active');}
@@ -12260,8 +12264,16 @@ window.__refreshAssignmentSubmitterButtons=async function(root){
     const p=cache[btn.dataset.profileUid]||{};
     const avatar=btn.querySelector('.assignment-submitter-avatar');
     const name=btn.querySelector('.assignment-submitter-name');
-    if(name)name.textContent=p.name||'مستخدم';
-    if(avatar)avatar.innerHTML=p.photo?`<img src="${esc2(p.photo)}" alt="">`:'<i class="fas fa-user"></i>';
+    const nextName=p.name||'مستخدم';
+    if(name&&name.textContent!==nextName)name.textContent=nextName;
+    const nextPhoto=p.photo||'';
+    if(avatar){
+      const currentImg=avatar.querySelector('img');
+      const currentSrc=currentImg?.getAttribute('src')||'';
+      if(nextPhoto){
+        if(!currentImg||currentSrc!==nextPhoto)avatar.innerHTML=`<img src="${esc2(nextPhoto)}" alt="">`;
+      }else if(currentImg){avatar.innerHTML='<i class="fas fa-user"></i>';}
+    }
     btn.title=`فتح ملف ${p.name||'المستخدم'}`;
     btn.setAttribute('aria-label',`فتح ملف ${p.name||'المستخدم'}`);
   });
@@ -12294,11 +12306,8 @@ if(typeof oldRefresh==='function' && !window.__liveAssignmentRefreshPatched){
   };
 }
 
-/* Also handle renderers that call the local function directly by observing inserted work cards. */
-window.__aaDomObserverRegister?.(()=>{
-  const root=document.getElementById('assignmentDetailContent');
-  if(root)window.__refreshAssignmentSubmitterButtons(root);
-});
+/* Assignment submitter profiles are hydrated explicitly after each assignment render.
+   Do not observe the whole body here: changing an avatar would trigger another mutation. */
 
 })();
 </script>
@@ -12365,17 +12374,9 @@ async function renderAuthoritativeProfile(uid,isSelf){
     $id('aaProfileGallery').innerHTML=rowList(cards.map(x=>{
       const imgs=Array.isArray(x.images)?x.images.filter(Boolean):(x.imageUrl?[x.imageUrl]:[]),img=imgs[0]||'';
       if(x.kind==='assignment')return `<article class="aa-profile-work"><div class="aa-profile-cover">${img?`<img src="${esc(img)}" alt="">`:'<i class="fas fa-images"></i>'}</div><div class="aa-profile-work-body"><strong>${esc(x.assignmentTitle||x.title||'واجب')}</strong><small>${esc(x.courseTitle||'')}<br>${x.approved?'✅ معتمد':'⏳ قيد المراجعة'}${imgs.length>1?` · ${imgs.length} صور`:''}</small><button type="button" class="aa-profile-view-work" data-course="${esc(x.courseId||'')}" data-assignment="${esc(x.assignmentId||'')}" data-work="${esc(x.workId||x.id||'')}"><i class="fas fa-eye"></i> عرض العمل</button></div></article>`;
-      return `<article class="aa-profile-work"><div class="aa-profile-cover">${img?`<img src="${esc(img)}" alt="">`:'<i class="fas fa-images"></i>'}</div><div class="aa-profile-work-body"><strong>${esc(x.title||'عمل')}</strong><small>${esc(x.type||'عمل شخصي')}${x.description?`<br>${esc(x.description)}`:''}${imgs.length>1?`<br>${imgs.length} صور`:''}</small></div></article>`;
+      return `<article class="aa-profile-work"><div class="aa-profile-cover">${img?`<img src="${esc(img)}" alt="">`:'<i class="fas fa-images"></i>'}</div><div class="aa-profile-work-body"><strong>${esc(x.title||'عمل')}</strong><small>${esc(x.type||'عمل شخصي')}${x.description?`<br>${esc(x.description)}`:''}${imgs.length>1?`<br>${imgs.length} صور`:''}</small><button type="button" class="aa-profile-view-work" data-kind="portfolio" data-user="${esc(uid)}" data-work="${esc(x.id||'')}"><i class="fas fa-eye"></i> عرض العمل</button></div></article>`;
     }),'لا توجد أعمال منشورة حاليًا.');
-    $id('aaProfileGallery').querySelectorAll('.aa-profile-view-work').forEach(btn=>btn.onclick=()=>{
-      const kind=btn.dataset.kind||'assignment';
-      if(kind==='portfolio'){
-        const uid2=btn.dataset.user||uid, wid=btn.dataset.work||'';
-        window.openProfilePortfolioWorkViewer?.(uid2,wid,btn.dataset.images||'[]');
-      }else{
-        window.openAssignmentWorkViewer?.(btn.dataset.course,btn.dataset.assignment,btn.dataset.work);
-      }
-    });
+    /* Work viewer is delegated globally so dynamically-rendered work cards use one path. */
     if(typeof window.__refreshAssignmentSubmitterButtons==='function')await window.__refreshAssignmentSubmitterButtons(document);
     if(typeof window.__loadDirectory==='function')await window.__loadDirectory();
   }catch(err){
@@ -12409,6 +12410,23 @@ window.openProfilePortfolioWorkViewer=async function(uid,workId,imagesJson){
 };
 
 window.__renderAuthoritativeProfile=renderAuthoritativeProfile;
+
+/* One universal work viewer: works from assignments and personal profiles use the same fullscreen viewer. */
+document.addEventListener('click',async function(e){
+  const btn=e.target.closest?.('.aa-profile-view-work');
+  if(!btn)return;
+  e.preventDefault();
+  e.stopImmediatePropagation();
+  const kind=btn.dataset.kind||'assignment';
+  try{
+    if(kind==='portfolio'){
+      const owner=btn.dataset.user||currentUser?.uid, workId=btn.dataset.work||'';
+      if(!owner||!workId)return;
+      return window.openProfilePortfolioWorkViewer?.(owner,workId,'[]');
+    }
+    return window.openAssignmentWorkViewer?.(btn.dataset.course||'',btn.dataset.assignment||'',btn.dataset.work||'');
+  }catch(err){console.error('work viewer click',err);showCustomAlert?.('خطأ','تعذر فتح العمل.');}
+},true);
 
 /* Ensure current account button uses the authoritative renderer. */
 const account=$id('authToggleBtn');
@@ -12663,7 +12681,6 @@ logoutNames.forEach(n=>{const fn=window[n];if(typeof fn==='function'&&!fn.__aaLo
 /* ---------- Suspended code button state: always "cancel" while active ---------- */
 /* ---------- Refresh assignment fallback initials after any render ---------- */
 document.addEventListener('DOMContentLoaded',()=>refreshAssignmentSubmitterAvatars(document));
-window.__aaDomObserverRegister?.(()=>refreshAssignmentSubmitterAvatars(document));
 })();
 
 </script>
@@ -13938,11 +13955,19 @@ async function hydrateNames(root=document){
   nodes.forEach(node=>{
     const uid=String(node.dataset.profileUid||node.dataset.userId||node.dataset.user||'');if(!uid)return;
     const p=map.get(uid);if(!p)return;
-    node.querySelectorAll?.('.assignment-submitter-name').forEach(el=>el.textContent=p.name);
-    node.querySelectorAll?.('.assignment-submitter-avatar').forEach(el=>{el.innerHTML=p.photo?`<img src="${esc(p.photo)}" alt="">`:`<span>${esc(p.name.charAt(0))}</span>`});
-    node.querySelectorAll?.('.chat-profile-name,.msg-header .u').forEach(el=>el.textContent=p.name);
-    node.querySelectorAll?.('.chat-profile-avatar').forEach(el=>{el.innerHTML=p.photo?`<img src="${esc(p.photo)}" alt="">`:`<i class="fas fa-user"></i>`});
-    node.querySelectorAll?.('.assignment-v2-body>strong').forEach(el=>el.textContent=p.name);
+    node.querySelectorAll?.('.assignment-submitter-name').forEach(el=>{if(el.textContent!==p.name)el.textContent=p.name;});
+    node.querySelectorAll?.('.assignment-submitter-avatar').forEach(el=>{
+      const img=el.querySelector('img'),src=img?.getAttribute('src')||'';
+      if(p.photo){if(!img||src!==p.photo)el.innerHTML=`<img src="${esc(p.photo)}" alt="">`;}
+      else if(img)el.innerHTML=`<span>${esc(p.name.charAt(0))}</span>`;
+    });
+    node.querySelectorAll?.('.chat-profile-name,.msg-header .u').forEach(el=>{if(el.textContent!==p.name)el.textContent=p.name;});
+    node.querySelectorAll?.('.chat-profile-avatar').forEach(el=>{
+      const img=el.querySelector('img'),src=img?.getAttribute('src')||'';
+      if(p.photo){if(!img||src!==p.photo)el.innerHTML=`<img src="${esc(p.photo)}" alt="">`;}
+      else if(img)el.innerHTML=`<i class="fas fa-user"></i>`;
+    });
+    node.querySelectorAll?.('.assignment-v2-body>strong').forEach(el=>{if(el.textContent!==p.name)el.textContent=p.name;});
   });
 }
 window.__aaHydrateCanonicalNames=hydrateNames;
@@ -13961,8 +13986,8 @@ async function refreshChatCanonicalNames(){
   for(const msg of msgs){
     const uid=msg.dataset.userId;if(!uid)continue;
     const p=await getCanonicalUser(uid);
-    msg.querySelectorAll('.chat-profile-name,.msg-header .u').forEach(el=>el.textContent=p.name);
-    msg.querySelectorAll('.chat-profile-avatar').forEach(el=>{el.innerHTML=p.photo?`<img src="${esc(p.photo)}" alt="">`:`<i class="fas fa-user"></i>`});
+    msg.querySelectorAll('.chat-profile-name,.msg-header .u').forEach(el=>{if(el.textContent!==p.name)el.textContent=p.name;});
+    msg.querySelectorAll('.chat-profile-avatar').forEach(el=>{const img=el.querySelector('img'),src=img?.getAttribute('src')||'';if(p.photo){if(!img||src!==p.photo)el.innerHTML=`<img src="${esc(p.photo)}" alt="">`;}else if(img)el.innerHTML='<i class="fas fa-user"></i>';});
   }
 }
 window.__aaRefreshChatCanonicalNames=refreshChatCanonicalNames;
@@ -15573,6 +15598,11 @@ if(!window.__aaStableNotifStarted){window.__aaStableNotifStarted=true;window.Ana
     if($('aaProfileEmail'))$('aaProfileEmail').textContent=isPrivate&&!isSelf?(isAdmin?'حساب خاص — المشرف يرى جميع البيانات':'حساب خاص'):(p.email||currentUser?.email||'—');
     if($('aaProfileBadge')){$('aaProfileBadge').className='aa-profile-badge '+(isPrivate?'private':'public');$('aaProfileBadge').innerHTML=isPrivate?'<i class="fas fa-lock"></i> الحساب خاص':'<i class="fas fa-eye"></i> الحساب عام';}
     if($('aaProfileAvatar'))$('aaProfileAvatar').innerHTML=photo?`<img src="${esc(photo)}" alt="${esc(name)}">`:esc(name.charAt(0));
+    if($('aaProfileBack'))$('aaProfileBack').style.display='inline-flex';
+    if($('aaProfileEdit'))$('aaProfileEdit').style.display=(isSelf||isAdmin)?'inline-flex':'none';
+    if($('aaProfileAddWork'))$('aaProfileAddWork').style.display=isSelf?'inline-flex':'none';
+    if($('aaProfileLogout'))$('aaProfileLogout').style.display=isSelf?'inline-flex':'none';
+    $('aaProfileEdit')?.setAttribute('aria-label',isSelf?'تعديل ملفي':(isAdmin?'تعديل ملف الطالب':''));
   }
 
   function renderData(uid,p,isSelf,live,requestToken){
@@ -15595,8 +15625,7 @@ if(!window.__aaStableNotifStarted){window.__aaStableNotifStarted=true;window.Ana
     const activities=[...live.lessons.map(x=>({t:`أكمل الحصة: ${x.title}`,d:x.completedAt})),...live.quizzes.map(x=>({t:`أكمل الاختبار: ${x.title}`,d:x.passedAt})),...live.assignmentWorks.map(x=>({t:`رفع عملًا في: ${x.assignmentTitle}`,d:x.uploadedAt})),...live.portfolio.map(x=>({t:`أضاف عملًا للمعرض: ${x.title||'عمل'}`,d:x.createdAt||x.uploadedAt}))].sort((a,b)=>new Date(b.d?.toDate?b.d.toDate():b.d||0)-new Date(a.d?.toDate?a.d.toDate():a.d||0));
     $('aaProfileActivity')&&($('aaProfileActivity').innerHTML=rowList(activities.slice(0,100).map(x=>`<div class="aa-profile-row"><strong>${esc(x.t)}</strong><small>${esc(dateText(x.d))}</small></div>`),'لا يوجد نشاط حالي.'));
     const cards=[...live.portfolio.map(x=>({kind:'portfolio',...x})),...live.assignmentWorks.map(x=>({kind:'assignment',...x}))];
-    $('aaProfileGallery')&&($('aaProfileGallery').innerHTML=rowList(cards.map(x=>{const imgs=Array.isArray(x.images)?x.images.filter(Boolean):(x.imageUrl?[x.imageUrl]:[]),img=imgs[0]||'';return x.kind==='assignment'?`<article class="aa-profile-work"><div class="aa-profile-cover">${img?`<img src="${esc(img)}" alt="">`:'<i class="fas fa-images"></i>'}</div><div class="aa-profile-work-body"><strong>${esc(x.assignmentTitle||x.title||'واجب')}</strong><small>${esc(x.courseTitle||'')}<br>${x.approved?'✅ معتمد':'⏳ قيد المراجعة'}${imgs.length>1?` · ${imgs.length} صور`:''}</small><button type="button" class="aa-profile-view-work" data-course="${esc(x.courseId||'')}" data-assignment="${esc(x.assignmentId||'')}" data-work="${esc(x.workId||x.id||'')}"><i class="fas fa-eye"></i> عرض العمل</button></div></article>`:`<article class="aa-profile-work"><div class="aa-profile-cover">${img?`<img src="${esc(img)}" alt="">`:'<i class="fas fa-images"></i>'}</div><div class="aa-profile-work-body"><strong>${esc(x.title||'عمل')}</strong><small>${esc(x.type||'عمل شخصي')}${x.description?`<br>${esc(x.description)}`:''}${imgs.length>1?`<br>${imgs.length} صور`:''}</small></div></article>`;}),'لا توجد أعمال منشورة حاليًا.'));
-    $('aaProfileGallery')?.querySelectorAll('.aa-profile-view-work').forEach(btn=>btn.addEventListener('click',()=>window.openAssignmentWorkViewer?.(btn.dataset.course,btn.dataset.assignment,btn.dataset.work)));
+    $('aaProfileGallery')&&($('aaProfileGallery').innerHTML=rowList(cards.map(x=>{const imgs=Array.isArray(x.images)?x.images.filter(Boolean):(x.imageUrl?[x.imageUrl]:[]),img=imgs[0]||'';return x.kind==='assignment'?`<article class="aa-profile-work"><div class="aa-profile-cover">${img?`<img src="${esc(img)}" alt="">`:'<i class="fas fa-images"></i>'}</div><div class="aa-profile-work-body"><strong>${esc(x.assignmentTitle||x.title||'واجب')}</strong><small>${esc(x.courseTitle||'')}<br>${x.approved?'✅ معتمد':'⏳ قيد المراجعة'}${imgs.length>1?` · ${imgs.length} صور`:''}</small><button type="button" class="aa-profile-view-work" data-kind="assignment" data-course="${esc(x.courseId||'')}" data-assignment="${esc(x.assignmentId||'')}" data-work="${esc(x.workId||x.id||'')}"><i class="fas fa-eye"></i> عرض العمل</button></div></article>`:`<article class="aa-profile-work"><div class="aa-profile-cover">${img?`<img src="${esc(img)}" alt="">`:'<i class="fas fa-images"></i>'}</div><div class="aa-profile-work-body"><strong>${esc(x.title||'عمل')}</strong><small>${esc(x.type||'عمل شخصي')}${x.description?`<br>${esc(x.description)}`:''}${imgs.length>1?`<br>${imgs.length} صور`:''}</small><button type="button" class="aa-profile-view-work" data-kind="portfolio" data-user="${esc(uid)}" data-work="${esc(x.id||'')}"><i class="fas fa-eye"></i> عرض العمل</button></div></article>`;}),'لا توجد أعمال منشورة حاليًا.'));
   }
 
   if(!document.getElementById('aa-profile-loading-style')){
