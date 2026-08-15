@@ -5971,6 +5971,10 @@ window.AnanasTimers=window.AnanasTimers||(()=>{
             activeCourseId = courseId;
             activeLessonId = lessonId;
             currentCoursePage = 'lessonPlayer';
+            document.getElementById('courseAssignmentDetailPage')?.classList.remove('active','is-mobile-active');
+            document.getElementById('courseAssignmentDetailPage')?.style.setProperty('display','none');
+            window.activeAssignmentDetailId=null;
+            try{document.body.classList.remove('aa-modal-lock','aa-v28-modal-open','aa-v9-modal-locked');document.documentElement.classList.remove('aa-modal-lock','aa-v9-modal-locked');document.body.style.overflow='';document.documentElement.style.overflow='';}catch(e){}
             lessonCurrentData = lesson;
             const lessonsPage=document.getElementById('courseLessonsPage');
             const playerPage=document.getElementById('courseLessonPlayerPage');
@@ -10965,11 +10969,13 @@ $('themeToggle')?.addEventListener('click',()=>setTimeout(fixBrandLogo,0),true);
 async function openAssignmentDetailV2(courseId,assignmentId){
   const page=$('courseAssignmentDetailPage');
   if(!page||!courseId||!assignmentId)return;
+  /* Assignment detail is a normal course page, never a modal. Clear stale modal locks before showing it. */
+  try{document.body.classList.remove('aa-modal-lock','aa-v28-modal-open','aa-v9-modal-locked');document.documentElement.classList.remove('aa-modal-lock','aa-v9-modal-locked');document.body.style.overflow='';document.documentElement.style.overflow='';}catch(e){}
   try{if(currentCoursePage==='lessonPlayer')window.stopLessonForNavigation?.();}catch(e){}
   currentCoursePage='assignments'; window.activeAssignmentDetailId=assignmentId;
   const hideIds=['courseOverviewContainer','courseDashboard','courseLessonsPage','courseLessonPlayerPage','courseQuizzesPage','courseAssignmentsPage','courseChatPage','courseFilesPage','courseLearningView','fullChatPage'];
   hideIds.forEach(id=>{const el=$(id);if(!el)return;el.classList.remove('active');el.style.display='none';});
-  page.classList.add('active');page.style.display='block';page.style.position='absolute';page.style.inset='0';page.style.zIndex='1200';page.style.overflowY='auto';
+  page.classList.add('active','is-mobile-active');page.style.display='block';page.style.position='absolute';page.style.inset='0';page.style.zIndex='1200';page.style.overflowY='auto';
   const result=await getAssignmentData(courseId,assignmentId);
   if(!result){page.innerHTML='<div class="assignment-v2-empty"><i class="fas fa-triangle-exclamation"></i><h3>الواجب غير موجود</h3><p>قد يكون الواجب قد حُذف أو لم يعد متاحًا.</p><button class="ananas-secondary-btn" type="button" onclick="switchCoursePage(\'assignments\')">العودة للواجبات</button></div>';return;}
   const a=result.data||{};
@@ -10978,7 +10984,7 @@ async function openAssignmentDetailV2(courseId,assignmentId){
     <div class="assignment-v2-meta"><span><i class="fas fa-star"></i> ${Number(a.xpReward)||0} XP</span><span><i class="fas fa-images"></i> ${Array.isArray(a.submissions)?a.submissions.length:0} أعمال</span></div>
     <div id="assignmentV2Content" class="assignment-v2-content"></div>
   </div>`;
-  $('assignmentV2Back').onclick=()=>{page.classList.remove('active');page.style.display='none';window.switchCoursePage('assignments');};
+  $('assignmentV2Back').onclick=()=>{page.classList.remove('active','is-mobile-active');page.style.display='none';page.style.removeProperty('position');page.style.removeProperty('inset');page.style.removeProperty('z-index');page.style.removeProperty('overflow-y');window.activeAssignmentDetailId=null;try{document.body.classList.remove('aa-modal-lock','aa-v28-modal-open','aa-v9-modal-locked');document.documentElement.classList.remove('aa-modal-lock','aa-v9-modal-locked');document.body.style.overflow='';document.documentElement.style.overflow='';}catch(e){} window.switchCoursePage('assignments');};
   const content=$('assignmentV2Content');
   const subs=Array.isArray(a.submissions)?a.submissions:[];
   const visible=subs.filter(sub=>sub&&!sub.deleted&&(isAdmin||sub.approved||sub.userId===currentUser?.uid));
@@ -15406,7 +15412,7 @@ document.addEventListener('click',e=>{
 
 /* 4) True application modal locking: underlying app cannot scroll or receive input. */
 (function modalLock(){
-  const modalSelectors=['.custom-alert-modal.active','.edit-modal.active','.auth-popup.active','#quizOverlay.active','.gallery-viewer.active','.file-viewer-overlay.active','#aaNotificationDetailModal.active','#aaCodeReasonModal.active','#aaRejectWorkModal.active','.profile-self-modal.active','#courseAssignmentDetailPage.active'];
+  const modalSelectors=['.custom-alert-modal.active','.edit-modal.active','.auth-popup.active','#quizOverlay.active','.gallery-viewer.active','.file-viewer-overlay.active','#aaNotificationDetailModal.active','#aaCodeReasonModal.active','#aaRejectWorkModal.active','.profile-self-modal.active'];
   const rootTargets=['body','#coursesPage','footer','.navbar','#mobileBottomNav'];
   let locked=false;
   function sync(){
