@@ -3222,7 +3222,6 @@ window.AnanasTimers=window.AnanasTimers||(()=>{
 </script>
 <style id="aa-private-preview-v22-style">
 .aa-private-preview-v22{position:relative;z-index:0;display:grid;gap:10px;padding:18px;margin:10px 0;border:1px solid var(--border);border-radius:18px;background:var(--bg-secondary);overflow:hidden;filter:blur(2px);opacity:.72}.aa-private-preview-v22 .row{height:44px;border-radius:12px;background:linear-gradient(90deg,var(--border),var(--bg-card),var(--border));}.aa-private-preview-v22 .wide{height:58px}.aa-private-curtain-v21{isolation:isolate}.aa-private-curtain-v21 .aa-private-blur-v21{z-index:-1}.aa-private-card-v21{z-index:2}</style>
-<style id="aa-private-data-v22-style">.aa-private-data-v22{position:relative;display:flex;flex-direction:column;gap:8px}.aa-private-data-v22 .allowed{position:relative;z-index:2}.aa-private-data-v22 .private-row{position:relative;z-index:2;filter:blur(3.5px);opacity:.82}.aa-private-row-cover{position:relative;margin-top:2px;border-radius:18px;padding:8px;overflow:hidden;background:rgba(255,255,255,.12);border:1px solid var(--border)}.aa-private-row-cover::before{content:"";position:absolute;inset:-18px;background:linear-gradient(135deg,rgba(108,92,231,.13),rgba(9,132,227,.08));filter:blur(16px);opacity:.9}.aa-private-row-cover>*{position:relative;z-index:1}.aa-private-inline-lock{display:flex;flex-direction:column;align-items:center;gap:7px;padding:18px;text-align:center;border-radius:16px;background:rgba(20,22,30,.62);backdrop-filter:blur(10px);border:1px solid var(--border);color:var(--text-primary)}.aa-private-inline-lock i{font-size:1.15rem;color:#e67e22}.aa-private-inline-lock span{color:var(--text-muted);font-size:.8rem;line-height:1.7}.aa-private-obscured{letter-spacing:.18em}.aa-profile-sub,.aa-profile-email,.aa-profile-head-copy p{transition:filter .2s ease,opacity .2s ease}.aa-profile-email.aa-private-email{filter:blur(6px);opacity:.8;user-select:none}.aa-private-email::selection{background:transparent}</style>
 </head>
 <body class="light-mode">
 <!-- ===== PLATFORM IMAGE VIEWER ===== -->
@@ -12480,28 +12479,19 @@ async function loadDirectoryEnhanced(){
   await buildAdminDirectoryControls();
   box.innerHTML='<div class="aa-profile-empty">جاري تحميل الحسابات...</div>';
   try{
-    const [snap,cs]=await Promise.all([db.collection('users').get(),db.collection('courses').get()]);
-    const liveCourses=new Set(cs.docs.map(d=>String(d.id)));
+    const snap=await db.collection('users').get();
     const rows=[];
+    const courseIds=[...(await db.collection('courses').get()).docs].map(d=>d.id);
+    const courseIdSet=new Set(courseIds);
     for(const d of snap.docs){
       const u={id:d.id,...(d.data()||{})};
       if(String(u.id)===String(currentUser?.uid))continue;
-      const enrolledIds=[];
+      let enrolledIds=[];
       try{
         const es=await d.ref.collection('enrolledCourses').get();
-        for(const x of es.docs){
-          const e=x.data()||{},cid=String(x.id);
-          if(!liveCourses.has(cid)||e.codeDeleted===true||e.accessBlocked===true||e.adminEnrollment===true)continue;
-          if(e.codeId){
-            const codeSnap=await db.collection('courses').doc(cid).collection('codes').doc(String(e.codeId)).get().catch(()=>null);
-            if(!codeSnap?.exists)continue;
-            const code=codeSnap.data()||{};
-            if(code.codeDeleted===true||code.status==='deleted'||code.state==='deleted')continue;
-          }
-          enrolledIds.push(cid);
-        }
-      }catch(_){ }
-      rows.push({...u,enrolledCourseIds:[...new Set(enrolledIds)]});
+        enrolledIds=es.docs.map(x=>({id:String(x.id),data:x.data()||{}})).filter(x=>courseIdSet.has(x.id)&&x.data.codeDeleted!==true&&x.data.accessBlocked!==true).map(x=>x.id);
+      }catch(_){enrolledIds=[];}
+      rows.push({...u,enrolledCourseIds:enrolledIds});
     }
     __directoryCache={users:rows,ready:true};
     renderDirectoryEnhanced();
@@ -12512,7 +12502,7 @@ function renderDirectoryEnhanced(){
   const membership=$('aaDirMembershipFilter')?.value||'all';
   const courseId=$('aaDirCourseFilter')?.value||'all';
   const q=String($('aaDirNameSearch')?.value||'').trim().toLocaleLowerCase('ar');
-  const viewed=String(window.__aaViewedProfileUid||'');
+  const viewed=String(window.profileState?.uid||'');
   let users=__directoryCache.users.filter(u=>String(u.id)!==String(currentUser?.uid)&&String(u.id)!==viewed);
   if(membership==='none')users=users.filter(u=>!u.enrolledCourseIds.length);
   if(membership==='enrolled')users=users.filter(u=>u.enrolledCourseIds.length>0);
@@ -12521,8 +12511,9 @@ function renderDirectoryEnhanced(){
   users.sort((a,b)=>String(a.displayName||a.name||'').localeCompare(String(b.displayName||b.name||''),'ar'));
   const count=$('aaProfileDirectoryCount');if(count)count.textContent=`${users.length} حساب`;
   const usedByInitial=new Map();
-  box.innerHTML=users.length?users.map(u=>{const n=u.displayName||u.name||'مستخدم',photo=u.photoURL||u.photoUrl||u.photo||'';return `<button type="button" class="aa-profile-directory-card" data-aa-uid="${escSafe(u.id)}" data-aa-vfinal-profile="1"><span class="aa-profile-directory-avatar">${avatarHtml(n,photo,u.id,'aa-dir-avatar',usedByInitial)}</span><span class="aa-profile-directory-copy"><strong>${escSafe(n)}</strong><small>${u.profilePublic===false?'حساب خاص':'حساب عام'} · ${u.enrolledCourseIds.length?'مشترك في '+u.enrolledCourseIds.length+' دورة':'غير مشترك'}</small></span><i class="fas fa-chevron-left"></i></button>`}).join(''):'<div class="aa-profile-empty">لا توجد حسابات مطابقة للفلاتر الحالية.</div>';
+  box.innerHTML=users.length?users.map(u=>{const n=u.displayName||u.name||'مستخدم',photo=u.photoURL||u.photoUrl||u.photo||'';return `<button type="button" class="aa-profile-directory-card" data-aa-uid="${escSafe(u.id)}"><span class="aa-profile-directory-avatar">${avatarHtml(n,photo,u.id,'aa-dir-avatar',usedByInitial)}</span><span class="aa-profile-directory-copy"><strong>${escSafe(n)}</strong><small>${u.profilePublic===false?'حساب خاص':'حساب عام'} · ${u.enrolledCourseIds.length?'مشترك في '+u.enrolledCourseIds.length+' دورة':'غير مشترك'}</small></span><i class="fas fa-chevron-left"></i></button>`}).join(''):'<div class="aa-profile-empty">لا توجد حسابات مطابقة للفلاتر الحالية.</div>';
   box.querySelectorAll('[data-aa-uid]').forEach(b=>b.onclick=()=>window.aaOpenProfile?.(b.dataset.aaUid,{kind:'admin-directory'}));
+  syncDirectoryViewedCard();
 }
 window.loadDirectory=loadDirectoryEnhanced;
 
@@ -12722,7 +12713,11 @@ if(typeof __aaOpenProfileOriginal==='function'&&!__aaOpenProfileOriginal.__v9Wra
   window.aaOpenProfile=wrapped;
 }
 
-
+/* Any click from admin directory records the viewed uid immediately. */
+document.addEventListener('click',e=>{
+  const card=e.target.closest?.('#aaProfileDirectory [data-aa-uid]');
+  if(card){window.__aaViewedProfileUid=String(card.dataset.aaUid||'');setTimeout(hideViewedDirectoryCard,0);}
+},true);
 
 /* When returning to the admin profile, show all other accounts again. */
 document.addEventListener('click',e=>{
@@ -12786,7 +12781,7 @@ function renderV9Directory(){
   box.innerHTML=users.length?users.map(u=>{
     const name=u.displayName||u.name||'مستخدم';
     const photo=u.photoURL||u.photoUrl||u.photo||'';
-    return `<button type="button" class="aa-profile-directory-card" data-aa-uid="${esc(u.id)}" data-aa-vfinal-profile="1"><span class="aa-profile-directory-avatar">${v9Avatar(name,photo,u.id,used)}</span><span class="aa-profile-directory-copy"><strong>${esc(name)}</strong><small>${u.profilePublic===false?'حساب خاص':'حساب عام'} · ${(u.enrolledCourseIds||[]).length?`مشترك في ${(u.enrolledCourseIds||[]).length} دورة`:'غير مشترك'}</small></span><i class="fas fa-chevron-left"></i></button>`;
+    return `<button type="button" class="aa-profile-directory-card" data-aa-uid="${esc(u.id)}"><span class="aa-profile-directory-avatar">${v9Avatar(name,photo,u.id,used)}</span><span class="aa-profile-directory-copy"><strong>${esc(name)}</strong><small>${u.profilePublic===false?'حساب خاص':'حساب عام'} · ${(u.enrolledCourseIds||[]).length?`مشترك في ${(u.enrolledCourseIds||[]).length} دورة`:'غير مشترك'}</small></span><i class="fas fa-chevron-left"></i></button>`;
   }).join(''):'<div class="aa-profile-empty">لا توجد حسابات مطابقة للفلاتر الحالية.</div>';
   box.querySelectorAll('[data-aa-uid]').forEach(b=>b.onclick=()=>window.aaOpenProfile?.(b.dataset.aaUid,{kind:'admin-directory'}));
 }
@@ -13063,33 +13058,19 @@ window.__aaV9Cleanup=()=>clearInterval(v9Tick);
     const token=++dirState.token;
     dirState.loading=true;
     try{
-      const [usersSnap,coursesSnap]=await Promise.all([db.collection('users').get(),db.collection('courses').get()]);
-      const validCourses=new Set(coursesSnap.docs.map(d=>String(d.id)));
+      const snap=await db.collection('users').get();
       const rows=[];
-      for(const d of usersSnap.docs){
+      for(const d of snap.docs){
         if(token!==dirState.token)return;
         const u={id:d.id,...(d.data()||{})};
         if(String(u.id)===String(currentUser?.uid))continue;
         let enrolledIds=[];
         try{
           const en=await d.ref.collection('enrolledCourses').get();
-          const current=[];
-          for(const x of en.docs){
-            const e=x.data()||{}, cid=String(x.id);
-            if(!validCourses.has(cid))continue;
-            if(e.codeDeleted===true||e.accessBlocked===true||e.adminEnrollment===true)continue;
-            if(e.codeId){
-              try{
-                const codeSnap=await db.collection('courses').doc(cid).collection('codes').doc(String(e.codeId)).get();
-                if(!codeSnap.exists)continue;
-                const code=codeSnap.data()||{};
-                if(code.codeDeleted===true||code.status==='deleted'||code.state==='deleted')continue;
-              }catch(_){ continue; }
-            }
-            current.push(cid);
-          }
-          enrolledIds=current;
-        }catch(_){ enrolledIds=[]; }
+          enrolledIds=en.docs.map(x=>String(x.id)).filter(Boolean);
+        }catch(_){
+          enrolledIds=Array.isArray(u.enrolledCourses)?u.enrolledCourses.map(x=>String(x.id||x)):[...new Set([...(u.enrolledCourseIds||[]).map(String),...(u.courseIds||[]).map(String)])];
+        }
         rows.push({...u,enrolledCourseIds:[...new Set(enrolledIds)]});
       }
       dirState.users=rows;dirState.ready=true;
@@ -13101,44 +13082,6 @@ window.__aaV9Cleanup=()=>clearInterval(v9Tick);
       dirState.loading=false;
       renderFinalDirectory();
     }
-  }
-
-  function forceDirectoryProfileSurface(){
-    const page=document.getElementById('aaRebuiltProfilePage');
-    if(!page)return;
-    ['userProfilePage','ananasV10ProfilePage','ananasPrivateProfileOverlay','ananasCanonicalProfilePage'].forEach(id=>{const el=document.getElementById(id);if(el&&el!==page){el.classList.remove('active');el.style.setProperty('display','none','important');el.style.setProperty('pointer-events','none','important');}});
-    page.classList.add('active');
-    page.style.setProperty('display','block','important');
-    page.style.setProperty('visibility','visible','important');
-    page.style.setProperty('pointer-events','auto','important');
-    page.style.setProperty('z-index','2147483000','important');
-    try{page.scrollTop=0;page.querySelector('.aa-profile-shell')?.scrollTo?.(0,0);window.scrollTo(0,0);}catch(_){}
-  }
-  window.__aaOpenDirectoryStudentDirect=function(uid){
-    uid=String(uid||'');
-    if(!uid||!currentUser)return;
-    window.__aaViewedProfileUid=uid;
-    const point=typeof profileSelfReturnPoint==='function'?profileSelfReturnPoint():null;
-    try{
-      const opener=window.__aaFastProfileOpenV36||window.aaOpenProfile||window.openPublicProfileFinal;
-      if(typeof opener!=='function')throw new Error('profile opener unavailable');
-      const pending=opener(uid,{kind:'admin-directory',returnPoint:point});
-      forceDirectoryProfileSurface();
-      Promise.resolve(pending).then(forceDirectoryProfileSurface).catch(err=>{console.error('directory profile open',err);showCustomAlert?.('خطأ','تعذر تحميل الملف الشخصي.');});
-      requestAnimationFrame(forceDirectoryProfileSurface);
-    }catch(err){console.error('directory profile open',err);showCustomAlert?.('خطأ','تعذر فتح الملف الشخصي.');}
-  };
-  function bindDirectoryProfileClicks(){
-    const box=document.getElementById('aaProfileDirectory');
-    if(!box||box.dataset.profileDirectBound==='1')return;
-    box.dataset.profileDirectBound='1';
-    box.addEventListener('click',e=>{
-      const card=e.target.closest?.('[data-aa-uid]');
-      if(!card||!box.contains(card))return;
-      e.preventDefault();
-      e.stopImmediatePropagation();
-      window.__aaOpenDirectoryStudentDirect(card.dataset.aaUid);
-    },true);
   }
 
   function renderFinalDirectory(){
@@ -13157,7 +13100,7 @@ window.__aaV9Cleanup=()=>clearInterval(v9Tick);
     if(membership==='enrolled')users=users.filter(u=>u.enrolledCourseIds.length>0);
     if(courseId!=='all')users=users.filter(u=>u.enrolledCourseIds.includes(String(courseId)));
     if(query)users=users.filter(u=>normalizeArabic(getUserName(u)).includes(query));
-    const viewedUid=String(window.__aaViewedProfileUid||'');
+    const viewedUid=String(window.profileState?.uid||window.__aaViewedProfileUid||'');
     users=users.filter(u=>String(u.id)!==viewedUid);
     users.sort((a,b)=>normalizeArabic(getUserName(a)).localeCompare(normalizeArabic(getUserName(b)),'ar'));
     const count=$('aaProfileDirectoryCount');if(count)count.textContent=`${users.length} حساب`;
@@ -13169,7 +13112,7 @@ window.__aaV9Cleanup=()=>clearInterval(v9Tick);
       if(photo)avatar=`<img src="${escapeHtml(photo)}" alt="" loading="lazy">`;
       else avatar=escapeHtml(name.trim().slice(0,1)||'م');
       const courseCount=u.enrolledCourseIds.length;
-      return `<button type="button" class="aa-profile-directory-card" data-aa-uid="${uid}" data-aa-vfinal-profile="1">
+      return `<button type="button" class="aa-profile-directory-card" data-aa-v10-uid="${uid}">
         <span class="aa-profile-directory-avatar">${avatar}</span>
         <span class="aa-profile-directory-copy">
           <strong>${escapeHtml(name)}</strong>
@@ -13178,8 +13121,14 @@ window.__aaV9Cleanup=()=>clearInterval(v9Tick);
         <i class="fas fa-chevron-left"></i>
       </button>`;
     }).join('');
-    bindDirectoryProfileClicks();
-    box.querySelectorAll('[data-aa-uid]').forEach(btn=>{ btn.onclick=null; });
+    box.querySelectorAll('[data-aa-v10-uid]').forEach(btn=>{
+      btn.addEventListener('click',e=>{
+        e.preventDefault();
+        const uid=btn.dataset.aaV10Uid;
+        window.__aaViewedProfileUid=uid;
+        if(typeof window.aaOpenProfile==='function')window.aaOpenProfile(uid,{kind:'admin-directory',returnPoint:profileSelfReturnPoint()});
+      });
+    });
   }
 
   async function loadFinalDirectory(){
@@ -15549,6 +15498,21 @@ if(!window.__aaStableNotifStarted){window.__aaStableNotifStarted=true;window.Ana
     ['userProfilePage','ananasV10ProfilePage','ananasPrivateProfileOverlay','ananasCanonicalProfilePage'].forEach(id=>{const e=$(id);if(e){e.classList.remove('active');e.style.setProperty('display','none','important')}});
     document.querySelectorAll('[data-aa-legacy-profile]').forEach(e=>{e.classList.remove('active');e.style.setProperty('display','none','important')});
   }
+  function syncDirectoryViewedCard(){
+    const viewed=String(window.__aaViewingProfileUid||window.profileState?.uid||'');
+    document.querySelectorAll('#aaProfileDirectory [data-aa-uid],#profileDirectoryGrid [data-profile-target],#aaProfileDirectoryPanel [data-aa-uid]').forEach(card=>{
+      const uid=String(card.dataset.aaUid||card.dataset.profileTarget||'');
+      card.style.display=(viewed&&uid===viewed)?'none':'';
+    });
+  }
+  function resetProfileViewport(page){
+    if(!page)return;
+    page.scrollTop=0;
+    page.style.setProperty('z-index','131500','important');
+    page.style.setProperty('visibility','visible','important');
+    requestAnimationFrame(()=>{try{page.scrollTo({top:0,left:0,behavior:'auto'});}catch(_){page.scrollTop=0;}});
+  }
+
   function getPage(){
     let page=$('aaRebuiltProfilePage');
     if(page && !page.querySelector('#aaProfileName')){
@@ -15657,7 +15621,7 @@ if(!window.__aaStableNotifStarted){window.__aaStableNotifStarted=true;window.Ana
       }
     }
     out.portfolio=(portfolio?.docs||[]).map(d=>({id:d.id,...(d.data()||{})})).filter(x=>x.deleted!==true);
-    out.courses=(enrolled?.docs||[]).map(d=>({id:d.id,...(d.data()||{})})).filter(x=>catalog.validCourseIds.has(x.id));
+    out.courses=(enrolled?.docs||[]).map(d=>({id:d.id,...(d.data()||{})})).filter(x=>catalog.validCourseIds.has(x.id)&&x.codeDeleted!==true&&x.accessBlocked!==true);
     for(const x of (completedAssignments?.docs||[]).map(d=>({id:d.id,...(d.data()||{})}))) if(x.xpEarned!==undefined) out.xp+=num(x.xpEarned);
     return out;
   }
@@ -15667,7 +15631,7 @@ if(!window.__aaStableNotifStarted){window.__aaStableNotifStarted=true;window.Ana
     const photo=p.photoURL||p.photoUrl||p.photo||currentUser?.photoURL||'';
     const isPrivate=p.profilePublic===false;
     if($('aaProfileName'))$('aaProfileName').textContent=name;
-    if($('aaProfileEmail')){const emailEl=$('aaProfileEmail');emailEl.textContent=p.email||currentUser?.email||'—';emailEl.classList.toggle('aa-private-email',isPrivate&&!isSelf&&!isAdmin);}
+    if($('aaProfileEmail'))$('aaProfileEmail').textContent=isPrivate&&!isSelf?(isAdmin?'حساب خاص — المشرف يرى جميع البيانات':'حساب خاص'):(p.email||currentUser?.email||'—');
     if($('aaProfileBadge')){$('aaProfileBadge').className='aa-profile-badge '+(isPrivate?'private':'public');$('aaProfileBadge').innerHTML=isPrivate?'<i class="fas fa-lock"></i> الحساب خاص':'<i class="fas fa-eye"></i> الحساب عام';}
     if($('aaProfileAvatar'))$('aaProfileAvatar').innerHTML=photo?`<img src="${esc(photo)}" alt="${esc(name)}">`:esc(name.charAt(0));
     if($('aaProfileBack'))$('aaProfileBack').style.display='inline-flex';
@@ -15681,11 +15645,15 @@ if(!window.__aaStableNotifStarted){window.__aaStableNotifStarted=true;window.Ana
     if(requestToken!==state.token)return;
     if(p.profilePublic===false&&!isSelf&&!isAdmin){
       ['aaProfileXP','aaProfileLessons','aaProfileQuizzes','aaProfileWorks'].forEach(id=>$(id)&&($(id).textContent='—'));
-      $('aaProfileData')&&($('aaProfileData').innerHTML=`<div class="aa-private-data-v22"><div class="aa-profile-row allowed"><strong>الاسم</strong><span>${esc(p.displayName||p.name||'مستخدم')}</span></div><div class="aa-profile-row private-row"><strong>البريد الإلكتروني</strong><span class="aa-private-obscured">••••••••••</span></div><div class="aa-private-row-cover"><div class="aa-profile-row"><strong>رقم الهاتف</strong><span>••••••••</span></div><div class="aa-profile-row"><strong>الجنس</strong><span>••••</span></div><div class="aa-profile-row"><strong>الحالة</strong><span>••••</span></div><div class="aa-profile-row"><strong>تاريخ التسجيل</strong><span>••••••••</span></div><div class="aa-private-inline-lock"><i class="fas fa-lock"></i><strong>هذا الحساب خاص</strong><span>لا تظهر للطلاب إلا الصورة والاسم. صاحب الحساب والمشرف يستطيعان رؤية جميع البيانات.</span></div></div></div>`);
-      const curtain='<div class="aa-private-curtain-v21"><div class="aa-private-blur-v21"></div><div class="aa-private-preview-v22"><div class="row wide"></div><div class="row"></div><div class="row"></div><div class="row wide"></div></div><div class="aa-private-card-v21"><i class="fas fa-lock"></i><strong>هذا الحساب خاص</strong><span>للطلبة تظهر صورة الحساب واسمه فقط، وتُعرض بقية البيانات بشكل ضبابي للحفاظ على الخصوصية. صاحب الحساب والمشرف يستطيعان رؤية جميع البيانات.</span></div></div>';
+      const email=p.email||'غير متوفر';
+      const privateData=`<div class="aa-profile-row"><strong>الاسم</strong><span>${esc(p.displayName||p.name||'مستخدم')}</span></div><div class="aa-profile-row aa-private-blurred-row"><strong>البريد الإلكتروني</strong><span>${esc(email)}</span></div><div class="aa-profile-row aa-private-blurred-row"><strong>رقم الهاتف</strong><span>${esc(p.phone||'غير مضاف')}</span></div><div class="aa-profile-row aa-private-blurred-row"><strong>الجنس</strong><span>${esc(p.gender==='female'?'أنثى':p.gender==='male'?'ذكر':'غير محدد')}</span></div><div class="aa-profile-row aa-private-blurred-row"><strong>تاريخ التسجيل</strong><span>${esc(dateText(p.createdAt))}</span></div>`;
+      $('aaProfileData')&&($('aaProfileData').innerHTML=`<div class="aa-private-data-wrap">${privateData}<div class="aa-private-overlay-note"><i class="fas fa-lock"></i><strong>هذا الحساب خاص</strong><span>تظهر للطلاب صورة الحساب واسمه فقط، أما البريد الإلكتروني وبقية البيانات فهي مخفية خلف ستارة تمويه. صاحب الحساب والمشرف يستطيعان رؤية جميع البيانات.</span></div></div>`);
+      const curtain='<div class="aa-private-curtain-v21"><div class="aa-private-blur-v21"></div><div class="aa-private-preview-v22"><div class="row wide"></div><div class="row"></div><div class="row"></div><div class="row wide"></div></div><div class="aa-private-card-v21"><i class="fas fa-lock"></i><strong>هذا الحساب خاص</strong><span>تظهر للطلاب صورة الحساب واسمه فقط، وبقية البيانات مغلقة خلف ستارة تمويه. صاحب الحساب والمشرف يستطيعان رؤية جميع البيانات.</span></div></div>';
       ['aaProfileCourses','aaProfileLessonList','aaProfileQuizList','aaProfileActivity','aaProfileGallery'].forEach(id=>$(id)&&($(id).innerHTML=curtain));
+      if($('aaProfileEmail')){ $('aaProfileEmail').textContent=email; $('aaProfileEmail').classList.add('aa-private-header-blur'); }
       return;
     }
+    $('aaProfileEmail')?.classList.remove('aa-private-header-blur');
     $('aaProfileXP')&&($('aaProfileXP').textContent=num(live.xp).toLocaleString('ar-SA'));
     $('aaProfileLessons')&&($('aaProfileLessons').textContent=live.lessons.length);
     $('aaProfileQuizzes')&&($('aaProfileQuizzes').textContent=live.quizzes.length);
@@ -15698,6 +15666,10 @@ if(!window.__aaStableNotifStarted){window.__aaStableNotifStarted=true;window.Ana
     $('aaProfileActivity')&&($('aaProfileActivity').innerHTML=rowList(activities.slice(0,100).map(x=>`<div class="aa-profile-row"><strong>${esc(x.t)}</strong><small>${esc(dateText(x.d))}</small></div>`),'لا يوجد نشاط حالي.'));
     const cards=[...live.portfolio.map(x=>({kind:'portfolio',...x})),...live.assignmentWorks.map(x=>({kind:'assignment',...x}))];
     $('aaProfileGallery')&&($('aaProfileGallery').innerHTML=rowList(cards.map(x=>{const imgs=Array.isArray(x.images)?x.images.filter(Boolean):(x.imageUrl?[x.imageUrl]:[]),img=imgs[0]||'';return x.kind==='assignment'?`<article class="aa-profile-work"><div class="aa-profile-cover">${img?`<img src="${esc(img)}" alt="">`:'<i class="fas fa-images"></i>'}</div><div class="aa-profile-work-body"><strong>${esc(x.assignmentTitle||x.title||'واجب')}</strong><small>${esc(x.courseTitle||'')}<br>${x.approved?'✅ معتمد':'⏳ قيد المراجعة'}${imgs.length>1?` · ${imgs.length} صور`:''}</small><button type="button" class="aa-profile-view-work" data-kind="assignment" data-course="${esc(x.courseId||'')}" data-assignment="${esc(x.assignmentId||'')}" data-work="${esc(x.workId||x.id||'')}"><i class="fas fa-eye"></i> عرض العمل</button></div></article>`:`<article class="aa-profile-work"><div class="aa-profile-cover">${img?`<img src="${esc(img)}" alt="">`:'<i class="fas fa-images"></i>'}</div><div class="aa-profile-work-body"><strong>${esc(x.title||'عمل')}</strong><small>${esc(x.type||'عمل شخصي')}${x.description?`<br>${esc(x.description)}`:''}${imgs.length>1?`<br>${imgs.length} صور`:''}</small><button type="button" class="aa-profile-view-work" data-kind="portfolio" data-user="${esc(uid)}" data-work="${esc(x.id||'')}"><i class="fas fa-eye"></i> عرض العمل</button></div></article>`;}),'لا توجد أعمال منشورة حاليًا.'));
+  }
+
+  if(!document.getElementById('aa-profile-privacy-final-style')){
+    const st=document.createElement('style');st.id='aa-profile-privacy-final-style';st.textContent=`#aaRebuiltProfilePage .aa-private-header-blur{filter:blur(6px);opacity:.72;user-select:none;}#aaRebuiltProfilePage .aa-private-data-wrap{position:relative;overflow:hidden;border-radius:16px;}#aaRebuiltProfilePage .aa-private-data-wrap .aa-private-blurred-row{filter:blur(6px);opacity:.55;user-select:none;}#aaRebuiltProfilePage .aa-private-overlay-note{position:absolute;inset:10px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:7px;padding:20px;text-align:center;border-radius:16px;background:rgba(8,10,18,.52);backdrop-filter:blur(4px);color:var(--text-primary);border:1px solid var(--border);z-index:3;}#aaRebuiltProfilePage .aa-private-overlay-note i{font-size:1.35rem;color:var(--accent1);}#aaRebuiltProfilePage .aa-private-overlay-note strong{font-size:1rem;}#aaRebuiltProfilePage .aa-private-overlay-note span{font-size:.8rem;color:var(--text-muted);line-height:1.7;max-width:520px;}`;document.head.appendChild(st);
   }
 
   if(!document.getElementById('aa-profile-loading-style')){
@@ -15745,7 +15717,6 @@ if(!window.__aaStableNotifStarted){window.__aaStableNotifStarted=true;window.Ana
     const point=state.returnPoint||null;
     state.token++; state.openUid=null; state.opening=null;
     const page=$('aaRebuiltProfilePage');
-    window.__aaViewedProfileUid='';
     page?.classList.remove('active');
     document.body.classList.remove('aa-profile-open');
     if(point?.type==='self-profile'&&point.uid){
@@ -15795,8 +15766,8 @@ if(!window.__aaStableNotifStarted){window.__aaStableNotifStarted=true;window.Ana
       const page=getPage();
       page.classList.add('active');
       document.body.classList.add('aa-profile-open');
-      window.__aaViewedProfileUid=uid;
-      try{page.scrollTop=0;page.querySelector('.aa-profile-shell,.aa-profile-page-inner,.profile-page-inner')?.scrollTo?.(0,0);window.scrollTo?.(0,0)}catch(_){}
+      resetProfileViewport(page);
+      syncDirectoryViewedCard();
       setProfileLoading(page,true);
       if(window.profileState){window.profileState.uid=uid;window.profileState.isSelf=uid===currentUser?.uid;window.profileState.source={kind:opts.kind||'public'};window.profileState.returnPoint=opts.returnPoint||window.profileReturnPoint?.()||null;window.profileState.busy=false;}
 
@@ -15869,13 +15840,13 @@ if(!window.__aaStableNotifStarted){window.__aaStableNotifStarted=true;window.Ana
 
   // Canonical chat/assignment/profile routing: exactly one delegated path.
   document.addEventListener('click',function(e){
-    const node=e.target.closest?.('[data-profile-uid],.chat-msg .chat-profile-avatar,.chat-msg .chat-profile-name,.chat-msg .msg-header .u,.assignment-submitter[data-profile-uid]');
+    const node=e.target.closest?.('[data-profile-uid],.chat-msg .chat-profile-avatar,.chat-msg .chat-profile-name,.chat-msg .msg-header .u,.assignment-submitter[data-profile-uid],[data-aa-uid]');
     if(!node)return;
     const msg=node.closest?.('.chat-msg');
     let uid=node.dataset.profileUid||node.closest('[data-profile-uid]')?.dataset.profileUid||node.dataset.aaUid||'';
     let kind='link',rp=typeof profileReturnPoint==='function'?profileReturnPoint():null;
-    if(node.matches?.('[data-aa-uid]'))return;
-    if(node.closest?.('.assignment-submitter')){kind='assignment-submitter';rp={type:'assignment-detail',courseId:window.activeCourseId||activeCourseId||null,assignmentId:window.activeAssignmentDetailId||$('courseAssignmentDetailPage')?.dataset.assignmentId||null};}
+    if(node.matches?.('[data-aa-uid]')){kind='admin-directory';rp=profileSelfReturnPoint();}
+    else if(node.closest?.('.assignment-submitter')){kind='assignment-submitter';rp={type:'assignment-detail',courseId:window.activeCourseId||activeCourseId||null,assignmentId:window.activeAssignmentDetailId||$('courseAssignmentDetailPage')?.dataset.assignmentId||null};}
     else if(node.closest?.('.chat-msg')){kind='chat';rp={type:'chat',courseId:window.activeCourseId||activeCourseId||null};}
     if(!uid&&msg?.dataset.messageId&&activeCourseId){
       e.preventDefault();e.stopImmediatePropagation();
@@ -15896,74 +15867,5 @@ if(!window.__aaStableNotifStarted){window.__aaStableNotifStarted=true;window.Ana
 
 })();
 </script>
-
-<script id="aa-final-directory-profile-open-fix">
-(function(){
-  'use strict';
-  const $=id=>document.getElementById(id);
-  const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-  function forceProfileSurface(){
-    const page=$('aaRebuiltProfilePage');
-    if(!page)return null;
-    ['userProfilePage','ananasV10ProfilePage','ananasPrivateProfileOverlay','ananasCanonicalProfilePage'].forEach(id=>{
-      const e=$(id); if(e && e!==page){e.classList.remove('active');e.style.setProperty('display','none','important');e.style.setProperty('pointer-events','none','important');}
-    });
-    page.classList.add('active');
-    page.style.setProperty('display','block','important');
-    page.style.setProperty('visibility','visible','important');
-    page.style.setProperty('pointer-events','auto','important');
-    page.style.setProperty('z-index','2147483000','important');
-    document.body.classList.add('aa-profile-open');
-    document.body.style.removeProperty('overflow');
-    document.documentElement.style.removeProperty('overflow');
-    try{page.scrollTop=0;page.querySelector('.aa-profile-shell')?.scrollTo?.(0,0);window.scrollTo(0,0);}catch(_){ }
-    return page;
-  }
-  function openDirectoryProfile(uid){
-    uid=String(uid||''); if(!uid || !currentUser)return;
-    window.__aaViewedProfileUid=uid;
-    const point=typeof profileSelfReturnPoint==='function'?profileSelfReturnPoint():null;
-    const runner=window.__aaRunOnceAction||((_,fn)=>Promise.resolve().then(fn));
-    return runner('directory-profile-final-'+uid, async()=>{
-      const opener=window.__aaFastProfileOpenV36||window.aaOpenProfile||window.openPublicProfileFinal;
-      if(typeof opener!=='function')return;
-      await opener(uid,{kind:'admin-directory',returnPoint:point});
-      const page=forceProfileSurface();
-      if(page){
-        try{page.scrollTop=0;window.scrollTo({top:0,left:0,behavior:'auto'});}catch(_){ }
-      }
-    });
-  }
-  window.__aaOpenDirectoryProfileFinal=openDirectoryProfile;
-
-  const box=$('aaProfileDirectory');
-  // Directory cards use their own direct onclick handler; do not intercept them at the container level.
-
-  const oldAAOpen=window.aaOpenProfile;
-  if(typeof oldAAOpen==='function' && !oldAAOpen.__aaFinalSurfaceFix){
-    const wrapped=async function(uid,opts={}){
-      const r=await oldAAOpen.apply(this,arguments);
-      const page=forceProfileSurface();
-      if(page){try{page.scrollTop=0;window.scrollTo({top:0,left:0,behavior:'auto'});}catch(_){}}
-      return r;
-    };
-    wrapped.__aaFinalSurfaceFix=true;
-    wrapped.__original=oldAAOpen;
-    window.aaOpenProfile=wrapped;
-    window.openPublicProfileFinal=wrapped;
-    window.openStudentProfile=wrapped;
-    window.viewProfileByUserId=wrapped;
-    window.openChatProfileV13=wrapped;
-    window.openChatProfileV12=wrapped;
-  }
-
-  document.head.insertAdjacentHTML('beforeend',`<style id="aa-final-profile-surface-fix">
-    #aaRebuiltProfilePage{display:none!important;visibility:hidden!important;pointer-events:none!important;z-index:2147483000!important;}
-    #aaRebuiltProfilePage.active{display:block!important;visibility:visible!important;pointer-events:auto!important;z-index:2147483000!important;}
-    #userProfilePage.active,#ananasV10ProfilePage.active,#ananasPrivateProfileOverlay.active,#ananasCanonicalProfilePage.active{z-index:1!important;}
-  </style>`);
-})();
-</script>
-
 </body>
 </html>
