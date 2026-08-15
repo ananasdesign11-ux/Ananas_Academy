@@ -5069,37 +5069,46 @@ window.AnanasTimers=window.AnanasTimers||(()=>{
         function switchCoursePage(page) {
             if(currentCoursePage === 'lessonPlayer' && page !== 'lessonPlayer') stopLessonForNavigation();
             currentCoursePage = page;
-            document.getElementById('courseDashboard').style.display = 'none';
-            if(page!=='overview') document.getElementById('courseOverviewContainer').style.display='none';
-            document.getElementById('courseLearningView').classList.remove('active');
-            document.getElementById('fullChatPage').classList.remove('active');
-            document.getElementById('courseLessonsPage').classList.remove('active');
-            document.getElementById('courseLessonPlayerPage').classList.remove('active');
+            const detail=document.getElementById('courseDetailView');
+            if(detail) detail.style.display='flex';
+            const overview=document.getElementById('courseOverviewContainer');
+            const dashboard=document.getElementById('courseDashboard');
+            const lessons=document.getElementById('courseLessonsPage');
+            const lessonPlayerPage=document.getElementById('courseLessonPlayerPage');
+            const quizzes=document.getElementById('courseQuizzesPage');
+            const assignments=document.getElementById('courseAssignmentsPage');
+            const chat=document.getElementById('courseChatPage');
+            if(dashboard) dashboard.style.display='none';
+            if(overview && page!=='overview') overview.style.display='none';
+            if(lessons){lessons.classList.remove('active');lessons.style.display='none';}
+            if(lessonPlayerPage){lessonPlayerPage.classList.remove('active');lessonPlayerPage.style.display='none';}
+            document.getElementById('courseLearningView')?.classList.remove('active');
+            document.getElementById('fullChatPage')?.classList.remove('active');
             document.getElementById('courseAssignmentDetailPage')?.classList.remove('active');
-            document.getElementById('courseQuizzesPage').style.display = 'none';
-            document.getElementById('courseAssignmentsPage').style.display = 'none';
-            document.getElementById('courseChatPage').style.display = 'none';
+            if(quizzes){quizzes.style.display='none';quizzes.classList.remove('active');}
+            if(assignments){assignments.style.display='none';assignments.classList.remove('active');}
+            if(chat){chat.style.display='none';chat.classList.remove('active');}
 
             if(page === 'overview') {
-                document.getElementById('courseOverviewContainer').style.display='block';
-                document.getElementById('courseDashboard').style.display='none';
+                if(overview) overview.style.display='block';
+                if(dashboard) dashboard.style.display='none';
             } else if(page === 'dashboard') {
-                document.getElementById('courseOverviewContainer').style.display='none';
-                document.getElementById('courseDashboard').style.display = 'flex';
+                if(overview) overview.style.display='none';
+                if(dashboard){dashboard.style.display='flex';dashboard.classList.add('active');}
             } else if(page === 'learning') {
-                document.getElementById('courseLessonsPage').classList.add('active');
-                loadLessonsForCourse(activeCourseId);
+                if(lessons){lessons.style.display='block';lessons.classList.add('active');}
+                void loadLessonsForCourse(activeCourseId);
             } else if(page === 'lessonPlayer') {
-                document.getElementById('courseLessonPlayerPage').classList.add('active');
+                if(lessonPlayerPage){lessonPlayerPage.style.display='block';lessonPlayerPage.classList.add('active');}
             } else if(page === 'quizzes') {
-                document.getElementById('courseQuizzesPage').style.display = 'block';
-                loadQuizzesPage(activeCourseId);
+                if(quizzes){quizzes.style.display='block';quizzes.classList.add('active');}
+                void loadQuizzesPage(activeCourseId);
             } else if(page === 'assignments') {
-                document.getElementById('courseAssignmentsPage').style.display = 'block';
-                loadAssignmentsPage(activeCourseId);
+                if(assignments){assignments.style.display='block';assignments.classList.add('active');}
+                void loadAssignmentsPage(activeCourseId);
             } else if(page === 'chat') {
-                document.getElementById('courseChatPage').style.display = 'block';
-                loadChatPage(activeCourseId);
+                if(chat){chat.style.display='block';chat.classList.add('active');}
+                void loadChatPage(activeCourseId);
             }
             setMobileNavActive(page === 'lessonPlayer' ? 'learning' : page);
             persistCourseState();
@@ -5808,59 +5817,97 @@ window.AnanasTimers=window.AnanasTimers||(()=>{
             return (h ? String(h).padStart(2,'0')+':' : '') + String(m).padStart(2,'0') + ':' + String(s).padStart(2,'0');
         }
 
+        const lessonLoadState = window.__ananasLessonLoadState = window.__ananasLessonLoadState || {inflight:new Map(),cache:new Map()};
+
+        function renderLessonsPageData(courseId, container, sidebar, newCache, completedMap){
+            if(String(activeCourseId||'')!==String(courseId||'')) return;
+            lessonListCache = newCache;
+            const countEl=document.getElementById('lessonSidebarCount');
+            if(countEl) countEl.textContent=`${Math.max(0,newCache.length)} حصة`;
+            if(!newCache.length){
+                container.innerHTML='<p style="color:var(--text-muted);text-align:center;grid-column:1/-1;padding:50px;">لا توجد حصص مضافة بعد.</p>';
+                if(sidebar) sidebar.innerHTML='';
+                container.dataset.loaded='1';
+                container.dataset.courseId=String(courseId);
+                return;
+            }
+            const fragment=document.createDocumentFragment();
+            newCache.forEach((lesson,index)=>{
+                const done=!!completedMap[lesson.id],title=lesson.titleAr||lesson.title||'حصة';
+                const card=document.createElement('div');
+                card.className='full-page-card lesson-card'+(done?' completed':'');
+                card.dataset.id=lesson.id;
+                const progressEntry=window.lessonProgressCache?.[lesson.id]||{};
+                card.innerHTML=`<div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start;">
+                    <div style="cursor:pointer;flex:1;min-width:0;"><div style="font-size:1.08rem;font-weight:800;margin-bottom:7px;">${index+1}. ${escapeHtml(title)}</div><div class="lesson-meta" data-lesson-meta style="color:${done?'#2ecc71':'var(--text-muted)'};font-size:.86rem;">${Math.max(0,Number(lesson.duration)||0)} دقيقة · ${Math.max(0,Number(lesson.xpReward)||0)} XP ${done?'· ✓ مكتملة':''} ${Number(progressEntry.percent||0)>0&&!done?`· ${Math.round(Number(progressEntry.percent)||0)}%`:''}</div></div>
+                    ${isAdmin?`<div class="admin-actions admin-only show" style="display:flex;gap:6px;"><button title="تعديل" onclick="event.stopPropagation();editLesson('${courseId}','${lesson.id}')" style="border:1px solid var(--border);background:var(--bg-secondary);color:var(--text-primary);width:36px;height:36px;border-radius:50%;cursor:pointer;"><i class="fas fa-edit"></i></button><button title="حذف" onclick="event.stopPropagation();deleteLesson('${courseId}','${lesson.id}')" style="border:1px solid var(--border);background:var(--bg-secondary);color:#e74c3c;width:36px;height:36px;border-radius:50%;cursor:pointer;"><i class="fas fa-trash"></i></button></div>`:''}
+                </div><div class="card-actions"><button type="button" onclick="event.stopPropagation();openLessonPlayer('${courseId}','${lesson.id}')"><i class="fas fa-play"></i> مشاهدة الحصة</button></div>`;
+                card.onclick=()=>openLessonPlayer(courseId,lesson.id);
+                fragment.appendChild(card);
+            });
+            container.replaceChildren(fragment);
+            container.dataset.loaded='1';
+            container.dataset.courseId=String(courseId);
+            renderLessonPlayerList();
+        }
+
         async function loadLessonsForCourse(courseId) {
-            const container=document.getElementById('lessonsCardsContainer'),sidebar=document.getElementById('lessonPlayerList'); if(!container||!courseId)return;
-            if(!container.querySelector('.lesson-card')&&!container.dataset.loaded){container.innerHTML='<div style="display:flex;justify-content:center;align-items:center;gap:10px;padding:45px;color:var(--text-muted);grid-column:1/-1;"><span class="mini-spin" style="display:inline-block;width:22px;height:22px;border-radius:50%;border:3px solid var(--border);border-top-color:var(--accent1);animation:spin 1s linear infinite;"></span><span>جاري تحميل الحصص...</span></div>';}
-            try{
-                let snap;
-                try {
-                    snap=await db.collection('courses').doc(courseId).collection('lessons').orderBy('order','asc').get();
-                } catch(orderErr) {
-                    console.warn('Lessons order query failed, using fallback:', orderErr);
-                    snap=await db.collection('courses').doc(courseId).collection('lessons').get();
-                }
-                const docs=snap.docs.slice().sort((a,b)=>{
-                    const ao=Number(a.data()?.order); const bo=Number(b.data()?.order);
-                    if(Number.isFinite(ao)&&Number.isFinite(bo)&&ao!==bo)return ao-bo;
-                    if(Number.isFinite(ao))return -1; if(Number.isFinite(bo))return 1;
-                    return String(a.id).localeCompare(String(b.id));
-                });
-                const newCache=[];docs.forEach((doc,index)=>newCache.push({id:doc.id,...doc.data(),index:index+1}));
-                lessonListCache=newCache;document.getElementById('lessonSidebarCount').textContent=`${Math.max(0,newCache.length)} حصة`;
-                const completedMap={};
-                if(currentUser){
-                    const completedSnap=await db.collection('users').doc(currentUser.uid).collection('completedLessons').get();
-                    completedSnap.forEach(d=>completedMap[d.id]=true);
-                    try{
-                        const progressSnap=await db.collection('users').doc(currentUser.uid).collection('courseProgress').doc(courseId).collection('lessons').get();
-                        window.lessonProgressCache = window.lessonProgressCache || {};
-                        progressSnap.forEach(d=>{
-                            const pd=d.data()||{};
-                            const pct=Number(pd.percent||pd.progress||0);
-                            window.lessonProgressCache[d.id]={percent:pct,position:Number(pd.lastPosition||0),duration:Number(pd.duration||0)};
-                        });
-                    }catch(progressErr){console.warn('تعذر قراءة تقدم الحصص:',progressErr);}
-                }
-                if(!newCache.length){container.innerHTML='<p style="color:var(--text-muted);text-align:center;grid-column:1/-1;padding:50px;">لا توجد حصص مضافة بعد.</p>';if(sidebar)sidebar.innerHTML='';container.dataset.loaded='1';return;}
-                const fragment=document.createDocumentFragment();
-                newCache.forEach((lesson,index)=>{
-                    const done=!!completedMap[lesson.id],title=lesson.titleAr || 'حصة';
-                    const card=document.createElement('div');card.className='full-page-card lesson-card'+(done?' completed':'');card.dataset.id=lesson.id;
-                    const progressEntry = window.lessonProgressCache?.[lesson.id] || {};
-                    const progressPercent = Math.max(0, Math.min(100, Number(progressEntry.percent || progressEntry.progress || 0)));
-                    const readyToComplete = false;
-                    card.innerHTML=`<div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start;">
-                        <div style="cursor:pointer;flex:1;min-width:0;"><div style="font-size:1.08rem;font-weight:800;margin-bottom:7px;">${index+1}. ${escapeHtml(title||'حصة')}</div><div class="lesson-meta" data-lesson-meta style="color:${done?'#2ecc71':'var(--text-muted)'};font-size:.86rem;">${Math.max(0,Number(lesson.duration)||0)} دقيقة · ${Math.max(0,Number(lesson.xpReward)||0)} XP ${done?'· ✓ مكتملة':''}</div></div>
-                        ${isAdmin?`<div class="admin-actions admin-only show" style="display:flex;gap:6px;"><button title="تعديل" onclick="event.stopPropagation();editLesson('${courseId}','${lesson.id}')" style="border:1px solid var(--border);background:var(--bg-secondary);color:var(--text-primary);width:36px;height:36px;border-radius:50%;cursor:pointer;"><i class="fas fa-edit"></i></button><button title="حذف" onclick="event.stopPropagation();deleteLesson('${courseId}','${lesson.id}')" style="border:1px solid var(--border);background:var(--bg-secondary);color:#e74c3c;width:36px;height:36px;border-radius:50%;cursor:pointer;"><i class="fas fa-trash"></i></button></div>`:''}
-                    </div>
-                    <div class="card-actions">
-                        <button type="button" onclick="event.stopPropagation();openLessonPlayer('${courseId}','${lesson.id}')"><i class="fas fa-play"></i> مشاهدة الحصة</button>
-                        ${readyToComplete ? `<button type="button" class="lesson-manual-complete-btn" data-lesson-complete="${lesson.id}" onclick="event.stopPropagation();completeLessonManually('${courseId}','${lesson.id}')"><i class="fas fa-check-circle"></i> إتمام الحصة</button>` : ''}
-                    </div>`;
-                    card.onclick=()=>openLessonPlayer(courseId,lesson.id);fragment.appendChild(card);
-                });
-                container.replaceChildren(fragment);container.dataset.loaded='1';renderLessonPlayerList();
-            }catch(e){console.error('Lessons load error:',e);if(!container.querySelector('.lesson-card'))container.innerHTML='<p style="color:#e74c3c;text-align:center;grid-column:1/-1;padding:40px;">حدث خطأ أثناء تحميل الحصص.</p>';}
+            courseId=String(courseId||window.activeCourseId||activeCourseId||'').trim();
+            const container=document.getElementById('lessonsCardsContainer'),sidebar=document.getElementById('lessonPlayerList');
+            const page=document.getElementById('courseLessonsPage'),detail=document.getElementById('courseDetailView');
+            if(!container||!page) return;
+            if(!courseId){
+                container.innerHTML='<div style="padding:45px;text-align:center;color:var(--text-muted);">جاري تجهيز الدورة...</div>';
+                window.AnanasTimers?.timeout?.('retryLessonsAfterCourseReady',()=>{const cid=window.activeCourseId||activeCourseId;if(cid)loadLessonsForCourse(cid)},140);
+                return;
+            }
+
+            page.classList.add('active');
+            page.style.display='block';
+            if(detail){detail.style.display='flex';detail.classList.add('course-detail-ready');}
+            container.dataset.courseId=courseId;
+
+            const cached=lessonLoadState.cache.get(courseId);
+            if(cached && Date.now()-cached.at<30000){
+                renderLessonsPageData(courseId,container,sidebar,cached.lessons,cached.completedMap);
+                return;
+            }
+            if(lessonLoadState.inflight.has(courseId)) return lessonLoadState.inflight.get(courseId);
+
+            if(!container.querySelector('.lesson-card')){
+                container.innerHTML='<div style="display:flex;justify-content:center;align-items:center;gap:10px;padding:45px;color:var(--text-muted);grid-column:1/-1;"><span class="mini-spin" style="display:inline-block;width:22px;height:22px;border-radius:50%;border:3px solid var(--border);border-top-color:var(--accent1);animation:spin 1s linear infinite;"></span><span>جاري تحميل الحصص...</span></div>';
+            }
+
+            const request=(async()=>{
+                try{
+                    const lessonPromise=(async()=>{
+                        try{return await db.collection('courses').doc(courseId).collection('lessons').orderBy('order','asc').get();}
+                        catch(orderErr){console.warn('Lessons order query failed, using fallback:',orderErr);return await db.collection('courses').doc(courseId).collection('lessons').get();}
+                    })();
+                    const completedPromise=currentUser?db.collection('users').doc(currentUser.uid).collection('completedLessons').get():Promise.resolve(null);
+                    const progressPromise=currentUser?db.collection('users').doc(currentUser.uid).collection('courseProgress').doc(courseId).collection('lessons').get().catch(()=>null):Promise.resolve(null);
+                    const [snap,completedSnap,progressSnap]=await Promise.all([lessonPromise,completedPromise,progressPromise]);
+                    if(String(window.activeCourseId||activeCourseId||'')!==courseId) return;
+
+                    const docs=snap.docs.slice().sort((a,b)=>{
+                        const ao=Number(a.data()?.order),bo=Number(b.data()?.order);
+                        if(Number.isFinite(ao)&&Number.isFinite(bo)&&ao!==bo)return ao-bo;
+                        if(Number.isFinite(ao))return -1;if(Number.isFinite(bo))return 1;
+                        return String(a.id).localeCompare(String(b.id));
+                    });
+                    const newCache=docs.map((doc,index)=>({id:doc.id,...doc.data(),index:index+1}));
+                    const completedMap={};completedSnap?.forEach(d=>completedMap[d.id]=true);
+                    window.lessonProgressCache=window.lessonProgressCache||{};
+                    progressSnap?.forEach(d=>{const pd=d.data()||{};window.lessonProgressCache[d.id]={percent:Number(pd.percent??pd.progress??0)||0,position:Number(pd.lastPosition||0)||0,duration:Number(pd.duration||0)||0};});
+                    lessonLoadState.cache.set(courseId,{at:Date.now(),lessons:newCache,completedMap});
+                    renderLessonsPageData(courseId,container,sidebar,newCache,completedMap);
+                }catch(e){
+                    console.error('Lessons load error:',e);
+                    if(String(window.activeCourseId||activeCourseId||'')===courseId){container.innerHTML='<p style="color:#e74c3c;text-align:center;grid-column:1/-1;padding:40px;">حدث خطأ أثناء تحميل الحصص. حاول مرة أخرى.</p>';container.dataset.loaded='0';}
+                }finally{lessonLoadState.inflight.delete(courseId);}
+            })();
+            lessonLoadState.inflight.set(courseId,request);
+            return request;
         }
 
         function renderLessonPlayerList() {
@@ -14690,7 +14737,7 @@ async function readAll(){const u=uid();if(!u)return;const list=state.notificatio
 function lockModal(){document.body.classList.add('aa-v28-modal-open')}
 function unlockModal(){if(!document.querySelector('#aaN28Detail.open, .custom-alert-modal.active, .edit-modal.active, .auth-popup.active, #quizOverlay.active, #courseFileViewer.active, #aaCoursePortfolioModal.active, .ananas-modal-overlay.active, .ananas-quiz-v2.active, .ananas-v10-overlay.active'))document.body.classList.remove('aa-v28-modal-open')}
 function closeDetail(){$('aaN28Detail')?.classList.remove('open');unlockModal()}
-function openPage(){closeDetail();$('aaN28Dropdown')?.classList.remove('open');$('aaN28Bell')?.classList.remove('is-open');$('aaN28Page')?.classList.add('open');document.body.classList.add('aa-notifications-open') ;if(isAdmin){$('aaN28SendPanel').style.display='block';}render()}
+function openPage(){closeDetail();$('aaN28Dropdown')?.classList.remove('open');$('aaN28Bell')?.classList.remove('is-open');$('aaN28Page')?.classList.add('open');document.body.classList.add('aa-notifications-open');if(isAdmin){$('aaN28SendPanel').style.display='block';$('aaN28SendPanel').classList.remove('collapsed');void ensureAdminSenderData();}render()}
 function closePage(){$('aaN28Page')?.classList.remove('open');closeDetail();document.body.classList.remove('aa-notifications-open')}
 async function openDetail(id){const n=state.notifications.find(x=>x.id===id);if(!n)return;await read(id);$('aaN28Page')?.classList.add('open');document.body.classList.add('aa-notifications-open');const d=n.data||{};$('aaN28DetailTitle').textContent=n.title||'إشعار';$('aaN28DetailMeta').textContent=`${n.type||'إشعار'} • ${notificationDate(n)}`;$('aaN28DetailBody').textContent=n.body||'';const rr=$('aaN28DetailReason');rr.style.display=n.reason?'block':'none';rr.innerHTML=n.reason?`<strong>السبب</strong><div style="margin-top:5px">${esc(n.reason)}</div>`:'';const actions=$('aaN28DetailActions');actions.innerHTML='';
   if(n.type==='code_deleted'||n.type==='subscription_expired'){
@@ -14700,7 +14747,27 @@ async function openDetail(id){const n=state.notifications.find(x=>x.id===id);if(
   if(n.type==='assignment_approved'&&d.courseId&&d.assignmentId){const b=document.createElement('button');b.className='primary';b.textContent='فتح الواجب';b.onclick=async()=>{closeDetail();closePage();try{await window.openAssignmentDetail?.(d.courseId,d.assignmentId)}catch(_){}};actions.appendChild(b)}
   $('aaN28Detail').classList.add('open');lockModal();
 }
-async function loadUsers(){if(state.users.length)return;try{const s=await db.collection('users').get();state.users=s.docs.map(d=>({id:d.id,...(d.data()||{})})).filter(u=>u.id!==uid()).sort((a,b)=>String(a.displayName||a.name||a.email||'').localeCompare(String(b.displayName||b.name||b.email||''),'ar'))}catch(_){state.users=[]}}
+let recipientLoadPromise=null;
+async function loadUsers(){
+  if(state.users.length)return state.users;
+  if(recipientLoadPromise)return recipientLoadPromise;
+  recipientLoadPromise=(async()=>{
+    try{
+      const s=await db.collection('users').get();
+      state.users=s.docs.map(d=>({id:d.id,...(d.data()||{})})).filter(u=>u.id!==uid()).sort((a,b)=>String(a.displayName||a.name||a.email||'').localeCompare(String(b.displayName||b.name||b.email||''),'ar'));
+      return state.users;
+    }catch(e){console.warn('notification recipient load',e);state.users=[];return[];}
+    finally{recipientLoadPromise=null;}
+  })();
+  return recipientLoadPromise;
+}
+async function ensureAdminSenderData(){
+  if(!isAdmin)return;
+  const panel=$('aaN28SendPanel');if(!panel)return;
+  panel.style.display='block';
+  try{await Promise.all([refreshCourses(),loadUsers()]);fillSendData();}
+  catch(e){console.warn('admin sender init',e);renderRecipients();}
+}
 function renderRecipients(){const box=$('aaN28UserList'),search=String($('aaN28UserSearch')?.value||'').trim().toLowerCase();if(!box)return;let us=state.users.filter(u=>!search||String(u.displayName||u.name||u.email||'').toLowerCase().includes(search));box.innerHTML=us.length?us.slice(0,300).map(u=>`<label class="aaN28-recipient-row"><input type="checkbox" data-aa-v28-rec="${esc(u.id)}" ${state.selected.has(u.id)?'checked':''}><span class="aaN28-rec-avatar">${avatarMarkup(u.displayName||u.name||u.email||'مستخدم',u.photoURL||u.photoUrl||u.photo,u.id)}</span><span class="aaN28-rec-copy"><strong>${esc(u.displayName||u.name||'مستخدم')}</strong><small>${esc(u.email||'')}</small></span></label>`).join(''):'<div class="aaN28-empty">لا توجد حسابات مطابقة.</div>';box.querySelectorAll('[data-aa-v28-rec]').forEach(c=>c.addEventListener('change',()=>{if(c.checked)state.selected.add(c.dataset.aaV28Rec);else state.selected.delete(c.dataset.aaV28Rec);updateSelected()}));updateSelected()}
 function updateSelected(){const n=$('aaN28SelectedNote');if(n)n.textContent=`تم تحديد ${state.selected.size} حساب`}
 async function fillSendData(){const sel=$('aaN28CourseSelect');if(sel){sel.innerHTML='<option value="">اختر الدورة</option>'+state.courses.map(c=>`<option value="${esc(c.id)}">${esc(c.titleAr||c.title||'دورة')}</option>`).join('')}await loadUsers();renderRecipients()}
@@ -14731,7 +14798,7 @@ function bind(){
   $('aaN28PageClose')?.addEventListener('click',closePage);
   $('aaN28DetailClose')?.addEventListener('click',closeDetail);
   $('aaN28SendToggle')?.addEventListener('click',()=>{const p=$('aaN28SendPanel');p.classList.toggle('collapsed');});
-  $('aaN28SendMode')?.addEventListener('change',async e=>{const v=e.target.value;$('aaN28SpecificWrap').style.display=v==='specific'?'grid':'none';$('aaN28CourseWrap').style.display=v==='course'?'grid':'none';state.selected.clear();await fillSendData()});
+  $('aaN28SendMode')?.addEventListener('change',async e=>{const v=e.target.value;$('aaN28SpecificWrap').style.display=v==='specific'?'grid':'none';$('aaN28CourseWrap').style.display=v==='course'?'grid':'none';state.selected.clear();await ensureAdminSenderData();});
   $('aaN28UserSearch')?.addEventListener('input',renderRecipients);
   $('aaN28SelectVisible')?.addEventListener('click',()=>{document.querySelectorAll('#aaN28UserList input[data-aa-v28-rec]').forEach(c=>{c.checked=true;state.selected.add(c.dataset.aaV28Rec)});updateSelected()});
   $('aaN28ClearVisible')?.addEventListener('click',()=>{document.querySelectorAll('#aaN28UserList input[data-aa-v28-rec]').forEach(c=>{c.checked=false;state.selected.delete(c.dataset.aaV28Rec)});updateSelected()});
@@ -14740,7 +14807,16 @@ function bind(){
   window.addEventListener('resize',()=>window.aaN28PositionDropdown?.(),{passive:true});
   window.addEventListener('scroll',()=>window.aaN28PositionDropdown?.(),{passive:true,capture:true});
 }
-async function init(){removeLegacy();buildUi();bind();await refreshCourses();listen();if(isAdmin){$('aaN28SendPanel').style.display='block';$('aaN28SendPanel').classList.remove('collapsed');await fillSendData()}}
+async function init(){
+  removeLegacy();buildUi();bind();
+  await refreshCourses();
+  listen();
+  if(isAdmin){
+    $('aaN28SendPanel')?.style.removeProperty('display');
+    $('aaN28SendPanel')?.classList.remove('collapsed');
+    await ensureAdminSenderData();
+  }
+}
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init,{once:true});else init();
 
 /* ---------- Global modal curtain + freeze ---------- */
@@ -14782,7 +14858,15 @@ setupSignup();
 
 /* ---------- Avatar update after any auth/profile refresh ---------- */
 window.aaV28RefreshAvatar=function(){if(!currentUser)return;const p=currentUserProfile||{};const name=p.displayName||currentUser.displayName||currentUser.email?.split('@')[0]||'مستخدم';const photo=p.photoURL||p.photoUrl||p.photo||currentUser.photoURL||'';const b=$('authToggleBtn');if(!b)return;b.innerHTML=`${photo?`<span class="auth-user-avatar"><img src="${esc(photo)}" alt=""></span>`:`<span class="auth-user-avatar" style="background:${avatarColor(currentUser.uid)}">${esc(avatarInitial(name))}</span>`}<span id="authLabel" class="auth-user-name">${esc(name)}</span>`;b.title=name}
-if(auth?.onAuthStateChanged)auth.onAuthStateChanged(async u=>{setTimeout(async()=>{if(u){window.aaV28RefreshAvatar();if(window.isAdmin||isAdmin){$('aaN28SendPanel').style.display='block';if($('aaN28SendPanel').classList.contains('collapsed')===false)$('aaN28SendPanel').classList.remove('collapsed');await refreshCourses();await fillSendData()}}},600)});
+if(auth?.onAuthStateChanged)auth.onAuthStateChanged(async u=>{
+  if(!u)return;
+  window.aaV28RefreshAvatar();
+  if(window.isAdmin||isAdmin){
+    $('aaN28SendPanel')?.style.setProperty('display','block','important');
+    $('aaN28SendPanel')?.classList.remove('collapsed');
+    await ensureAdminSenderData();
+  }
+});
 
 /* ---------- Logo always returns to courses home ---------- */
 const logo=$('.logo');if(logo&&!logo.dataset.aaV28Home){logo.dataset.aaV28Home='1';logo.addEventListener('click',e=>{e.preventDefault();e.stopPropagation();closeDetail?.();$('aaN28Page')?.classList.remove('open');document.body.classList.remove('aa-notifications-open');try{activeCourseId=null;activeLessonId=null;}catch(_){}try{document.querySelector('#courseDetailView')?.style.setProperty('display','none','important')}catch(_){}try{mobileNavigate?.('courses')}catch(_){}try{renderCourses?.()}catch(_){}window.scrollTo?.(0,0);})}
@@ -15327,10 +15411,37 @@ if(!window.__aaStableNotifStarted){window.__aaStableNotifStarted=true;window.Ana
     document.querySelectorAll('[data-aa-legacy-profile]').forEach(e=>{e.classList.remove('active');e.style.setProperty('display','none','important')});
   }
   function getPage(){
-    if(typeof ensureProfilePage==='function') return ensureProfilePage();
     let page=$('aaRebuiltProfilePage');
+    if(page && !page.querySelector('#aaProfileName')){
+      page.remove();
+      page=null;
+    }
     if(page)return page;
-    page=document.createElement('div');page.id='aaRebuiltProfilePage';document.body.appendChild(page);return page;
+    page=document.createElement('div');
+    page.id='aaRebuiltProfilePage';
+    page.innerHTML=`<div class="aa-profile-shell">
+      <div class="aa-profile-hero">
+        <div class="aa-profile-avatar" id="aaProfileAvatar">م</div>
+        <div class="aa-profile-head-copy"><h1 id="aaProfileName">—</h1><p id="aaProfileEmail">—</p><span id="aaProfileBadge" class="aa-profile-badge"></span></div>
+        <div class="aa-profile-actions"><button id="aaProfileBack" type="button" class="aa-profile-btn"><i class="fas fa-arrow-right"></i><span>العودة</span></button><button id="aaProfileEdit" type="button" class="aa-profile-btn primary"><i class="fas fa-user-pen"></i><span>تعديل الملف</span></button><button id="aaProfileAddWork" type="button" class="aa-profile-btn primary"><i class="fas fa-plus"></i><span>إضافة عمل</span></button><button id="aaProfileLogout" type="button" class="aa-profile-btn danger"><i class="fas fa-right-from-bracket"></i><span>تسجيل الخروج</span></button></div>
+      </div>
+      <div class="aa-profile-stats"><div class="aa-profile-stat"><b id="aaProfileXP">—</b><span>نقاط الخبرة</span></div><div class="aa-profile-stat"><b id="aaProfileLessons">—</b><span>حصص مكتملة</span></div><div class="aa-profile-stat"><b id="aaProfileQuizzes">—</b><span>اختبارات مكتملة</span></div><div class="aa-profile-stat"><b id="aaProfileWorks">—</b><span>أعمال منشورة</span></div></div>
+      <div class="aa-profile-grid">
+        <section class="aa-profile-panel"><h2>البيانات الشخصية</h2><div id="aaProfileData" class="aa-profile-list"></div></section>
+        <section class="aa-profile-panel"><h2>الدورات المشتركة</h2><div id="aaProfileCourses" class="aa-profile-list"></div></section>
+        <section class="aa-profile-panel"><h2>إنجازات الحصص</h2><div id="aaProfileLessonList" class="aa-profile-list"></div></section>
+        <section class="aa-profile-panel"><h2>نتائج الاختبارات</h2><div id="aaProfileQuizList" class="aa-profile-list"></div></section>
+        <section class="aa-profile-panel full"><h2>سجل النشاط</h2><div id="aaProfileActivity" class="aa-profile-list"></div></section>
+        <section class="aa-profile-panel full"><div class="aa-profile-section-head"><div><h2>معرض الأعمال</h2><p>الأعمال الشخصية وأعمال الواجبات المنشورة.</p></div></div><div id="aaProfileGallery" class="aa-profile-gallery"></div></section>
+        <section class="aa-profile-panel full" id="aaProfileDirectoryPanel" style="display:none"><div class="aa-profile-section-head"><div><h2>الحسابات والطلاب</h2><p>هذه القائمة للمشرف فقط.</p></div><span id="aaProfileDirectoryCount"></span></div><div id="aaProfileDirectory" class="aa-profile-directory"></div></section>
+      </div>
+    </div>`;
+    document.body.appendChild(page);
+    const back=$('aaProfileBack'); if(back)back.onclick=()=>profileBack();
+    const edit=$('aaProfileEdit'); if(edit)edit.onclick=e=>{e.preventDefault();window.openProfileEditorFinal?.(currentUser?.uid)};
+    const add=$('aaProfileAddWork'); if(add)add.onclick=()=>window.openPortfolioFromCourses?.();
+    const logout=$('aaProfileLogout'); if(logout)logout.onclick=()=>window.__aaSafeLogoutV22?.();
+    return page;
   }
 
   async function getCatalog(){
@@ -15445,6 +15556,10 @@ if(!window.__aaStableNotifStarted){window.__aaStableNotifStarted=true;window.Ana
     $('aaProfileGallery')?.querySelectorAll('.aa-profile-view-work').forEach(btn=>btn.addEventListener('click',()=>window.openAssignmentWorkViewer?.(btn.dataset.course,btn.dataset.assignment,btn.dataset.work)));
   }
 
+  if(!document.getElementById('aa-profile-loading-style')){
+    const st=document.createElement('style');st.id='aa-profile-loading-style';st.textContent=`#aaRebuiltProfilePage.aa-profile-loading .aa-profile-name,#aaRebuiltProfilePage.aa-profile-loading #aaProfileName{color:transparent;background:linear-gradient(90deg,var(--border),var(--bg-secondary),var(--border));background-size:200% 100%;animation:aaProfileShimmer 1.2s linear infinite;border-radius:8px;min-width:120px;height:1.15em}#aaRebuiltProfilePage.aa-profile-loading .aa-profile-stat b{color:transparent;background:linear-gradient(90deg,var(--border),var(--bg-secondary),var(--border));background-size:200% 100%;animation:aaProfileShimmer 1.2s linear infinite;border-radius:6px;min-width:34px;display:inline-block}@keyframes aaProfileShimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}`;document.head.appendChild(st);
+  }
+
   function ensureProfileLoadingOverlay(){
     let overlay=$('aaProfileLoadingOverlay');
     if(overlay)return overlay;
@@ -15462,13 +15577,15 @@ if(!window.__aaStableNotifStarted){window.__aaStableNotifStarted=true;window.Ana
     const overlay=ensureProfileLoadingOverlay();
     if(loading){
       page.dataset.profileLoading='1';
-      page.style.visibility='hidden';
+      page.style.visibility='visible';
       page.setAttribute('aria-busy','true');
-      overlay.style.display='flex';
+      page.classList.add('aa-profile-loading');
+      overlay.style.display='none';
     }else{
       page.dataset.profileLoading='0';
       page.style.visibility='visible';
       page.setAttribute('aria-busy','false');
+      page.classList.remove('aa-profile-loading');
       overlay.style.display='none';
     }
   }
