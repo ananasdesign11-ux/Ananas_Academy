@@ -9540,13 +9540,7 @@ window.openAnanasV10Profile=async(uid,isSelf=false)=>{if(!currentUser||!uid)retu
 
 /* Account button opens the new profile page. */
 
-/* 6) Private-profile rule everywhere: non-owner students see shell only. */
-document.addEventListener('click',async e=>{
- const t=e.target.closest?.('[data-profile-uid]');if(!t)return;const uid=t.dataset.profileUid;if(!uid)return;e.preventDefault();e.stopPropagation();if(uid===currentUser?.uid||isAdmin)return window.openAnanasV10Profile(uid,uid===currentUser.uid);const s=await db.collection('users').doc(uid).get();if(!s.exists)return;return window.openAnanasV10Profile(uid,false)},true);
 
-/* 7) Chat profile opening from message name. */
-document.addEventListener('click',async e=>{
- const u=e.target.closest?.('.chat-msg .msg-header .u');if(!u)return;const msg=u.closest('.chat-msg'),id=msg?.dataset?.messageId;if(!id||!activeCourseId)return;e.preventDefault();e.stopPropagation();try{const s=await db.collection('courses').doc(activeCourseId).collection('chat').doc(id).get();const uid=s.data()?.userId;if(uid)window.openAnanasV10Profile(uid,uid===currentUser?.uid)}catch(err){console.error(err)}},true);
 
 /* 8) Keep video position when entering a quiz and resume the same lesson automatically. */
 let v10QuizReturn=null;
@@ -9838,13 +9832,6 @@ window.openChatProfileV13=async function(uid){
     return window.openAnanasV10Profile?.(uid,false);
   }catch(err){console.error('chat profile',err)}
 };
-document.addEventListener('click',async e=>{
-  const direct=e.target.closest?.('[data-profile-uid],.chat-profile-head,.chat-profile-name,.chat-profile-avatar,.chat-msg .msg-header .u');
-  if(direct){e.preventDefault();e.stopImmediatePropagation();const uid=direct.dataset.profileUid||direct.closest('[data-profile-uid]')?.dataset.profileUid;if(uid){window.openChatProfileV13(uid);return;}}
-  const msg=e.target.closest?.('.chat-msg');if(!msg||!activeCourseId)return;
-  if(e.target.closest('.msg-header')){
-    e.preventDefault();e.stopImmediatePropagation();try{const s=await db.collection('courses').doc(activeCourseId).collection('chat').doc(msg.dataset.messageId).get();const uid=s.data()?.userId;if(uid)window.openChatProfileV13(uid);}catch(err){console.error(err)}}
-},true);
 
 /* Force profile UID onto chat headers when a renderer created only a name. */
 async function enrichChatHeadersV13(){
@@ -10001,7 +9988,6 @@ async function loadPersonalPortfolio(uid){try{const s=await db.collection('users
 function renderGallery(items){const g=$('acpGallery');if(!items.length){g.innerHTML='<div class="acp-empty">لا توجد أعمال منشورة حاليًا.</div>';return}g.innerHTML=items.map(x=>{const imgs=Array.isArray(x.images)?x.images:(x.imageUrl?[x.imageUrl]:[]);const img=imgs[0]||'';return '<article class="acp-work"><div class="acp-work-cover">'+(img?'<img src="'+esc2(img)+'" alt="">':'<i class="fas fa-images" style="font-size:2rem;color:var(--accent1)"></i>')+'</div><div class="acp-work-body"><div class="acp-work-title">'+esc2(x.title||x.name||'عمل')+'</div><div class="acp-work-meta">'+esc2(x.type||'عمل شخصي')+(x.description?'<br>'+esc2(x.description):'')+'</div></div></article>'}).join('')}
 async function loadSubscriptions(uid){try{const s=await db.collection('users').doc(uid).collection('enrolledCourses').get();const out=[];for(const d of s.docs){const c=await db.collection('courses').doc(d.id).get();if(!c.exists)continue;out.push({id:d.id,title:c.data()?.titleAr||'دورة',enrolledAt:d.data()?.enrolledAt})}return out}catch(_){return[]}}
 async function openCanonical(uid,isSelf){if(!currentUser||!uid)return;const page=ensureCanonical();hideLegacyProfiles();page.classList.add('active');setLoading();const admin=await resolveAdmin();try{const snap=await db.collection('users').doc(uid).get();if(!snap.exists){showCustomAlert?.('غير متاح','الحساب غير موجود.');return}const p=snap.data()||{};const self=uid===currentUser.uid;const privateProfile=!self&&!admin&&p.profilePublic===false;const name=p.displayName||p.name||'مستخدم';const photo=p.photoURL||p.photoUrl||p.photo||'';$('acpAvatar').innerHTML=photo?'<img src="'+esc2(photo)+'" alt="">':esc2(name.slice(0,1));$('acpName').textContent=name;$('acpEmail').textContent=privateProfile?'حساب خاص':(p.email||currentUser.email||'—');$('acpBadge').innerHTML=privateProfile?'<i class="fas fa-lock"></i> الحساب خاص':'<i class="fas fa-eye"></i> الحساب عام';$('acpEdit').style.display=self?'inline-flex':'none';$('acpAddWork').style.display=self?'inline-flex':'none';$('acpLogout').style.display=self?'inline-flex':'none';$('acpBack').style.display=(!self&&admin)?'inline-flex':'none';if(privateProfile){$('acpXP').textContent='—';$('acpLessons').textContent='—';$('acpQuizzes').textContent='—';$('acpWorks').textContent='—';$('acpData').innerHTML='<div class="acp-row"><strong>الاسم</strong><small>'+esc2(name)+'</small></div>';const hidden='<div class="acp-private"><div class="acp-private-blur"></div><div class="acp-private-center"><div class="acp-private-card"><i class="fas fa-lock" style="font-size:1.5rem;color:var(--accent1)"></i><h3>الحساب خاص</h3><p style="margin:0;color:var(--text-muted);line-height:1.9">صاحب الحساب جعل ملفه الشخصي خاصًا، لذلك تظهر لك صورة الحساب واسمه فقط.</p></div></div></div>';['acpCourses','acpLessonList','acpQuizList','acpActivity','acpGallery'].forEach(id=>$(id).innerHTML=hidden);$('acpAdminDirectoryPanel').style.display='none';return}const data=await getEffectiveProfileData(uid);const subs=await loadSubscriptions(uid);const personal=await loadPersonalPortfolio(uid);$('acpXP').textContent=Number(data.effectiveXP||0).toLocaleString('ar-SA');$('acpLessons').textContent=data.activeLessons.length;$('acpQuizzes').textContent=data.activeQuizzes.length;$('acpWorks').textContent=personal.length+data.assignmentWorks.length;$('acpData').innerHTML=[['الاسم',name],['البريد الإلكتروني',p.email||currentUser.email||'غير متوفر'],['رقم الهاتف',p.phone||'غير مضاف'],['الحالة',p.profilePublic===false?'خاص':'عام'],['تاريخ التسجيل',fmt2(p.createdAt)]].map(a=>'<div class="acp-row"><strong>'+esc2(a[0])+'</strong><small>'+esc2(a[1])+'</small></div>').join('');$('acpCourses').innerHTML=subs.length?subs.map(x=>'<div class="acp-row"><div><strong>'+esc2(x.title)+'</strong><small>تاريخ الاشتراك: '+esc2(fmt2(x.enrolledAt))+'</small></div><i class="fas fa-circle-check" style="color:#22c55e"></i></div>').join(''):'<div class="acp-empty">لا توجد دورات مشتركة حاليًا.</div>';$('acpLessonList').innerHTML=data.activeLessons.length?data.activeLessons.slice().reverse().slice(0,50).map(x=>'<div class="acp-row"><strong>'+esc2(x.titleAr||'حصة')+'</strong><small>'+esc2(x.courseTitle)+' · +'+(Number(x.xpEarned)||0)+' XP</small></div>').join(''):'<div class="acp-empty">لا توجد حصص مكتملة حاليًا.</div>';$('acpQuizList').innerHTML=data.activeQuizzes.length?data.activeQuizzes.slice().reverse().slice(0,50).map(x=>'<div class="acp-row"><strong>'+esc2(x.titleAr||'اختبار')+'</strong><small>'+(Number(x.score)||0)+'% · +'+(Number(x.xpEarned)||0)+' XP</small></div>').join(''):'<div class="acp-empty">لا توجد اختبارات مكتملة حاليًا.</div>';const acts=[...data.activeLessons.map(x=>({t:'أكمل الحصة: '+(x.titleAr||'حصة'),d:fmt2(x.completedAt)})),...data.activeQuizzes.map(x=>({t:'أكمل الاختبار: '+(x.titleAr||'اختبار'),d:fmt2(x.passedAt)})),...data.assignmentWorks.map(x=>({t:'رفع عملًا في: '+x.assignmentTitle,d:fmt2(x.uploadedAt)})),...personal.map(x=>({t:'أضاف عملًا للمعرض: '+(x.title||'عمل'),d:fmt2(x.createdAt||x.uploadedAt)}))];$('acpActivity').innerHTML=acts.length?acts.slice(0,80).map(x=>'<div class="acp-row"><strong>'+esc2(x.t)+'</strong><small>'+esc2(x.d)+'</small></div>').join(''):'<div class="acp-empty">لا يوجد نشاط حالي.</div>';renderGallery([...personal,...data.assignmentWorks.map(x=>({title:x.assignmentTitle,type:x.courseTitle,description:x.approved?'معتمد':'قيد المراجعة',images:x.images}))]);await loadDirectory()}catch(err){console.error('canonical profile',err);['acpXP','acpLessons','acpQuizzes','acpWorks'].forEach(id=>$(id).textContent='—');$('acpData').innerHTML='<div class="acp-empty">تعذر تحميل بيانات الحساب.</div>';['acpCourses','acpLessonList','acpQuizList','acpActivity','acpGallery'].forEach(id=>$(id).innerHTML='<div class="acp-empty">تعذر تحميل المحتوى.</div>');await loadDirectory();showCustomAlert?.('خطأ','تعذر تحميل الملف الشخصي بالكامل.')}}
-document.addEventListener('click',async e=>{const n=e.target.closest?.('.chat-msg .chat-profile-avatar,.chat-msg .chat-profile-name,.chat-msg .msg-header .u,.chat-msg .msg-header,[data-profile-uid]');if(!n)return;const msg=n.closest('.chat-msg');let uid=n.dataset.profileUid||n.closest('[data-profile-uid]')?.dataset.profileUid;if(!uid&&msg?.dataset.messageId&&typeof activeCourseId!=='undefined'&&activeCourseId){try{const s=await db.collection('courses').doc(activeCourseId).collection('chat').doc(msg.dataset.messageId).get();uid=s.data()?.userId||''}catch(_){}}if(uid){e.preventDefault();e.stopImmediatePropagation();await openCanonical(uid,uid===currentUser?.uid)}},true);
 const account=document.getElementById('authToggleBtn');if(account)account.addEventListener('click',e=>{if(currentUser){e.preventDefault();e.stopImmediatePropagation();openCanonical(currentUser.uid,true)}},true);
 })();
 </script>
@@ -10111,7 +10097,6 @@ async function openCanonicalV17(uid,isSelf){
  }catch(err){console.error('V17 profile',err);$('acpData').innerHTML='<div class="acp-empty">تعذر تحميل بيانات الحساب الأساسية.</div>';['acpCourses','acpLessonList','acpQuizList','acpActivity','acpGallery'].forEach(id=>$(id).innerHTML='<div class="acp-empty">تعذر تحميل هذه البيانات.</div>');if(admin)await loadDirectoryV17(true);showCustomAlert?.('خطأ','تعذر تحميل الملف الشخصي بالكامل. تم عرض البيانات التي تسمح بها الصلاحيات.');}
 }
 // أي معالج دردشة قديم سيستدعي الدالة الجديدة، وأي عنصر يحمل UID يفتحها كذلك.
-document.addEventListener('click',async e=>{const n=e.target.closest?.('.chat-msg .chat-profile-avatar,.chat-msg .chat-profile-name,.chat-msg .msg-header .u,[data-profile-uid]');if(!n)return;const msg=n.closest('.chat-msg');let uid=n.dataset.profileUid||n.closest('[data-profile-uid]')?.dataset.profileUid;if(!uid&&msg?.dataset.messageId&&typeof activeCourseId!=='undefined'&&activeCourseId){try{const s=await db.collection('courses').doc(activeCourseId).collection('chat').doc(msg.dataset.messageId).get();uid=s.data()?.userId||''}catch(_){}}if(uid){e.preventDefault();e.stopImmediatePropagation();window.__ananasProfileReturnPoint={type:'chat',courseId:window.activeCourseId||activeCourseId||null};await openCanonicalV17(uid,uid===currentUser?.uid);}},true);
 })();
 </script>
 <!-- ===== FINAL PATCH 27: lesson progress + code lifecycle/tabs + standalone terms + mobile viewport ===== -->
@@ -11096,10 +11081,8 @@ window.openPublicProfileFinal=async function(uid){
 };
 
 /* Generic future-ready profile links: any card/button with data-profile-uid opens the profile. */
-document.addEventListener('click',e=>{const node=e.target.closest?.('[data-profile-uid]');if(!node)return;const uid=node.dataset.profileUid;if(!uid)return;e.preventDefault();e.stopPropagation();window.viewProfileByUserId?.(uid)},true);
 
 /* Assignment cards created by the fallback page expose the student profile as well. */
-document.addEventListener('click',e=>{const t=e.target.closest?.('.assignment-v2-body strong[data-profile-uid]');if(!t)return;window.viewProfileByUserId?.(t.dataset.profileUid)},true);
 
 /* Keep the dashboard/course navigation consistent from profile pages. */
 window.closeUserProfileAndGo=function(page){$('userProfilePage')?.classList.remove('active');document.querySelectorAll('.nav-btn,.auth-btn').forEach(x=>x.classList.remove('active'));if(page==='courses')return window.mobileNavigate?.('courses');if(page&&window.switchCoursePage)return window.switchCoursePage(page)};
@@ -11470,7 +11453,6 @@ async function savePortfolioModal(){if(!currentUser)return triggerAuth?.();const
 
 window.aaOpenProfile=openProfile;window.aaProfileBack=profileBack;window.openUserProfilePage=()=>openProfile(currentUser?.uid,{kind:'self'});window.openPublicProfileFinal=uid=>openProfile(uid,{kind:'public',returnPoint:profileReturnPoint()});window.openAnanasV10Profile=window.openPublicProfileFinal;window.viewProfileByUserId=uid=>openProfile(uid,{kind:'public',returnPoint:profileReturnPoint()});window.openStudentProfile=window.openPublicProfileFinal;window.openChatProfileV13=uid=>openProfile(uid,{kind:'chat',returnPoint:profileReturnPoint()});window.openChatProfileV12=window.openChatProfileV13;window.openProfileWorkUpload=openPortfolioFromCourses;window.openPortfolioFromCourses=openPortfolioFromCourses;
 const account=$('authToggleBtn');if(account&&!account.dataset.aaFinal){account.dataset.aaFinal='1';account.addEventListener('click',e=>{if(!currentUser)return;e.preventDefault();e.stopImmediatePropagation();openProfile(currentUser.uid,{kind:'self'});},true)}
-document.addEventListener('click',async e=>{const dir=e.target.closest?.('[data-aa-uid]');if(dir){e.preventDefault();e.stopImmediatePropagation();await openProfile(dir.dataset.aaUid,{kind:'admin-directory'});return;}const n=e.target.closest?.('[data-profile-uid],.chat-profile-head,.chat-profile-avatar,.chat-profile-name,.chat-msg .msg-header .u,.chat-msg .msg-header');if(!n)return;let uid=n.dataset.profileUid||n.closest('[data-profile-uid]')?.dataset.profileUid;const msg=n.closest('.chat-msg');if(!uid&&msg?.dataset.messageId&&activeCourseId){try{const s=await db.collection('courses').doc(activeCourseId).collection('chat').doc(msg.dataset.messageId).get();uid=s.data()?.userId||''}catch(_){} }if(uid){e.preventDefault();e.stopImmediatePropagation();await openProfile(uid,{kind:'chat',returnPoint:profileReturnPoint()});}},true);
 hideLegacy();
 })();
 </script>
@@ -12142,7 +12124,9 @@ async function authoritativeLiveProfile(uid){
   const out={xp:0,lessons:[],quizzes:[],assignmentWorks:[],portfolio:[],courses:[]};
   const emptySnap={docs:[],empty:true};
   const now=Date.now();
-  const cache=window.__aaLiveProfileCache=window.__aaLiveProfileCache||{catalog:null,users:new Map()};
+  const cache=window.__aaLiveProfileCache=window.__aaLiveProfileCache||{catalog:null,users:new Map(),profiles:new Map()};
+  const cachedProfile=cache.profiles.get(uid);
+  if(cachedProfile && (now-cachedProfile.createdAt)<5000) return cachedProfile.value;
 
   /* Fetch the current user record, completion ledgers, portfolio and course catalog concurrently. */
   let userPromise=cache.users.get(uid);
@@ -12170,10 +12154,11 @@ async function authoritativeLiveProfile(uid){
     cache.catalog=catalogPromise;
   }
 
-  const [userSnap,completedLessons,completedQuizzes,enrolled,portfolioSnap,catalog]=await Promise.all([
+  const [userSnap,completedLessons,completedQuizzes,completedAssignments,enrolled,portfolioSnap,catalog]=await Promise.all([
     userPromise,
     db.collection('users').doc(uid).collection('completedLessons').get().catch(e=>{console.warn('live completed lessons read',e);return emptySnap;}),
     db.collection('userStats').doc(uid).collection('completedQuizzes').get().catch(e=>{console.warn('live completed quizzes read',e);return emptySnap;}),
+    db.collection('userStats').doc(uid).collection('completedAssignments').get().catch(e=>{console.warn('live completed assignments read',e);return emptySnap;}),
     db.collection('users').doc(uid).collection('enrolledCourses').get().catch(e=>{console.warn('live enrolled courses read',e);return emptySnap;}),
     db.collection('users').doc(uid).collection('portfolioWorks').get().catch(e=>{console.warn('live portfolio read',e);return emptySnap;}),
     catalogPromise
@@ -12229,7 +12214,9 @@ async function authoritativeLiveProfile(uid){
 
   out.portfolio=portfolioSnap.docs.map(d=>({id:d.id,...(d.data()||{})})).filter(x=>x.deleted!==true);
   out.courses=enrolled.docs.map(d=>({id:d.id,...(d.data()||{})})).filter(c=>validCourseIds.has(c.id));
-  return { ...out, user:userSnap?.exists?(userSnap.data()||{}):{} };
+  const finalValue={ ...out, user:userSnap?.exists?(userSnap.data()||{}):{} };
+  cache.profiles.set(uid,{createdAt:Date.now(),value:finalValue});
+  return finalValue;
 }
 
 window.__authoritativeLiveProfile=authoritativeLiveProfile;
@@ -12293,21 +12280,7 @@ window.__refreshAssignmentSubmitterButtons=async function(root){
   });
 };
 
-/* Every work's name + photo is an actual profile button, and its return point is the exact assignment page. */
-document.addEventListener('click',async function(e){
-  const btn=e.target.closest?.('.assignment-submitter[data-profile-uid]');
-  if(!btn)return;
-  const uid=btn.dataset.profileUid;
-  if(!uid)return;
-  e.preventDefault();e.stopImmediatePropagation();
-  const assignmentRoot=btn.closest('.assignment-work-card');
-  const assignmentDetail=document.getElementById('courseAssignmentDetailPage');
-  const courseId=window.activeCourseId||activeCourseId||assignmentRoot?.closest('[data-course-id]')?.dataset.courseId||null;
-  const assignmentId=window.activeAssignmentDetailId||assignmentDetail?.dataset.assignmentId||null;
-  const returnPoint={type:'assignment-detail',courseId,assignmentId};
-  if(typeof window.aaOpenProfile==='function') await window.aaOpenProfile(uid,{kind:'assignment-submitter',returnPoint});
-  else window.viewProfileByUserId?.(uid);
-},true);
+
 
 /* When the assignment page is rendered, hydrate the live account identity immediately. */
 const oldRefresh=window.refreshAssignmentDetail;
@@ -15628,7 +15601,7 @@ if(!window.__aaStableNotifStarted){window.__aaStableNotifStarted=true;window.Ana
     }
     out.portfolio=(portfolio?.docs||[]).map(d=>({id:d.id,...(d.data()||{})})).filter(x=>x.deleted!==true);
     out.courses=(enrolled?.docs||[]).map(d=>({id:d.id,...(d.data()||{})})).filter(x=>catalog.validCourseIds.has(x.id));
-    for(const x of doneA.values()) if(catalog.assignmentMap.has(x.id)) out.xp+=num(x.xpEarned);
+    for(const x of (completedAssignments?.docs||[]).map(d=>({id:d.id,...(d.data()||{})}))) if(x.xpEarned!==undefined) out.xp+=num(x.xpEarned);
     return out;
   }
 
@@ -15819,25 +15792,48 @@ if(!window.__aaStableNotifStarted){window.__aaStableNotifStarted=true;window.Ana
     return state.opening;
   }
 
+  window.__aaProfileClickBusy=false;
   window.__aaFastProfileOpenV36=open;
   window.aaOpenProfile=open;
   window.openUserProfilePage=()=>currentUser?open(currentUser.uid,{kind:'self'}):triggerAuth?.();
   window.openPublicProfileFinal=uid=>open(uid,{kind:uid===currentUser?.uid?'self':'public',returnPoint:typeof profileReturnPoint==='function'?profileReturnPoint():null});
   window.openChatProfileV13=uid=>open(uid,{kind:'chat',returnPoint:typeof profileReturnPoint==='function'?profileReturnPoint():null});
 
+  // One-shot async action gate used by profile/chat/assignment navigation to avoid duplicate clicks.
+  window.__aaRunOnceAction=window.__aaRunOnceAction||function(key,fn){
+    const keyName='__aaActionBusy_'+String(key||'action');
+    if(window[keyName])return Promise.resolve(false);
+    window[keyName]=true;
+    return Promise.resolve().then(fn).finally(()=>{window[keyName]=false;});
+  };
+
+  // Canonical chat/assignment/profile routing: exactly one delegated path.
+  document.addEventListener('click',function(e){
+    const node=e.target.closest?.('[data-profile-uid],.chat-msg .chat-profile-avatar,.chat-msg .chat-profile-name,.chat-msg .msg-header .u,.assignment-submitter[data-profile-uid],[data-aa-uid]');
+    if(!node)return;
+    const msg=node.closest?.('.chat-msg');
+    let uid=node.dataset.profileUid||node.closest('[data-profile-uid]')?.dataset.profileUid||node.dataset.aaUid||'';
+    let kind='link',rp=typeof profileReturnPoint==='function'?profileReturnPoint():null;
+    if(node.matches?.('[data-aa-uid]')){kind='admin-directory';rp=profileSelfReturnPoint();}
+    else if(node.closest?.('.assignment-submitter')){kind='assignment-submitter';rp={type:'assignment-detail',courseId:window.activeCourseId||activeCourseId||null,assignmentId:window.activeAssignmentDetailId||$('courseAssignmentDetailPage')?.dataset.assignmentId||null};}
+    else if(node.closest?.('.chat-msg')){kind='chat';rp={type:'chat',courseId:window.activeCourseId||activeCourseId||null};}
+    if(!uid&&msg?.dataset.messageId&&activeCourseId){
+      e.preventDefault();e.stopImmediatePropagation();
+      return window.__aaRunOnceAction('profile-chat-lookup',async()=>{
+        const s=await db.collection('courses').doc(activeCourseId).collection('chat').doc(msg.dataset.messageId).get();
+        const id=s.exists?String(s.data()?.userId||''):'';
+        if(id)await open(id,{kind,returnPoint:rp});
+      });
+    }
+    if(!uid)return;
+    e.preventDefault();e.stopImmediatePropagation();
+    return window.__aaRunOnceAction('profile-open-'+uid,()=>open(uid,{kind,returnPoint:rp}));
+  },true);
+
   // Replace the account button node so ALL old listeners disappear.
   const account=$('authToggleBtn');
-  if(account){const clean=account.cloneNode(true);account.replaceWith(clean);clean.addEventListener('click',e=>{e.preventDefault();e.stopImmediatePropagation();if(currentUser)open(currentUser.uid,{kind:'self'});else triggerAuth?.();},true);}
+  if(account){const clean=account.cloneNode(true);account.replaceWith(clean);clean.addEventListener('click',e=>{e.preventDefault();e.stopImmediatePropagation();if(currentUser)return window.__aaRunOnceAction('profile-account-open',()=>open(currentUser.uid,{kind:'self'}));triggerAuth?.();},true);}
 
-  // One delegated handler for directory/chat/assignment profile links.
-  document.addEventListener('click',function(e){
-    const btn=e.target.closest?.('[data-aa-uid]');
-    if(btn){e.preventDefault();e.stopImmediatePropagation();open(btn.dataset.aaUid,{kind:'admin-directory',returnPoint:profileSelfReturnPoint()});return;}
-    const work=e.target.closest?.('.assignment-submitter[data-profile-uid]');
-    if(work){e.preventDefault();e.stopImmediatePropagation();open(work.dataset.profileUid,{kind:'assignment-submitter',returnPoint:{type:'assignment-detail',courseId:window.activeCourseId||activeCourseId||null,assignmentId:window.activeAssignmentDetailId||$('courseAssignmentDetailPage')?.dataset.assignmentId||null}});return;}
-    const profileNode=e.target.closest?.('[data-profile-uid]');
-    if(profileNode){const uid=profileNode.dataset.profileUid;if(uid){e.preventDefault();e.stopImmediatePropagation();open(uid,{kind:'link',returnPoint:typeof profileReturnPoint==='function'?profileReturnPoint():null});}}
-  },true);
 })();
 </script>
 </body>
