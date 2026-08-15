@@ -10216,6 +10216,9 @@ window.aaOpenProfile=openProfile;window.aaProfileBack=profileBack;window.openUse
 const account=$('authToggleBtn');if(account&&!account.dataset.aaFinal){account.dataset.aaFinal='1';account.addEventListener('click',e=>{if(!currentUser)return;e.preventDefault();e.stopImmediatePropagation();openProfile(currentUser.uid,{kind:'self'});},true)}
 document.addEventListener('click',async e=>{const dir=e.target.closest?.('[data-aa-uid]');if(dir){e.preventDefault();e.stopImmediatePropagation();await openProfile(dir.dataset.aaUid,{kind:'admin-directory'});return;}const n=e.target.closest?.('[data-profile-uid],.chat-profile-head,.chat-profile-avatar,.chat-profile-name,.chat-msg .msg-header .u,.chat-msg .msg-header');if(!n)return;let uid=n.dataset.profileUid||n.closest('[data-profile-uid]')?.dataset.profileUid;const msg=n.closest('.chat-msg');if(!uid&&msg?.dataset.messageId&&activeCourseId){try{const s=await db.collection('courses').doc(activeCourseId).collection('chat').doc(msg.dataset.messageId).get();uid=s.data()?.userId||''}catch(_){} }if(uid){e.preventDefault();e.stopImmediatePropagation();await openProfile(uid,{kind:'chat',returnPoint:profileReturnPoint()});}},true);
 document.addEventListener('click',e=>{const b=e.target.closest?.('.aa-profile-view-work');if(b)e.stopImmediatePropagation()},true);
+window.__ensureProfilePageFinal = ensureProfilePageFinal;
+window.__renderProfileForUidFinal = renderProfileForUidFinal;
+window.__profileOpenInternal = openProfile;
 hideLegacy();
 })();
 </script>
@@ -12979,8 +12982,9 @@ const s=document.createElement('style');s.textContent=`
     let page=null;
     try{
       if(typeof hideLegacy==='function') hideLegacy();
-      if(typeof ensureProfilePage==='function') page=ensureProfilePage();
-      else page=$id('aaRebuiltProfilePage');
+      if(typeof window.__ensureProfilePageFinal==='function') page=window.__ensureProfilePageFinal();
+      else if(typeof ensureProfilePage==='function') page=ensureProfilePage();
+      else page=$id('userProfilePage')||$id('aaRebuiltProfilePage');
     }catch(err){
       console.error('profile shell recovery failed',err);
     }
@@ -12993,7 +12997,9 @@ const s=document.createElement('style');s.textContent=`
     document.body.classList.add('aa-profile-open');
 
     try{
-      if(typeof renderReliableProfile==='function'){
+      if(typeof window.__renderProfileForUidFinal==='function'){
+        await window.__renderProfileForUidFinal(uid,isSelf);
+      }else if(typeof renderReliableProfile==='function'){
         await renderReliableProfile(uid,isSelf);
       }else if(typeof window.__renderReliableProfile==='function'){
         await window.__renderReliableProfile(uid,isSelf);
