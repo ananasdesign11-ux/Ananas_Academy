@@ -13035,5 +13035,107 @@ const s=document.createElement('style');s.textContent=`
   window.__profileOpenRecoveryV31=true;
 })();
 </script>
-</body>
+<script id="profile-opening-final-stable-v33">
+(function(){
+  'use strict';
+  const byId=id=>document.getElementById(id);
+  const getCurrent=()=>window.currentUser||currentUser||null;
+
+  async function stableOpenProfile(uid, opts){
+    const me=getCurrent();
+    if(!me){ try{ if(typeof triggerAuth==='function') triggerAuth(); }catch(_){} return null; }
+    uid=String(uid||'');
+    if(!uid) return null;
+    const isSelf=uid===String(me.uid);
+    const options=opts||{};
+
+    try{
+      window.profileState={uid,isSelf,source:options.kind||'profile',returnPoint:options.returnPoint||{type:'courses'},busy:false};
+    }catch(_){}
+
+    let page=null;
+    try{
+      /* Prefer the already-established profile page used by the working v18+ system. */
+      if(byId('aaRebuiltProfilePage')){
+        page=byId('aaRebuiltProfilePage');
+      }else if(typeof window.__ensureProfilePageFinal==='function'){
+        page=window.__ensureProfilePageFinal();
+      }else if(typeof ensureProfilePage==='function'){
+        page=ensureProfilePage();
+      }else if(byId('userProfilePage')){
+        page=byId('userProfilePage');
+      }
+    }catch(err){
+      console.error('stable profile shell error',err);
+      page=byId('aaRebuiltProfilePage')||byId('userProfilePage');
+    }
+    if(!page){
+      try{ showCustomAlert?.('خطأ','تعذر إنشاء واجهة الملف الشخصي.'); }catch(_){}
+      return null;
+    }
+
+    try{
+      document.querySelectorAll('#userProfilePage,#aaRebuiltProfilePage,#ananasCanonicalProfilePage').forEach(x=>x.classList.remove('active'));
+      page.classList.add('active');
+      document.body.classList.add('aa-profile-open');
+      document.querySelector('#coursesNavBtn')?.classList.remove('active');
+    }catch(err){ console.error('stable profile activate error',err); }
+
+    let rendered=false;
+    try{
+      if(typeof window.__renderReliableProfile==='function'){
+        await window.__renderReliableProfile(uid,isSelf); rendered=true;
+      }else if(typeof renderReliableProfile==='function'){
+        await renderReliableProfile(uid,isSelf); rendered=true;
+      }else if(typeof window.__renderProfileForUidFinal==='function'){
+        await window.__renderProfileForUidFinal(uid,isSelf); rendered=true;
+      }else if(typeof renderProfileForUidFinal==='function'){
+        await renderProfileForUidFinal(uid,isSelf); rendered=true;
+      }else if(typeof window.__renderAuthoritativeProfile==='function'){
+        await window.__renderAuthoritativeProfile(uid,isSelf); rendered=true;
+      }
+    }catch(err){
+      console.error('stable profile data render error',err);
+      /* Keep the page open; a data read failure must not make opening fail. */
+      rendered=false;
+    }
+
+    try{
+      const edit=byId('profileEditBtn');
+      if(edit) edit.style.display=isSelf?'inline-flex':'none';
+      const backMembers=byId('profileBackToMembers');
+      if(backMembers) backMembers.style.display=(isAdmin&&isSelf)?'inline-flex':'none';
+    }catch(_){}
+
+    return page;
+  }
+
+  /* One final entry point. No older profile wrapper is consulted after this point. */
+  window.aaOpenProfile=stableOpenProfile;
+  window.openUserProfilePage=function(){
+    const me=getCurrent();
+    return me?stableOpenProfile(me.uid,{kind:'self'}):null;
+  };
+  window.openPublicProfileFinal=function(uid){
+    return uid?stableOpenProfile(uid,{kind:uid===getCurrent()?.uid?'self':'public'}):null;
+  };
+  window.openStudentProfile=window.openPublicProfileFinal;
+  window.viewProfileByUserId=window.openPublicProfileFinal;
+  window.openAnanasV10Profile=window.openPublicProfileFinal;
+  window.openChatProfileV13=function(uid){ return stableOpenProfile(uid,{kind:'chat'}); };
+  window.openChatProfileV12=window.openChatProfileV13;
+
+  const account=byId('authToggleBtn');
+  if(account){
+    account.onclick=function(e){
+      e?.preventDefault?.();
+      e?.stopImmediatePropagation?.();
+      const me=getCurrent();
+      if(me) stableOpenProfile(me.uid,{kind:'self'});
+      else { try{ triggerAuth?.(); }catch(_){} }
+    };
+  }
+})();
+</script>
+ </body>
 </html>
