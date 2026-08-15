@@ -12426,9 +12426,9 @@ async function renderAuthoritativeProfile(uid,isSelf){
       if(x.kind==='assignment')return `<article class="aa-profile-work"><div class="aa-profile-cover">${img?`<img src="${esc(img)}" alt="">`:'<i class="fas fa-images"></i>'}</div><div class="aa-profile-work-body"><strong>${esc(x.assignmentTitle||x.title||'واجب')}</strong><small>${esc(x.courseTitle||'')}<br>${x.approved?'✅ معتمد':'⏳ قيد المراجعة'}${imgs.length>1?` · ${imgs.length} صور`:''}</small><button type="button" class="aa-profile-view-work" data-course="${esc(x.courseId||'')}" data-assignment="${esc(x.assignmentId||'')}" data-work="${esc(x.workId||x.id||'')}"><i class="fas fa-eye"></i> عرض العمل</button></div></article>`;
       return `<article class="aa-profile-work"><div class="aa-profile-cover">${img?`<img src="${esc(img)}" alt="">`:'<i class="fas fa-images"></i>'}</div><div class="aa-profile-work-body"><strong>${esc(x.title||'عمل')}</strong><small>${esc(x.type||'عمل شخصي')}${x.description?`<br>${esc(x.description)}`:''}${imgs.length>1?`<br>${imgs.length} صور`:''}</small><button type="button" class="aa-profile-view-work" data-kind="portfolio" data-user="${esc(uid)}" data-work="${esc(x.id||'')}"><i class="fas fa-eye"></i> عرض العمل</button></div></article>`;
     }),'لا توجد أعمال منشورة حاليًا.');
-    /* Auxiliary UI refreshes are non-critical: never let them turn a successfully rendered profile into an error dialog. */
-    try{ if(typeof window.__refreshAssignmentSubmitterButtons==='function') await window.__refreshAssignmentSubmitterButtons($id('aaProfileGallery')||document); }catch(auxErr){ console.warn('profile assignment identity refresh skipped',auxErr); }
-    try{ if(isAdmin && typeof window.loadDirectory==='function') await window.loadDirectory(); }catch(auxErr){ console.warn('profile directory refresh skipped',auxErr); }
+    /* Work viewer is delegated globally so dynamically-rendered work cards use one path. */
+    if(typeof window.__refreshAssignmentSubmitterButtons==='function')await window.__refreshAssignmentSubmitterButtons(document);
+    if(typeof window.__loadDirectory==='function')await window.__loadDirectory();
   }catch(err){
     console.error('authoritative profile render',err);
     ['aaProfileData','aaProfileCourses','aaProfileLessonList','aaProfileQuizList','aaProfileActivity','aaProfileGallery'].forEach(id=>{if($id(id))$id(id).innerHTML='<div class="aa-profile-empty">تعذر تحميل هذه البيانات.</div>';});
@@ -12534,29 +12534,6 @@ async function buildAdminDirectoryControls(){
 }
 
 let __directoryCache={users:[],ready:false};
-
-/* Canonical directory membership: only current, non-deleted courses with a valid enrollment/code survive. */
-async function getLiveDirectoryMembership(uid, courseCatalog){
-  const out=[];
-  try{
-    const enrolledSnap=await db.collection('users').doc(uid).collection('enrolledCourses').get();
-    for(const d of enrolledSnap.docs){
-      const e=d.data()||{};
-      if(e.codeDeleted===true||e.accessBlocked===true||e.deleted===true)continue;
-      const course=courseCatalog.get(String(d.id));
-      if(!course||course.deleted===true||course.isDeleted===true||course.removed===true)continue;
-      if(e.codeId){
-        const codeSnap=await db.collection('courses').doc(String(d.id)).collection('codes').doc(String(e.codeId)).get().catch(()=>null);
-        if(!codeSnap?.exists)continue;
-      }
-      out.push(String(d.id));
-    }
-  }catch(e){
-    console.warn('live directory membership',uid,e);
-  }
-  return [...new Set(out)];
-}
-
 async function loadDirectoryEnhanced(){
   const panel=$('aaProfileDirectoryPanel'),box=$('aaProfileDirectory');
   if(!panel||!box)return;
@@ -12565,18 +12542,15 @@ async function loadDirectoryEnhanced(){
   await buildAdminDirectoryControls();
   box.innerHTML='<div class="aa-profile-empty">جاري تحميل الحسابات...</div>';
   try{
-    const [snap,courseSnap]=await Promise.all([db.collection('users').get(),db.collection('courses').get()]);
-    const courseCatalog=new Map(courseSnap.docs.map(d=>[String(d.id),{id:d.id,...(d.data()||{})}]));
-    const sourceUsers=snap.docs.map(d=>({doc:d,u:{id:d.id,...(d.data()||{})}})).filter(x=>String(x.u.id)!==String(currentUser?.uid));
-    const rows=[];let cursor=0;
-    const worker=async()=>{
-      while(cursor<sourceUsers.length){
-        const i=cursor++,item=sourceUsers[i];
-        const enrolledIds=await getLiveDirectoryMembership(item.u.id,courseCatalog);
-        rows.push({...item.u,enrolledCourseIds:enrolledIds});
-      }
-    };
-    await Promise.all(Array.from({length:Math.min(6,sourceUsers.length)},worker));
+    const snap=await db.collection('users').get();
+    const rows=[];
+    for(const d of snap.docs){
+      const u={id:d.id,...(d.data()||{})};
+      if(String(u.id)===String(currentUser?.uid))continue; /* لا يظهر حساب المشرف */
+      let enrolledIds=[];
+      try{const es=await d.ref.collection('enrolledCourses').get();enrolledIds=es.docs.map(x=>String(x.id)).filter(Boolean);}catch(_){enrolledIds=[];}
+      rows.push({...u,enrolledCourseIds:enrolledIds});
+    }
     __directoryCache={users:rows,ready:true};
     renderDirectoryEnhanced();
   }catch(e){console.error('directory',e);box.innerHTML='<div class="aa-profile-empty">تعذر تحميل الحسابات.</div>';}
@@ -12604,11 +12578,7 @@ window.loadDirectory=loadDirectoryEnhanced;
 const oldReliableRender=window.__renderReliableProfile;
 if(oldReliableRender&&!window.__aaDirectoryPatched){
   window.__aaDirectoryPatched=true;
-  window.__renderReliableProfile=async function(){
-    const r=await oldReliableRender.apply(this,arguments);
-    if(isAdmin){try{await loadDirectoryEnhanced();}catch(e){console.warn('directory refresh after profile render skipped',e)}}
-    return r;
-  };
+  window.__renderReliableProfile=async function(){const r=await oldReliableRender.apply(this,arguments);if(isAdmin){await loadDirectoryEnhanced();}return r;};
 }
 
 /* ---------- Active profile avatar fallback ---------- */
@@ -14007,11 +13977,7 @@ window.aaOpenProfile=async function(uid,opts={}){
     const p=snap.data()||{};
     window.__aaViewingPrivateProfile=!self&&!isAdmin&&p.profilePublic===false;
     if(typeof window.__renderAuthoritativeProfile==='function')await window.__renderAuthoritativeProfile(target,self);
-  }catch(e){console.error('fast authoritative profile open',e);
-    const page=document.getElementById('aaRebuiltProfilePage');
-    if(page?.classList.contains('active')) console.warn('profile rendered but a non-critical refresh failed',e);
-    else showCustomAlert?.('خطأ','تعذر تحميل بيانات الملف الشخصي.');
-  }
+  }catch(e){console.error('fast authoritative profile open',e);showCustomAlert?.('خطأ','تعذر تحميل بيانات الملف الشخصي.');}
 };
 
 /* 5) Re-render private profiles with only name/photo and the glass privacy curtain for non-admin viewers. */
