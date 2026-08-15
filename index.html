@@ -15876,5 +15876,137 @@ if(!window.__aaStableNotifStarted){window.__aaStableNotifStarted=true;window.Ana
   },true);
 })();
 </script>
+
+<script id="ananas-final-data-navigation-repair">
+(function(){
+'use strict';
+const $=id=>document.getElementById(id);
+
+/* Canonical assignment loader: Firestore is always the source of truth. */
+window.loadAssignmentsPage = async function(courseId){
+  courseId=String(courseId||'').trim();
+  const container=$('fullPageAssignmentsContainer');
+  if(!courseId||!container)return;
+  if(window.__aaAssignmentsRequest) {
+    try { if(window.__aaAssignmentsRequest.courseId===courseId) await window.__aaAssignmentsRequest.promise; } catch(_) {}
+  }
+  const token=(window.__aaAssignmentsToken||0)+1; window.__aaAssignmentsToken=token;
+  const promise=(async()=>{
+    try{
+      let snap;
+      try{ snap=await db.collection('courses').doc(courseId).collection('assignments').orderBy('createdAt','desc').get(); }
+      catch(_){ snap=await db.collection('courses').doc(courseId).collection('assignments').get(); }
+      if(token!==window.__aaAssignmentsToken)return;
+      const docs=[...snap.docs].sort((a,b)=>{
+        const av=a.data()?.createdAt?.seconds||0, bv=b.data()?.createdAt?.seconds||0;
+        return bv-av;
+      });
+      const grid=document.createElement('div'); grid.className='assignment-page-grid';
+      for(const doc of docs){
+        const a=doc.data()||{}, submissions=Array.isArray(a.submissions)?a.submissions:[];
+        const approvedCount=submissions.filter(x=>x?.approved===true).length;
+        const card=document.createElement('div'); card.className='full-page-card assignment-full-card'; card.dataset.id=doc.id;
+        card.innerHTML=`<div style="display:flex;justify-content:space-between;gap:15px;align-items:flex-start;">
+          <div style="min-width:0;flex:1"><h3 style="font-size:1.2rem;margin-bottom:7px">${escapeHtml(a.titleAr||a.title||'واجب')}</h3>
+          <p style="color:var(--text-muted);line-height:1.6;margin-bottom:8px">${escapeHtml(a.descAr||a.descriptionAr||'')}</p>
+          <div style="display:flex;gap:12px;flex-wrap:wrap;color:var(--text-muted);font-size:.84rem"><span><i class="fas fa-star"></i> XP: ${Math.max(0,Number(a.xpReward)||0)}</span><span><i class="fas fa-images"></i> ${approvedCount} أعمال معتمدة</span></div></div>
+          ${isAdmin?`<div style="display:flex;gap:6px"><button type="button" title="حذف" class="admin-only show" onclick="event.stopPropagation();deleteAssignment('${courseId}','${doc.id}')" style="border:1px solid var(--border);background:var(--bg-secondary);color:#e74c3c;width:36px;height:36px;border-radius:50%;cursor:pointer"><i class="fas fa-trash"></i></button></div>`:''}</div>
+          <div class="card-actions"><button type="button" class="assignment-card-button" onclick="openAssignmentDetail('${courseId}','${doc.id}')"><i class="fas fa-folder-open"></i> فتح الواجب ومشاهدة الأعمال</button></div>`;
+        grid.appendChild(card);
+      }
+      if(!docs.length){ container.innerHTML='<p style="color:var(--text-muted);text-align:center;padding:60px 20px">لا توجد واجبات مضافة بعد.</p>'; }
+      else { container.replaceChildren(grid); }
+      container.dataset.loaded='1';
+    }catch(e){
+      console.error('Canonical assignments loader:',e);
+      if(token===window.__aaAssignmentsToken && !container.querySelector('.assignment-page-grid')) container.innerHTML='<p style="color:#e74c3c;text-align:center;padding:40px">تعذر تحميل الواجبات.</p>';
+    }finally{
+      if(window.__aaAssignmentsRequest?.promise===promise)window.__aaAssignmentsRequest=null;
+    }
+  })();
+  window.__aaAssignmentsRequest={courseId,promise};
+  return promise;
+};
+
+/* Canonical files loader: no dependency on legacy navigation wrappers. */
+window.loadCourseFilesPage = async function(){
+  const page=$('courseFilesPage'), box=$('courseFilesPageGrid'), cid=String(activeCourseId||'').trim();
+  if(!page||!box||!cid)return;
+  try{
+    let files=await getFiles(cid);
+    if(!Array.isArray(files))files=[];
+    renderFilesGrid(files,box);
+    page.classList.add('active','is-mobile-active'); page.style.display='block';
+  }catch(e){
+    console.error('Canonical files loader:',e);
+    box.innerHTML='<div style="grid-column:1/-1;padding:40px;text-align:center;color:#e74c3c">تعذر تحميل الملفات.</div>';
+  }
+};
+
+function setPageVisible(el,visible,display){
+  if(!el)return;
+  el.classList.toggle('active',visible); el.classList.toggle('is-mobile-active',visible);
+  el.style.display=visible?(display||'block'):'none';
+}
+
+/* One final navigation implementation. This intentionally bypasses the stacked wrappers. */
+window.switchCoursePage = function(page){
+  page=String(page||'dashboard');
+  if(page==='course'||page==='courses'){ window.mobileNavigate?.('courses'); return; }
+  if(!activeCourseId)return;
+  try{ if(currentCoursePage==='lessonPlayer' && page!=='lessonPlayer') stopLessonForNavigation?.(); }catch(_){ }
+  currentCoursePage=page;
+  try{ window.__startCanonicalCourseLiveSync?.(String(activeCourseId)); }catch(_){ }
+  const ids=['courseOverviewContainer','courseDashboard','courseLessonsPage','courseLessonPlayerPage','courseQuizzesPage','courseAssignmentsPage','courseAssignmentDetailPage','courseFilesPage','courseChatPage','courseLearningView','fullChatPage'];
+  ids.forEach(id=>setPageVisible($(id),false));
+  const map={
+    overview:['courseOverviewContainer','block'], dashboard:['courseDashboard','flex'], learning:['courseLessonsPage','block'],
+    lessonPlayer:['courseLessonPlayerPage','block'], quizzes:['courseQuizzesPage','block'], assignments:['courseAssignmentsPage','block'],
+    assignmentDetail:['courseAssignmentDetailPage','block'], files:['courseFilesPage','block'], chat:['courseChatPage','block']
+  };
+  const spec=map[page]||map.dashboard; setPageVisible($(spec[0]),true,spec[1]);
+  $('courseDetailView')?.style.setProperty('display','flex','important');
+  setMobileNavActive?.(page==='lessonPlayer'?'learning':page);
+  if(page==='learning') void loadLessonsForCourse(activeCourseId);
+  else if(page==='quizzes') void loadQuizzesPage(activeCourseId);
+  else if(page==='assignments') void window.loadAssignmentsPage(activeCourseId);
+  else if(page==='files'){ void window.loadCourseFilesPage(); void window.populateFileLessonSelect?.(); }
+  else if(page==='chat') void loadChatPage(activeCourseId);
+  try{persistCourseState?.();}catch(_){ }
+  return true;
+};
+
+/* Make create/edit/delete changes visible immediately when the active page is open. */
+window.__aaRefreshCurrentCourseContent = function(){
+  const cid=String(activeCourseId||'').trim(); if(!cid)return;
+  if(currentCoursePage==='assignments')return window.loadAssignmentsPage(cid);
+  if(currentCoursePage==='quizzes')return window.loadQuizzesPage(cid);
+  if(currentCoursePage==='files')return window.loadCourseFilesPage();
+  if(currentCoursePage==='learning')return window.loadLessonsForCourse(cid);
+};
+
+/* The assignment/files/lesson streams refresh the currently visible page only. */
+if(window.__courseLiveUnsubs instanceof Map){
+  /* Rewire the live stream once using the canonical loaders. */
+  window.__startCanonicalCourseLiveSync=function(courseId){
+    const cid=String(courseId||'').trim(); if(!cid)return;
+    try{ const old=window.__courseLiveUnsubs.get(cid); if(Array.isArray(old))old.forEach(u=>u?.()); }catch(_){ }
+    const base=db.collection('courses').doc(cid), unsubs=[];
+    ['lessons','quizzes','assignments','files'].forEach(kind=>{
+      const u=base.collection(kind).onSnapshot(()=>{
+        if(String(activeCourseId||'')!==cid)return;
+        if(currentCoursePage==='assignments'&&kind==='assignments')window.loadAssignmentsPage(cid);
+        else if(currentCoursePage==='quizzes'&&kind==='quizzes')window.loadQuizzesPage(cid);
+        else if(currentCoursePage==='files'&&kind==='files')window.loadCourseFilesPage();
+        else if(currentCoursePage==='learning'&&kind==='lessons')window.loadLessonsForCourse(cid);
+      },e=>console.warn('live content sync',kind,e));
+      unsubs.push(u);
+    });
+    window.__courseLiveUnsubs.set(cid,unsubs);
+  };
+}
+
+})();
+</script>
 </body>
 </html>
