@@ -4967,8 +4967,8 @@ window.AnanasTimers=window.AnanasTimers||(()=>{
             // the overview when entering another course.
             const overviewView = document.getElementById('courseOverviewContainer');
             const dashboardView = document.getElementById('courseDashboard');
-            if (overviewView) overviewView.style.display = 'block';
-            if (dashboardView) dashboardView.style.display = 'none';
+            if (overviewView) { overviewView.style.display='block'; overviewView.classList.add('is-mobile-active'); }
+            if (dashboardView) { dashboardView.style.display='none'; dashboardView.classList.remove('is-mobile-active'); }
             document.getElementById('courseLearningView').classList.remove('active');
             document.getElementById('fullChatPage').classList.remove('active');
             document.getElementById('courseLessonsPage').classList.remove('active');
@@ -5069,47 +5069,45 @@ window.AnanasTimers=window.AnanasTimers||(()=>{
         document.addEventListener('keydown',e=>{if(e.key==='Escape'){closePlatformImageViewer();closePlatformGalleryViewer();}});
 
         function switchCoursePage(page) {
+            if(!activeCourseId && page!=='courses') return;
             if(currentCoursePage === 'lessonPlayer' && page !== 'lessonPlayer') stopLessonForNavigation();
             currentCoursePage = page;
             const detail=document.getElementById('courseDetailView');
             if(detail) detail.style.display='flex';
-            const overview=document.getElementById('courseOverviewContainer');
-            const dashboard=document.getElementById('courseDashboard');
-            const lessons=document.getElementById('courseLessonsPage');
-            const lessonPlayerPage=document.getElementById('courseLessonPlayerPage');
-            const quizzes=document.getElementById('courseQuizzesPage');
-            const assignments=document.getElementById('courseAssignmentsPage');
-            const chat=document.getElementById('courseChatPage');
-            if(dashboard) dashboard.style.display='none';
-            if(overview && page!=='overview') overview.style.display='none';
-            if(lessons){lessons.classList.remove('active');lessons.style.display='none';}
-            if(lessonPlayerPage){lessonPlayerPage.classList.remove('active');lessonPlayerPage.style.display='none';}
-            document.getElementById('courseLearningView')?.classList.remove('active');
-            document.getElementById('fullChatPage')?.classList.remove('active');
-            document.getElementById('courseAssignmentDetailPage')?.classList.remove('active');
-            if(quizzes){quizzes.style.display='none';quizzes.classList.remove('active');}
-            if(assignments){assignments.style.display='none';assignments.classList.remove('active');}
-            if(chat){chat.style.display='none';chat.classList.remove('active');}
-
-            if(page === 'overview') {
-                if(overview) overview.style.display='block';
-                if(dashboard) dashboard.style.display='none';
-            } else if(page === 'dashboard') {
-                if(overview) overview.style.display='none';
-                if(dashboard){dashboard.style.display='flex';dashboard.classList.add('active');}
-            } else if(page === 'learning') {
-                if(lessons){lessons.style.display='block';lessons.classList.add('active');}
+            const pages={
+                overview:document.getElementById('courseOverviewContainer'),
+                dashboard:document.getElementById('courseDashboard'),
+                learning:document.getElementById('courseLessonsPage'),
+                lessonPlayer:document.getElementById('courseLessonPlayerPage'),
+                quizzes:document.getElementById('courseQuizzesPage'),
+                assignments:document.getElementById('courseAssignmentsPage'),
+                assignmentDetail:document.getElementById('courseAssignmentDetailPage'),
+                chat:document.getElementById('courseChatPage')
+            };
+            const learningView=document.getElementById('courseLearningView');
+            const fullChat=document.getElementById('fullChatPage');
+            Object.values(pages).forEach(el=>{if(!el)return;el.classList.remove('active','is-mobile-active');el.style.display='none';});
+            learningView?.classList.remove('active','is-mobile-active');
+            fullChat?.classList.remove('active','is-mobile-active');
+            const active=pages[page]||pages.dashboard;
+            if(active){
+                active.classList.add('active','is-mobile-active');
+                active.style.display=page==='dashboard'?'flex':'block';
+            }
+            if(page==='overview'){
+                pages.overview?.style.setProperty('display','block');
+            }else if(page==='dashboard'){
+                pages.dashboard?.style.setProperty('display','flex');
+            }else if(page==='learning'){
                 void loadLessonsForCourse(activeCourseId);
-            } else if(page === 'lessonPlayer') {
-                if(lessonPlayerPage){lessonPlayerPage.style.display='block';lessonPlayerPage.classList.add('active');}
-            } else if(page === 'quizzes') {
-                if(quizzes){quizzes.style.display='block';quizzes.classList.add('active');}
+            }else if(page==='lessonPlayer'){
+                // Player is activated by openLessonPlayer; keep it visible for mobile and desktop.
+                pages.lessonPlayer?.style.setProperty('display','block');
+            }else if(page==='quizzes'){
                 void loadQuizzesPage(activeCourseId);
-            } else if(page === 'assignments') {
-                if(assignments){assignments.style.display='block';assignments.classList.add('active');}
+            }else if(page==='assignments'){
                 void loadAssignmentsPage(activeCourseId);
-            } else if(page === 'chat') {
-                if(chat){chat.style.display='block';chat.classList.add('active');}
+            }else if(page==='chat'){
                 void loadChatPage(activeCourseId);
             }
             setMobileNavActive(page === 'lessonPlayer' ? 'learning' : page);
@@ -5253,7 +5251,7 @@ window.AnanasTimers=window.AnanasTimers||(()=>{
                 const submissionName=escapeHtml(sub.userName||'طالب');
                 const submissionPhoto=escapeHtml(sub.userPhoto||'');
                 const profileUid=escapeHtml(sub.userId||'');
-                html+=`<div class="assignment-work-card" data-work-id="${escapeHtml(workId)}" data-user-id="${profileUid}">
+                html+=`<div class="assignment-work-card" data-work-id="${escapeHtml(workId)}" data-assignment-id="${escapeHtml(assignmentId)}" data-user-id="${profileUid}">
                     <button type="button" class="assignment-submitter" data-profile-uid="${profileUid}" ${profileUid?'':'disabled'}>
                         <span class="assignment-submitter-avatar">${submissionPhoto?`<img src="${submissionPhoto}" alt="">`:'<i class="fas fa-user"></i>'}</span>
                         <span class="assignment-submitter-name">${submissionName}</span>
@@ -5277,32 +5275,28 @@ window.AnanasTimers=window.AnanasTimers||(()=>{
             return html;
         }
 
-        async function hydrateAssignmentSubmitterProfiles(){
-            const cards=[...document.querySelectorAll('#assignmentDetailContent .assignment-work-card[data-user-id]')];
-            const ids=[...new Set(cards.map(card=>card.dataset.userId).filter(Boolean))];
+        async function hydrateAssignmentSubmitterProfiles(root=document.getElementById('assignmentDetailContent')){
+            if(!root)return;
+            const cards=[...root.querySelectorAll('.assignment-work-card[data-user-id]')];
+            const ids=[...new Set(cards.map(card=>String(card.dataset.userId||'')).filter(Boolean))];
             if(!ids.length)return;
             const cache=window.__assignmentSubmitterProfileCache=window.__assignmentSubmitterProfileCache||{};
-            await Promise.all(ids.map(async uid=>{
-                if(cache[uid])return;
-                try{
-                    const snap=await db.collection('users').doc(uid).get();
-                    const p=snap.exists?(snap.data()||{}):{};
-                    cache[uid]={name:p.displayName||p.name||'طالب',photo:p.photoURL||p.photoUrl||p.photo||''};
-                }catch(_){cache[uid]={name:'طالب',photo:''};}
-            }));
+            let cursor=0;
+            const worker=async()=>{while(cursor<ids.length){const uid=ids[cursor++];if(cache[uid])continue;try{const p=await window.__aaGetCanonicalUser?.(uid);cache[uid]=p||{name:'طالب',photo:''};}catch(_){cache[uid]={name:'طالب',photo:''};}}};
+            await Promise.all(Array.from({length:Math.min(6,ids.length)},worker));
             cards.forEach(card=>{
-                const uid=card.dataset.userId,p=cache[uid]||{};
+                const uid=String(card.dataset.userId||''),p=cache[uid]||{};
                 const nameEl=card.querySelector('.assignment-submitter-name');
                 const avatar=card.querySelector('.assignment-submitter-avatar');
                 if(nameEl&&p.name)nameEl.textContent=p.name;
-                if(avatar&&p.photo)avatar.innerHTML=`<img src="${escapeHtml(p.photo)}" alt="">`;
+                if(avatar){const src=avatar.querySelector('img')?.getAttribute('src')||'';if(p.photo){if(!src||src!==p.photo)avatar.innerHTML=`<img src="${escapeHtml(p.photo)}" alt="">`;}else if(!avatar.textContent.trim())avatar.innerHTML=`<span>${escapeHtml(String(p.name||'طالب').charAt(0))}</span>`;}
             });
         }
 
         async function refreshAssignmentDetail(courseId,assignmentId){
             const result=await getAssignmentData(courseId,assignmentId); if(!result)return;
             document.getElementById('assignmentDetailContent').innerHTML=renderAssignmentDetailHtml(courseId,assignmentId,result.data);
-            hydrateAssignmentSubmitterProfiles();
+            await hydrateAssignmentSubmitterProfiles(document.getElementById('assignmentDetailContent'));
             if(isAdmin){
                 const content=document.getElementById('assignmentDetailContent');
                 const subs=Array.isArray(result.data.submissions)?result.data.submissions:[];
@@ -5332,8 +5326,15 @@ window.AnanasTimers=window.AnanasTimers||(()=>{
         window.openAssignmentDetail = async function(courseId, assignmentId) {
             if(!$('ananasCanonicalProfilePage')?.classList.contains('active')) window.__ananasProfileReturnPoint={type:'assignment-detail',courseId,assignmentId};
             const page=document.getElementById('courseAssignmentDetailPage');
-            page.classList.add('active');
-            document.getElementById('courseAssignmentsPage').style.display='none';
+            const assignmentsPage=document.getElementById('courseAssignmentsPage');
+            if(!page)return;
+            page.dataset.assignmentId=String(assignmentId||'');
+            page.classList.add('active','is-mobile-active');
+            page.style.display='block';
+            if(assignmentsPage){assignmentsPage.classList.remove('active','is-mobile-active');assignmentsPage.style.display='none';}
+            currentCoursePage='assignments';
+            const detailHost=document.getElementById('assignmentDetailContent');
+            if(detailHost && !detailHost.innerHTML.trim()) detailHost.innerHTML='<div style="padding:50px;text-align:center;color:var(--text-muted)">جاري تحميل الواجب...</div>';
             const result=await getAssignmentData(courseId,assignmentId);
             if(!result)return showCustomAlert('خطأ','الواجب غير موجود.');
             const a=result.data;
@@ -5343,9 +5344,13 @@ window.AnanasTimers=window.AnanasTimers||(()=>{
         };
 
         window.closeAssignmentDetail=function(){
-            document.getElementById('courseAssignmentDetailPage')?.classList.remove('active');
-            document.getElementById('courseAssignmentsPage').style.display='block';
+            const detail=document.getElementById('courseAssignmentDetailPage');
+            const list=document.getElementById('courseAssignmentsPage');
+            if(detail){detail.classList.remove('active','is-mobile-active');detail.style.display='none';detail.dataset.assignmentId='';}
+            if(list){list.classList.add('active','is-mobile-active');list.style.display='block';}
+            currentCoursePage='assignments';
             window.__ananasProfileReturnPoint={type:'assignments',courseId:activeCourseId||null};
+            persistCourseState?.();
         };
 
         window.openAssignmentWorkViewer=async function(courseId,assignmentId,workId){
@@ -5858,6 +5863,7 @@ window.AnanasTimers=window.AnanasTimers||(()=>{
             container.dataset.loaded='1';
             container.dataset.courseId=String(courseId);
             renderLessonPlayerList();
+            try{ normalizeLessonCards?.(); }catch(_){ }
         }
 
         async function loadLessonsForCourse(courseId) {
@@ -5966,8 +5972,10 @@ window.AnanasTimers=window.AnanasTimers||(()=>{
             activeLessonId = lessonId;
             currentCoursePage = 'lessonPlayer';
             lessonCurrentData = lesson;
-            document.getElementById('courseLessonsPage').classList.remove('active');
-            document.getElementById('courseLessonPlayerPage').classList.add('active');
+            const lessonsPage=document.getElementById('courseLessonsPage');
+            const playerPage=document.getElementById('courseLessonPlayerPage');
+            if(lessonsPage){lessonsPage.classList.remove('active','is-mobile-active');lessonsPage.style.display='none';}
+            if(playerPage){playerPage.classList.add('active','is-mobile-active');playerPage.style.display='block';}
             document.getElementById('lessonPlayerTitle').textContent = lesson.titleAr || 'حصة';
             document.getElementById('lessonPlayerMeta').textContent = `${lesson.duration || 0} دقيقة • ${lesson.xpReward || 0} XP`;
             renderLessonPlayerList();
@@ -8294,7 +8302,7 @@ window.AnanasTimers=window.AnanasTimers||(()=>{
                 if(st.page==='chat'){switchCoursePage('chat');return;}
                 if(st.page==='lessonPlayer'&&st.lessonId){
                     switchCoursePage('learning');
-                    const wait=()=>{if(lessonListCache.some(l=>l.id===st.lessonId)){openLessonPlayer(st.courseId,st.lessonId);}else setTimeout(wait,120);}; wait();
+                    let tries=0;const wait=()=>{if(lessonListCache.some(l=>String(l.id)===String(st.lessonId))){openLessonPlayer(st.courseId,st.lessonId);}else if(++tries<40)setTimeout(wait,120);else console.warn('lesson route restore timed out',st.lessonId)}; wait();
                 }
             }catch(e){console.warn('restore route failed',e);} finally { setTimeout(()=>window.__restoredCourseRoute=false,300); }
         }
@@ -8442,7 +8450,7 @@ window.AnanasTimers=window.AnanasTimers||(()=>{
     if(!nav){nav=document.createElement('div');nav.id='assignmentRouteNav';nav.style.cssText='display:flex;gap:8px;align-items:center;margin-bottom:14px;';page.querySelector('.page-title')?.prepend(nav);}
     nav.innerHTML=`<button type="button" class="full-page-back-btn" title="العودة للحصة" onclick="returnToAssignmentLesson()"><i class="fas fa-video"></i></button><button type="button" class="full-page-back-btn" title="الواجبات" onclick="returnToAssignmentList()"><i class="fas fa-paint-brush"></i></button>`;
   };
-  window.returnToAssignmentLesson=function(){const lid=activeLessonId||(()=>{try{return JSON.parse(localStorage.getItem('ananas.lastCourseState')||'{}').lessonId}catch(e){return null}})();document.getElementById('courseAssignmentDetailPage')?.classList.remove('active');if(activeCourseId&&lid){__origSwitchCoursePage('learning');setTimeout(()=>openLessonPlayer(activeCourseId,lid),50);}else if(activeCourseId)__origSwitchCoursePage('learning');persistCourseState();};
+  window.returnToAssignmentLesson=function(){const lid=activeLessonId||(()=>{try{return JSON.parse(localStorage.getItem('ananas.lastCourseState')||'{}').lessonId}catch(e){return null}})();document.getElementById('courseAssignmentDetailPage')?.classList.remove('active','is-mobile-active');document.getElementById('courseAssignmentDetailPage')?.style.setProperty('display','none');if(activeCourseId&&lid){__origSwitchCoursePage('learning');setTimeout(()=>openLessonPlayer(activeCourseId,lid),50);}else if(activeCourseId)__origSwitchCoursePage('learning');persistCourseState();};
   window.returnToAssignmentList=function(){window.activeAssignmentDetailId=null;document.getElementById('courseAssignmentDetailPage')?.classList.remove('active');if(activeCourseId)__origSwitchCoursePage('assignments');persistCourseState();};
 
   /* Clicking the buttons under a lesson opens the actual linked item, not its list. */
@@ -8712,7 +8720,7 @@ window.AnanasTimers=window.AnanasTimers||(()=>{
       if(st.page==='learning'){switchCoursePage('learning');return;}
       if(st.page==='lessonPlayer'&&st.lessonId){
         switchCoursePage('learning');
-        const wait=()=>{if(Array.isArray(lessonListCache)&&lessonListCache.some(l=>String(l.id)===String(st.lessonId))){openLessonPlayer(courseId,st.lessonId);}else setTimeout(wait,100);};wait();return;
+        let tries=0;const wait=()=>{if(Array.isArray(lessonListCache)&&lessonListCache.some(l=>String(l.id)===String(st.lessonId))){openLessonPlayer(courseId,st.lessonId);}else if(++tries<40)setTimeout(wait,100);else console.warn('lesson route restore timed out',st.lessonId)};wait();return;
       }
       if(st.page==='quizzes'){switchCoursePage('quizzes');if(st.quizId)setTimeout(()=>window.openQuiz(courseId,st.quizId,true),80);return;}
       if(st.page==='assignments'){switchCoursePage('assignments');if(st.assignmentId)setTimeout(()=>window.openAssignmentDetail(courseId,st.assignmentId,true),80);return;}
@@ -9224,7 +9232,7 @@ dedupeFilesDashboardTile();
   if(profilePage) profilePage.style.setProperty('top','var(--nav-height-desktop)','important');
 
   /* Re-run the unified styling after dynamically rendered content. */
-  window.__aaDomObserverRegister?.((m)=>{if(m.some(x=>x.addedNodes?.length))window.ensureAssignmentEditButtons(document);});
+  // Assignment edit buttons are bound by the assignment renderer after each render.
   window.ensureAssignmentEditButtons(document);
 })();
 </script>
@@ -9281,10 +9289,6 @@ dedupeFilesDashboardTile();
    finally{btn.disabled=false;}
  }
  window.openProfileWorkUpload=async function(){if(!currentUser)return triggerAuth?.();const m=ensureProfileWorkModal();await loadProfileWorkCourses();$('profileWorkCourse').value='';$('profileWorkAssignment').innerHTML='<option value="">اختر الواجب</option>';$('profileWorkFiles').value='';$('profileWorkFilesName').textContent='لم يتم اختيار ملفات بعد';$('profileWorkStatus').textContent='';m.classList.add('active');};
- window.__aaDomObserverRegister?.(()=>{
-   const toolbar=$('profileSelfToolbar');
-   if(toolbar&&!toolbar.querySelector('#profileAddWorkBtn')){const b=document.createElement('button');b.id='profileAddWorkBtn';b.type='button';b.className='ananas-primary-btn';b.innerHTML='<i class="fas fa-plus"></i> إضافة عمل';b.onclick=()=>window.openProfileWorkUpload();toolbar.insertBefore(b,toolbar.firstChild);}
- });
 })();
 </script>
 
@@ -9389,7 +9393,7 @@ function attachV7LockHandlers(){const lock=$('chatLockBtn'),unlock=$('chatUnlock
 attachV7LockHandlers();buildV7LockModal();
 
 /* 8) Clean duplicate lesson upload/file actions once more after dynamic updates. */
-window.__aaDomObserverRegister?.(()=>{attachV7LockHandlers();dedupeLessonActions();ensureProfileFooter()});
+attachV7LockHandlers(); dedupeLessonActions(); ensureProfileFooter();
 
 /* 9) Keep lesson resume position when returning from quiz/assignment; autoplay from exact saved point. */
 const oldRestore=window.returnToQuizLesson;
@@ -9446,14 +9450,14 @@ const toMs=v=>{try{return v?.toDate?v.toDate().getTime():v?new Date(v).getTime()
 
 /* 1) Lesson cards: same compact footprint / spacing language as quiz cards. */
 function normalizeLessonCards(){document.querySelectorAll('.lesson-card').forEach(card=>{card.style.minHeight='210px';card.style.height='210px';card.style.padding='0';});}
-window.__aaDomObserverRegister?.(()=>normalizeLessonCards());normalizeLessonCards();
+normalizeLessonCards();
 
 /* 2) Enrollment code: visible optional final-expiry date, accepted when filled. */
 function enhanceCodeExpiry(){
  const box=$('codeEndDate'); if(box&&!box.dataset.v10){box.dataset.v10='1';const host=box.parentElement;if(host&&!host.querySelector('.v10-code-expiry-note')){const n=document.createElement('span');n.className='v10-code-expiry-note';n.textContent='اختياري: اتركه فارغًا ليبقى الكود بلا تاريخ انتهاء.';host.appendChild(n)}}
 }
 enhanceCodeExpiry();
-window.__aaDomObserverRegister?.(()=>enhanceCodeExpiry());
+
 
 /* 3) File upload button: click the real input, never depend on a label/hidden click. */
 function bindCourseFilePicker(){
@@ -11779,11 +11783,11 @@ hideLegacy();
       $('aaProfileGallery').innerHTML=rowList(allWorks.map(x=>{
         const imgs=Array.isArray(x.images)?x.images:(x.imageUrl?[x.imageUrl]:[]), img=imgs[0]||'';
         if(x.kind==='assignment'){
-          return `<article class="aa-profile-work"><div class="aa-profile-cover">${img?`<img src="${esc(img)}" alt="">`:'<i class="fas fa-images"></i>'}</div><div class="aa-profile-work-body"><strong>${esc(x.title||'واجب')}</strong><small>${esc(x.courseTitle||'')}<br>${x.approved?'✅ معتمد':'⏳ قيد المراجعة'}${imgs.length>1?` · ${imgs.length} صور`:''}</small><button type="button" class="aa-profile-view-work" data-course="${esc(x.courseId||'')}" data-assignment="${esc(x.assignmentId||'')}" data-work="${esc(x.id||'')}"><i class="fas fa-eye"></i> عرض العمل</button></div></article>`;
+          return `<article class="aa-profile-work"><div class="aa-profile-cover">${img?`<img src="${esc(img)}" alt="">`:'<i class="fas fa-images"></i>'}</div><div class="aa-profile-work-body"><strong>${esc(x.title||'واجب')}</strong><small>${esc(x.courseTitle||'')}<br>${x.approved?'✅ معتمد':'⏳ قيد المراجعة'}${imgs.length>1?` · ${imgs.length} صور`:''}</small><button type="button" class="aa-profile-view-work" data-kind="assignment" data-course="${esc(x.courseId||'')}" data-assignment="${esc(x.assignmentId||'')}" data-work="${esc(x.id||'')}"><i class="fas fa-eye"></i> عرض العمل</button></div></article>`;
         }
         return `<article class="aa-profile-work"><div class="aa-profile-cover">${img?`<img src="${esc(img)}" alt="">`:'<i class="fas fa-images"></i>'}</div><div class="aa-profile-work-body"><strong>${esc(x.title||'عمل')}</strong><small>${esc(x.type||'عمل شخصي')}${x.description?`<br>${esc(x.description)}`:''}${imgs.length>1?`<br>${imgs.length} صور`:''}</small><button type="button" class="aa-profile-view-work" data-kind="portfolio" data-user="${esc(uid)}" data-work="${esc(x.id||'')}" data-images="${esc(JSON.stringify(imgs))}"><i class="fas fa-eye"></i> عرض العمل</button></div></article>`;
       }),'لا توجد أعمال منشورة حاليًا.');
-      $('aaProfileGallery').querySelectorAll('.aa-profile-view-work').forEach(btn=>btn.addEventListener('click',()=>window.openAssignmentWorkViewer?.(btn.dataset.course,btn.dataset.assignment,btn.dataset.work)));
+      $('aaProfileGallery').querySelectorAll('.aa-profile-view-work').forEach(btn=>btn.addEventListener('click',e=>{e.preventDefault();e.stopPropagation();if(btn.dataset.kind==='portfolio'){window.openProfilePortfolioWorkViewer?.(btn.dataset.user,btn.dataset.work,btn.dataset.images||'[]');}else{window.openAssignmentWorkViewer?.(btn.dataset.course,btn.dataset.assignment,btn.dataset.work);}}));
     }
   }
 
@@ -14032,7 +14036,7 @@ function scheduleCanonicalHydration(){
     finally{canonicalHydrationRunning=false;}
   },120);
 }
-window.__aaDomObserverRegister?.(()=>scheduleCanonicalHydration());
+// Canonical hydration is triggered explicitly by page renderers; do not scan the whole DOM on every mutation.
 
 window.__aaHydrateAssignmentDetailNow=function(){
   const root=document.getElementById('assignmentV2Content')||document.getElementById('assignmentDetailContent');
@@ -14803,9 +14807,6 @@ function removeLegacy(){
   document.querySelectorAll('.aa-notifications-page,.aa-notification-detail-modal,.aa-code-reason-modal').forEach(e=>e.remove());
 }
 removeLegacy();
-window.__aaDomObserverRegister?.(()=>{
-  ['aaN27Wrap','aaN27Dropdown','aaN27Page','aaN27Detail','aaFinalNotifWrap','aaFinalNotifDropdown','aaFinalNotificationsRoot','aaFinalNotifDetail','aaNotificationsWrap','aaNotificationsPage','aaNotificationDetailModal','aaNotificationsDropdown','aaCodeReasonModal','aaAdminNotificationToolsV'].forEach(id=>$(id)?.remove());
-});
 
 const state={notifications:[],courses:[],users:[],selected:new Set(),sendOpen:true,mode:'specific',unsub:null};
 function notificationDate(n){const d=dateOf(n.createdAt);return d?d.toLocaleString('ar-SA',{dateStyle:'medium',timeStyle:'short'}):''}
