@@ -13053,28 +13053,43 @@ window.__aaV9Cleanup=()=>clearInterval(v9Tick);
     dirState.loading=true;
     try{
       const snap=await db.collection('users').get();
+      const users=snap.docs
+        .map(d=>({id:d.id,ref:d.ref,...(d.data()||{})}))
+        .filter(u=>String(u.id)!==String(currentUser?.uid||''));
       const rows=[];
-      for(const d of snap.docs){
-        if(token!==dirState.token)return;
-        const u={id:d.id,...(d.data()||{})};
-        if(String(u.id)===String(currentUser?.uid))continue;
-        let enrolledIds=[];
-        try{
-          const en=await d.ref.collection('enrolledCourses').get();
-          enrolledIds=en.docs.map(x=>String(x.id)).filter(Boolean);
-        }catch(_){
-          enrolledIds=Array.isArray(u.enrolledCourses)?u.enrolledCourses.map(x=>String(x.id||x)):[...new Set([...(u.enrolledCourseIds||[]).map(String),...(u.courseIds||[]).map(String)])];
+      const workerCount=Math.min(8,Math.max(1,users.length));
+      let cursor=0;
+      const worker=async()=>{
+        while(true){
+          const idx=cursor++;
+          if(idx>=users.length)break;
+          if(token!==dirState.token)return;
+          const u=users[idx];
+          let enrolledIds=[];
+          try{
+            const en=await u.ref.collection('enrolledCourses').get();
+            enrolledIds=en.docs
+              .filter(x=>{
+                const e=x.data()||{};
+                return e.codeDeleted!==true && e.accessBlocked!==true;
+              })
+              .map(x=>String(x.id))
+              .filter(Boolean);
+          }catch(_){
+            enrolledIds=[];
+          }
+          rows[idx]={...u,enrolledCourseIds:[...new Set(enrolledIds)]};
         }
-        rows.push({...u,enrolledCourseIds:[...new Set(enrolledIds)]});
-      }
-      dirState.users=rows;dirState.ready=true;
+      };
+      await Promise.all(Array.from({length:workerCount},worker));
+      if(token!==dirState.token)return;
+      dirState.users=rows.filter(Boolean);dirState.ready=true;
     }catch(e){
       console.error('final directory users',e);
       dirState.users=[];dirState.ready=false;
       const box=$('aaProfileDirectory');if(box)box.innerHTML='<div class="aa-profile-empty">تعذر تحميل الحسابات.</div>';
     }finally{
-      dirState.loading=false;
-      renderFinalDirectory();
+      if(token===dirState.token){dirState.loading=false;renderFinalDirectory();}
     }
   }
 
@@ -13103,10 +13118,10 @@ window.__aaV9Cleanup=()=>clearInterval(v9Tick);
     box.innerHTML=users.map(u=>{
       const name=getUserName(u),photo=getUserPhoto(u),uid=escapeHtml(u.id);
       let avatar='';
-      if(photo)avatar=`<img src="${escapeHtml(photo)}" alt="" loading="lazy">`;
+      if(photo)avatar=`<img src="${escapeHtml(photo)}" alt="" loading="lazy" decoding="async">`;
       else avatar=escapeHtml(name.trim().slice(0,1)||'م');
       const courseCount=u.enrolledCourseIds.length;
-      return `<button type="button" class="aa-profile-directory-card" data-aa-v10-uid="${uid}">
+      return `<button type="button" class="aa-profile-directory-card" data-directory-profile-uid="${uid}">
         <span class="aa-profile-directory-avatar">${avatar}</span>
         <span class="aa-profile-directory-copy">
           <strong>${escapeHtml(name)}</strong>
@@ -13115,13 +13130,19 @@ window.__aaV9Cleanup=()=>clearInterval(v9Tick);
         <i class="fas fa-chevron-left"></i>
       </button>`;
     }).join('');
-    box.querySelectorAll('[data-aa-v10-uid]').forEach(btn=>{
-      btn.addEventListener('click',e=>{
+    box.querySelectorAll('[data-directory-profile-uid]').forEach(btn=>{
+      btn.onclick=e=>{
         e.preventDefault();
-        const uid=btn.dataset.aaV10Uid;
+        e.stopPropagation();
+        const uid=String(btn.dataset.directoryProfileUid||'');
+        if(!uid)return;
         window.__aaViewedProfileUid=uid;
-        if(typeof window.aaOpenProfile==='function')window.aaOpenProfile(uid,{kind:'admin-directory',returnPoint:profileSelfReturnPoint()});
-      });
+        window.__aaRunOnceAction?.('directory-profile-'+uid,async()=>{
+          await window.aaOpenProfile?.(uid,{kind:'admin-directory',returnPoint:profileSelfReturnPoint()});
+          hideViewedDirectoryCard();
+          renderFinalDirectory();
+        });
+      };
     });
   }
 
@@ -13136,6 +13157,7 @@ window.__aaV9Cleanup=()=>clearInterval(v9Tick);
   }
 
   window.__v10LoadDirectory=loadFinalDirectory;
+  window.__loadDirectory=loadFinalDirectory;
   window.loadDirectory=loadFinalDirectory;
   window.__aaFinalDirectoryV10=dirState;
 
@@ -15737,6 +15759,9 @@ if(!window.__aaStableNotifStarted){window.__aaStableNotifStarted=true;window.Ana
       const page=getPage();
       page.classList.add('active');
       document.body.classList.add('aa-profile-open');
+      page.scrollTop=0;
+      requestAnimationFrame(()=>{try{page.scrollTo({top:0,left:0,behavior:'auto'});}catch(_){} });
+      try{window.scrollTo({top:0,left:0,behavior:'auto'});}catch(_){}
       setProfileLoading(page,true);
       if(window.profileState){window.profileState.uid=uid;window.profileState.isSelf=uid===currentUser?.uid;window.profileState.source={kind:opts.kind||'public'};window.profileState.returnPoint=opts.returnPoint||window.profileReturnPoint?.()||null;window.profileState.busy=false;}
 
@@ -15775,6 +15800,7 @@ if(!window.__aaStableNotifStarted){window.__aaStableNotifStarted=true;window.Ana
         const finalProfile=live.user&&Object.keys(live.user).length?live.user:p;
         if(finalProfile!==p)setHeader(uid,finalProfile,isSelf);
         renderData(uid,finalProfile,isSelf,live,token);
+        try{page.scrollTo({top:0,left:0,behavior:'auto'});}catch(_){}
         window.__aaProfileDataSource='authoritativeLiveProfile';
         if(isAdmin&&typeof window.__loadDirectory==='function'){try{await window.__loadDirectory();}catch(_){} }
       }catch(err){
