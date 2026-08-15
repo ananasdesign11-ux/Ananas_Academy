@@ -15882,5 +15882,87 @@ if(!window.__aaStableNotifStarted){window.__aaStableNotifStarted=true;window.Ana
 
 })();
 </script>
+
+<script id="aa-final-directory-profile-open-fix">
+(function(){
+  'use strict';
+  const $=id=>document.getElementById(id);
+  const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  function forceProfileSurface(){
+    const page=$('aaRebuiltProfilePage');
+    if(!page)return null;
+    ['userProfilePage','ananasV10ProfilePage','ananasPrivateProfileOverlay','ananasCanonicalProfilePage'].forEach(id=>{
+      const e=$(id); if(e && e!==page){e.classList.remove('active');e.style.setProperty('display','none','important');e.style.setProperty('pointer-events','none','important');}
+    });
+    page.classList.add('active');
+    page.style.setProperty('display','block','important');
+    page.style.setProperty('visibility','visible','important');
+    page.style.setProperty('pointer-events','auto','important');
+    page.style.setProperty('z-index','2147483000','important');
+    document.body.classList.add('aa-profile-open');
+    document.body.style.removeProperty('overflow');
+    document.documentElement.style.removeProperty('overflow');
+    try{page.scrollTop=0;page.querySelector('.aa-profile-shell')?.scrollTo?.(0,0);window.scrollTo(0,0);}catch(_){ }
+    return page;
+  }
+  function openDirectoryProfile(uid){
+    uid=String(uid||''); if(!uid || !currentUser)return;
+    window.__aaViewedProfileUid=uid;
+    const point=typeof profileSelfReturnPoint==='function'?profileSelfReturnPoint():null;
+    const runner=window.__aaRunOnceAction||((_,fn)=>Promise.resolve().then(fn));
+    return runner('directory-profile-final-'+uid, async()=>{
+      const opener=window.__aaFastProfileOpenV36||window.aaOpenProfile||window.openPublicProfileFinal;
+      if(typeof opener!=='function')return;
+      await opener(uid,{kind:'admin-directory',returnPoint:point});
+      const page=forceProfileSurface();
+      if(page){
+        try{page.scrollTop=0;window.scrollTo({top:0,left:0,behavior:'auto'});}catch(_){ }
+      }
+    });
+  }
+  window.__aaOpenDirectoryProfileFinal=openDirectoryProfile;
+
+  const box=$('aaProfileDirectory');
+  if(box){
+    box.addEventListener('pointerup',e=>{
+      const card=e.target.closest?.('[data-aa-uid]');
+      if(!card || !box.contains(card))return;
+      e.preventDefault(); e.stopImmediatePropagation();
+      openDirectoryProfile(card.dataset.aaUid);
+    },true);
+    box.addEventListener('click',e=>{
+      const card=e.target.closest?.('[data-aa-uid]');
+      if(!card || !box.contains(card))return;
+      e.preventDefault(); e.stopImmediatePropagation();
+      openDirectoryProfile(card.dataset.aaUid);
+    },true);
+  }
+
+  const oldAAOpen=window.aaOpenProfile;
+  if(typeof oldAAOpen==='function' && !oldAAOpen.__aaFinalSurfaceFix){
+    const wrapped=async function(uid,opts={}){
+      const r=await oldAAOpen.apply(this,arguments);
+      const page=forceProfileSurface();
+      if(page){try{page.scrollTop=0;window.scrollTo({top:0,left:0,behavior:'auto'});}catch(_){}}
+      return r;
+    };
+    wrapped.__aaFinalSurfaceFix=true;
+    wrapped.__original=oldAAOpen;
+    window.aaOpenProfile=wrapped;
+    window.openPublicProfileFinal=wrapped;
+    window.openStudentProfile=wrapped;
+    window.viewProfileByUserId=wrapped;
+    window.openChatProfileV13=wrapped;
+    window.openChatProfileV12=wrapped;
+  }
+
+  document.head.insertAdjacentHTML('beforeend',`<style id="aa-final-profile-surface-fix">
+    #aaRebuiltProfilePage{display:none!important;visibility:hidden!important;pointer-events:none!important;z-index:2147483000!important;}
+    #aaRebuiltProfilePage.active{display:block!important;visibility:visible!important;pointer-events:auto!important;z-index:2147483000!important;}
+    #userProfilePage.active,#ananasV10ProfilePage.active,#ananasPrivateProfileOverlay.active,#ananasCanonicalProfilePage.active{z-index:1!important;}
+  </style>`);
+})();
+</script>
+
 </body>
 </html>
