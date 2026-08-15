@@ -12963,5 +12963,71 @@ const s=document.createElement('style');s.textContent=`
   });
 })();
 </script>
+
+<script id="profile-open-recovery-v31">
+(function(){
+  'use strict';
+  const $id=id=>document.getElementById(id);
+  const safePoint=()=>{try{return typeof profileReturnPoint==='function'?profileReturnPoint():{type:'courses'};}catch(_){return {type:'courses'};}};
+
+  async function openProfileRecovery(uid,opts={}){
+    if(!currentUser||!uid){try{triggerAuth?.();}catch(_){ } return;}
+    const isSelf=String(uid)===String(currentUser.uid);
+    const source=opts.kind==='admin-directory'?{kind:'admin-directory'}:{kind:opts.kind||'link'};
+    window.profileState={uid,isSelf,source,returnPoint:opts.returnPoint||safePoint(),busy:false};
+
+    let page=null;
+    try{
+      if(typeof hideLegacy==='function') hideLegacy();
+      if(typeof ensureProfilePage==='function') page=ensureProfilePage();
+      else page=$id('aaRebuiltProfilePage');
+    }catch(err){
+      console.error('profile shell recovery failed',err);
+    }
+    if(!page){
+      try{showCustomAlert?.('خطأ','تعذر فتح الملف الشخصي.');}catch(_){ }
+      return;
+    }
+
+    page.classList.add('active');
+    document.body.classList.add('aa-profile-open');
+
+    try{
+      if(typeof renderReliableProfile==='function'){
+        await renderReliableProfile(uid,isSelf);
+      }else if(typeof window.__renderReliableProfile==='function'){
+        await window.__renderReliableProfile(uid,isSelf);
+      }else if(typeof renderAuthoritativeProfile==='function'){
+        await renderAuthoritativeProfile(uid,isSelf);
+      }
+    }catch(err){
+      console.error('profile recovery render failed',err);
+      page.classList.add('active');
+      try{showCustomAlert?.('خطأ','تعذر تحميل بيانات الملف الشخصي.');}catch(_){ }
+    }
+
+    if(isAdmin && !isSelf){
+      const back=$id('aaProfileBack');
+      if(back) back.style.display='inline-flex';
+    }
+    return page;
+  }
+
+  window.aaOpenProfile=openProfileRecovery;
+  window.openUserProfilePage=()=>currentUser?openProfileRecovery(currentUser.uid,{kind:'self'}):triggerAuth?.();
+  window.openPublicProfileFinal=uid=>uid?openProfileRecovery(uid,{kind:uid===currentUser?.uid?'self':'public',returnPoint:safePoint()}):undefined;
+  window.openAnanasV10Profile=window.openPublicProfileFinal;
+  window.viewProfileByUserId=window.openPublicProfileFinal;
+  window.openStudentProfile=window.openPublicProfileFinal;
+  window.openChatProfileV13=uid=>openProfileRecovery(uid,{kind:'chat',returnPoint:safePoint()});
+  window.openChatProfileV12=window.openChatProfileV13;
+
+  const account=$id('authToggleBtn');
+  if(account){
+    account.onclick=()=>{if(currentUser)openProfileRecovery(currentUser.uid,{kind:'self'});else{try{triggerAuth?.();}catch(_){}}};
+  }
+  window.__profileOpenRecoveryV31=true;
+})();
+</script>
 </body>
 </html>
