@@ -4481,15 +4481,20 @@ window.AnanasTimers=window.AnanasTimers||(()=>{
                         return bv - av;
                     });
                     coursesData = nextCourses;
-                    // Reconcile the displayed lesson counter with the real lessons subcollection.
+                    // Calculate current lesson counters locally; loading must remain read-only.
                     await Promise.all(coursesData.map(async course => {
                         try {
-                            const ls = await db.collection('courses').doc(course.id).collection('lessons').get();
+                            const [ls,qs,as] = await Promise.all([
+                                db.collection('courses').doc(course.id).collection('lessons').get(),
+                                db.collection('courses').doc(course.id).collection('quizzes').get(),
+                                db.collection('courses').doc(course.id).collection('assignments').get()
+                            ]);
                             let mins = 0; ls.forEach(d => mins += Number(d.data()?.duration)||0);
                             course.lessons = ls.size;
                             course.hours = Math.round((mins/60)*10)/10;
-                            await db.collection('courses').doc(course.id).set({lessons:ls.size,hours:course.hours},{merge:true});
-                        } catch(e) { console.warn('تعذر مزامنة عداد الحصص:',course.id,e); }
+                            course.quizzes = qs.size;
+                            course.assignments = as.size;
+                        } catch(e) { console.warn('تعذر مزامنة عدادات الدورة محليًا:',course.id,e); }
                     }));
                     coursesLastLoadedAt = Date.now();
                     coursesLastLoadedUid = uid;
@@ -5068,10 +5073,57 @@ window.AnanasTimers=window.AnanasTimers||(()=>{
         document.getElementById('platformImageViewer')?.addEventListener('click',e=>{if(e.target.id==='platformImageViewer')closePlatformImageViewer();});
         document.addEventListener('keydown',e=>{if(e.key==='Escape'){closePlatformImageViewer();closePlatformGalleryViewer();}});
 
+        // ===== LIVE COURSE CONTENT SYNC =====
+        const courseLiveUnsubs = window.__courseLiveUnsubs || (window.__courseLiveUnsubs = new Map());
+        function stopCourseLiveSync(courseId){
+            const arr=courseLiveUnsubs.get(String(courseId));
+            if(Array.isArray(arr)){arr.forEach(fn=>{try{fn?.()}catch(_){}});}
+            courseLiveUnsubs.delete(String(courseId));
+        }
+        function invalidateCourseContentCaches(courseId){
+            const cid=String(courseId);
+            try{ lessonLoadState?.cache?.delete?.(cid); }catch(_){}
+            try{ lessonLoadState?.inflight?.delete?.(cid); }catch(_){}
+            const c=(coursesData||[]).find(x=>String(x.id)===cid);
+            if(c){
+                Promise.all([
+                    db.collection('courses').doc(cid).collection('lessons').get(),
+                    db.collection('courses').doc(cid).collection('quizzes').get(),
+                    db.collection('courses').doc(cid).collection('assignments').get()
+                ]).then(([ls,qs,as])=>{
+                    let mins=0;ls.forEach(d=>mins+=Number(d.data()?.duration)||0);
+                    c.lessons=ls.size;c.hours=Math.round(mins/60*10)/10;c.quizzes=qs.size;c.assignments=as.size;
+                    const coursesPage=document.getElementById('coursesPage');
+                    if(!activeCourseId || coursesPage?.classList.contains('active') || coursesPage?.style.display!=='none') renderCourses?.();
+                }).catch(()=>{});
+            }
+        }
+        function startCourseLiveSync(courseId){
+            const cid=String(courseId||'').trim(); if(!cid)return;
+            stopCourseLiveSync(cid);
+            const base=db.collection('courses').doc(cid);
+            const unsubs=[];
+            const refreshCurrent=(kind)=>{
+                invalidateCourseContentCaches(cid);
+                if(String(activeCourseId||'')!==cid)return;
+                if(currentCoursePage==='learning') loadLessonsForCourse(cid);
+                else if(currentCoursePage==='quizzes') loadQuizzesPage(cid);
+                else if(currentCoursePage==='assignments') loadAssignmentsPage(cid);
+                else if(currentCoursePage==='files') window.loadCourseFilesPage?.();
+                else if(currentCoursePage==='dashboard' || currentCoursePage==='overview') window.updateCurrentCourseOverview?.();
+            };
+            ['lessons','quizzes','assignments','files'].forEach(kind=>{
+                const unsub=base.collection(kind).onSnapshot(()=>refreshCurrent(kind),()=>{});
+                unsubs.push(unsub);
+            });
+            courseLiveUnsubs.set(cid,unsubs);
+        }
+
         function switchCoursePage(page) {
             if(!activeCourseId && page!=='courses') return;
             if(currentCoursePage === 'lessonPlayer' && page !== 'lessonPlayer') stopLessonForNavigation();
             currentCoursePage = page;
+            startCourseLiveSync(activeCourseId);
             const detail=document.getElementById('courseDetailView');
             if(detail) detail.style.display='flex';
             const pages={
@@ -5082,6 +5134,7 @@ window.AnanasTimers=window.AnanasTimers||(()=>{
                 quizzes:document.getElementById('courseQuizzesPage'),
                 assignments:document.getElementById('courseAssignmentsPage'),
                 assignmentDetail:document.getElementById('courseAssignmentDetailPage'),
+                files:document.getElementById('courseFilesPage'),
                 chat:document.getElementById('courseChatPage')
             };
             const learningView=document.getElementById('courseLearningView');
@@ -5093,6 +5146,10 @@ window.AnanasTimers=window.AnanasTimers||(()=>{
             if(active){
                 active.classList.add('active','is-mobile-active');
                 active.style.display=page==='dashboard'?'flex':'block';
+            }
+            if(page==='files'){
+                const filesPage=document.getElementById('courseFilesPage');
+                if(filesPage){filesPage.classList.add('active','is-mobile-active');filesPage.style.display='block';filesPage.removeAttribute('hidden');}
             }
             if(page==='overview'){
                 pages.overview?.style.setProperty('display','block');
@@ -5107,6 +5164,8 @@ window.AnanasTimers=window.AnanasTimers||(()=>{
                 void loadQuizzesPage(activeCourseId);
             }else if(page==='assignments'){
                 void loadAssignmentsPage(activeCourseId);
+            }else if(page==='files'){
+                void window.loadCourseFilesPage?.();
             }else if(page==='chat'){
                 void loadChatPage(activeCourseId);
             }
@@ -5186,7 +5245,13 @@ window.AnanasTimers=window.AnanasTimers||(()=>{
                 container.innerHTML = `<div class="page-inline-loader" style="display:flex;justify-content:center;align-items:center;gap:10px;padding:45px;color:var(--text-muted);"><span class="mini-spin" style="display:inline-block;width:22px;height:22px;border-radius:50%;border:3px solid var(--border);border-top-color:var(--accent1);animation:spin 1s linear infinite;"></span><span>جاري تحميل الواجبات...</span></div>`;
             }
             try {
-                const snap = await db.collection('courses').doc(courseId).collection('assignments').orderBy('createdAt','desc').get();
+                let snap;
+                try {
+                    snap = await db.collection('courses').doc(courseId).collection('assignments').orderBy('createdAt','desc').get();
+                } catch(orderErr) {
+                    console.warn('Assignments order query failed, using fallback:', orderErr);
+                    snap = await db.collection('courses').doc(courseId).collection('assignments').get();
+                }
                 const previousGrid = container.querySelector('.assignment-page-grid');
                 if(snap.empty){
                     container.innerHTML = `<p style="color:var(--text-muted);text-align:center;padding:60px 20px;">لا توجد واجبات مضافة بعد.</p>`;
