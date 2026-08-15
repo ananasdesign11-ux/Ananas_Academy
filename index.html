@@ -10983,12 +10983,13 @@ async function openAssignmentDetailV2(courseId,assignmentId){
   if(isAdmin&&visible.length){const people=[...new Map(visible.filter(s=>s.userId).map(s=>[s.userId,s.userName||'طالب'])).entries()];html+=`<div class="assignment-v2-filters"><button class="assignment-filter active" data-u="">الكل</button>${people.map(([id,n])=>`<button class="assignment-filter" data-u="${esc(id)}">${esc(n)}</button>`).join('')}</div>`;}
   html+='<div class="assignment-v2-grid">';
   if(!visible.length)html+='<div class="assignment-v2-empty"><i class="fas fa-images"></i><h3>لا توجد أعمال للعرض</h3><p>ابدأ برفع عملك ليظهر هنا.</p></div>';
-  visible.forEach((sub,i)=>{const workId=typeof submissionWorkId==='function'?submissionWorkId(sub,i):(sub.workId||sub.id||`work_${i}`);const imgs=Array.isArray(sub.images)&&sub.images.length?sub.images.filter(Boolean):(sub.imageUrl?[sub.imageUrl]:[]);if(!imgs.length)return;html+=`<article class="assignment-v2-card" data-user="${esc(sub.userId||'')}"><div class="assignment-v2-cover"><img src="${esc(imgs[0])}" alt="${esc(sub.userName||'عمل')}">${imgs.length>1?`<span>${imgs.length} صور</span>`:''}</div><div class="assignment-v2-body"><strong>${esc(sub.userName||'طالب')}</strong><small>${sub.approved?'معتمد':'قيد المراجعة'}</small><div class="assignment-v2-actions"><button type="button" class="ananas-primary-btn" data-work-view="${esc(workId)}"><i class="fas fa-images"></i> عرض</button>${isAdmin&&!sub.approved?`<button type="button" class="ananas-secondary-btn" data-work-approve="${esc(workId)}"><i class="fas fa-check"></i> اعتماد</button>`:''}${sub.userId===currentUser?.uid||isAdmin?`<button type="button" class="ananas-danger-btn" data-work-delete="${esc(workId)}"><i class="fas fa-trash"></i> حذف</button>`:''}</div></div></article>`;});
+  visible.forEach((sub,i)=>{const workId=typeof submissionWorkId==='function'?submissionWorkId(sub,i):(sub.workId||sub.id||`work_${i}`);const imgs=Array.isArray(sub.images)&&sub.images.length?sub.images.filter(Boolean):(sub.imageUrl?[sub.imageUrl]:[]);if(!imgs.length)return;html+=`<article class="assignment-v2-card" data-user="${esc(sub.userId||'')}"><div class="assignment-v2-cover"><img src="${esc(imgs[0])}" alt="${esc(sub.userName||'عمل')}" loading="lazy" decoding="async" fetchpriority="low">${imgs.length>1?`<span>${imgs.length} صور</span>`:''}</div><div class="assignment-v2-body"><strong>${esc(sub.userName||'طالب')}</strong><small>${sub.approved?'معتمد':'قيد المراجعة'}</small><div class="assignment-v2-actions"><button type="button" class="ananas-primary-btn" data-work-view="${esc(workId)}"><i class="fas fa-images"></i> عرض</button>${isAdmin&&!sub.approved?`<button type="button" class="ananas-secondary-btn" data-work-approve="${esc(workId)}"><i class="fas fa-check"></i> اعتماد</button>`:''}${sub.userId===currentUser?.uid||isAdmin?`<button type="button" class="ananas-danger-btn" data-work-delete="${esc(workId)}"><i class="fas fa-trash"></i> حذف</button>`:''}</div></div></article>`;});
   html+='</div>';content.innerHTML=html;
   content.querySelectorAll('[data-work-view]').forEach(b=>b.onclick=()=>window.openAssignmentWorkViewer(courseId,assignmentId,b.dataset.workView));
   content.querySelectorAll('[data-work-approve]').forEach(b=>b.onclick=()=>window.approveSubmission(courseId,assignmentId,b.dataset.workApprove).then(()=>openAssignmentDetailV2(courseId,assignmentId)));
   content.querySelectorAll('[data-work-delete]').forEach(b=>b.onclick=()=>window.deleteAssignmentWork(courseId,assignmentId,b.dataset.workDelete).then(()=>openAssignmentDetailV2(courseId,assignmentId)));
   content.querySelectorAll('.assignment-filter').forEach(b=>b.onclick=()=>{content.querySelectorAll('.assignment-filter').forEach(x=>x.classList.toggle('active',x===b));content.querySelectorAll('.assignment-v2-card').forEach(c=>c.style.display=(!b.dataset.u||c.dataset.user===b.dataset.u)?'':'none');});
+  try{await window.__refreshAssignmentSubmitterButtons?.(content)}catch(e){console.warn('assignment profile hydration',e)}
   $('assignmentV2Upload')?.addEventListener('change',async e=>{const files=[...(e.target.files||[])];if(!files.length||!currentUser)return;const st=$('assignmentV2Status');st.textContent='جاري رفع الصور...';try{const urls=[];for(const f of files){const u=await uploadImage(f);if(!u)throw Error('upload');urls.push(u);}const latest=await getAssignmentData(courseId,assignmentId);if(!latest)throw Error('missing');const arr=Array.isArray(latest.data.submissions)?[...latest.data.submissions]:[];const newWorkId=crypto.randomUUID?crypto.randomUUID():`work_${Date.now()}_${Math.random().toString(36).slice(2)}`;arr.push({workId:newWorkId,userId:currentUser.uid,userName:currentUser.displayName||'طالب',images:urls,approved:false,xpGranted:false,uploadedAt:new Date().toISOString()});await latest.ref.update({submissions:arr});try{const admins=await window.aaGetAdminRecipients?.()||[];for(const uid of admins)await window.aaAddNotification?.(uid,{title:'تم رفع عمل جديد للمراجعة',body:`قام ${currentUser.displayName||'طالب'} برفع عمل جديد في ${latest.data?.titleAr||'الواجب'} ويحتاج إلى اعتمادك.`,type:'assignment_submitted',data:{route:'assignment',courseId,assignmentId,workId:newWorkId,userId:currentUser.uid}})}catch(notifyErr){console.warn('assignment upload notification',notifyErr)}await openAssignmentDetailV2(courseId,assignmentId);}catch(err){console.error(err);st.textContent='تعذر رفع العمل.'}finally{e.target.value=''}});
 }
 window.openAssignmentDetail=openAssignmentDetailV2;
@@ -12680,7 +12681,7 @@ logoutNames.forEach(n=>{const fn=window[n];if(typeof fn==='function'&&!fn.__aaLo
 
 /* ---------- Suspended code button state: always "cancel" while active ---------- */
 /* ---------- Refresh assignment fallback initials after any render ---------- */
-document.addEventListener('DOMContentLoaded',()=>refreshAssignmentSubmitterAvatars(document));
+document.addEventListener('DOMContentLoaded',()=>refreshAssignmentSubmitterAvatars(document.getElementById('assignmentV2Content')||document.getElementById('assignmentDetailContent')||document));
 })();
 
 </script>
@@ -13950,7 +13951,10 @@ async function hydrateNames(root=document){
   const nodes=[...root.querySelectorAll?.('[data-profile-uid], [data-user-id], .assignment-v2-card[data-user], .assignment-work-card[data-user-id]')||[]];
   const ids=[...new Set(nodes.map(n=>String(n.dataset.profileUid||n.dataset.userId||n.dataset.user||'')).filter(Boolean))];
   if(!ids.length)return;
-  const profiles=await Promise.all(ids.map(getCanonicalUser));
+  /* Limit concurrent Firestore profile reads so opening a large assignment cannot saturate the client. */
+  const profiles=[];let cursor=0;
+  const worker=async()=>{while(cursor<ids.length){const i=cursor++;profiles.push(await getCanonicalUser(ids[i]));}};
+  await Promise.all(Array.from({length:Math.min(8,ids.length)},worker));
   const map=new Map(profiles.map(p=>[p.uid,p]));
   nodes.forEach(node=>{
     const uid=String(node.dataset.profileUid||node.dataset.userId||node.dataset.user||'');if(!uid)return;
@@ -14009,11 +14013,39 @@ if(typeof oldDir==='function')window.loadDirectory=async function(){const r=awai
 /* 9) Ensure any login with an older user document gets the default public flag once. */
 const normalizeAuthTimer=window.AnanasTimers.interval('normalizePublicProfile',()=>{if(currentUser&&currentUserProfile)ensureDefaultPublicProfile();},6000);window.__aaNormalizePublicTimer=normalizeAuthTimer;
 
-/* 10) Mutation observer catches every dynamically-rendered name field. */
-let running=false;
-window.__aaDomObserverRegister?.(async()=>{if(running)return;running=true;try{await hydrateNames(document);await refreshChatCanonicalNames();await enforcePrivateProfileView();}finally{running=false}});
-setTimeout(async()=>{await ensureDefaultPublicProfile();await hydrateNames(document);await refreshChatCanonicalNames();await enforcePrivateProfileView();},800);
-setInterval(async()=>{if(document.visibilityState!=='visible')return;try{await hydrateNames(document);await refreshChatCanonicalNames();await enforcePrivateProfileView();}catch(_){}},4000);
+/* 10) Targeted canonical-name hydration. Never scan the whole document on every DOM mutation. */
+let canonicalHydrationTimer=null;
+let canonicalHydrationRunning=false;
+function scheduleCanonicalHydration(){
+  clearTimeout(canonicalHydrationTimer);
+  canonicalHydrationTimer=setTimeout(async()=>{
+    if(canonicalHydrationRunning||document.visibilityState!=='visible')return;
+    canonicalHydrationRunning=true;
+    try{
+      const assignmentRoot=document.getElementById('assignmentV2Content')||document.getElementById('assignmentDetailContent');
+      if(assignmentRoot&&assignmentRoot.offsetParent!==null)await hydrateNames(assignmentRoot);
+      const chatRoot=document.getElementById('chatPageMessagesList')||document.getElementById('fullChatPage');
+      if(chatRoot&&chatRoot.offsetParent!==null)await refreshChatCanonicalNames();
+      const profilePage=document.getElementById('aaRebuiltProfilePage');
+      if(profilePage?.classList.contains('active'))await enforcePrivateProfileView();
+    }catch(error){console.warn('targeted canonical hydration failed',error)}
+    finally{canonicalHydrationRunning=false;}
+  },120);
+}
+window.__aaDomObserverRegister?.(()=>scheduleCanonicalHydration());
+
+window.__aaHydrateAssignmentDetailNow=function(){
+  const root=document.getElementById('assignmentV2Content')||document.getElementById('assignmentDetailContent');
+  if(root)scheduleCanonicalHydration();
+};
+
+setTimeout(async()=>{
+  try{
+    await ensureDefaultPublicProfile();
+    const profilePage=document.getElementById('aaRebuiltProfilePage');
+    if(profilePage?.classList.contains('active'))await enforcePrivateProfileView();
+  }catch(_){}
+},800);
 
 /* 11) Privacy curtain style. */
 const st=document.createElement('style');st.id='final-privacy-v21-style';st.textContent=`
