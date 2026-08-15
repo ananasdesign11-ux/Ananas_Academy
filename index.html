@@ -2806,13 +2806,11 @@ label[for*="En"], input[id*="En"], textarea[id*="En"] { display:none !important;
         let isAdmin = false;
         let currentLang = 'ar';
         let translations = {};
-        let selectedAwardIcon = '';
 
         let editingCourseId = null; // For tracking edits
         let activeCourseId = null;
         let activeLessonId = null;
         let coursesData = []; // Local cache for Firestore data
-        let courseEnrollmentStatus = {}; // Store local check to avoid re-prompting
 
         // Chat & Quiz State
         let activeQuizId = null;
@@ -2830,14 +2828,11 @@ label[for*="En"], input[id*="En"], textarea[id*="En"] { display:none !important;
         let currentCoursePage = 'overview';
         let currentChatLock = null;
         let chatLockUnsubscribe = null;
-        let savedLessonPosition = 0;
 
         // YouTube Player State
         let ytPlayer = null;
         let ytPlayerReady = false;
         let isVideoLoaded = false;
-        let adSkippable = false;
-        let adInterval = null;
 
         // ================================================================
         // 4. دوال مساعدة آمنة
@@ -3886,6 +3881,10 @@ label[for*="En"], input[id*="En"], textarea[id*="En"] { display:none !important;
 
         // ===== FULL PAGE: ASSIGNMENTS =====
         let assignmentWorkEditorState = null;
+
+        function escapeHtml(value){
+            return String(value ?? '').replace(/[&<>'"]/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[ch]));
+        }
 
         function submissionImages(sub){
             if(Array.isArray(sub?.images) && sub.images.length) return sub.images.filter(Boolean);
@@ -6964,8 +6963,8 @@ label[for*="En"], input[id*="En"], textarea[id*="En"] { display:none !important;
             }catch(e){console.warn('restore route failed',e);} finally { setTimeout(()=>window.__restoredCourseRoute=false,300); }
         }
         // ===== Persistent page / language / theme state =====
-        window.addEventListener('beforeunload',()=>{try{saveLessonPositionBeforeLeaving();persistCourseState();}catch(e){}});
-        document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden'){try{saveLessonPositionBeforeLeaving();}catch(e){}}});
+        // Saving on pagehide/beforeunload/visibilitychange is handled by the single
+        // final hardSave() lifecycle handler defined later in this file.
         function restorePersistentState(){
             try{
                 const raw=localStorage.getItem('ananas.lastCourseState'); if(!raw)return;
@@ -7475,20 +7474,6 @@ label[for*="En"], input[id*="En"], textarea[id*="En"] { display:none !important;
 #courseChatPage #fullChatPageSendBtn{order:4!important;flex:0 0 auto!important;}
 #courseChatPage #chatEmojiPickerPage{left:0!important;right:auto!important;bottom:calc(100% + 8px)!important;}
 </style>
-<script>
-/* ===== FINAL LESSON POSITION SAFETY SAVE ===== */
-(function(){
-  function save(){
-    try{
-      const p=window.saveLessonPositionBeforeLeaving?.();
-      if(p&&typeof p.catch==='function')p.catch(()=>{});
-    }catch(e){}
-  }
-  document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden')save();});
-  window.addEventListener('pagehide',save);
-  window.addEventListener('beforeunload',save);
-})();
-</script>
 \n<script id="arabic-only-final-fixes">
 (function(){
   currentLang = 'ar';
@@ -8429,6 +8414,16 @@ function bindCourseFilePicker(){
 bindCourseFilePicker();
 
 /* 4) Independent personal portfolio. Completely separate from assignments. */
+function ensurePortfolioModal(){
+ let m=$('ananasV10PortfolioModal');if(m)return m;
+ m=document.createElement('div');m.id='ananasV10PortfolioModal';m.className='ananas-v10-overlay';
+ m.innerHTML='<div class="ananas-v10-modal-card"><button class="ananas-v10-close" id="v10PortfolioClose" type="button"><i class="fas fa-xmark"></i></button><div class="ananas-v10-heading"><div class="ananas-v10-heading-icon"><i class="fas fa-images"></i></div><div><h3>إضافة عمل إلى معرضي</h3><p>هذا العمل مستقل عن الواجبات. سيظهر في معرض أعمالك الشخصي.</p></div></div><div class="ananas-v10-form"><label class="ananas-v10-field"><span>عنوان العمل</span><input id="v10WorkTitle" placeholder="مثال: هوية بصرية لمشروع"></label><label class="ananas-v10-field"><span>نوع العمل</span><select id="v10WorkType"><option value="تصميم">تصميم</option><option value="هوية بصرية">هوية بصرية</option><option value="واجهات">واجهات</option><option value="رسم">رسم</option><option value="تصوير">تصوير</option><option value="أخرى">أخرى</option></select></label><label class="ananas-v10-field full"><span>وصف العمل</span><textarea id="v10WorkDescription" placeholder="اكتب وصفًا مختصرًا للعمل"></textarea></label><div class="ananas-v10-field full"><span>صور العمل</span><label class="ananas-v10-upload" for="v10WorkFiles"><i class="fas fa-cloud-arrow-up" style="font-size:1.7rem;color:var(--accent1);display:block;margin-bottom:7px"></i><strong>اختيار الصور</strong><span id="v10WorkFilesName">لم يتم اختيار صور</span></label><input id="v10WorkFiles" type="file" accept="image/*" multiple hidden></div></div><div class="ananas-v10-actions-bar"><button class="ananas-v10-btn" id="v10WorkCancel" type="button">إلغاء</button><button class="ananas-v10-btn primary" id="v10WorkSave" type="button"><i class="fas fa-plus"></i> إضافة إلى المعرض</button></div><div id="v10WorkStatus" style="margin-top:9px;color:var(--text-muted);font-size:.8rem"></div></div>';
+ document.body.appendChild(m);
+ $('v10PortfolioClose').onclick=()=>m.classList.remove('active');$('v10WorkCancel').onclick=()=>m.classList.remove('active');
+ $('v10WorkFiles').onchange=()=>{$('v10WorkFilesName').textContent=[...($('v10WorkFiles').files||[])].map(f=>f.name).join(' • ')||'لم يتم اختيار صور'};
+ $('v10WorkSave').onclick=savePersonalWork;
+ return m;
+}
 async function savePersonalWork(){
  if(!currentUser)return triggerAuth?.();
  const title=$('v10WorkTitle').value.trim(),desc=$('v10WorkDescription').value.trim(),type=$('v10WorkType').value,files=[...($('v10WorkFiles').files||[])],btn=$('v10WorkSave'),status=$('v10WorkStatus');
@@ -9148,6 +9143,24 @@ window.returnToAssignmentLesson=function(){markResumeAutoplay(); return oldRetur
 
 /* Patch YouTube ready handler by wrapping player construction once. */
 const originalYTPlayer=window.YT;
+function installYTResume(){
+  if(!window.YT||!YT.Player||window.__ananasYTResumePatched)return;
+  const Orig=YT.Player;
+  YT.Player=function(container,opts){
+    const oldReady=opts?.events?.onReady;
+    opts.events=opts.events||{};
+    opts.events.onReady=async function(ev){
+      if(typeof oldReady==='function') await oldReady(ev);
+      const p=lessonPlayer;
+      const saved=Number(window.__lessonResumePosition||0);
+      if(p&&saved>2){try{p.seekTo(saved,true);}catch(e){}}
+      if(window.__lessonResumeAutoplay){window.__lessonResumeAutoplay=false;try{p.playVideo();}catch(e){}}
+    };
+    return new Orig(container,opts);
+  };
+  YT.Player.prototype=Orig.prototype;window.__ananasYTResumePatched=true;
+}
+try{installYTResume();}catch(e){}
 try{installYTResume();}catch(e){}
 
 /* ---------- B. One-time codes, lifetime uniqueness, details and tabs ---------- */
@@ -9760,6 +9773,11 @@ const oldOpenLock=window.openChatLockDialog;window.openChatLockDialog=async func
 setInterval(()=>{if(currentChatLock?.locked&&currentChatLock.endAt){const ms=currentChatLock.endAt.toDate?currentChatLock.endAt.toDate().getTime():Number(currentChatLock.endAt);if(ms&&Date.now()>=ms)window.unlockCourseChat()}},10000);
 
 /* ---------- E. User full profile page ---------- */
+function ensureProfilePage(){
+ if($('userProfilePage'))return;
+ const page=document.createElement('div');page.id='userProfilePage';page.innerHTML='<div class="profile-page-inner"><div class="profile-hero"><div class="profile-avatar" id="profilePageAvatar">م</div><div><div class="profile-name" id="profilePageName">مستخدم</div><div class="profile-email" id="profilePageEmail">—</div><div class="profile-stat-grid"><div class="profile-stat"><b id="profileXP">0</b><span>نقاط الخبرة</span></div><div class="profile-stat"><b id="profileLessons">0</b><span>حصص مكتملة</span></div><div class="profile-stat"><b id="profileQuizzes">0</b><span>اختبارات مكتملة</span></div><div class="profile-stat"><b id="profileAssignments">0</b><span>أعمال مرفوعة</span></div></div></div><div class="profile-close-wrap"><button class="auth-btn" id="profilePageClose"><i class="fas fa-arrow-right"></i><span>العودة</span></button></div></div><div class="profile-sections"><section class="profile-panel"><h3>البيانات الشخصية</h3><div class="profile-list" id="profileDataList"></div></section><section class="profile-panel"><h3>إنجازات الحصص</h3><div class="profile-list" id="profileLessonsList"></div></section><section class="profile-panel"><h3>نتائج الاختبارات</h3><div class="profile-list" id="profileQuizzesList"></div></section><section class="profile-panel"><h3>الأعمال والواجبات</h3><div class="profile-list" id="profileAssignmentsList"></div></section><section class="profile-panel" style="grid-column:1/-1"><h3>سجل النشاط</h3><div class="profile-list" id="profileActivityList"></div></section></div></div>';
+ document.body.appendChild(page);$('profilePageClose').onclick=()=>page.classList.remove('active');
+}
 window.openUserProfilePage=async function(){if(!currentUser)return;ensureProfilePage();const p=currentUserProfile||{};$('profilePageName').textContent=p.displayName||currentUser.displayName||'مستخدم';$('profilePageEmail').textContent=p.email||currentUser.email||'—';$('profilePageAvatar').textContent=(p.displayName||currentUser.displayName||'م')[0];
  const fields=[['الاسم',p.displayName||currentUser.displayName||'مستخدم'],['البريد الإلكتروني',p.email||currentUser.email||'غير متوفر'],['الهاتف',p.phone||'غير مضاف'],['الجنس',p.gender==='female'?'أنثى':p.gender==='male'?'ذكر':'غير محدد'],['معرّف الحساب',currentUser.uid],['تاريخ إنشاء الحساب',p.createdAt?.toDate?p.createdAt.toDate().toLocaleDateString('ar-SA'):'غير متوفر']];$('profileDataList').innerHTML=fields.map(x=>`<div class="profile-list-item"><strong>${esc(x[0])}</strong><span>${esc(x[1])}</span></div>`).join('');
  $('userProfilePage').classList.add('active');
