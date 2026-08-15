@@ -8386,6 +8386,7 @@ window.AnanasTimers=window.AnanasTimers||(()=>{
   /* Save quiz/assignment identity whenever it is opened. */
   const __oldOpenQuiz=window.openQuiz;
   window.openQuiz=async function(courseId,quizId,fromLesson=false){
+    window.__aaLastQuizReturnPoint = fromLesson ? {type:'learning',courseId:courseId,lessonId:window.activeLessonId||activeLessonId||null} : {type:'quizzes',courseId:courseId};
     if(fromLesson){
       try{ if(typeof stopLessonForNavigation==='function') stopLessonForNavigation(); else if(typeof destroyLessonVideo==='function') destroyLessonVideo(); }
       catch(e){ try{destroyLessonVideo();}catch(_){} }
@@ -8438,19 +8439,25 @@ window.AnanasTimers=window.AnanasTimers||(()=>{
     const c=document.getElementById('quizContainer'); if(!c)return;
     let nav=document.getElementById('quizRouteNav');
     if(!nav){nav=document.createElement('div');nav.id='quizRouteNav';nav.style.cssText='display:flex;gap:8px;justify-content:flex-start;align-items:center;flex-wrap:wrap;margin:0 0 18px;';c.insertBefore(nav,c.firstChild);}
-    nav.innerHTML=`<button type="button" class="full-page-back-btn" title="العودة للحصة" onclick="returnToQuizLesson()"><i class="fas fa-video"></i></button><button type="button" class="full-page-back-btn" title="الاختبارات" onclick="returnToQuizList()"><i class="fas fa-question-circle"></i></button>`;
+    nav.innerHTML=`<button type="button" class="full-page-back-btn" title="العودة" onclick="returnFromQuiz()"><i class="fas fa-arrow-right"></i></button><button type="button" class="full-page-back-btn" title="الاختبارات" onclick="returnToQuizList()"><i class="fas fa-question-circle"></i></button>`;
     nav.dataset.fromLesson=fromLesson?'1':'0';
   }
   window.returnToQuizLesson=function(){
-    const lid=activeLessonId||(()=>{try{return JSON.parse(localStorage.getItem('ananas.lastCourseState')||'{}').lessonId}catch(e){return null}})();
+    const rp=window.__aaLastQuizReturnPoint||{type:'learning',courseId:activeCourseId,lessonId:activeLessonId||null};
     document.getElementById('quizOverlay')?.classList.remove('active');activeQuizId=null;activeQuizData=null;
-    if(activeCourseId&&lid){__origSwitchCoursePage('learning');setTimeout(()=>openLessonPlayer(activeCourseId,lid),50);}else if(activeCourseId)__origSwitchCoursePage('learning');
+    if(rp.type==='learning'&&rp.courseId){__origSwitchCoursePage('learning');if(rp.lessonId)setTimeout(()=>openLessonPlayer(rp.courseId,rp.lessonId),50);}
+    else if(rp.type==='quizzes'&&rp.courseId){__origSwitchCoursePage('quizzes');}
+    else if(rp.type==='assignments'&&rp.courseId){__origSwitchCoursePage('assignments');}
+    else if(rp.type==='chat'&&rp.courseId){__origSwitchCoursePage('chat');}
+    else {window.mobileNavigate?.('courses');}
     persistCourseState();
   };
+  window.returnFromQuiz=window.returnToQuizLesson;
   window.returnToQuizList=function(){document.getElementById('quizOverlay')?.classList.remove('active');activeQuizId=null;activeQuizData=null;if(activeCourseId)__origSwitchCoursePage('quizzes');persistCourseState();};
 
   const __oldOpenAssignment=window.openAssignmentDetail;
   window.openAssignmentDetail=async function(courseId,assignmentId,fromLesson=false){
+    window.__aaLastAssignmentReturnPoint = fromLesson ? {type:'learning',courseId:courseId,lessonId:window.activeLessonId||activeLessonId||null} : {type:'assignments',courseId:courseId};
     if(fromLesson){
       try{ if(typeof stopLessonForNavigation==='function') stopLessonForNavigation(); else if(typeof destroyLessonVideo==='function') destroyLessonVideo(); }
       catch(e){ try{destroyLessonVideo();}catch(_){} }
@@ -8460,9 +8467,19 @@ window.AnanasTimers=window.AnanasTimers||(()=>{
     const page=document.getElementById('courseAssignmentDetailPage');if(!page)return;
     let nav=document.getElementById('assignmentRouteNav');
     if(!nav){nav=document.createElement('div');nav.id='assignmentRouteNav';nav.style.cssText='display:flex;gap:8px;align-items:center;margin-bottom:14px;';page.querySelector('.page-title')?.prepend(nav);}
-    nav.innerHTML=`<button type="button" class="full-page-back-btn" title="العودة للحصة" onclick="returnToAssignmentLesson()"><i class="fas fa-video"></i></button><button type="button" class="full-page-back-btn" title="الواجبات" onclick="returnToAssignmentList()"><i class="fas fa-paint-brush"></i></button>`;
+    nav.innerHTML=`<button type="button" class="full-page-back-btn" title="العودة" onclick="returnFromAssignment()"><i class="fas fa-arrow-right"></i></button><button type="button" class="full-page-back-btn" title="الواجبات" onclick="returnToAssignmentList()"><i class="fas fa-paint-brush"></i></button>`;
   };
-  window.returnToAssignmentLesson=function(){const lid=activeLessonId||(()=>{try{return JSON.parse(localStorage.getItem('ananas.lastCourseState')||'{}').lessonId}catch(e){return null}})();document.getElementById('courseAssignmentDetailPage')?.classList.remove('active','is-mobile-active');document.getElementById('courseAssignmentDetailPage')?.style.setProperty('display','none');if(activeCourseId&&lid){__origSwitchCoursePage('learning');setTimeout(()=>openLessonPlayer(activeCourseId,lid),50);}else if(activeCourseId)__origSwitchCoursePage('learning');persistCourseState();};
+  window.returnToAssignmentLesson=function(){
+    const rp=window.__aaLastAssignmentReturnPoint||{type:'learning',courseId:activeCourseId,lessonId:activeLessonId||null};
+    document.getElementById('courseAssignmentDetailPage')?.classList.remove('active','is-mobile-active');document.getElementById('courseAssignmentDetailPage')?.style.setProperty('display','none');
+    if(rp.type==='learning'&&rp.courseId){__origSwitchCoursePage('learning');if(rp.lessonId)setTimeout(()=>openLessonPlayer(rp.courseId,rp.lessonId),50);}
+    else if(rp.type==='assignments'&&rp.courseId){__origSwitchCoursePage('assignments');}
+    else if(rp.type==='quizzes'&&rp.courseId){__origSwitchCoursePage('quizzes');}
+    else if(rp.type==='chat'&&rp.courseId){__origSwitchCoursePage('chat');}
+    else {window.mobileNavigate?.('courses');}
+    persistCourseState();
+  };
+  window.returnFromAssignment=window.returnToAssignmentLesson;
   window.returnToAssignmentList=function(){window.activeAssignmentDetailId=null;document.getElementById('courseAssignmentDetailPage')?.classList.remove('active');if(activeCourseId)__origSwitchCoursePage('assignments');persistCourseState();};
 
   /* Clicking the buttons under a lesson opens the actual linked item, not its list. */
@@ -11451,13 +11468,15 @@ let profileState={uid:null,isSelf:false,source:null,returnPoint:null,busy:false}
 function profileReturnPoint(){
  const cid=window.activeCourseId||activeCourseId||null;
  const p={type:'courses',courseId:cid,assignmentId:window.activeAssignmentDetailId||null,lessonId:window.activeLessonId||null};
- const ad=$('courseAssignmentDetailPage'),chat=$('courseChatPage'),lessons=$('courseLessonsPage'),quizzes=$('courseQuizzesPage'),assignments=$('courseAssignmentsPage'),learning=$('courseLearningView'),dashboard=$('courseDashboard'),overview=$('courseOverviewContainer');
+ const ad=$('courseAssignmentDetailPage'),chat=$('courseChatPage'),lessons=$('courseLessonsPage'),quizzes=$('courseQuizzesPage'),assignments=$('courseAssignmentsPage'),learning=$('courseLearningView'),dashboard=$('courseDashboard'),overview=$('courseOverviewContainer'),quizOverlay=$('quizOverlay');
+ // Highest priority: an actual item opened on top of the course (quiz / assignment / lesson player).
+ if(quizOverlay?.classList.contains('active') || (window.activeQuizId && currentCoursePage==='quizzes')){p.type='quiz-detail';p.quizId=window.activeQuizId||activeQuizId||null;return p;}
  if(ad?.classList.contains('active')){p.type='assignment-detail';p.assignmentId=window.activeAssignmentDetailId||ad.dataset.assignmentId||p.assignmentId;return p;}
+ if(learning?.classList.contains('active') || currentCoursePage==='lessonPlayer'){p.type='learning';p.lessonId=window.activeLessonId||p.lessonId;return p;}
  if(chat?.classList.contains('active')||chat?.style.display!=='none'&&chat?.offsetParent!==null){p.type='chat';return p;}
  if(quizzes?.classList.contains('active')||quizzes?.style.display!=='none'&&quizzes?.offsetParent!==null){p.type='quizzes';return p;}
  if(assignments?.classList.contains('active')||assignments?.style.display!=='none'&&assignments?.offsetParent!==null){p.type='assignments';return p;}
  if(lessons?.classList.contains('active')){p.type='lessons';return p;}
- if(learning?.classList.contains('active')||learning?.style.display!=='none'&&learning?.offsetParent!==null){p.type='learning';p.lessonId=window.activeLessonId||p.lessonId;return p;}
  if(dashboard?.style.display!=='none'&&dashboard?.offsetParent!==null){p.type='dashboard';return p;}
  if(overview?.style.display!=='none'&&overview?.offsetParent!==null){p.type='overview';return p;}
  return p;
@@ -11489,12 +11508,27 @@ function ensureProfilePage(){
  return page;
 }
 function hideProfile(){const p=$('aaRebuiltProfilePage');if(p)p.classList.remove('active');document.body.classList.remove('aa-profile-open');}
-function restorePoint(point){hideLegacy();hideProfile();if(!point||point.type==='courses'||!point.courseId){window.mobileNavigate?.('courses');$('coursesNavBtn')?.classList.add('active');return;}window.activeCourseId=point.courseId;try{if(point.type==='assignment-detail'&&point.assignmentId){window.openAssignmentDetail?.(point.courseId,point.assignmentId);return;}if(point.type==='chat'){window.switchCoursePage?.('chat');return;}if(point.type==='quizzes'){window.switchCoursePage?.('quizzes');return;}if(point.type==='assignments'){window.switchCoursePage?.('assignments');return;}if(point.type==='lessons'){window.switchCoursePage?.('learning');return;}if(point.type==='learning'){window.switchCoursePage?.('learning');if(point.lessonId&&window.openLessonPlayer)setTimeout(()=>window.openLessonPlayer(point.courseId,point.lessonId),80);return;}if(point.type==='dashboard'){window.switchCoursePage?.('dashboard');return;}window.switchCoursePage?.('overview');}catch(e){console.warn('profile restore',e);window.mobileNavigate?.('courses');}}
+function restorePoint(point){
+ hideLegacy();hideProfile();
+ if(!point||point.type==='courses'||!point.courseId){window.mobileNavigate?.('courses');$('coursesNavBtn')?.classList.add('active');return;}
+ window.activeCourseId=point.courseId;
+ try{
+   if(point.type==='quiz-detail'&&point.quizId){window.switchCoursePage?.('quizzes');setTimeout(()=>window.openQuiz?.(point.courseId,point.quizId,false),80);return;}
+   if(point.type==='assignment-detail'&&point.assignmentId){window.switchCoursePage?.('assignments');setTimeout(()=>window.openAssignmentDetail?.(point.courseId,point.assignmentId,false),80);return;}
+   if(point.type==='chat'){window.switchCoursePage?.('chat');return;}
+   if(point.type==='quizzes'){window.switchCoursePage?.('quizzes');return;}
+   if(point.type==='assignments'){window.switchCoursePage?.('assignments');return;}
+   if(point.type==='lessons'){window.switchCoursePage?.('learning');return;}
+   if(point.type==='learning'){window.switchCoursePage?.('learning');if(point.lessonId&&window.openLessonPlayer)setTimeout(()=>window.openLessonPlayer(point.courseId,point.lessonId),80);return;}
+   if(point.type==='dashboard'){window.switchCoursePage?.('dashboard');return;}
+   window.switchCoursePage?.('overview');
+ }catch(e){console.warn('profile restore',e);window.mobileNavigate?.('courses');}
+}
 async function profileBack(){if(profileState.busy)return;profileState.busy=true;try{if(profileState.source?.kind==='admin-directory'){profileState={uid:currentUser.uid,isSelf:true,source:{kind:'self'},returnPoint:null,busy:false};await renderProfile(currentUser.uid,true);return;}restorePoint(profileState.returnPoint);}finally{profileState.busy=false;}}
 async function loadSubscriptions(uid){const out=[];try{const s=await db.collection('users').doc(uid).collection('enrolledCourses').get();for(const d of s.docs){const c=await db.collection('courses').doc(d.id).get();if(c.exists)out.push({id:d.id,title:c.data()?.titleAr||'دورة',enrolledAt:d.data()?.enrolledAt})}}catch(e){console.warn('subscriptions',e)}return out;}
 async function loadPortfolio(uid){try{const s=await db.collection('users').doc(uid).collection('portfolioWorks').get();return s.docs.map(d=>({id:d.id,...(d.data()||{})})).filter(x=>x.deleted!==true)}catch(e){console.warn('portfolio',e);return[]}}
 async function loadEffective(uid){try{if(typeof window.getEffectiveProfileData==='function'){const d=await window.getEffectiveProfileData(uid);if(d)return d;}}catch(e){console.warn('effective data',e)}return {effectiveXP:0,activeLessons:[],activeQuizzes:[],assignmentWorks:[]};}
-async function loadDirectory(){const panel=$('aaProfileDirectoryPanel');if(!panel)return;if(!isAdmin){panel.style.display='none';return;}panel.style.display='block';const box=$('aaProfileDirectory');box.innerHTML='<div class="aa-profile-empty">جاري تحميل الحسابات...</div>';try{const s=await db.collection('users').get();const users=s.docs.map(d=>({id:d.id,...(d.data()||{})})).sort((a,b)=>String(a.displayName||a.name||'').localeCompare(String(b.displayName||b.name||''),'ar'));$('aaProfileDirectoryCount').textContent=`${users.length} حساب`;box.innerHTML=users.length?users.map(u=>{const n=u.displayName||u.name||'مستخدم',photo=u.photoURL||u.photoUrl||u.photo||'';return `<button type="button" class="aa-profile-directory-card" data-aa-uid="${esc(u.id)}"><span class="aa-profile-directory-avatar">${photo?`<img src="${esc(photo)}" alt="">`:esc(n.slice(0,1))}</span><span class="aa-profile-directory-copy"><strong>${esc(n)}</strong><small>${u.id===currentUser.uid?'حسابي':(u.profilePublic===false?'حساب خاص':'حساب عام')}</small></span><i class="fas fa-chevron-left"></i></button>`}).join(''):'<div class="aa-profile-empty">لا توجد حسابات.</div>';box.querySelectorAll('[data-aa-uid]').forEach(b=>b.onclick=()=>openProfile(b.dataset.aaUid,{kind:'admin-directory'}));}catch(e){console.error(e);box.innerHTML='<div class="aa-profile-empty">تعذر تحميل الحسابات.</div>';}}
+async function loadDirectory(){const panel=$('aaProfileDirectoryPanel');if(!panel)return;if(!isAdmin){panel.style.display='none';return;}panel.style.display='block';const box=$('aaProfileDirectory');box.innerHTML='<div class="aa-profile-empty">جاري تحميل الحسابات...</div>';try{const s=await db.collection('users').get();const users=s.docs.map(d=>({id:d.id,...(d.data()||{})})).sort((a,b)=>String(a.displayName||a.name||'').localeCompare(String(b.displayName||b.name||''),'ar'));$('aaProfileDirectoryCount').textContent=`${users.length} حساب`;box.innerHTML=users.length?users.map(u=>{const n=u.displayName||u.name||'مستخدم',photo=u.photoURL||u.photoUrl||u.photo||'';return `<button type="button" class="aa-profile-directory-card" data-aa-uid="${esc(u.id)}"><span class="aa-profile-directory-avatar">${photo?`<img src="${esc(photo)}" alt="">`:esc(n.slice(0,1))}</span><span class="aa-profile-directory-copy"><strong>${esc(n)}</strong></span><i class="fas fa-chevron-left"></i></button>`}).join(''):'<div class="aa-profile-empty">لا توجد حسابات.</div>';box.querySelectorAll('[data-aa-uid]').forEach(b=>b.onclick=()=>openProfile(b.dataset.aaUid,{kind:'admin-directory'}));}catch(e){console.error(e);box.innerHTML='<div class="aa-profile-empty">تعذر تحميل الحسابات.</div>';}}
 function renderRows(items,empty){return items.length?items.join(''):`<div class="aa-profile-empty">${empty}</div>`;}
 async function renderProfile(uid,isSelf){const page=ensureProfilePage();page.classList.add('active');['aaProfileXP','aaProfileLessons','aaProfileQuizzes','aaProfileWorks'].forEach(id=>$(id).textContent='—');['aaProfileData','aaProfileCourses','aaProfileLessonList','aaProfileQuizList','aaProfileActivity','aaProfileGallery'].forEach(id=>$(id).innerHTML='<div class="aa-profile-empty">جاري تحميل البيانات...</div>');const snap=await db.collection('users').doc(uid).get();if(!snap.exists){await profileBack();showCustomAlert?.('غير متاح','الحساب غير موجود.');return;}const p=snap.data()||{},name=p.displayName||p.name||currentUser?.displayName||'مستخدم',photo=p.photoURL||p.photoUrl||p.photo||currentUser?.photoURL||'';const privateProfile=!isSelf&&!isAdmin&&p.profilePublic===false;$('aaProfileAvatar').innerHTML=photo?`<img src="${esc(photo)}" alt="">`:esc(name.slice(0,1));$('aaProfileName').textContent=name;$('aaProfileEmail').textContent=privateProfile?'حساب خاص':(p.email||currentUser?.email||'—');$('aaProfileBadge').className='aa-profile-badge '+(privateProfile?'private':'public');$('aaProfileBadge').innerHTML=privateProfile?'<i class="fas fa-lock"></i> الحساب خاص':'<i class="fas fa-eye"></i> الحساب عام';$('aaProfileEdit').style.display=isSelf?'inline-flex':'none';$('aaProfileAddWork').style.display=isSelf?'inline-flex':'none';$('aaProfileLogout').style.display=isSelf?'inline-flex':'none';$('aaProfileBack').style.display='inline-flex';if(privateProfile){$('aaProfileXP').textContent='—';$('aaProfileLessons').textContent='—';$('aaProfileQuizzes').textContent='—';$('aaProfileWorks').textContent='—';$('aaProfileData').innerHTML=`<div class="aa-profile-row"><strong>الاسم</strong><span>${esc(name)}</span></div>`;['aaProfileCourses','aaProfileLessonList','aaProfileQuizList','aaProfileActivity','aaProfileGallery'].forEach(id=>$(id).innerHTML='<div class="aa-profile-private"><i class="fas fa-lock"></i><strong>الحساب خاص</strong><span>صاحب الحساب أخفى التفاصيل.</span></div>');await loadDirectory();return;}const [data,subs,portfolio]=await Promise.all([loadEffective(uid),loadSubscriptions(uid),loadPortfolio(uid)]);const lessons=data.activeLessons||data.lessons||[],quizzes=data.activeQuizzes||data.quizzes||[],works=Array.isArray(data.assignmentWorks)?data.assignmentWorks:[];$('aaProfileXP').textContent=Number(data.effectiveXP||data.xp||0).toLocaleString('ar-SA');$('aaProfileLessons').textContent=lessons.length;$('aaProfileQuizzes').textContent=quizzes.length;$('aaProfileWorks').textContent=portfolio.length+works.length;$('aaProfileData').innerHTML=[['الاسم',name],['البريد الإلكتروني',p.email||'غير متوفر'],['رقم الهاتف',p.phone||'غير مضاف'],['الحالة',p.profilePublic===false?'خاص':'عام'],['تاريخ التسجيل',fmt(p.createdAt)]].map(a=>`<div class="aa-profile-row"><strong>${esc(a[0])}</strong><span>${esc(a[1])}</span></div>`).join('');$('aaProfileCourses').innerHTML=renderRows(subs.map(x=>`<div class="aa-profile-row"><div><strong>${esc(x.title)}</strong><small>تاريخ الاشتراك: ${esc(fmt(x.enrolledAt))}</small></div><i class="fas fa-circle-check" style="color:#22c55e"></i></div>`),'لا توجد دورات مشتركة حاليًا.');$('aaProfileLessonList').innerHTML=renderRows(lessons.slice().reverse().slice(0,60).map(x=>`<div class="aa-profile-row"><div><strong>${esc(x.titleAr||x.title||'حصة')}</strong><small>${esc(x.courseTitle||'')} · +${Number(x.xpEarned||0)} XP · ${esc(fmt(x.completedAt))}</small></div></div>`),'لا توجد حصص مكتملة حاليًا.');$('aaProfileQuizList').innerHTML=renderRows(quizzes.slice().reverse().slice(0,60).map(x=>`<div class="aa-profile-row"><div><strong>${esc(x.titleAr||x.title||'اختبار')}</strong><small>${Number(x.score||0)}% · +${Number(x.xpEarned||0)} XP · ${esc(fmt(x.passedAt))}</small></div></div>`),'لا توجد اختبارات مكتملة حاليًا.');const acts=[...lessons.map(x=>({t:`أكمل الحصة: ${x.titleAr||x.title||'حصة'}`,d:fmt(x.completedAt)})),...quizzes.map(x=>({t:`أكمل الاختبار: ${x.titleAr||x.title||'اختبار'}`,d:fmt(x.passedAt)})),...works.map(x=>({t:`رفع عملًا في: ${x.assignmentTitle||'واجب'}`,d:fmt(x.uploadedAt)})),...portfolio.map(x=>({t:`أضاف عملًا للمعرض: ${x.title||'عمل'}`,d:fmt(x.createdAt||x.uploadedAt)}))];$('aaProfileActivity').innerHTML=renderRows(acts.slice(0,100).map(x=>`<div class="aa-profile-row"><strong>${esc(x.t)}</strong><small>${esc(x.d)}</small></div>`),'لا يوجد نشاط حالي.');const cards=[...portfolio.map(x=>({kind:'portfolio',...x})),...works.map(x=>({kind:'assignment',...x}))];$('aaProfileGallery').innerHTML=renderRows(cards.map(x=>{const imgs=Array.isArray(x.images)?x.images:(x.imageUrl?[x.imageUrl]:[]),img=imgs[0]||'';if(x.kind==='assignment')return `<article class="aa-profile-work"><div class="aa-profile-cover">${img?`<img src="${esc(img)}" alt="">`:'<i class="fas fa-images"></i>'}</div><div class="aa-profile-work-body"><strong>${esc(x.assignmentTitle||'واجب')}</strong><small>${esc(x.courseTitle||'')}<br>${x.approved?'✅ معتمد':'⏳ قيد المراجعة'}${imgs.length>1?` · ${imgs.length} صور`:''}</small><button type="button" class="aa-profile-view-work" data-kind="assignment" data-course="${esc(x.courseId||'')}" data-assignment="${esc(x.assignmentId||'')}" data-work="${esc(x.workId||x.id||'')}"><i class="fas fa-eye"></i> عرض العمل</button></div></article>`;return `<article class="aa-profile-work"><div class="aa-profile-cover">${img?`<img src="${esc(img)}" alt="">`:'<i class="fas fa-images"></i>'}</div><div class="aa-profile-work-body"><strong>${esc(x.title||'عمل')}</strong><small>${esc(x.type||'عمل شخصي')}${x.description?`<br>${esc(x.description)}`:''}${imgs.length>1?`<br>${imgs.length} صور`:''}</small><button type="button" class="aa-profile-view-work" data-kind="portfolio" data-user="${esc(uid)}" data-work="${esc(x.id||'')}" data-images="${esc(JSON.stringify(imgs))}"><i class="fas fa-eye"></i> عرض العمل</button></div></article>`;}),'لا توجد أعمال منشورة حاليًا.');document.querySelectorAll('.aa-profile-view-work').forEach(b=>b.onclick=()=>{if(b.dataset.kind==='portfolio'){window.openProfilePortfolioWorkViewer?.(b.dataset.user,b.dataset.work,b.dataset.images||'[]');}else{window.openAssignmentWorkViewer?.(b.dataset.course,b.dataset.assignment,b.dataset.work);}});await loadDirectory();}
 async function openProfile(uid,opts={}){if(!currentUser||!uid)return triggerAuth?.();const source=opts.kind==='admin-directory'?{kind:'admin-directory'}:{kind:opts.kind||'link'};profileState={uid,isSelf:uid===currentUser.uid,source,returnPoint:opts.returnPoint||profileReturnPoint(),busy:false};hideLegacy();ensureProfilePage().classList.add('active');document.body.classList.add('aa-profile-open');try{await renderProfile(uid,uid===currentUser.uid);}catch(e){console.error('profile render',e);showCustomAlert?.('خطأ','تعذر تحميل بيانات الملف الشخصي.');}}
@@ -11840,11 +11874,14 @@ hideLegacy();
   window.__loadReliableProfile = loadReliableProfile;
   window.__renderReliableProfile = renderReliableProfile;
 
-  const oldAAOpen = window.aaOpenProfile;
   window.aaOpenProfile = async function(uid,opts={}){
-    try{ await oldAAOpen?.apply(this,arguments); }catch(e){ console.warn('legacy profile open skipped',e); }
-    try{ await renderReliableProfile(uid,uid===currentUser?.uid); }
-    catch(e){ console.error('reliable profile render failed',e); showCustomAlert?.('خطأ','تعذر تحميل بيانات الملف الشخصي.'); }
+    if(!currentUser||!uid)return triggerAuth?.();
+    try{
+      await renderReliableProfile(uid,uid===currentUser.uid);
+    }catch(e){
+      console.error('reliable profile render failed',e);
+      showCustomAlert?.('خطأ','تعذر تحميل بيانات الملف الشخصي.');
+    }
   };
 
   window.openUserProfilePage = async function(){
@@ -12569,7 +12606,7 @@ function renderDirectoryEnhanced(){
   users.sort((a,b)=>String(a.displayName||a.name||'').localeCompare(String(b.displayName||b.name||''),'ar'));
   const count=$('aaProfileDirectoryCount');if(count)count.textContent=`${users.length} حساب`;
   const usedByInitial=new Map();
-  box.innerHTML=users.length?users.map(u=>{const n=u.displayName||u.name||'مستخدم',photo=u.photoURL||u.photoUrl||u.photo||'';return `<button type="button" class="aa-profile-directory-card" data-aa-uid="${escSafe(u.id)}"><span class="aa-profile-directory-avatar">${avatarHtml(n,photo,u.id,'aa-dir-avatar',usedByInitial)}</span><span class="aa-profile-directory-copy"><strong>${escSafe(n)}</strong><small>${u.profilePublic===false?'حساب خاص':'حساب عام'} · ${u.enrolledCourseIds.length?'مشترك في '+u.enrolledCourseIds.length+' دورة':'غير مشترك'}</small></span><i class="fas fa-chevron-left"></i></button>`}).join(''):'<div class="aa-profile-empty">لا توجد حسابات مطابقة للفلاتر الحالية.</div>';
+  box.innerHTML=users.length?users.map(u=>{const n=u.displayName||u.name||'مستخدم',photo=u.photoURL||u.photoUrl||u.photo||'';return `<button type="button" class="aa-profile-directory-card" data-aa-uid="${escSafe(u.id)}"><span class="aa-profile-directory-avatar">${avatarHtml(n,photo,u.id,'aa-dir-avatar',usedByInitial)}</span><span class="aa-profile-directory-copy"><strong>${escSafe(n)}</strong></span><i class="fas fa-chevron-left"></i></button>`}).join(''):'<div class="aa-profile-empty">لا توجد حسابات مطابقة للفلاتر الحالية.</div>';
   box.querySelectorAll('[data-aa-uid]').forEach(b=>b.onclick=()=>window.aaOpenProfile?.(b.dataset.aaUid,{kind:'admin-directory'}));
 }
 window.loadDirectory=loadDirectoryEnhanced;
@@ -15761,7 +15798,8 @@ if(!window.__aaStableNotifStarted){window.__aaStableNotifStarted=true;window.Ana
     if(!point||point.type==='courses'||!point.courseId){window.mobileNavigate?.('courses');$('coursesNavBtn')?.classList.add('active');return;}
     try{
       window.activeCourseId=point.courseId;
-      if(point.type==='assignment-detail'&&point.assignmentId){window.openAssignmentDetail?.(point.courseId,point.assignmentId);return;}
+      if(point.type==='quiz-detail'&&point.quizId){window.switchCoursePage?.('quizzes');window.setTimeout?.(()=>window.openQuiz?.(point.courseId,point.quizId,false),80);return;}
+      if(point.type==='assignment-detail'&&point.assignmentId){window.switchCoursePage?.('assignments');window.setTimeout?.(()=>window.openAssignmentDetail?.(point.courseId,point.assignmentId,false),80);return;}
       if(point.type==='chat'){window.switchCoursePage?.('chat');return;}
       if(point.type==='quizzes'){window.switchCoursePage?.('quizzes');return;}
       if(point.type==='assignments'){window.switchCoursePage?.('assignments');return;}
@@ -15778,7 +15816,10 @@ if(!window.__aaStableNotifStarted){window.__aaStableNotifStarted=true;window.Ana
     if(state.opening && state.openUid===uid)return state.opening;
     const token=++state.token;
     state.openUid=uid;
-    state.returnPoint=opts.returnPoint||window.profileReturnPoint?.()||null;
+    const currentlyViewingProfile=!!document.getElementById('aaRebuiltProfilePage')?.classList.contains('active');
+    // When moving from one profile to another, keep the ORIGINAL non-profile return point.
+    // This makes A -> B -> C -> Back return to the page that opened the first profile.
+    state.returnPoint=opts.returnPoint || (currentlyViewingProfile && state.returnPoint ? state.returnPoint : (window.profileReturnPoint?.()||null));
     window.__aaViewedProfileUid=uid;
 
     state.opening=(async()=>{
