@@ -11002,7 +11002,56 @@ window.loadCourseFilesPage=async function(){
 
 /* Replace only the file-related action buttons beneath a lesson. */
 const baseRender=window.renderLessonRelatedActions;
-if(baseRender&&!window.__lessonFileActionFinal){window.__lessonFileActionFinal=true;window.renderLessonRelatedActions=async function(courseId,lessonId){await baseRender.apply(this,arguments);const area=$('lessonRelatedActions');if(!area)return;area.querySelectorAll('[data-ananas-file-action],.ananas-generated-file-action').forEach(x=>x.remove());try{const snap=await db.collection('courses').doc(courseId).collection('files').get();const files=snap.docs.map(d=>({id:d.id,...(d.data()||{})})).filter(x=>!x.deleted&&String(x.lessonId||'')===String(lessonId));const view=document.createElement('button');view.type='button';view.className='related-action ananas-generated-file-action';view.dataset.ananasFileAction='1';view.innerHTML=`<i class="fas fa-folder-open"></i> ملفات الحصة${files.length?` (${files.length})`:''}`;view.onclick=()=>{window.switchCoursePage?.('files');setTimeout(()=>{const box=$('courseFilesPageGrid');if(box){box.innerHTML='';const list=files; if(!list.length)box.innerHTML='<div class="files-empty-state"><i class="fas fa-folder-open"></i><strong>لا توجد ملفات مرتبطة بهذه الحصة</strong></div>';else box.innerHTML=list.map(f=>`<article class="course-file-card"><div class="course-file-icon"><i class="fas ${fileIcon(f)}"></i></div><div class="course-file-name">${esc(f.name||'ملف')}</div><div class="course-file-meta">مرتبط بـ: ${esc(f.lessonTitle||'الحصة')}<br>${esc(fileSize(f.size))}</div><div class="course-file-actions"><button class="primary" type="button" onclick='openCourseFileViewer(${JSON.stringify(f)})'><i class="fas fa-eye"></i> عرض</button>${f.allowDownload!==false||isAdmin?`<a href="${esc(f.url)}" target="_blank" rel="noopener" download><i class="fas fa-download"></i> تحميل</a>`:''}</div></article>`).join('');}},80);};area.appendChild(view);if(isAdmin){const up=document.createElement('button');up.type='button';up.className='related-action ananas-generated-file-action';up.dataset.ananasFileUploadLesson=lessonId;up.innerHTML='<i class="fas fa-cloud-arrow-up"></i> رفع ملف للحصة';area.appendChild(up);}}catch(e){console.warn(e);}};}
+if(baseRender&&!window.__lessonFileActionFinal){
+  window.__lessonFileActionFinal=true;
+  window.renderLessonRelatedActions=async function(courseId,lessonId){
+    await baseRender.apply(this,arguments);
+    const area=$('lessonRelatedActions');
+    if(!area)return;
+    area.querySelectorAll('[data-ananas-file-action],.ananas-generated-file-action').forEach(x=>x.remove());
+    try{
+      const snap=await db.collection('courses').doc(courseId).collection('files').get();
+      const files=snap.docs
+        .map(d=>({id:d.id,...(d.data()||{})}))
+        .filter(x=>!x.deleted&&String(x.lessonId||'')===String(lessonId));
+      const view=document.createElement('button');
+      view.type='button';
+      view.className='related-action ananas-generated-file-action';
+      view.dataset.ananasFileAction='1';
+      view.innerHTML=`<i class="fas fa-folder-open"></i> ملفات الحصة${files.length?` (${files.length})`:''}`;
+      view.onclick=async()=>{
+        await window.__openCourseFilesPage?.();
+        const box=$('courseFilesPageGrid');
+        if(!box)return;
+        box.innerHTML='';
+        if(!files.length){
+          box.innerHTML='<div class="files-empty-state"><i class="fas fa-folder-open"></i><strong>لا توجد ملفات مرتبطة بهذه الحصة</strong></div>';
+          return;
+        }
+        box.innerHTML=files.map(f=>`<article class="course-file-card">
+          <div class="course-file-icon"><i class="fas ${fileIcon(f)}"></i></div>
+          <div class="course-file-name">${esc(f.name||'ملف')}</div>
+          <div class="course-file-meta">مرتبط بـ: ${esc(f.lessonTitle||'الحصة')}<br>${esc(fileSize(f.size))}</div>
+          <div class="course-file-actions">
+            <button class="primary" type="button" data-file-viewer="1"><i class="fas fa-eye"></i> عرض</button>
+            ${f.allowDownload!==false||isAdmin?`<a href="${esc(f.url||'#')}" target="_blank" rel="noopener" download><i class="fas fa-download"></i> تحميل</a>`:''}
+          </div>
+        </article>`).join('');
+        box.querySelectorAll('[data-file-viewer="1"]').forEach((btn,i)=>btn.addEventListener('click',()=>openCourseFileViewer(files[i])));
+      };
+      area.appendChild(view);
+      if(isAdmin){
+        const up=document.createElement('button');
+        up.type='button';
+        up.className='related-action ananas-generated-file-action';
+        up.dataset.ananasFileUploadLesson=lessonId;
+        up.innerHTML='<i class="fas fa-cloud-arrow-up"></i> رفع ملف للحصة';
+        up.onclick=()=>$('lessonFilesUploadInput')?.click();
+        area.appendChild(up);
+      }
+    }catch(e){console.warn(e)}
+  };
+}
 
 /* Include course file uploads in activity feeds, while still excluding deleted files. */
 const oldGetEffective=window.getEffectiveProfileData;
@@ -15950,10 +15999,33 @@ function setPageVisible(el,visible,display){
 }
 
 /* One final navigation implementation. This intentionally bypasses the stacked wrappers. */
+window.__openCourseFilesPage = async function(){
+  const cid=String(window.activeCourseId||activeCourseId||'').trim();
+  const detail=$('courseDetailView'), page=$('courseFilesPage');
+  if(!cid || !detail || !page) return false;
+  try{ stopLessonForNavigation?.(); }catch(_){}
+  try{ document.querySelectorAll('.custom-alert-modal.active,.auth-popup.active,.edit-modal.active').forEach(x=>x.classList.remove('active')); }catch(_){}
+  document.body.classList.remove('aa-modal-lock','aa-v9-modal-locked','aa-v28-modal-open');
+  document.documentElement.classList.remove('aa-v9-modal-locked');
+  currentCoursePage='files';
+  window.activeCourseId=cid;
+  try{ ensureFilesShell?.(); }catch(e){ console.warn('ensure files shell',e); }
+  const ids=['courseOverviewContainer','courseDashboard','courseLessonsPage','courseLessonPlayerPage','courseQuizzesPage','courseAssignmentsPage','courseAssignmentDetailPage','courseFilesPage','courseChatPage','courseLearningView','fullChatPage'];
+  ids.forEach(id=>{ const el=$(id); if(!el)return; el.classList.remove('active','is-mobile-active'); el.style.setProperty('display','none','important'); });
+  detail.style.setProperty('display','flex','important');
+  page.classList.add('active','is-mobile-active');
+  page.style.setProperty('display','block','important');
+  try{ setMobileNavActive?.('files'); }catch(_){}
+  try{ await window.loadCourseFilesPage?.(); }catch(e){ console.error('open files page',e); }
+  try{ await window.populateFileLessonSelect?.(); }catch(_){}
+  try{ persistCourseState?.(); }catch(_){}
+  return true;
+};
 window.switchCoursePage = function(page){
   page=String(page||'dashboard');
-  if(page==='course'||page==='courses'){ window.mobileNavigate?.('courses'); return; }
-  if(!activeCourseId)return;
+  if(page==='course'||page==='courses'){ window.mobileNavigate?.('courses'); return true; }
+  if(page==='files') return window.__openCourseFilesPage();
+  if(!activeCourseId)return false;
   try{ if(currentCoursePage==='lessonPlayer' && page!=='lessonPlayer') stopLessonForNavigation?.(); }catch(_){ }
   currentCoursePage=page;
   try{ window.__startCanonicalCourseLiveSync?.(String(activeCourseId)); }catch(_){ }
@@ -15962,7 +16034,7 @@ window.switchCoursePage = function(page){
   const map={
     overview:['courseOverviewContainer','block'], dashboard:['courseDashboard','flex'], learning:['courseLessonsPage','block'],
     lessonPlayer:['courseLessonPlayerPage','block'], quizzes:['courseQuizzesPage','block'], assignments:['courseAssignmentsPage','block'],
-    assignmentDetail:['courseAssignmentDetailPage','block'], files:['courseFilesPage','block'], chat:['courseChatPage','block']
+    assignmentDetail:['courseAssignmentDetailPage','block'], chat:['courseChatPage','block']
   };
   const spec=map[page]||map.dashboard; setPageVisible($(spec[0]),true,spec[1]);
   $('courseDetailView')?.style.setProperty('display','flex','important');
@@ -15970,7 +16042,6 @@ window.switchCoursePage = function(page){
   if(page==='learning') void loadLessonsForCourse(activeCourseId);
   else if(page==='quizzes') void loadQuizzesPage(activeCourseId);
   else if(page==='assignments') void window.loadAssignmentsPage(activeCourseId);
-  else if(page==='files'){ void window.loadCourseFilesPage(); void window.populateFileLessonSelect?.(); }
   else if(page==='chat') void loadChatPage(activeCourseId);
   try{persistCourseState?.();}catch(_){ }
   return true;
