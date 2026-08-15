@@ -12710,11 +12710,13 @@ const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&
 window.__aaViewedProfileUid='';
 function getViewedUid(){return String(window.__aaViewedProfileUid||window.profileState?.uid||'');}
 function hideViewedDirectoryCard(){
-  const uid=getViewedUid();
-  document.querySelectorAll('#aaProfileDirectory [data-aa-uid]').forEach(card=>{
-    const same=uid && String(card.dataset.aaUid)===uid;
+  const uid=String(getViewedUid()||'');
+  const selectors=['#aaProfileDirectory [data-aa-uid]','#aaProfileDirectory [data-aa-v10-uid]','[data-profile-directory-uid]'];
+  selectors.forEach(sel=>document.querySelectorAll(sel).forEach(card=>{
+    const cardUid=String(card.dataset.aaUid||card.dataset.aaV10Uid||card.dataset.profileDirectoryUid||'');
+    const same=!!uid && cardUid===uid;
     card.style.display=same?'none':'';
-  });
+  }));
 }
 
 /* Wrap the authoritative profile opener without changing its original behavior. */
@@ -12805,6 +12807,7 @@ function renderV9Directory(){
   box.querySelectorAll('[data-aa-uid]').forEach(b=>b.onclick=()=>window.aaOpenProfile?.(b.dataset.aaUid,{kind:'admin-directory'}));
 }
 window.renderV9Directory=renderV9Directory;
+window.__renderFinalDirectory=renderV9Directory;
 
 ['aaDirMembershipFilter','aaDirCourseFilter','aaDirNameSearch'].forEach(id=>$(id)?.addEventListener('input',renderV9Directory));
 ['aaDirMembershipFilter','aaDirCourseFilter','aaDirNameSearch'].forEach(id=>$(id)?.addEventListener('change',renderV9Directory));
@@ -13161,6 +13164,7 @@ window.__aaV9Cleanup=()=>clearInterval(v9Tick);
   }
 
   window.__v10LoadDirectory=loadFinalDirectory;
+  window.renderFinalDirectory=renderFinalDirectory;
   window.loadDirectory=loadFinalDirectory;
   window.__aaFinalDirectoryV10=dirState;
 
@@ -15711,10 +15715,11 @@ if(!window.__aaStableNotifStarted){window.__aaStableNotifStarted=true;window.Ana
 
   function profileBackFast(){
     const point=state.returnPoint||null;
-    state.token++; state.openUid=null; state.opening=null;
+    state.token++; state.openUid=null; state.opening=null; window.__aaViewedProfileUid='';
     const page=$('aaRebuiltProfilePage');
     page?.classList.remove('active');
     document.body.classList.remove('aa-profile-open');
+    try{hideViewedDirectoryCard(); if(typeof window.renderFinalDirectory==='function' && isAdmin)window.renderFinalDirectory();}catch(_){}
     if(!point||point.type==='courses'||!point.courseId){window.mobileNavigate?.('courses');$('coursesNavBtn')?.classList.add('active');return;}
     try{
       window.activeCourseId=point.courseId;
@@ -15730,59 +15735,61 @@ if(!window.__aaStableNotifStarted){window.__aaStableNotifStarted=true;window.Ana
   }
 
   async function open(uid,opts={}){
-    uid=String(uid||'');if(!uid)return;
-    if(state.opening && state.openUid===uid){return state.opening;}
-    const token=++state.token;state.openUid=uid;state.returnPoint=opts.returnPoint||window.profileReturnPoint?.()||null;
+    uid=String(uid||'');
+    if(!uid)return;
+    if(state.opening && state.openUid===uid)return state.opening;
+    const token=++state.token;
+    state.openUid=uid;
+    state.returnPoint=opts.returnPoint||window.profileReturnPoint?.()||null;
+    window.__aaViewedProfileUid=uid;
+
     state.opening=(async()=>{
       hideAllLegacy();
       const page=getPage();
       page.classList.add('active');
       document.body.classList.add('aa-profile-open');
       setProfileLoading(page,true);
-      if(window.profileState){window.profileState.uid=uid;window.profileState.isSelf=uid===currentUser?.uid;window.profileState.source={kind:opts.kind||'public'};window.profileState.returnPoint=opts.returnPoint||window.profileReturnPoint?.()||null;window.profileState.busy=false;}
-
-      // Never expose stale/default profile data while a new account is being resolved.
-      ['aaProfileXP','aaProfileLessons','aaProfileQuizzes','aaProfileWorks'].forEach(id=>$(id)&&($(id).textContent='—'));
-      ['aaProfileData','aaProfileCourses','aaProfileLessonList','aaProfileQuizList','aaProfileActivity','aaProfileGallery'].forEach(id=>$(id)&&($(id).innerHTML='<div class="aa-profile-empty">جاري تحميل البيانات...</div>'));
-      if($('aaProfileName'))$('aaProfileName').textContent='—';
-      if($('aaProfileEmail'))$('aaProfileEmail').textContent='—';
-      if($('aaProfileBadge')){$('aaProfileBadge').className='aa-profile-badge';$('aaProfileBadge').innerHTML='';}
-      if($('aaProfileAvatar'))$('aaProfileAvatar').innerHTML='<i class="fas fa-user" style="opacity:.45"></i>';
+      if(window.profileState){
+        window.profileState.uid=uid;
+        window.profileState.isSelf=uid===currentUser?.uid;
+        window.profileState.source={kind:opts.kind||'public'};
+        window.profileState.returnPoint=state.returnPoint;
+        window.profileState.busy=true;
+      }
 
       try{
-        const snap=await db.collection('users').doc(uid).get().catch(()=>null);
+        const userSnap=await db.collection('users').doc(uid).get();
         if(token!==state.token)return;
-        if(!snap?.exists){setProfileLoading(page,false);showCustomAlert?.('غير متاح','الحساب غير موجود.');return;}
-        let p=snap.data()||{},isSelf=uid===String(currentUser?.uid||'');
-        if(p.profilePublic===undefined){
-          p={...p,profilePublic:true};
-          if(isSelf){
-            try{await db.collection('users').doc(uid).set({profilePublic:true,updatedAt:firebase.firestore.FieldValue.serverTimestamp()},{merge:true});}catch(e){console.warn('profile public default write',e)}
-            currentUserProfile={...(currentUserProfile||{}),profilePublic:true};
-          }
-        }
-        setHeader(uid,p,isSelf);
-
-        // The profile stays visually locked until the complete authoritative dataset is ready.
-        if(p.profilePublic===false&&!isSelf&&!isAdmin){
-          renderData(uid,p,isSelf,{xp:0,lessons:[],quizzes:[],assignmentWorks:[],portfolio:[],courses:[]},token);
+        if(!userSnap.exists){
+          setProfileLoading(page,false);
+          showCustomAlert?.('غير متاح','الحساب غير موجود.');
           return;
         }
-
-        const live=await collectLive(uid,token);
-        if(!live||token!==state.token)return;
-        const finalProfile=live.user&&Object.keys(live.user).length?live.user:p;
-        if(finalProfile!==p)setHeader(uid,finalProfile,isSelf);
-        renderData(uid,finalProfile,isSelf,live,token);
-        if(isAdmin&&typeof window.__loadDirectory==='function'){try{await window.__loadDirectory();}catch(_){} }
-      }catch(err){
-        console.error('profile open',err);
-        if(token===state.token){
-          ['aaProfileData','aaProfileCourses','aaProfileLessonList','aaProfileQuizList','aaProfileActivity','aaProfileGallery'].forEach(id=>$(id)&&($(id).innerHTML='<div class="aa-profile-empty">تعذر تحميل بيانات الملف الشخصي.</div>'));
-          showCustomAlert?.('خطأ','تعذر تحميل بيانات الملف الشخصي.');
+        const u=userSnap.data()||{};
+        const isSelf=uid===String(currentUser?.uid||'');
+        if(u.profilePublic===undefined){
+          try{
+            await db.collection('users').doc(uid).set({profilePublic:true,updatedAt:firebase.firestore.FieldValue.serverTimestamp()},{merge:true});
+          }catch(e){console.warn('profile default public',e)}
         }
+
+        // Use the authoritative profile renderer for every entry point (self, assignment, chat, directory).
+        if(typeof window.__renderAuthoritativeProfile==='function'){
+          await window.__renderAuthoritativeProfile(uid,isSelf);
+        }else if(typeof renderAuthoritativeProfile==='function'){
+          await renderAuthoritativeProfile(uid,isSelf);
+        }
+        if(token!==state.token)return;
+        if(window.profileState)window.profileState.busy=false;
+        hideViewedDirectoryCard();
+        if(typeof window.renderFinalDirectory==='function')window.renderFinalDirectory();
+        else if(typeof window.__v10LoadDirectory==='function' && isAdmin){try{await window.__v10LoadDirectory();}catch(_){}}
+      }catch(err){
+        console.error('authoritative profile open',err);
+        if(token===state.token)showCustomAlert?.('خطأ','تعذر تحميل بيانات الملف الشخصي.');
       }finally{
         if(state.openUid===uid&&token===state.token){
+          if(window.profileState)window.profileState.busy=false;
           setProfileLoading(page,false);
         }
       }
@@ -15809,6 +15816,37 @@ if(!window.__aaStableNotifStarted){window.__aaStableNotifStarted=true;window.Ana
     const profileNode=e.target.closest?.('[data-profile-uid]');
     if(profileNode){const uid=profileNode.dataset.profileUid;if(uid){e.preventDefault();e.stopImmediatePropagation();open(uid,{kind:'link',returnPoint:typeof profileReturnPoint==='function'?profileReturnPoint():null});}}
   },true);
+})();
+</script>
+
+<script id="final-single-click-navigation-fix">
+(function(){
+'use strict';
+const $=id=>document.getElementById(id);
+function replaceButton(id,handler){
+  const el=$(id); if(!el)return;
+  const clone=el.cloneNode(true); el.replaceWith(clone);
+  clone.addEventListener('click',e=>{e.preventDefault();e.stopImmediatePropagation();handler(e,clone);},true);
+}
+replaceButton('aaNotificationsBtn',()=>{if(window.__aaStableOpenNotificationDropdown){window.__aaStableOpenNotificationDropdown();return;} const d=document.getElementById('aaNotificationsDropdown'); if(d){d.classList.toggle('active'); document.getElementById('aaNotificationsBtn')?.classList.toggle('active');}});
+replaceButton('authToggleBtn',()=>{if(currentUser)window.aaOpenProfile?.(currentUser.uid,{kind:'self'});else triggerAuth?.();});
+
+// Course buttons are dynamic, so bind them directly after every course render without opening twice.
+window.__aaBindCourseOpenButtons=window.__aaBindCourseOpenButtons||function(root=document){
+  root.querySelectorAll?.('.course-card .course-actions .btn-primary').forEach(btn=>{
+    if(btn.dataset.aaSingleClick==='1')return;
+    btn.dataset.aaSingleClick='1';
+    btn.addEventListener('pointerup',async e=>{
+      e.preventDefault();e.stopImmediatePropagation();
+      const card=btn.closest('.course-card');
+      const cid=btn.dataset.courseId||card?.dataset.courseId||((btn.getAttribute('onclick')||'').match(/openCourse\([\'\"]([^\'\"]+)/)?.[1]||'');
+      if(!cid)return;
+      try{await window.openCourse?.(cid);}catch(err){console.warn('course single-click',err);}
+    },true);
+  });
+};
+window.__aaBindCourseOpenButtons(document);
+window.__aaDomObserverRegister?.(()=>window.__aaBindCourseOpenButtons(document));
 })();
 </script>
 </body>
