@@ -11511,6 +11511,8 @@ hideLegacy();
     }catch(e){console.error('save profile self',e);status.textContent='تعذر حفظ التعديلات.';showCustomAlert?.('خطأ','تعذر حفظ تعديلات الملف الشخصي.')}finally{btn.disabled=false;}
   }
   function openSelfWork(){if(!currentUser)return triggerAuth?.();ensureSelfModals();['aaProfileWorkName','aaProfileWorkType','aaProfileWorkDesc'].forEach(id=>$p(id).value='');$p('aaProfileWorkFiles').value='';$p('aaProfileWorkFilesName').textContent='لم يتم اختيار صور بعد';$p('aaProfileWorkStatus').textContent='';$p('aaProfileWorkSave').disabled=false;$p('aaProfileSelfWorkModal').classList.add('active');}
+  window.__aaOpenSelfProfileEdit=openSelfEdit;
+  window.__aaOpenSelfProfileWork=openSelfWork;
   async function saveSelfWork(){
     if(!currentUser)return;const title=$p('aaProfileWorkName').value.trim(),type=$p('aaProfileWorkType').value.trim(),description=$p('aaProfileWorkDesc').value.trim(),files=[...($p('aaProfileWorkFiles').files||[])],btn=$p('aaProfileWorkSave'),status=$p('aaProfileWorkStatus');
     if(!title){status.textContent='اكتب عنوان العمل.';return;}if(!type){status.textContent='اكتب نوع العمل.';return;}if(!files.length){status.textContent='اختر صورة واحدة على الأقل.';return;}
@@ -13837,7 +13839,12 @@ window.__aaGetCanonicalUser=getCanonicalUser;
 if(typeof window.updateAuthAccountButton==='function'){
   const oldAuthBtn=window.updateAuthAccountButton;
   window.updateAuthAccountButton=function(user=currentUser,profile=currentUserProfile||{}){
-    if(!user||!document.getElementById('authToggleBtn'))return oldAuthBtn?.apply(this,arguments);
+    if(!user){
+      const btn=document.getElementById('authToggleBtn');
+      if(btn){const t=(window.translations&&window.translations[window.currentLang||'ar'])||(window.translations&&window.translations.ar)||{};btn.innerHTML=`<i class="fas fa-user"></i> <span id="authLabel" class="auth-user-name">${esc(t.authLabel||'تسجيل الدخول')}</span>`;btn.title=t.authLabel||'تسجيل الدخول';}
+      return;
+    }
+    if(!document.getElementById('authToggleBtn'))return oldAuthBtn?.apply(this,arguments);
     const clean={...profile,displayName:profile?.displayName||profile?.name||user?.displayName||'مستخدم'};
     const photo=profile?.photoURL||profile?.photoUrl||profile?.photo||user?.photoURL||'';
     const btn=document.getElementById('authToggleBtn');
@@ -15437,10 +15444,10 @@ if(!window.__aaStableNotifStarted){window.__aaStableNotifStarted=true;window.Ana
       </div>
     </div>`;
     document.body.appendChild(page);
-    const back=$('aaProfileBack'); if(back)back.onclick=()=>profileBack();
-    const edit=$('aaProfileEdit'); if(edit)edit.onclick=e=>{e.preventDefault();window.openProfileEditorFinal?.(currentUser?.uid)};
-    const add=$('aaProfileAddWork'); if(add)add.onclick=()=>window.openPortfolioFromCourses?.();
-    const logout=$('aaProfileLogout'); if(logout)logout.onclick=()=>window.__aaSafeLogoutV22?.();
+    const back=$('aaProfileBack'); if(back)back.onclick=e=>{e.preventDefault();e.stopImmediatePropagation();profileBackFast();};
+    const edit=$('aaProfileEdit'); if(edit)edit.onclick=e=>{e.preventDefault();e.stopImmediatePropagation();window.__aaOpenSelfProfileEdit?.();};
+    const add=$('aaProfileAddWork'); if(add)add.onclick=e=>{e.preventDefault();e.stopImmediatePropagation();window.__aaOpenSelfProfileWork?.();};
+    const logout=$('aaProfileLogout'); if(logout)logout.onclick=async e=>{e.preventDefault();e.stopImmediatePropagation();try{if(window.aaSafeLogoutV24)await window.aaSafeLogoutV24();else if(window.__aaSafeLogoutV22)await window.__aaSafeLogoutV22();else await auth?.signOut?.();}finally{showSignedOutAuthButton();}};
     return page;
   }
 
@@ -15590,10 +15597,37 @@ if(!window.__aaStableNotifStarted){window.__aaStableNotifStarted=true;window.Ana
     }
   }
 
+  function showSignedOutAuthButton(){
+    const btn=$('authToggleBtn'); if(!btn)return;
+    const t=(window.translations&&window.translations[window.currentLang||'ar'])||(window.translations&&window.translations.ar)||{};
+    btn.innerHTML=`<i class="fas fa-user"></i> <span id="authLabel" class="auth-user-name">${esc(t.authLabel||'تسجيل الدخول')}</span>`;
+    btn.title=t.authLabel||'تسجيل الدخول';
+  }
+
+  function profileBackFast(){
+    const point=state.returnPoint||null;
+    state.token++; state.openUid=null; state.opening=null;
+    const page=$('aaRebuiltProfilePage');
+    page?.classList.remove('active');
+    document.body.classList.remove('aa-profile-open');
+    if(!point||point.type==='courses'||!point.courseId){window.mobileNavigate?.('courses');$('coursesNavBtn')?.classList.add('active');return;}
+    try{
+      window.activeCourseId=point.courseId;
+      if(point.type==='assignment-detail'&&point.assignmentId){window.openAssignmentDetail?.(point.courseId,point.assignmentId);return;}
+      if(point.type==='chat'){window.switchCoursePage?.('chat');return;}
+      if(point.type==='quizzes'){window.switchCoursePage?.('quizzes');return;}
+      if(point.type==='assignments'){window.switchCoursePage?.('assignments');return;}
+      if(point.type==='lessons'){window.switchCoursePage?.('learning');return;}
+      if(point.type==='learning'){window.switchCoursePage?.('learning');if(point.lessonId)window.setTimeout?.(()=>window.openLessonPlayer?.(point.courseId,point.lessonId),80);return;}
+      if(point.type==='dashboard'){window.switchCoursePage?.('dashboard');return;}
+      window.switchCoursePage?.('overview');
+    }catch(err){console.warn('profile back',err);window.mobileNavigate?.('courses');}
+  }
+
   async function open(uid,opts={}){
     uid=String(uid||'');if(!uid)return;
     if(state.opening && state.openUid===uid){return state.opening;}
-    const token=++state.token;state.openUid=uid;
+    const token=++state.token;state.openUid=uid;state.returnPoint=opts.returnPoint||window.profileReturnPoint?.()||null;
     state.opening=(async()=>{
       hideAllLegacy();
       const page=getPage();
