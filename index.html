@@ -11424,6 +11424,8 @@ function profileReturnPoint(){
  if(overview?.style.display!=='none'&&overview?.offsetParent!==null){p.type='overview';return p;}
  return p;
 }
+function profileSelfReturnPoint(){ return {type:'self-profile',uid:String(currentUser?.uid||'')}; }
+
 function ensureProfilePage(){
  hideLegacy();let page=$('aaRebuiltProfilePage');if(page)return page;
  page=document.createElement('div');page.id='aaRebuiltProfilePage';
@@ -13145,7 +13147,7 @@ window.__aaV9Cleanup=()=>clearInterval(v9Tick);
         e.preventDefault();
         const uid=btn.dataset.aaV10Uid;
         window.__aaViewedProfileUid=uid;
-        if(typeof window.aaOpenProfile==='function')window.aaOpenProfile(uid,{kind:'admin-directory'});
+        if(typeof window.aaOpenProfile==='function')window.aaOpenProfile(uid,{kind:'admin-directory',returnPoint:profileSelfReturnPoint()});
       });
     });
   }
@@ -15715,7 +15717,23 @@ if(!window.__aaStableNotifStarted){window.__aaStableNotifStarted=true;window.Ana
     const page=$('aaRebuiltProfilePage');
     page?.classList.remove('active');
     document.body.classList.remove('aa-profile-open');
-    if(!point||point.type==='courses'||!point.courseId){window.mobileNavigate?.('courses');$('coursesNavBtn')?.classList.add('active');return;}
+    if(point?.type==='self-profile'&&point.uid){
+      const selfUid=String(point.uid);
+      if(selfUid===String(currentUser?.uid||'')){
+        window.__aaViewingProfileUid=selfUid;
+        return window.openUserProfilePage?.();
+      }
+    }
+    if(point?.type==='profile-view'&&point.uid&&String(point.uid)!==String(currentUser?.uid||'')){
+      window.__aaViewingProfileUid=String(point.uid);
+      return window.aaOpenProfile?.(String(point.uid),{kind:'profile-view'});
+    }
+    if(!point||point.type==='courses'||!point.courseId){
+      window.__aaViewingProfileUid=String(currentUser?.uid||'');
+      window.mobileNavigate?.('courses');
+      $('coursesNavBtn')?.classList.add('active');
+      return;
+    }
     try{
       window.activeCourseId=point.courseId;
       if(point.type==='assignment-detail'&&point.assignmentId){window.openAssignmentDetail?.(point.courseId,point.assignmentId);return;}
@@ -15732,7 +15750,15 @@ if(!window.__aaStableNotifStarted){window.__aaStableNotifStarted=true;window.Ana
   async function open(uid,opts={}){
     uid=String(uid||'');if(!uid)return;
     if(state.opening && state.openUid===uid){return state.opening;}
-    const token=++state.token;state.openUid=uid;state.returnPoint=opts.returnPoint||window.profileReturnPoint?.()||null;
+    const token=++state.token;
+    state.openUid=uid;
+    const requestedReturn=opts.returnPoint||null;
+    const returnPoint=requestedReturn
+      || (opts.kind==='admin-directory'?profileSelfReturnPoint()
+      : (window.__aaViewingProfileUid && String(window.__aaViewingProfileUid)!==String(uid) ? {type:'profile-view',uid:String(window.__aaViewingProfileUid)}
+      : window.profileReturnPoint?.()||null));
+    state.returnPoint=returnPoint;
+    window.__aaViewingProfileUid=uid;
     state.opening=(async()=>{
       hideAllLegacy();
       const page=getPage();
@@ -15769,11 +15795,14 @@ if(!window.__aaStableNotifStarted){window.__aaStableNotifStarted=true;window.Ana
           return;
         }
 
-        const live=await collectLive(uid,token);
+        const live=await (window.__authoritativeLiveProfile
+          ? window.__authoritativeLiveProfile(uid)
+          : collectLive(uid,token));
         if(!live||token!==state.token)return;
         const finalProfile=live.user&&Object.keys(live.user).length?live.user:p;
         if(finalProfile!==p)setHeader(uid,finalProfile,isSelf);
         renderData(uid,finalProfile,isSelf,live,token);
+        window.__aaProfileDataSource='authoritativeLiveProfile';
         if(isAdmin&&typeof window.__loadDirectory==='function'){try{await window.__loadDirectory();}catch(_){} }
       }catch(err){
         console.error('profile open',err);
@@ -15803,7 +15832,7 @@ if(!window.__aaStableNotifStarted){window.__aaStableNotifStarted=true;window.Ana
   // One delegated handler for directory/chat/assignment profile links.
   document.addEventListener('click',function(e){
     const btn=e.target.closest?.('[data-aa-uid]');
-    if(btn){e.preventDefault();e.stopImmediatePropagation();open(btn.dataset.aaUid,{kind:'admin-directory'});return;}
+    if(btn){e.preventDefault();e.stopImmediatePropagation();open(btn.dataset.aaUid,{kind:'admin-directory',returnPoint:profileSelfReturnPoint()});return;}
     const work=e.target.closest?.('.assignment-submitter[data-profile-uid]');
     if(work){e.preventDefault();e.stopImmediatePropagation();open(work.dataset.profileUid,{kind:'assignment-submitter',returnPoint:{type:'assignment-detail',courseId:window.activeCourseId||activeCourseId||null,assignmentId:window.activeAssignmentDetailId||$('courseAssignmentDetailPage')?.dataset.assignmentId||null}});return;}
     const profileNode=e.target.closest?.('[data-profile-uid]');
