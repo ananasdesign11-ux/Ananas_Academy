@@ -3584,16 +3584,45 @@ label[for*="En"], input[id*="En"], textarea[id*="En"] { display:none !important;
         function stopLessonForNavigation() {
             try {
                 if(currentCoursePage === 'lessonPlayer' && activeCourseId && activeLessonId && lessonPlayer){
-                    let position=0;
-                    try{ position=Number(lessonPlayer.getCurrentTime?.()||0); }catch(e){}
-                    window.__lessonResumeOnReturn={courseId:activeCourseId,lessonId:activeLessonId,position:Number.isFinite(position)?position:0};
+                    let position=0, duration=0;
+                    try{ position=Number(lessonPlayer.getCurrentTime?.()||0); duration=Number(lessonPlayer.getDuration?.()||0); }catch(e){}
+                    position=Number.isFinite(position)?position:0;
+                    duration=Number.isFinite(duration)?duration:0;
+                    window.__lessonResumeOnReturn={courseId:activeCourseId,lessonId:activeLessonId,position};
+                    window.__lessonResumePosition=position;
                     window.__lessonResumeAutoplay=true;
+                    try{
+                        const key=`ananas.lessonResume.${currentUser?.uid||'guest'}.${activeCourseId}.${activeLessonId}`;
+                        localStorage.setItem(key,JSON.stringify({position,duration,updatedAt:Date.now()}));
+                    }catch(e){}
+                    try{ if(typeof lessonPlayer.pauseVideo==='function') lessonPlayer.pauseVideo(); else lessonPlayer.pause?.(); }catch(e){}
+                    const pending = window.saveLessonPositionBeforeLeaving?.();
+                    if(pending && typeof pending.catch === 'function') pending.catch(()=>{});
                 }
-                const pending = window.saveLessonPositionBeforeLeaving?.();
-                if(pending && typeof pending.catch === 'function') pending.catch(()=>{});
             } catch(e) {}
             destroyLessonVideo();
         }
+
+        function pauseLessonForInternalNavigation(){
+            try{
+                if(currentCoursePage!=='lessonPlayer'||!activeCourseId||!activeLessonId||!lessonPlayer)return false;
+                let position=0,duration=0;
+                try{position=Number(lessonPlayer.getCurrentTime?.()||0);duration=Number(lessonPlayer.getDuration?.()||0);}catch(e){}
+                position=Number.isFinite(position)?position:0; duration=Number.isFinite(duration)?duration:0;
+                window.__lessonResumeOnReturn={courseId:activeCourseId,lessonId:activeLessonId,position};
+                window.__lessonResumePosition=position;
+                window.__lessonResumeAutoplay=true;
+                try{
+                    const key=`ananas.lessonResume.${currentUser?.uid||'guest'}.${activeCourseId}.${activeLessonId}`;
+                    localStorage.setItem(key,JSON.stringify({position,duration,updatedAt:Date.now()}));
+                }catch(e){}
+                try{if(typeof lessonPlayer.pauseVideo==='function')lessonPlayer.pauseVideo();else lessonPlayer.pause?.();}catch(e){}
+                try{window.saveLessonProgressNow?.();}catch(e){}
+                try{window.persistCourseState?.();}catch(e){}
+                return true;
+            }catch(e){return false;}
+        }
+        window.pauseLessonForInternalNavigation=pauseLessonForInternalNavigation;
 
         window.registerMobileNavPage=function(page,label,icon){
             const nav=document.getElementById('mobileBottomNav');if(!nav||nav.querySelector(`[data-page="${page}"]`))return;
@@ -3648,7 +3677,10 @@ label[for*="En"], input[id*="En"], textarea[id*="En"] { display:none !important;
         document.addEventListener('keydown',e=>{if(e.key==='Escape'){closePlatformImageViewer();closePlatformGalleryViewer();}});
 
         function switchCoursePage(page) {
-            if(currentCoursePage === 'lessonPlayer' && page !== 'lessonPlayer') stopLessonForNavigation();
+            if(currentCoursePage === 'lessonPlayer' && page !== 'lessonPlayer'){
+                if(['quizzes','assignments','files','chat'].includes(page)) pauseLessonForInternalNavigation();
+                else stopLessonForNavigation();
+            }
             currentCoursePage = page;
             document.getElementById('courseDashboard').style.display = 'none';
             if(page!=='overview') document.getElementById('courseOverviewContainer').style.display='none';
@@ -6950,7 +6982,12 @@ label[for*="En"], input[id*="En"], textarea[id*="En"] { display:none !important;
   /* Remember the exact page/item, including a quiz or assignment detail. */
   const __origSwitchCoursePage=window.switchCoursePage||switchCoursePage;
   window.switchCoursePage=function(page){
-    if(currentCoursePage==='lessonPlayer' && page!=='lessonPlayer') { try{stopLessonForNavigation();}catch(e){} }
+    if(currentCoursePage==='lessonPlayer' && page!=='lessonPlayer') {
+      try{
+        if(['quizzes','assignments','files','chat'].includes(page)) pauseLessonForInternalNavigation();
+        else stopLessonForNavigation();
+      }catch(e){}
+    }
     return __origSwitchCoursePage(page);
   };
 
@@ -7563,7 +7600,7 @@ function readLocalLessonResume(courseId,lessonId){
   try{const raw=localStorage.getItem(lessonResumeStorageKey(courseId,lessonId));return raw?JSON.parse(raw)||{}:{};}catch(e){return {};}
 }
 async function saveLessonProgressNow(){
-  if(!currentUser||!activeCourseId||!activeLessonId||!window.lessonPlayer)return;
+  if(!currentUser||!activeCourseId||!activeLessonId||!lessonPlayer)return;
   if(window.__lessonProgressWriteBusy)return;
   try{
     window.__lessonProgressWriteBusy=true;
@@ -7753,7 +7790,7 @@ document.head.appendChild(st);
 const __baseOpenQuiz=window.openQuiz;
 window.openQuiz=async function(courseId,quizId,fromLesson=false){
   if(fromLesson){
-    try{window.stopLessonForNavigation?.();}catch(_e){}
+    try{window.pauseLessonForInternalNavigation?.();}catch(_e){}
     window.__quizOpenedFromLesson={courseId,lessonId:activeLessonId,quizId};
   }
   const result=await __baseOpenQuiz.apply(this,arguments);
@@ -7769,6 +7806,46 @@ window.openAssignmentDetail=async function(courseId,assignmentId,fromLesson=fals
   if(nav) nav.style.display=fromLesson?'flex':'none';
   return result;
 };
+
+function resumeLessonFromInternalPage(courseId,lessonId,fromFiles=false){
+  if(!courseId||!lessonId)return false;
+  if(String(activeCourseId||'')!==String(courseId)||String(activeLessonId||'')!==String(lessonId)||!lessonPlayer)return false;
+  try{
+    document.getElementById('quizOverlay')?.classList.remove('active');
+    document.getElementById('courseAssignmentDetailPage')?.classList.remove('active');
+    const fp=document.getElementById('courseFilesPage');if(fp){fp.classList.remove('active');fp.style.display='none';}
+    activeCourseId=courseId;activeLessonId=lessonId;currentCoursePage='lessonPlayer';
+    if(typeof __origSwitchCoursePage==='function')__origSwitchCoursePage('lessonPlayer');
+    else document.getElementById('courseLessonPlayerPage')?.classList.add('active');
+    window.__lessonResumeAutoplay=false;
+    let saved=Number(window.__lessonResumePosition||0);
+    try{const uid=currentUser?.uid||'guest';const raw=localStorage.getItem(`ananas.lessonResume.${uid}.${courseId}.${lessonId}`);const d=raw?JSON.parse(raw)||{}:{};saved=Math.max(saved,Number(d.position||0));}catch(e){}
+    window.__lessonResumePosition=Math.max(0,saved);
+    window.__allowedLessonSeekUntil=Date.now()+2200;
+    if(saved>0.5){try{lessonPlayer.seekTo(saved,true);}catch(e){try{lessonPlayer.seekTo(saved);}catch(_){} }showLessonResumeIndicator(saved);}
+    /* Play immediately in the same click task so mobile browsers keep the user gesture. */
+    try{const p=typeof lessonPlayer.playVideo==='function'?lessonPlayer.playVideo():lessonPlayer.play?.();if(p?.catch)p.catch(()=>{});}catch(e){}
+    updateLessonControls();
+    window.__lessonResumeOnReturn=null;
+    window.__lessonReturnContext=null;
+    try{persistCourseState();}catch(e){}
+    /* Reconcile with Firestore after playback has already resumed. */
+    try{
+      const ref=lessonProgressRef(courseId,lessonId);
+      ref?.get?.().then(snap=>{
+        if(!snap?.exists)return;
+        const serverPos=Number(snap.data()?.lastPosition||0);
+        if(serverPos>saved+1.5 && String(activeLessonId)===String(lessonId) && currentCoursePage==='lessonPlayer'){
+          window.__allowedLessonSeekUntil=Date.now()+1200;
+          try{lessonPlayer.seekTo(serverPos,true);}catch(e){}
+          window.__lessonResumePosition=serverPos;
+        }
+      }).catch(()=>{});
+    }catch(e){}
+    return true;
+  }catch(e){console.warn('resume existing lesson failed',e);return false;}
+}
+window.resumeLessonFromInternalPage=resumeLessonFromInternalPage;
 
 async function __restoreLessonAndPlay(courseId,lessonId){
   if(!courseId||!lessonId)return;
@@ -7787,8 +7864,8 @@ async function __restoreLessonAndPlay(courseId,lessonId){
   const wait=()=>{if(Array.isArray(lessonListCache)&&lessonListCache.some(l=>String(l.id)===String(lessonId))){openLessonPlayer(courseId,lessonId);}else setTimeout(wait,100);};
   wait();
 }
-window.returnToQuizLesson=function(){const x=window.__quizOpenedFromLesson||{};return __restoreLessonAndPlay(x.courseId||activeCourseId,x.lessonId||activeLessonId);};
-window.returnToAssignmentLesson=function(){const x=window.__assignmentOpenedFromLesson||{};return __restoreLessonAndPlay(x.courseId||activeCourseId,x.lessonId||activeLessonId);};
+window.returnToQuizLesson=function(){const x=window.__quizOpenedFromLesson||{};const cid=x.courseId||activeCourseId,lid=x.lessonId||activeLessonId;const ok=resumeLessonFromInternalPage(cid,lid);return ok?Promise.resolve(true):__restoreLessonAndPlay(cid,lid);};
+window.returnToAssignmentLesson=function(){const x=window.__assignmentOpenedFromLesson||{};const cid=x.courseId||activeCourseId,lid=x.lessonId||activeLessonId;const ok=resumeLessonFromInternalPage(cid,lid);return ok?Promise.resolve(true):__restoreLessonAndPlay(cid,lid);};
 
 /* Ensure YouTube autoplay/resume also works when the iframe API loads after this patch. */
 function installYTResume(){
@@ -8195,6 +8272,12 @@ function ensureFilesShell(){
      input.addEventListener('change',()=>{$('courseFilesPickText').textContent=input.files?.length?`تم اختيار ${input.files.length} ملف`:'اختر ملفات';});
    }
    page.innerHTML=''; if(title)wrap.appendChild(title);wrap.appendChild(hero);if(upload)wrap.appendChild(upload); if(grid)wrap.appendChild(grid); page.appendChild(wrap);
+   const back=title?.querySelector('.full-page-back-btn');
+   if(back){back.onclick=()=>{
+      const ctx=window.__lessonReturnContext;
+      if(ctx?.courseId&&ctx?.lessonId){window.__lessonReturnContext=null;return window.resumeLessonFromInternalPage?.(ctx.courseId,ctx.lessonId,true);}
+      window.switchCoursePage?.('dashboard');
+   };}
  }
 }
 function closeAllCourseSections(){
@@ -8205,7 +8288,10 @@ const originalSwitch=window.switchCoursePage;
 window.switchCoursePage=function(page){
  if(page==='files'){
    if(!activeCourseId)return;
-   if(currentCoursePage==='lessonPlayer'&&typeof stopLessonForNavigation==='function')stopLessonForNavigation();
+   if(currentCoursePage==='lessonPlayer'){
+      window.__lessonReturnContext={courseId:activeCourseId,lessonId:activeLessonId};
+      try{pauseLessonForInternalNavigation();}catch(e){}
+   }
    currentCoursePage='files'; closeAllCourseSections(); ensureFilesShell(); $('courseFilesPage').style.display='block';$('courseFilesPage').classList.add('active');
    window.loadCourseFilesPage?.();window.populateFileLessonSelect?.();window.persistCourseState?.();return;
  }
@@ -8678,7 +8764,7 @@ $('themeToggle')?.addEventListener('click',()=>setTimeout(fixBrandLogo,0),true);
 async function openAssignmentDetailV2(courseId,assignmentId){
   const page=$('courseAssignmentDetailPage');
   if(!page||!courseId||!assignmentId)return;
-  try{if(currentCoursePage==='lessonPlayer')window.stopLessonForNavigation?.();}catch(e){}
+  try{if(currentCoursePage==='lessonPlayer'){window.__lessonReturnContext={courseId:courseId,lessonId:activeLessonId};window.pauseLessonForInternalNavigation?.();}}catch(e){}
   currentCoursePage='assignments'; window.activeAssignmentDetailId=assignmentId;
   const hideIds=['courseOverviewContainer','courseDashboard','courseLessonsPage','courseLessonPlayerPage','courseQuizzesPage','courseAssignmentsPage','courseChatPage','courseFilesPage','courseLearningView','fullChatPage'];
   hideIds.forEach(id=>{const el=$(id);if(!el)return;el.classList.remove('active');el.style.display='none';});
@@ -8691,7 +8777,11 @@ async function openAssignmentDetailV2(courseId,assignmentId){
     <div class="assignment-v2-meta"><span><i class="fas fa-star"></i> ${Number(a.xpReward)||0} XP</span><span><i class="fas fa-images"></i> ${Array.isArray(a.submissions)?a.submissions.length:0} أعمال</span></div>
     <div id="assignmentV2Content" class="assignment-v2-content"></div>
   </div>`;
-  $('assignmentV2Back').onclick=()=>{page.classList.remove('active');page.style.display='none';window.switchCoursePage('assignments');};
+  $('assignmentV2Back').onclick=()=>{
+    const ctx=window.__lessonReturnContext;
+    if(ctx?.courseId&&ctx?.lessonId){window.resumeLessonFromInternalPage?.(ctx.courseId,ctx.lessonId);return;}
+    page.classList.remove('active');page.style.display='none';window.switchCoursePage('assignments');
+  };
   const content=$('assignmentV2Content');
   const subs=Array.isArray(a.submissions)?a.submissions:[];
   const visible=subs.filter(sub=>sub&&!sub.deleted&&(isAdmin||sub.approved||sub.userId===currentUser?.uid));
@@ -8981,7 +9071,7 @@ if(lessonRelatedStopHandler&&!lessonRelatedStopHandler.dataset.stopBound){
   lessonRelatedStopHandler.addEventListener('click',e=>{
     const btn=e.target.closest('button,[role="button"],a');
     if(!btn)return;
-    try{window.stopLessonForNavigation?.();}catch(_e){}
+    try{window.pauseLessonForInternalNavigation?.();}catch(_e){}
   },true);
 }
 document.getElementById('lessonSeekBackBtn')?.addEventListener('click',e=>{e.preventDefault();e.stopPropagation();window.seekLessonBy?.(-10)},true);
@@ -9133,13 +9223,15 @@ window.closeQuiz=async function(){
   const result=v12OldCloseQuiz?.apply(this,arguments);
   if(ret?.courseId&&ret?.lessonId){
     const cid=ret.courseId,lid=ret.lessonId,pos=Number(ret.position||window.__lessonResumePosition||0);
-    setTimeout(async()=>{
-      try{
-        window.__lessonResumePosition=pos;
-        window.__lessonResumeAutoplay=true;
-        await window.returnToQuizLesson?.();
-      }catch(e){console.warn('quiz->lesson resume',e)}
-    },180);
+    window.__lessonResumePosition=pos;
+    window.__lessonResumeAutoplay=true;
+    let resumed=false;
+    try{resumed=window.resumeLessonFromInternalPage?.(cid,lid) || false;}catch(e){console.warn('quiz direct resume',e)}
+    if(!resumed){
+      setTimeout(async()=>{
+        try{await window.returnToQuizLesson?.();}catch(e){console.warn('quiz->lesson resume',e)}
+      },120);
+    }
   }
   return result;
 };
