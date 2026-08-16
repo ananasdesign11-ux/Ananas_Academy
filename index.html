@@ -13184,7 +13184,7 @@ window.__aaV9Cleanup=()=>clearInterval(v9Tick);
     if(membership==='enrolled')users=users.filter(u=>u.enrolledCourseIds.length>0);
     if(courseId!=='all')users=users.filter(u=>u.enrolledCourseIds.includes(String(courseId)));
     if(query)users=users.filter(u=>normalizeArabic(getUserName(u)).includes(query));
-    const viewedUid=String(window.__aaViewedProfileUid||window.profileState?.uid||'');
+    const viewedUid=String(window.__aaViewedProfileUid||state.openUid||window.profileState?.uid||'');
     users=users.filter(u=>String(u.id)!==viewedUid);
     users.sort((a,b)=>normalizeArabic(getUserName(a)).localeCompare(normalizeArabic(getUserName(b)),'ar'));
     const count=$('aaProfileDirectoryCount');if(count)count.textContent=`${users.length} حساب`;
@@ -15690,7 +15690,35 @@ if(!window.__aaStableNotifStarted){window.__aaStableNotifStarted=true;window.Ana
       }
     }
     out.portfolio=(portfolio?.docs||[]).map(d=>({id:d.id,...(d.data()||{})})).filter(x=>x.deleted!==true);
-    out.courses=(enrolled?.docs||[]).map(d=>({id:d.id,...(d.data()||{})})).filter(x=>catalog.validCourseIds.has(x.id));
+    // Authoritative shared-courses list: keep only live courses with a live enrollment/code.
+    // Deleted code/access-blocked enrollments and deleted courses are excluded.
+    const enrollmentDocs=(enrolled?.docs||[]).filter(d=>d&&d.exists);
+    const shared=[];
+    await Promise.all(enrollmentDocs.map(async d=>{
+      const en={id:d.id,...(d.data()||{})};
+      const courseEntry=catalog.courses.find(x=>String(x.course.id)===String(d.id));
+      if(!courseEntry || !catalog.validCourseIds.has(d.id)) return;
+      const course=courseEntry.course||{};
+      if(course.deleted===true||course.isDeleted===true||course.archived===true||String(course.status||'').toLowerCase()==='deleted') return;
+      if(en.codeDeleted===true || en.accessBlocked===true) return;
+      if(en.adminEnrollment===true){
+        shared.push({...en,courseTitle:course.titleAr||course.title||'دورة',courseDeleted:false,codeEndTime:null});
+        return;
+      }
+      const codeId=String(en.codeId||'').trim();
+      if(!codeId) return;
+      const codeSnap=await db.collection('courses').doc(d.id).collection('codes').doc(codeId).get().catch(()=>null);
+      if(!codeSnap?.exists) return;
+      const code=codeSnap.data()||{};
+      if(code.deleted===true || code.archived===true) return;
+      const codeEnd=code.endTime?.toDate?code.endTime.toDate():(code.endTime?new Date(code.endTime):null);
+      shared.push({...en,courseTitle:course.titleAr||course.title||'دورة',courseDeleted:false,codeEndTime:codeEnd,codeStartTime:code.startTime?.toDate?code.startTime.toDate():(code.startTime?new Date(code.startTime):null)});
+    }));
+    out.courses=shared.sort((a,b)=>{
+      const am=a.enrolledAt?.toDate?a.enrolledAt.toDate():new Date(a.enrolledAt||0);
+      const bm=b.enrolledAt?.toDate?b.enrolledAt.toDate():new Date(b.enrolledAt||0);
+      return bm-am;
+    });
     for(const x of doneA.values()) if(catalog.assignmentMap.has(x.id)) out.xp+=num(x.xpEarned);
     return out;
   }
@@ -15700,7 +15728,12 @@ if(!window.__aaStableNotifStarted){window.__aaStableNotifStarted=true;window.Ana
     const photo=p.photoURL||p.photoUrl||p.photo||currentUser?.photoURL||'';
     const isPrivate=p.profilePublic===false;
     if($('aaProfileName'))$('aaProfileName').textContent=name;
-    if($('aaProfileEmail'))$('aaProfileEmail').textContent=isPrivate&&!isSelf?(isAdmin?'حساب خاص — المشرف يرى جميع البيانات':'حساب خاص'):(p.email||currentUser?.email||'—');
+    if($('aaProfileEmail')){
+      const emailValue=String(p.email||p.emailAddress||currentUser?.email||'غير متوفر');
+      $('aaProfileEmail').textContent=emailValue;
+      $('aaProfileEmail').classList.toggle('aa-profile-private-email',!!(isPrivate&&!isSelf&&!isAdmin));
+      $('aaProfileEmail').setAttribute('title',isPrivate&&!isSelf&&!isAdmin?'البريد الإلكتروني مخفي للحساب الخاص':'');
+    }
     if($('aaProfileBadge')){$('aaProfileBadge').className='aa-profile-badge '+(isPrivate?'private':'public');$('aaProfileBadge').innerHTML=isPrivate?'<i class="fas fa-lock"></i> الحساب خاص':'<i class="fas fa-eye"></i> الحساب عام';}
     if($('aaProfileAvatar'))$('aaProfileAvatar').innerHTML=photo?`<img src="${esc(photo)}" alt="${esc(name)}">`:esc(name.charAt(0));
     if($('aaProfileBack'))$('aaProfileBack').style.display='inline-flex';
@@ -15725,13 +15758,20 @@ if(!window.__aaStableNotifStarted){window.__aaStableNotifStarted=true;window.Ana
     $('aaProfileWorks')&&($('aaProfileWorks').textContent=live.portfolio.length+live.assignmentWorks.length);
     const displayEmail=isSelf?(p.email||currentUser?.email||'—'):(p.email||p.emailAddress||'—');
     $('aaProfileData')&&($('aaProfileData').innerHTML=[['الاسم',p.displayName||p.name||'مستخدم'],['البريد الإلكتروني',displayEmail],['رقم الهاتف',p.phone||'غير مضاف'],['الجنس',p.gender==='female'?'أنثى':p.gender==='male'?'ذكر':'غير محدد'],['الحالة',p.profilePublic===false?'خاص':'عام'],['تاريخ التسجيل',dateText(p.createdAt)]].map(x=>`<div class="aa-profile-row"><strong>${esc(x[0])}</strong><span>${esc(x[1])}</span></div>`).join(''));
-    $('aaProfileCourses')&&($('aaProfileCourses').innerHTML=rowList(live.courses.map(c=>`<div class="aa-profile-row"><div><strong>${esc(c.titleAr||c.title||'دورة')}</strong><small>تاريخ الاشتراك: ${esc(dateText(c.enrolledAt))}</small></div><i class="fas fa-circle-check" style="color:#22c55e"></i></div>`),'لا توجد دورات مشتركة حاليًا.'));
+    $('aaProfileCourses')&&($('aaProfileCourses').innerHTML=rowList(live.courses.map(c=>{
+      const endText=c.codeEndTime?dateText(c.codeEndTime):'لا يوجد تاريخ انتهاء';
+      return `<div class="aa-profile-row"><div><strong>${esc(c.courseTitle||c.titleAr||c.title||'دورة')}</strong><small>تاريخ الاشتراك: ${esc(dateText(c.enrolledAt))}<br>تاريخ نهاية الكود: ${esc(endText)}</small></div><i class="fas fa-circle-check" style="color:#22c55e"></i></div>`;
+    }),'لا توجد دورات مشتركة حاليًا.'));
     $('aaProfileLessonList')&&($('aaProfileLessonList').innerHTML=rowList(live.lessons.slice().sort((a,b)=>new Date(b.completedAt?.toDate?b.completedAt.toDate():b.completedAt||0)-new Date(a.completedAt?.toDate?a.completedAt.toDate():a.completedAt||0)).map(x=>`<div class="aa-profile-row"><div><strong>${esc(x.title)}</strong><small>${esc(x.courseTitle)} · +${num(x.xpEarned)} XP · ${esc(dateText(x.completedAt))}</small></div></div>`),'لا توجد حصص مكتملة حاليًا.'));
     $('aaProfileQuizList')&&($('aaProfileQuizList').innerHTML=rowList(live.quizzes.slice().sort((a,b)=>new Date(b.passedAt?.toDate?b.passedAt.toDate():b.passedAt||0)-new Date(a.passedAt?.toDate?a.passedAt.toDate():a.passedAt||0)).map(x=>`<div class="aa-profile-row"><div><strong>${esc(x.title)}</strong><small>${num(x.score)}% · +${num(x.xpEarned)} XP · ${esc(dateText(x.passedAt))}</small></div></div>`),'لا توجد اختبارات مكتملة حاليًا.'));
     const activities=[...live.lessons.map(x=>({t:`أكمل الحصة: ${x.title}`,d:x.completedAt})),...live.quizzes.map(x=>({t:`أكمل الاختبار: ${x.title}`,d:x.passedAt})),...live.assignmentWorks.map(x=>({t:`رفع عملًا في: ${x.assignmentTitle}`,d:x.uploadedAt})),...live.portfolio.map(x=>({t:`أضاف عملًا للمعرض: ${x.title||'عمل'}`,d:x.createdAt||x.uploadedAt}))].sort((a,b)=>new Date(b.d?.toDate?b.d.toDate():b.d||0)-new Date(a.d?.toDate?a.d.toDate():a.d||0));
     $('aaProfileActivity')&&($('aaProfileActivity').innerHTML=rowList(activities.slice(0,100).map(x=>`<div class="aa-profile-row"><strong>${esc(x.t)}</strong><small>${esc(dateText(x.d))}</small></div>`),'لا يوجد نشاط حالي.'));
     const cards=[...live.portfolio.map(x=>({kind:'portfolio',...x})),...live.assignmentWorks.map(x=>({kind:'assignment',...x}))];
     $('aaProfileGallery')&&($('aaProfileGallery').innerHTML=rowList(cards.map(x=>{const imgs=Array.isArray(x.images)?x.images.filter(Boolean):(x.imageUrl?[x.imageUrl]:[]),img=imgs[0]||'';return x.kind==='assignment'?`<article class="aa-profile-work"><div class="aa-profile-cover">${img?`<img src="${esc(img)}" alt="">`:'<i class="fas fa-images"></i>'}</div><div class="aa-profile-work-body"><strong>${esc(x.assignmentTitle||x.title||'واجب')}</strong><small>${esc(x.courseTitle||'')}<br>${x.approved?'✅ معتمد':'⏳ قيد المراجعة'}${imgs.length>1?` · ${imgs.length} صور`:''}</small><button type="button" class="aa-profile-view-work" data-kind="assignment" data-course="${esc(x.courseId||'')}" data-assignment="${esc(x.assignmentId||'')}" data-work="${esc(x.workId||x.id||'')}"><i class="fas fa-eye"></i> عرض العمل</button></div></article>`:`<article class="aa-profile-work"><div class="aa-profile-cover">${img?`<img src="${esc(img)}" alt="">`:'<i class="fas fa-images"></i>'}</div><div class="aa-profile-work-body"><strong>${esc(x.title||'عمل')}</strong><small>${esc(x.type||'عمل شخصي')}${x.description?`<br>${esc(x.description)}`:''}${imgs.length>1?`<br>${imgs.length} صور`:''}</small><button type="button" class="aa-profile-view-work" data-kind="portfolio" data-user="${esc(uid)}" data-work="${esc(x.id||'')}"><i class="fas fa-eye"></i> عرض العمل</button></div></article>`;}),'لا توجد أعمال منشورة حاليًا.'));
+  }
+
+  if(!document.getElementById('aa-profile-private-email-style')){
+    const st=document.createElement('style');st.id='aa-profile-private-email-style';st.textContent=`#aaRebuiltProfilePage #aaProfileEmail.aa-profile-private-email{filter:blur(6px);user-select:none;opacity:.78;cursor:default;transition:filter .2s ease,opacity .2s ease}#aaRebuiltProfilePage #aaProfileEmail.aa-profile-private-email:hover{filter:blur(6px);opacity:.78}`;document.head.appendChild(st);
   }
 
   if(!document.getElementById('aa-profile-loading-style')){
@@ -15851,7 +15891,7 @@ if(!window.__aaStableNotifStarted){window.__aaStableNotifStarted=true;window.Ana
         if(finalProfile!==p)setHeader(uid,finalProfile,isSelf);
         renderData(uid,finalProfile,isSelf,live,token);
         if(isAdmin&&typeof window.__loadDirectory==='function'){try{await window.__loadDirectory();}catch(_){} }
-        requestAnimationFrame(()=>{try{page.scrollTop=0;}catch(_){} try{window.scrollTo(0,0);}catch(_){} });
+        requestAnimationFrame(()=>{try{page.scrollTop=0;}catch(_){} try{page.querySelector('.aa-profile-hero')?.scrollIntoView({block:'start',behavior:'instant'});}catch(_){} try{window.scrollTo(0,0);}catch(_){} });
       }catch(err){
         console.error('profile open',err);
         if(token===state.token){
