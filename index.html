@@ -13209,52 +13209,36 @@ window.__aaV9Cleanup=()=>clearInterval(v9Tick);
   async function fetchDirectoryUsers(){
     const token=++dirState.token;
     dirState.loading=true;
-    dirState.ready=false;
     dirState.membershipsReady=false;
     dirState.membershipsLoading=false;
     const box=$('aaProfileDirectory');
-    if(box)box.innerHTML='<div class="aa-profile-empty">جاري تحميل الحسابات...</div>';
+    const cached=Array.isArray(window.__aaDirectoryUsersCache)?window.__aaDirectoryUsersCache:null;
+    if(box&&!dirState.users.length)box.innerHTML='<div class="aa-profile-empty">جاري تحميل الحسابات...</div>';
+    async function readUsers(){
+      let lastErr=null;
+      for(let attempt=0;attempt<3;attempt++){
+        try{return await Promise.race([db.collection('users').get(),new Promise((_,reject)=>setTimeout(()=>reject(new Error('DIRECTORY_USERS_TIMEOUT')),8000))]);}
+        catch(err){lastErr=err;await new Promise(r=>setTimeout(r,300*(attempt+1)));}
+      }
+      throw lastErr||new Error('DIRECTORY_USERS_UNAVAILABLE');
+    }
     try{
-      /* Load users independently so a course-query failure can never blank the whole directory. */
-      const usersSnap=await db.collection('users').get();
-      if(token!==dirState.token)return;
-      dirState.users=usersSnap.docs
-        .filter(d=>String(d.id)!==String(currentUser?.uid||''))
-        .map(d=>({id:d.id,...(d.data()||{}),enrolledCourseIds:[],enrolledMemberships:{},membershipsReady:false}));
-      dirState.ready=true;
-      dirState.loading=false;
-      renderFinalDirectory();
-
-      /* Courses are secondary data: load them in the background. If this query fails,
-         the accounts list remains usable and the course filter stays disabled. */
+      const usersSnap=await readUsers(); if(token!==dirState.token)return;
+      const users=usersSnap.docs.filter(d=>String(d.id)!==String(currentUser?.uid||'')).map(d=>({id:d.id,...(d.data()||{}),enrolledCourseIds:[],enrolledMemberships:{},membershipsReady:false}));
+      dirState.users=users;window.__aaDirectoryUsersCache=users.map(u=>({...u}));dirState.ready=true;dirState.loading=false;renderFinalDirectory();
       try{
-        const coursesSnap=await db.collection('courses').get();
+        const coursesSnap=await Promise.race([db.collection('courses').get(),new Promise((_,reject)=>setTimeout(()=>reject(new Error('DIRECTORY_COURSES_TIMEOUT')),8000))]);
         if(token!==dirState.token)return;
-        const activeCourses=coursesSnap.docs
-          .map(d=>({id:d.id,...(d.data()||{})}))
-          .filter(c=>!(c.deleted===true||c.isDeleted===true||c.archived===true||String(c.status||'').toLowerCase()==='deleted'))
-          .sort((a,b)=>normalizeArabic(a.titleAr||a.title).localeCompare(normalizeArabic(b.titleAr||b.title),'ar'));
-        dirState.courses=activeCourses;
-        dirState.coursesById=new Map(activeCourses.map(c=>[String(c.id),c]));
-        const select=$('aaDirCourseFilter');
-        if(select){
-          select.innerHTML='<option value="all">جميع الدورات</option>'+activeCourses.map(c=>`<option value="${escapeHtml(c.id)}">${escapeHtml(c.titleAr||c.title||'دورة')}</option>`).join('');
-          select.dataset.loaded='1';
-          syncDirectoryCourseFilterState();
-        }
-      }catch(courseErr){
-        console.warn('directory courses unavailable',courseErr);
-      }
-
-      /* Fast first paint: hydrate membership metadata after the cards are visible. */
-      hydrateDirectoryMemberships(token,false).catch(e=>console.warn('directory membership hydration',e));
-      renderFinalDirectory();
+        const activeCourses=coursesSnap.docs.map(d=>({id:d.id,...(d.data()||{})})).filter(c=>!(c.deleted===true||c.isDeleted===true||c.archived===true||String(c.status||'').toLowerCase()==='deleted')).sort((a,b)=>normalizeArabic(a.titleAr||a.title).localeCompare(normalizeArabic(b.titleAr||b.title),'ar'));
+        dirState.courses=activeCourses;dirState.coursesById=new Map(activeCourses.map(c=>[String(c.id),c]));
+        const select=$('aaDirCourseFilter');if(select){select.innerHTML='<option value="all">جميع الدورات</option>'+activeCourses.map(c=>`<option value="${escapeHtml(c.id)}">${escapeHtml(c.titleAr||c.title||'دورة')}</option>`).join('');select.dataset.loaded='1';syncDirectoryCourseFilterState();}
+      }catch(courseErr){console.warn('directory courses unavailable',courseErr)}
+      hydrateDirectoryMemberships(token,false).catch(e=>console.warn('directory membership hydration',e));renderFinalDirectory();
     }catch(e){
-      console.error('final directory users',e);
-      if(token===dirState.token){
-        dirState.users=[];dirState.ready=false;dirState.loading=false;
-        if(box)box.innerHTML='<div class="aa-profile-empty">تعذر تحميل الحسابات. حاول تحديث الملف الشخصي مرة أخرى.</div>';
-      }
+      console.error('final directory users',e);if(token!==dirState.token)return;
+      if(!dirState.users.length&&cached?.length){dirState.users=cached.map(u=>({...u}));dirState.ready=true;dirState.loading=false;renderFinalDirectory();return;}
+      dirState.ready=dirState.users.length>0;dirState.loading=false;
+      if(box&&!dirState.users.length)box.innerHTML='<div class="aa-profile-empty">تعذر تحميل الحسابات مؤقتًا. حاول مرة أخرى بعد لحظات.</div>';else renderFinalDirectory();
     }
   }
 
@@ -13307,15 +13291,12 @@ window.__aaV9Cleanup=()=>clearInterval(v9Tick);
   }
 
   async function loadFinalDirectory(){
-    const panel=$('aaProfileDirectoryPanel');
-    if(!panel)return;
-    const admin=await resolveAdmin();
-    isAdmin=!!admin;
-    if(!admin){panel.style.display='none';return;}
-    panel.style.display='block';
-    ensureDirectoryControls();
-    if(!dirState.ready&&!dirState.loading)await fetchDirectoryUsers();
-    else renderFinalDirectory();
+    const panel=$('aaProfileDirectoryPanel');if(!panel)return;const admin=await resolveAdmin();isAdmin=!!admin;
+    if(!admin){panel.style.display='none';return;}panel.style.display='block';ensureDirectoryControls();
+    if(!dirState.ready&&!dirState.loading){
+      const cached=Array.isArray(window.__aaDirectoryUsersCache)?window.__aaDirectoryUsersCache:null;
+      if(cached?.length){dirState.users=cached.map(u=>({...u}));dirState.ready=true;renderFinalDirectory();fetchDirectoryUsers().catch(()=>{});}else await fetchDirectoryUsers();
+    }else renderFinalDirectory();
   }
 
   window.__v10LoadDirectory=loadFinalDirectory;
