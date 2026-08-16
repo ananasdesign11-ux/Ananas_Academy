@@ -10963,29 +10963,52 @@ window.__aaV9Cleanup=()=>clearInterval(v9Tick);
     const token=++dirState.token;
     dirState.loading=true;
     try{
+      /*
+       * Load the account documents first and render them immediately.
+       * The previous implementation waited for an enrolledCourses read
+       * for every account before rendering anything, so one slow/denied
+       * subcollection read could leave the whole directory stuck on
+       * "جاري تحميل الحسابات..." even though users.get() had succeeded.
+       */
       const snap=await db.collection('users').get();
-      const rows=[];
-      for(const d of snap.docs){
-        if(token!==dirState.token)return;
-        const u={id:d.id,...(d.data()||{})};
-        if(String(u.id)===String(currentUser?.uid))continue;
-        let enrolledIds=[];
-        try{
-          const en=await d.ref.collection('enrolledCourses').get();
-          enrolledIds=en.docs.map(x=>String(x.id)).filter(Boolean);
-        }catch(_){
-          enrolledIds=Array.isArray(u.enrolledCourses)?u.enrolledCourses.map(x=>String(x.id||x)):[...new Set([...(u.enrolledCourseIds||[]).map(String),...(u.courseIds||[]).map(String)])];
-        }
-        rows.push({...u,enrolledCourseIds:[...new Set(enrolledIds)]});
-      }
-      dirState.users=rows;dirState.ready=true;
-    }catch(e){
-      console.error('final directory users',e);
-      dirState.users=[];dirState.ready=false;
-      const box=$('aaProfileDirectory');if(box)box.innerHTML='<div class="aa-profile-empty">تعذر تحميل الحسابات.</div>';
-    }finally{
+      if(token!==dirState.token)return;
+
+      const rows=snap.docs
+        .map(d=>{
+          const u={id:d.id,...(d.data()||{})};
+          const fallback=Array.isArray(u.enrolledCourses)
+            ? u.enrolledCourses.map(x=>String(x?.id||x)).filter(Boolean)
+            : [...new Set([...(u.enrolledCourseIds||[]).map(String),...(u.courseIds||[]).map(String)])];
+          return {...u,enrolledCourseIds:[...new Set(fallback)]};
+        })
+        .filter(u=>String(u.id)!==String(currentUser?.uid));
+
+      dirState.users=rows;
+      dirState.ready=true;
       dirState.loading=false;
       renderFinalDirectory();
+
+      /* Enrich membership data in the background without blocking the list. */
+      const enrichments=rows.map(async u=>{
+        try{
+          const en=await db.collection('users').doc(u.id).collection('enrolledCourses').get();
+          if(token!==dirState.token)return;
+          u.enrolledCourseIds=[...new Set(en.docs.map(x=>String(x.id)).filter(Boolean))];
+        }catch(_){
+          /* Keep the profile-document fallback already shown in the list. */
+        }
+      });
+
+      await Promise.allSettled(enrichments);
+      if(token===dirState.token)renderFinalDirectory();
+    }catch(e){
+      console.error('final directory users',e);
+      if(token!==dirState.token)return;
+      dirState.users=[];
+      dirState.ready=false;
+      dirState.loading=false;
+      const box=$('aaProfileDirectory');
+      if(box)box.innerHTML='<div class="aa-profile-empty">تعذر تحميل الحسابات.</div>';
     }
   }
 
