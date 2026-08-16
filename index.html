@@ -7031,11 +7031,18 @@ label[for*="En"], input[id*="En"], textarea[id*="En"] { display:none !important;
             } else {
                 // ===== LOGOUT LOGIC =====
                 currentUser = null; currentUserProfile = {}; isAdmin = false;
+                window.__aaViewedProfileUid = '';
+                if (window.profileState) { window.profileState.uid = null; window.profileState.isSelf = false; window.profileState.source = null; window.profileState.returnPoint = null; window.profileState.busy = false; }
                 document.querySelectorAll('.admin-only').forEach(el => el.classList.remove('show'));
                 const t = translations[currentLang] || translations['ar'] || {};
                 updateAuthAccountButton(null, {});
                 
-                // بعد تسجيل الخروج: إغلاق أي صفحة داخل الدورة والعودة مباشرة للصفحة الرئيسية للدورات.
+                // بعد تسجيل الخروج: إغلاق الملف الشخصي وأي صفحة داخل الدورة والعودة مباشرة للصفحة الرئيسية للدورات.
+                document.querySelectorAll('#aaRebuiltProfilePage,#ananasV10ProfilePage,#ananasPrivateProfileOverlay,#ananasCanonicalProfilePage,#userProfilePage').forEach(el => {
+                    el.classList.remove('active');
+                    el.style.removeProperty('display');
+                });
+
                 const courseViewsToClose = [
                     ['courseDetailView', 'none'], ['courseLearningView', null], ['fullChatPage', null],
                     ['courseLessonsPage', null], ['courseLessonPlayerPage', null], ['courseDashboard', 'none'],
@@ -9675,7 +9682,26 @@ function ensureProfilePage(){
  $('aaProfileBack').onclick=profileBack;
  $('aaProfileEdit').onclick=e=>{e.preventDefault();};
  $('aaProfileAddWork').onclick=()=>openPortfolioFromCourses();
- $('aaProfileLogout').onclick=()=>auth?.signOut?.();
+ $('aaProfileLogout').onclick=async e=>{
+  e?.preventDefault();
+  e?.stopPropagation?.();
+  if(!currentUser||!auth?.signOut)return;
+  try{
+    $('aaProfileLogout').disabled=true;
+    // إغلاق الواجهة فورًا قبل انتظار استجابة Firebase.
+    document.querySelectorAll('#aaRebuiltProfilePage,#ananasV10ProfilePage,#ananasPrivateProfileOverlay,#ananasCanonicalProfilePage,#userProfilePage').forEach(el=>{el.classList.remove('active');el.style.removeProperty('display');});
+    window.__aaViewedProfileUid='';
+    if(window.profileState){window.profileState.uid=null;window.profileState.isSelf=false;window.profileState.source=null;window.profileState.returnPoint=null;window.profileState.busy=false;}
+    try{window.mobileNavigate?.('courses');}catch(_){}
+    document.querySelectorAll('.nav-btn,.auth-btn').forEach(x=>x.classList.remove('active'));
+    document.querySelector('#coursesNavBtn')?.classList.add('active');
+    await auth.signOut();
+  }catch(err){
+    console.error('profile logout',err);
+    showCustomAlert?.('خطأ','تعذر تسجيل الخروج حاليًا.');
+    const b=$('aaProfileLogout');if(b)b.disabled=false;
+  }
+};
  return page;
 }
 function hideProfile(){const p=$('aaRebuiltProfilePage');if(p)p.classList.remove('active');document.body.classList.remove('aa-profile-open');}
@@ -12444,5 +12470,72 @@ const s=document.createElement('style');s.textContent=`
   bindButtons();
 })();
 </script>
+
+<script id="final-page-open-scroll-top-patch">
+(function(){
+  'use strict';
+  if(window.__aaPageOpenScrollTopPatch)return;
+  window.__aaPageOpenScrollTopPatch=true;
+
+  const selectors=[
+    '#coursesPage','#courseDetailView','#courseOverviewContainer','#courseDashboard',
+    '#courseLessonsPage','#courseLessonPlayerPage','#courseQuizzesPage','#courseAssignmentsPage',
+    '#courseAssignmentDetailPage','#courseFilesPage','#courseChatPage','#fullChatPage',
+    '#courseLearningView','#aaRebuiltProfilePage','#ananasCanonicalProfilePage',
+    '#ananasV10ProfilePage','#userProfilePage','#profilePage','#quizOverlay',
+    '.edit-modal.active','.auth-popup.active','.custom-alert-modal.active',
+    '.gallery-viewer','.platform-image-viewer','.file-viewer-overlay'
+  ];
+
+  function resetOne(el){
+    if(!el)return;
+    try{el.scrollTop=0;el.scrollLeft=0;}catch(_){}
+    try{el.querySelectorAll?.('[data-scroll-container],.aa-mobile-scroll-host,.sidebar-content,.course-main-area,.sidebar-content,.lessons-cards-grid,.lesson-player-list,.chat-messages-list,.profile-list,.aa-profile-directory').forEach(x=>{try{x.scrollTop=0;x.scrollLeft=0;}catch(_){}});}catch(_){}
+  }
+
+  function resetPageScroll(){
+    try{window.scrollTo({top:0,left:0,behavior:'auto'});}catch(_){try{window.scrollTo(0,0);}catch(__){}}
+    try{document.documentElement.scrollTop=0;document.body.scrollTop=0;}catch(_){}
+    selectors.forEach(sel=>document.querySelectorAll(sel).forEach(resetOne));
+    requestAnimationFrame(()=>{
+      try{window.scrollTo({top:0,left:0,behavior:'auto'});}catch(_){}
+      selectors.forEach(sel=>document.querySelectorAll(sel).forEach(resetOne));
+    });
+  }
+  window.__aaResetPageScrollTop=resetPageScroll;
+
+  function wrap(name,after){
+    const original=window[name];
+    if(typeof original!=='function'||original.__aaScrollTopWrapped)return;
+    const wrapped=function(){
+      resetPageScroll();
+      const result=original.apply(this,arguments);
+      if(result&&typeof result.then==='function')return result.finally(()=>after?.());
+      after?.();
+      return result;
+    };
+    wrapped.__aaScrollTopWrapped=true;
+    wrapped.__original=original;
+    window[name]=wrapped;
+  }
+
+  wrap('mobileNavigate');
+  wrap('switchCoursePage');
+  wrap('openQuiz');
+  wrap('openAssignmentDetail');
+  wrap('openCourseFileViewer');
+  wrap('aaOpenProfile');
+  wrap('openPublicProfileFinal');
+
+  document.addEventListener('click',function(e){
+    const target=e.target?.closest?.('[data-page],.nav-btn,.mobile-nav-item,.course-card,.dashboard-btn,.full-page-back-btn,.course-page-back-btn,#coursesNavBtn,#aaProfileBack,#acpBack');
+    if(!target)return;
+    setTimeout(resetPageScroll,0);
+  },true);
+
+  document.addEventListener('DOMContentLoaded',()=>setTimeout(resetPageScroll,0),{once:true});
+})();
+</script>
+
 </body>
 </html>
