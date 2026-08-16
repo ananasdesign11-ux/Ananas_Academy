@@ -5101,10 +5101,7 @@ label[for*="En"], input[id*="En"], textarea[id*="En"] { display:none !important;
             const playing=state===LESSON_MEDIA_STATE.PLAYING || (window.YT&&state===YT.PlayerState.PLAYING);
             playing?lessonPlayer.pauseVideo():lessonPlayer.playVideo();
         }
-        document.getElementById('lessonPlayPauseBtn')?.addEventListener('click',toggleLessonPlayback);
-        document.getElementById('lessonCenterPlayBtn')?.addEventListener('click',toggleLessonPlayback);
-        document.getElementById('lessonSeekBackBtn')?.addEventListener('click',()=>seekLessonBy(-10));
-        document.getElementById('lessonSeekForwardBtn')?.addEventListener('click',()=>seekLessonBy(10));
+        /* Playback/seek button handlers are bound once in the final capture-phase controller below. */
         document.getElementById('lessonMuteBtn')?.addEventListener('click',()=>{
             if(!lessonPlayerReady) return;
             if(lessonPlayer.isMuted()) { lessonPlayer.unMute(); document.getElementById('lessonMuteBtn').innerHTML='<i class="fas fa-volume-up"></i>'; }
@@ -7709,7 +7706,10 @@ document.head.appendChild(st);
 /* Linked-item navigation is the only place where lesson-return buttons are shown. */
 const __baseOpenQuiz=window.openQuiz;
 window.openQuiz=async function(courseId,quizId,fromLesson=false){
-  if(fromLesson) window.__quizOpenedFromLesson={courseId,lessonId:activeLessonId,quizId};
+  if(fromLesson){
+    try{window.stopLessonForNavigation?.();}catch(_e){}
+    window.__quizOpenedFromLesson={courseId,lessonId:activeLessonId,quizId};
+  }
   const result=await __baseOpenQuiz.apply(this,arguments);
   const nav=document.getElementById('quizRouteNav');
   if(nav) nav.style.display=fromLesson?'flex':'none';
@@ -8917,16 +8917,27 @@ window.submitQuiz=async function(){
 function v12VideoCommand(action,arg){
   if(!lessonPlayerReady||!lessonPlayer)return false;
   try{
-    if(action==='play')return Promise.resolve(lessonPlayer.playVideo?.());
-    if(action==='pause')return Promise.resolve(lessonPlayer.pauseVideo?.());
+    if(action==='play')return Promise.resolve(typeof lessonPlayer.playVideo==='function'?lessonPlayer.playVideo():lessonPlayer.play?.());
+    if(action==='pause')return Promise.resolve(typeof lessonPlayer.pauseVideo==='function'?lessonPlayer.pauseVideo():lessonPlayer.pause?.());
     if(action==='seek')return Promise.resolve(lessonPlayer.seekTo?.(arg,true));
     if(action==='volume')return Promise.resolve(lessonPlayer.setVolume?.(arg));
     if(action==='rate')return Promise.resolve(lessonPlayer.setPlaybackRate?.(arg));
-  }catch(e){console.warn(e);return false}
+  }catch(e){console.warn('Video command failed:',e);return false}
 }
 function v12TogglePlayback(){if(!lessonPlayerReady||!lessonPlayer)return;const s=lessonPlayer.getPlayerState?.();const playing=s===LESSON_MEDIA_STATE.PLAYING||(window.YT&&s===YT.PlayerState.PLAYING);playing?v12VideoCommand('pause'):v12VideoCommand('play');}
 document.getElementById('lessonPlayPauseBtn')?.addEventListener('click',e=>{e.preventDefault();e.stopPropagation();v12TogglePlayback()},true);
 document.getElementById('lessonCenterPlayBtn')?.addEventListener('click',e=>{e.preventDefault();e.stopPropagation();v12TogglePlayback()},true);
+
+/* Leaving the lesson player through any related action must stop the media first. */
+const lessonRelatedStopHandler=document.getElementById('lessonRelatedActions');
+if(lessonRelatedStopHandler&&!lessonRelatedStopHandler.dataset.stopBound){
+  lessonRelatedStopHandler.dataset.stopBound='1';
+  lessonRelatedStopHandler.addEventListener('click',e=>{
+    const btn=e.target.closest('button,[role="button"],a');
+    if(!btn)return;
+    try{window.stopLessonForNavigation?.();}catch(_e){}
+  },true);
+}
 document.getElementById('lessonSeekBackBtn')?.addEventListener('click',e=>{e.preventDefault();e.stopPropagation();window.seekLessonBy?.(-10)},true);
 document.getElementById('lessonSeekForwardBtn')?.addEventListener('click',e=>{e.preventDefault();e.stopPropagation();window.seekLessonBy?.(10)},true);
 document.getElementById('lessonProgressBarWrap')?.addEventListener('dblclick',e=>{e.preventDefault();v12TogglePlayback()},true);
