@@ -4466,14 +4466,8 @@ label[for*="En"], input[id*="En"], textarea[id*="En"] { display:none !important;
             const wrapper=document.getElementById('lessonVideoWrapper');
             if(!wrapper || wrapper.dataset.controlsAutoHideBound==='1') return;
             wrapper.dataset.controlsAutoHideBound='1';
-            const wake=(event)=>{
+            const wake=()=>{
                 if(currentCoursePage!=='lessonPlayer') return;
-                /* On touch devices, let the dedicated touch handler observe the
-                   hidden state before revealing controls. Otherwise the generic
-                   pointer/touch wake handler would reveal them first and the
-                   first tap could accidentally toggle playback. */
-                const isTouchEvent = event?.type==='touchstart' || (event?.type==='pointerdown' && event?.pointerType==='touch');
-                if(isTouchEvent && wrapper.classList.contains('lesson-controls-hidden')) return;
                 showLessonControls();
             };
             wrapper.addEventListener('pointermove',wake,{passive:true});
@@ -4924,6 +4918,14 @@ label[for*="En"], input[id*="En"], textarea[id*="En"] { display:none !important;
                 if(!lessonWatchState.lastTick)document.getElementById('lessonVideoWrapper')?.classList.add('show-center-play');
             },{once:true});
             v.addEventListener('play',handleLessonPlaybackPlaying);v.addEventListener('pause',()=>handleLessonPlaybackStopped(LESSON_MEDIA_STATE.PAUSED));v.addEventListener('ended',()=>handleLessonPlaybackStopped(LESSON_MEDIA_STATE.ENDED));
+            v.addEventListener('webkitbeginfullscreen',()=>{
+                const pending=window.__lessonPendingFullscreenOrientation;
+                if(pending&&isLessonTouchDevice()){setTimeout(()=>{lockLessonScreenOrientation(pending);},0);}
+            });
+            v.addEventListener('webkitendfullscreen',()=>{
+                unlockLessonScreenOrientation();
+                if(isLessonTouchDevice())setTimeout(()=>{try{screen.orientation?.lock?.('portrait');}catch(e){}},120);
+            });
             v.addEventListener('error',()=>{const s=document.getElementById('lessonCompletionStatus');if(s){s.style.display='block';s.className='lesson-completion-status';s.innerHTML='<i class="fas fa-triangle-exclamation"></i> تعذر تشغيل ملف الفيديو من هذا الرابط. استخدم رابط فيديو مباشر.';}});
         }
         function createLessonVimeoPlayer(videoId){
@@ -9137,6 +9139,8 @@ function syncLessonCenterPlayButton(){
 function showLessonCenterActionForTouch(){
   const wrapper=document.getElementById('lessonVideoWrapper');
   if(!wrapper)return;
+  /* Touch reveal must always restore the controls before exposing the center action. */
+  wrapper.classList.remove('lesson-controls-hidden');
   syncLessonCenterPlayButton();
   wrapper.classList.add('show-center-play');
 }
@@ -9165,8 +9169,13 @@ videoWrap?.addEventListener('click',e=>{
   }
   v12TogglePlayback();
 });
+function isLessonTouchDevice(){
+  return !!(window.matchMedia?.('(pointer:coarse)')?.matches || navigator.maxTouchPoints>0);
+}
+
 async function getLessonMediaDimensions(){
   try{
+    /* Prefer actual media dimensions whenever the current player exposes them. */
     if(lessonPlayerType==='html5'&&lessonHtmlVideo){
       const width=Number(lessonHtmlVideo.videoWidth)||0,height=Number(lessonHtmlVideo.videoHeight)||0;
       if(width&&height)return {width,height};
@@ -9174,6 +9183,16 @@ async function getLessonMediaDimensions(){
     if(lessonPlayerType==='vimeo'&&lessonVimeoInstance&&typeof lessonVimeoInstance.getVideoWidth==='function'&&typeof lessonVimeoInstance.getVideoHeight==='function'){
       const [width,height]=await Promise.all([lessonVimeoInstance.getVideoWidth(),lessonVimeoInstance.getVideoHeight()]);
       if(Number(width)>0&&Number(height)>0)return {width:Number(width),height:Number(height)};
+    }
+    /* Keep explicit lesson dimensions/aspect ratio as a useful fallback. */
+    const width=Number(lessonCurrentData?.videoWidth||lessonCurrentData?.width)||0;
+    const height=Number(lessonCurrentData?.videoHeight||lessonCurrentData?.height)||0;
+    if(width>0&&height>0)return {width,height};
+    const ratio=String(lessonCurrentData?.aspectRatio||'').trim();
+    const ratioMatch=ratio.match(/^(\d+(?:\.\d+)?)\s*[:/]\s*(\d+(?:\.\d+)?)$/);
+    if(ratioMatch){
+      const rw=Number(ratioMatch[1]),rh=Number(ratioMatch[2]);
+      if(rw>0&&rh>0)return {width:rw,height:rh};
     }
     if(lessonPlayerType==='youtube'){
       const sourceUrl=String(lessonCurrentData?.url||'');
@@ -9183,6 +9202,7 @@ async function getLessonMediaDimensions(){
   }catch(e){}
   return {width:16,height:9};
 }
+
 async function lockLessonScreenOrientation(kind){
   const type=kind==='portrait'?'portrait':'landscape';
   try{
@@ -9190,41 +9210,76 @@ async function lockLessonScreenOrientation(kind){
   }catch(e){}
   return false;
 }
+
 function unlockLessonScreenOrientation(){
   try{screen.orientation?.unlock?.();}catch(e){}
 }
-async function toggleLessonFullscreenWithOrientation(){
+
+async function enterLessonFullscreen(){
   const el=document.getElementById('lessonVideoWrapper');
   if(!el)return;
-  if(document.fullscreenElement){
-    try{await document.exitFullscreen();}catch(e){try{document.exitFullscreen?.();}catch(_){}}
-    return;
-  }
-  const mobile=window.matchMedia?.('(max-width: 768px)').matches;
   const dims=await getLessonMediaDimensions();
   const orientation=dims.height>dims.width?'portrait':'landscape';
+  window.__lessonPendingFullscreenOrientation=orientation;
   try{
-    if(el.requestFullscreen)await el.requestFullscreen();
-    else if(lessonHtmlVideo?.webkitEnterFullscreen)lessonHtmlVideo.webkitEnterFullscreen();
+    if(el.requestFullscreen){
+      await el.requestFullscreen();
+    }else if(lessonHtmlVideo?.webkitEnterFullscreen){
+      lessonHtmlVideo.webkitEnterFullscreen();
+      try{await lockLessonScreenOrientation(orientation);}catch(e){}
+    }else{
+      return;
+    }
   }catch(e){
-    try{if(lessonHtmlVideo?.webkitEnterFullscreen)lessonHtmlVideo.webkitEnterFullscreen();}catch(_e){}
+    try{
+      if(lessonHtmlVideo?.webkitEnterFullscreen){
+        lessonHtmlVideo.webkitEnterFullscreen();
+        try{await lockLessonScreenOrientation(orientation);}catch(_){}
+      }
+    }catch(_e){}
+  }
+}
+
+async function exitLessonFullscreen(){
+  try{
+    if(document.fullscreenElement&&document.exitFullscreen){
+      await document.exitFullscreen();
+    }else if(document.webkitFullscreenElement&&document.webkitExitFullscreen){
+      document.webkitExitFullscreen();
+    }
+  }catch(e){try{document.exitFullscreen?.();}catch(_){} }
+}
+
+async function toggleLessonFullscreenWithOrientation(){
+  if(document.fullscreenElement||document.webkitFullscreenElement){
+    await exitLessonFullscreen();
     return;
   }
-  if(mobile)await lockLessonScreenOrientation(orientation);
+  await enterLessonFullscreen();
 }
-document.addEventListener('fullscreenchange',()=>{
-  if(document.fullscreenElement){
-    const fs=document.getElementById('lessonFullscreenBtn');
+
+async function handleLessonFullscreenStateChange(){
+  const fs=document.getElementById('lessonFullscreenBtn');
+  const active=!!(document.fullscreenElement||document.webkitFullscreenElement);
+  if(active){
     if(fs)fs.innerHTML='<i class="fas fa-compress"></i>';
+    if(isLessonTouchDevice()){
+      const pending=window.__lessonPendingFullscreenOrientation||'landscape';
+      await lockLessonScreenOrientation(pending);
+    }
   }else{
     unlockLessonScreenOrientation();
-    const fs=document.getElementById('lessonFullscreenBtn');
+    window.__lessonPendingFullscreenOrientation=null;
     if(fs)fs.innerHTML='<i class="fas fa-expand"></i>';
-    if(window.matchMedia?.('(max-width: 768px)').matches){
+    /* The course is portrait-first after leaving fullscreen on touch devices. */
+    if(isLessonTouchDevice()){
       setTimeout(()=>{try{screen.orientation?.lock?.('portrait');}catch(e){}},120);
     }
   }
-});
+}
+
+document.addEventListener('fullscreenchange',handleLessonFullscreenStateChange);
+document.addEventListener('webkitfullscreenchange',handleLessonFullscreenStateChange);
 
 document.addEventListener('keydown',e=>{
   if(currentCoursePage!=='lessonPlayer'||!lessonPlayerReady||!lessonPlayer)return;
