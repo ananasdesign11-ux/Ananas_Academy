@@ -12289,67 +12289,92 @@ const s=document.createElement('style');s.textContent=`
 
 </script>
 <!-- ===== FINAL PROFILE MODAL LAYER / BUTTON REBIND PATCH ===== -->
-<script id="final-profile-modal-layer-fix">
+<script id="final-profile-modal-layer-fix-v2">
 (function(){
   'use strict';
   const $=id=>document.getElementById(id);
 
-  function liftProfileModal(modal){
-    if(!modal)return;
-    if(modal.parentElement!==document.body) document.body.appendChild(modal);
-    modal.style.setProperty('position','fixed','important');
-    modal.style.setProperty('inset','0','important');
-    modal.style.setProperty('z-index','300000','important');
-    modal.style.setProperty('display',modal.classList.contains('active')?'flex':'none','important');
-    modal.style.setProperty('align-items','center','important');
-    modal.style.setProperty('justify-content','center','important');
-    modal.style.setProperty('padding','20px','important');
-    modal.style.setProperty('box-sizing','border-box','important');
+  function ensureProfileModalsInsideProfile(){
+    const host=$('aaRebuiltProfilePage');
+    if(!host)return null;
+    try{window.__aaEnsureSelfModals?.();}catch(e){console.warn('profile modal ensure',e);}
+    const edit=$('aaProfileSelfEditModal');
+    const work=$('aaProfileSelfWorkModal');
+    if(edit && edit.parentElement!==host) host.appendChild(edit);
+    if(work && work.parentElement!==host) host.appendChild(work);
+    return {host,edit,work};
   }
 
-  function ensureProfileModals(){
-    try{ window.__aaEnsureSelfModals?.(); }catch(e){ console.warn('profile modal ensure',e); }
-    liftProfileModal($('aaProfileSelfEditModal'));
-    liftProfileModal($('aaProfileSelfWorkModal'));
-  }
-
-  function openEdit(){
+  function openEdit(e){
+    e?.preventDefault();
+    e?.stopImmediatePropagation?.();
+    const set=ensureProfileModalsInsideProfile();
     if(!currentUser)return triggerAuth?.();
-    ensureProfileModals();
     if(typeof window.__aaOpenSelfEdit==='function'){
-      Promise.resolve(window.__aaOpenSelfEdit()).then(()=>liftProfileModal($('aaProfileSelfEditModal'))).catch(e=>console.warn('open profile edit',e));
-      return;
+      Promise.resolve(window.__aaOpenSelfEdit())
+        .then(()=>{ const m=$('aaProfileSelfEditModal'); if(m) m.classList.add('active'); })
+        .catch(err=>console.warn('open profile edit',err));
+    }else if(set?.edit){
+      set.edit.classList.add('active');
     }
-    const m=$('aaProfileSelfEditModal'); if(m)m.classList.add('active');
   }
 
-  function openWork(){
+  function openWork(e){
+    e?.preventDefault();
+    e?.stopImmediatePropagation?.();
+    const set=ensureProfileModalsInsideProfile();
     if(!currentUser)return triggerAuth?.();
-    ensureProfileModals();
     if(typeof window.__aaOpenSelfWork==='function') window.__aaOpenSelfWork();
     const m=$('aaProfileSelfWorkModal');
-    if(m){m.classList.add('active');liftProfileModal(m);}
+    if(m) m.classList.add('active');
+    else if(set?.work) set.work.classList.add('active');
   }
 
-  // Capture phase ensures this final binding wins over the older empty handler.
+  function bindButtons(){
+    const host=$('aaRebuiltProfilePage');
+    if(!host)return;
+    ensureProfileModalsInsideProfile();
+    const edit=$('aaProfileEdit');
+    const add=$('aaProfileAddWork');
+    if(edit && edit.dataset.profileModalFix!=='1'){
+      edit.dataset.profileModalFix='1';
+      edit.onclick=openEdit;
+    }
+    if(add && add.dataset.profileModalFix!=='1'){
+      add.dataset.profileModalFix='1';
+      add.onclick=openWork;
+    }
+  }
+
+  const oldOpenProfile=window.aaOpenProfile;
+  if(oldOpenProfile && !window.__profileModalLayerV2){
+    window.__profileModalLayerV2=true;
+    window.aaOpenProfile=async function(){
+      const r=await oldOpenProfile.apply(this,arguments);
+      bindButtons();
+      return r;
+    };
+  }
+  const oldOpenUser=window.openUserProfilePage;
+  if(oldOpenUser && !window.__profileModalUserV2){
+    window.__profileModalUserV2=true;
+    window.openUserProfilePage=async function(){
+      const r=await oldOpenUser.apply(this,arguments);
+      bindButtons();
+      return r;
+    };
+  }
+
   document.addEventListener('click',function(e){
     const edit=e.target?.closest?.('#aaProfileEdit');
-    if(edit){e.preventDefault();e.stopImmediatePropagation();openEdit();return;}
+    if(edit){ openEdit(e); }
     const add=e.target?.closest?.('#aaProfileAddWork');
-    if(add){e.preventDefault();e.stopImmediatePropagation();openWork();return;}
+    if(add){ openWork(e); }
   },true);
 
-  // Keep the two dialogs above the profile page even when the page is rebuilt.
-  const obs=new MutationObserver(()=>{
-    const edit=$('aaProfileSelfEditModal'),work=$('aaProfileSelfWorkModal');
-    if(edit||work){liftProfileModal(edit);liftProfileModal(work);}
-  });
+  const obs=new MutationObserver(()=>bindButtons());
   obs.observe(document.body,{subtree:true,childList:true});
-
-  // Re-lift when a dialog becomes active.
-  document.addEventListener('click',()=>{
-    setTimeout(()=>{liftProfileModal($('aaProfileSelfEditModal'));liftProfileModal($('aaProfileSelfWorkModal'));},0);
-  },true);
+  bindButtons();
 })();
 </script>
 </body>
