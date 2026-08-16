@@ -10222,7 +10222,7 @@ async function authoritativeLiveProfile(uid){
           if(c.disabled===true && Number.isFinite(until)&&until>now)active=false;
         }
       }
-      if(active)activeCourseRows.push({id:d.id,...e,codeEndAt});
+      if(active){const courseData=courseDoc.data()||{};activeCourseRows.push({id:d.id,...e,titleAr:courseData.titleAr||courseData.title||'دورة',title:courseData.titleAr||courseData.title||'دورة',codeEndAt});}
     }
   }
   out.courses=activeCourseRows;
@@ -10502,6 +10502,7 @@ async function renderAuthoritativeProfile(uid,isSelf){
 window.aaOpenProfile=async function(uid,opts={}){
   if(!currentUser||!uid){triggerAuth?.();return;}
   const isSelf=String(uid)===String(currentUser.uid);
+  if(isAdmin && !isSelf) window.__aaViewedProfileUid=String(uid);
   const kind=opts.kind||(isSelf?'self':'link');
   const returnPoint=kind==='admin-directory'?null:(opts.returnPoint??window.profileReturnPoint?.()??null);
   window.profileState={uid:String(uid),isSelf,source:{kind},returnPoint,busy:false};
@@ -10899,7 +10900,7 @@ function renderV9Directory(){
   const membership=$('aaDirMembershipFilter')?.value||'all';
   const courseId=$('aaDirCourseFilter')?.value||'all';
   const q=String($('aaDirNameSearch')?.value||'').trim().toLocaleLowerCase('ar');
-  const viewed=getViewedUid();
+  const viewed=String(window.__aaViewedProfileUid||window.profileState?.uid||'');
   let users=cache.filter(u=>String(u.id)!==String(currentUser?.uid)&&String(u.id)!==viewed);
   if(membership==='none')users=users.filter(u=>!Array.isArray(u.enrolledCourseIds)||u.enrolledCourseIds.length===0);
   if(membership==='enrolled')users=users.filter(u=>Array.isArray(u.enrolledCourseIds)&&u.enrolledCourseIds.length>0);
@@ -11214,14 +11215,43 @@ window.__aaV9Cleanup=()=>clearInterval(v9Tick);
       dirState.loading=false;
       renderFinalDirectory();
 
-      /* Enrich membership data in the background without blocking the list. */
+      /* Reconcile each card with the same live subscription rules used by the profile page. */
       const enrichments=rows.map(async u=>{
         try{
           const en=await db.collection('users').doc(u.id).collection('enrolledCourses').get();
+          const liveIds=[];
+          for(const enrollmentDoc of en.docs){
+            if(token!==dirState.token)return;
+            const e=enrollmentDoc.data()||{};
+            if(e.enrollmentActive===false || e.active===false)continue;
+            const courseSnap=await db.collection('courses').doc(enrollmentDoc.id).get().catch(()=>null);
+            if(!courseSnap?.exists || courseSnap.data()?.deleted===true)continue;
+            let codeId=String(e.codeId||'');
+            if(!codeId && e.codeUsed){
+              const legacy=await courseSnap.ref.collection('codes').where('code','==',String(e.codeUsed)).limit(1).get().catch(()=>null);
+              if(legacy && !legacy.empty)codeId=legacy.docs[0].id;
+              else if(legacy && legacy.empty)continue;
+            }
+            let active=true;
+            if(codeId){
+              const codeSnap=await courseSnap.ref.collection('codes').doc(codeId).get().catch(()=>null);
+              if(!codeSnap?.exists)active=false;
+              else{
+                const c=codeSnap.data()||{},now=Date.now();
+                const endDate=c.endTime?.toDate?c.endTime.toDate():(c.endTime?new Date(c.endTime):null);
+                const end=Number.isFinite(endDate?.getTime?.())?endDate.getTime():0;
+                const until=c.suspendedUntil?.toDate?c.suspendedUntil.toDate().getTime():new Date(c.suspendedUntil||0).getTime();
+                if(end>0&&end<=now)active=false;
+                if(c.disabled===true && (!Number.isFinite(until)||until<=now))active=false;
+                if(c.disabled===true && Number.isFinite(until)&&until>now)active=false;
+              }
+            }
+            if(active)liveIds.push(String(enrollmentDoc.id));
+          }
           if(token!==dirState.token)return;
-          u.enrolledCourseIds=[...new Set(en.docs.map(x=>String(x.id)).filter(Boolean))];
+          u.enrolledCourseIds=[...new Set(liveIds)];
         }catch(_){
-          /* Keep the profile-document fallback already shown in the list. */
+          /* Keep the lightweight fallback already shown if live reconciliation fails. */
         }
       });
 
@@ -11254,8 +11284,8 @@ window.__aaV9Cleanup=()=>clearInterval(v9Tick);
     if(membership==='enrolled')users=users.filter(u=>u.enrolledCourseIds.length>0);
     if(courseId!=='all')users=users.filter(u=>u.enrolledCourseIds.includes(String(courseId)));
     if(query)users=users.filter(u=>normalizeArabic(getUserName(u)).includes(query));
-    const viewedUid=String(window.profileState?.uid||window.__aaViewedProfileUid||'');
-    users=users.filter(u=>String(u.id)!==viewedUid);
+    const viewedUid=String(window.__aaViewedProfileUid||window.profileState?.uid||'');
+    users=users.filter(u=>String(u.id)!==String(currentUser?.uid)&&String(u.id)!==viewedUid);
     users.sort((a,b)=>normalizeArabic(getUserName(a)).localeCompare(normalizeArabic(getUserName(b)),'ar'));
     const count=$('aaProfileDirectoryCount');if(count)count.textContent=`${users.length} حساب`;
     if(!users.length){box.innerHTML='<div class="aa-profile-empty">لا توجد حسابات مطابقة للفلاتر الحالية.</div>';return;}
