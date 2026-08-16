@@ -3652,41 +3652,14 @@ label[for*="En"], input[id*="En"], textarea[id*="En"] { display:none !important;
                                 transaction.update(codeRef,{usedCount:1,usedBy:[currentUser.uid],usedByInfo:[usedByInfo]});
                             });
 
-                            /*
-                             * Re-enrollment must restore the user's previous course state.
-                             * Completion ledgers/progress are stored outside enrolledCourses and are
-                             * intentionally never deleted. We also keep an enrollment snapshot so
-                             * any course-scoped metadata that lives on the enrollment document
-                             * comes back when the user subscribes again.
-                             */
-                            const enrollmentRef = db.collection('users').doc(currentUser.uid).collection('enrolledCourses').doc(courseId);
-                            const enrollmentArchiveRef = db.collection('users').doc(currentUser.uid).collection('enrollmentHistory').doc(courseId);
-                            const previousEnrollmentSnap = await enrollmentArchiveRef.get().catch(()=>null);
-                            const archivedEnrollment = previousEnrollmentSnap?.exists ? (previousEnrollmentSnap.data()||{}) : {};
-                            const restoredEnrollment = {...archivedEnrollment};
-                            [
-                                'codeId','codeUsed','enrolledAt','termsAccepted','termsAcceptedAt',
-                                'termsSnapshot','termsVersion','codeDeleted','accessBlocked',
-                                'accessBlockReason','blockedUntil','blockReason','accessUpdatedAt',
-                                'archivedAt','archiveReason'
-                            ].forEach(k=>delete restoredEnrollment[k]);
-
-                            await enrollmentRef.set({
-                                ...restoredEnrollment,
+                            await db.collection('users').doc(currentUser.uid).collection('enrolledCourses').doc(courseId).set({
                                 enrolledAt: firebase.firestore.FieldValue.serverTimestamp(),
                                 codeUsed: enteredCode,
                                 codeId: codeDoc.id,
                                 termsAccepted: courseTerms.length ? true : false,
                                 termsAcceptedAt: courseTerms.length ? firebase.firestore.FieldValue.serverTimestamp() : null,
                                 termsSnapshot: courseTerms.slice(),
-                                termsVersion: termsSnap.exists ? (termsSnap.data()?.termsUpdatedAt || null) : null,
-                                codeDeleted: false,
-                                accessBlocked: false,
-                                accessBlockReason: null,
-                                blockedUntil: null,
-                                blockReason: null,
-                                accessUpdatedAt: firebase.firestore.FieldValue.serverTimestamp(),
-                                restoredFromPreviousEnrollment: previousEnrollmentSnap?.exists === true
+                                termsVersion: termsSnap.exists ? (termsSnap.data()?.termsUpdatedAt || null) : null
                             });
 
                             isEnrolled = true;
@@ -11834,7 +11807,9 @@ const esc=(window.escapeHtml||((v)=>String(v??'').replace(/[&<>'"]/g,c=>({'&':'&
 const dateAr=(v)=>{try{const d=v?.toDate?v.toDate():new Date(v||0);return d&&!isNaN(d)?d.toLocaleDateString('ar-SA',{year:'numeric',month:'long',day:'numeric'}):'—';}catch(_){return '—';}};
 const rowList=(items,empty)=>items.length?items.join(''):`<div class="aa-profile-empty">${esc(empty)}</div>`;
 
+let __aaProfileRenderToken=0;
 async function renderAuthoritativeProfile(uid,isSelf){
+  const token=++__aaProfileRenderToken;
   const page=$id('aaRebuiltProfilePage'); if(!page)return;
   page.classList.add('active');document.body.classList.add('aa-profile-open');
   ['aaProfileXP','aaProfileLessons','aaProfileQuizzes','aaProfileWorks'].forEach(id=>{if($id(id))$id(id).textContent='—';});
@@ -11844,6 +11819,7 @@ async function renderAuthoritativeProfile(uid,isSelf){
       db.collection('users').doc(uid).get(),
       window.__authoritativeLiveProfile(uid)
     ]);
+    if(token!==__aaProfileRenderToken)return;
     if(!userSnap.exists){showCustomAlert?.('غير متاح','الحساب غير موجود.');return;}
     const u=userSnap.data()||{};
     const name=u.displayName||u.name||(isSelf?currentUser?.displayName:'')||'مستخدم';
@@ -11865,6 +11841,7 @@ async function renderAuthoritativeProfile(uid,isSelf){
       return;
     }
 
+    if(token!==__aaProfileRenderToken)return;
     $id('aaProfileXP').textContent=Number(live.xp||0).toLocaleString('ar-SA');
     $id('aaProfileLessons').textContent=live.lessons.length;
     $id('aaProfileQuizzes').textContent=live.quizzes.length;
@@ -11888,6 +11865,7 @@ async function renderAuthoritativeProfile(uid,isSelf){
     ].sort((a,b)=>new Date(b.d?.toDate?b.d.toDate():b.d||0)-new Date(a.d?.toDate?a.d.toDate():a.d||0));
     $id('aaProfileActivity').innerHTML=rowList(activities.slice(0,100).map(x=>`<div class="aa-profile-row"><strong>${esc(x.t)}</strong><small>${esc(dateAr(x.d))}</small></div>`),'لا يوجد نشاط حالي.');
 
+    if(token!==__aaProfileRenderToken)return;
     const cards=[...live.portfolio.map(x=>({kind:'portfolio',...x})),...live.assignmentWorks.map(x=>({kind:'assignment',...x}))];
     $id('aaProfileGallery').innerHTML=rowList(cards.map(x=>{
       const imgs=Array.isArray(x.images)?x.images.filter(Boolean):(x.imageUrl?[x.imageUrl]:[]),img=imgs[0]||'';
@@ -11904,10 +11882,19 @@ async function renderAuthoritativeProfile(uid,isSelf){
   }
 }
 
-const previousAAOpen=window.aaOpenProfile;
 window.aaOpenProfile=async function(uid,opts={}){
-  try{await previousAAOpen?.(uid,opts);}catch(e){console.warn('previous profile navigation',e);}
-  await renderAuthoritativeProfile(uid,uid===currentUser?.uid);
+  if(!uid) return;
+  /* Single authoritative profile renderer: do not invoke any legacy renderer
+     before the current data is loaded, because doing so causes stale/wrong
+     profile data to flash briefly on screen. */
+  const page=$id('aaRebuiltProfilePage');
+  if(page){
+    page.classList.add('active');
+    document.body.classList.add('aa-profile-open');
+    ['aaProfileXP','aaProfileLessons','aaProfileQuizzes','aaProfileWorks'].forEach(id=>{if($id(id))$id(id).textContent='—';});
+    ['aaProfileData','aaProfileCourses','aaProfileLessonList','aaProfileQuizList','aaProfileActivity','aaProfileGallery'].forEach(id=>{if($id(id))$id(id).innerHTML='<div class="aa-profile-empty">جاري تحميل البيانات...</div>';});
+  }
+  return renderAuthoritativeProfile(uid,uid===currentUser?.uid);
 };
 window.__renderAuthoritativeProfile=renderAuthoritativeProfile;
 window.openUserProfilePage=()=>currentUser&&window.aaOpenProfile(currentUser.uid,{kind:'self'});
@@ -12672,80 +12659,13 @@ window.__aaV9Cleanup=()=>clearInterval(v9Tick);
     };
   }
 
-  /*
-   * Final profile-open gate:
-   * never call an older profile renderer here. Older versions caused the
-   * profile to render several times with stale/partial data before the
-   * authoritative data arrived. One request now owns the whole render.
-   */
-  if(!window.__aaStableProfileOpen){
-    window.__aaStableProfileOpen=true;
-    let pendingPromise=null;
-    let pendingUid='';
-    let renderToken=0;
-
-    window.aaOpenProfile=async function(uid,source={}){
-      if(!currentUser||!uid)return triggerAuth?.();
-      uid=String(uid);
-
-      /* Coalesce duplicate listeners/click handlers for the same account. */
-      if(pendingPromise && pendingUid===uid)return pendingPromise;
-
-      const token=++renderToken;
-      pendingUid=uid;
-
-      const sourceKind=source?.kind||'link';
-      const returnPoint=source?.returnPoint||((typeof profileReturnPoint==='function')?profileReturnPoint():null);
-      profileState={
-        uid,
-        isSelf:uid===String(currentUser.uid),
-        source:{kind:sourceKind},
-        returnPoint,
-        busy:false
-      };
-
-      try{window.hideLegacyProfilesV17?.();}catch(_){}
-      try{window.hideLegacy?.();}catch(_){}
-      const page=typeof ensureProfilePage==='function'?ensureProfilePage():document.getElementById('aaRebuiltProfilePage');
-      if(!page)return;
-
-      page.classList.add('active');
-      page.style.visibility='hidden';
-      page.style.pointerEvents='none';
-      document.body.classList.add('aa-profile-open');
-
-      const job=(async()=>{
-        try{
-          /* Only the final authoritative renderer is allowed to paint data. */
-          if(typeof window.__renderAuthoritativeProfile==='function'){
-            await window.__renderAuthoritativeProfile(uid,uid===String(currentUser.uid));
-          }else if(typeof window.__renderReliableProfile==='function'){
-            await window.__renderReliableProfile(uid,uid===String(currentUser.uid));
-          }
-
-          /* Ignore late results from an earlier account switch. */
-          if(token!==renderToken)return;
-          page.style.visibility='visible';
-          page.style.pointerEvents='auto';
-          if(isAdmin)renderFinalDirectory();
-        }catch(err){
-          console.error('stable profile open',err);
-          if(token===renderToken){
-            page.style.visibility='visible';
-            page.style.pointerEvents='auto';
-            showCustomAlert?.('خطأ','تعذر تحميل بيانات الملف الشخصي.');
-          }
-          throw err;
-        }finally{
-          if(token===renderToken){
-            pendingPromise=null;
-            pendingUid='';
-          }
-        }
-      })();
-
-      pendingPromise=job;
-      return job;
+  const originalProfileOpen=window.aaOpenProfile;
+  if(originalProfileOpen && !window.__v10WrappedOpen){
+    window.__v10WrappedOpen=true;
+    window.aaOpenProfile=async function(uid,source){
+      const r=await originalProfileOpen.apply(this,arguments);
+      if(isAdmin)renderFinalDirectory();
+      return r;
     };
   }
 
@@ -13385,32 +13305,21 @@ const s=document.createElement('style');s.textContent=`
 
   async function removeEnrollmentForCode(courseId,codeId,codeData,reason){
     if(!courseId||!codeId) return [];
-    const usersFromCode=[
-      ...(Array.isArray(codeData?.usedBy)?codeData.usedBy:[]),
-      ...(Array.isArray(codeData?.usedByInfo)?codeData.usedByInfo:[])
-    ];
-    const uids=usersFromCode.map(uidOf).filter(Boolean);
+    const uids=[];
+    for(const x of (Array.isArray(codeData?.usedBy)?codeData.usedBy:[])){
+      const uid=uidOf(x); if(uid) uids.push(uid);
+    }
     const unique=[...new Set(uids)];
     if(!unique.length) return [];
-
     for(const uid of unique){
       const ref=db.collection('users').doc(uid).collection('enrolledCourses').doc(courseId);
-      const archiveRef=db.collection('users').doc(uid).collection('enrollmentHistory').doc(courseId);
       try{
         const snap=await ref.get();
         if(!snap.exists) continue;
         const e=snap.data()||{};
-        // Preserve enrollment-scoped data before removing the active subscription.
-        // Completion/progress ledgers elsewhere in Firestore are never touched.
+        // The code owns this enrollment. Delete it so the course card becomes
+        // "الاشتراك في الدورة" again on the next render.
         if(String(e.codeId||'')===String(codeId) || String(e.codeUsed||'')===String(codeData?.code||'')){
-          const archivePayload={
-            ...e,
-            archivedAt:firebase.firestore.FieldValue.serverTimestamp(),
-            archiveReason:reason||'ended',
-            archivedFromCodeId:codeId,
-            archivedFromCode:String(codeData?.code||'')
-          };
-          await archiveRef.set(archivePayload,{merge:true});
           await ref.delete();
         }
       }catch(err){console.warn('remove enrollment',uid,courseId,err)}
@@ -13575,14 +13484,6 @@ const s=document.createElement('style');s.textContent=`
       const e=es.data()||{}; if(!e.codeId)return;
       const cs=await db.collection('courses').doc(courseId).collection('codes').doc(e.codeId).get();
       if(!cs.exists){
-        const archiveRef=db.collection('users').doc(currentUser.uid).collection('enrollmentHistory').doc(courseId);
-        await archiveRef.set({
-          ...e,
-          archivedAt:firebase.firestore.FieldValue.serverTimestamp(),
-          archiveReason:'code-missing-repair',
-          archivedFromCodeId:e.codeId,
-          archivedFromCode:e.codeUsed||''
-        },{merge:true}).catch(()=>{});
         await er.delete();
         await refreshMainCourseButtons();
       }
@@ -13594,6 +13495,23 @@ const s=document.createElement('style');s.textContent=`
     if(document.hidden||!window.activeCourseId||!currentUser||isAdmin)return;
     repairCurrentUserDeletedCode(window.activeCourseId).finally(()=>window.watchCourseAccess?.(window.activeCourseId));
   });
+})();
+</script>
+\n<script id="final-single-profile-click-binding">
+(function(){
+  'use strict';
+  const old=document.getElementById('authToggleBtn');
+  if(!old)return;
+  const clone=old.cloneNode(true);
+  old.replaceWith(clone);
+  clone.addEventListener('click',function(e){
+    e.preventDefault();
+    e.stopPropagation();
+    if(e.stopImmediatePropagation)e.stopImmediatePropagation();
+    if(window.currentUser||typeof currentUser!=='undefined' && currentUser){
+      window.openUserProfilePage?.();
+    }
+  },false);
 })();
 </script>
 </body>
