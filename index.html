@@ -13141,30 +13141,44 @@ window.__aaV9Cleanup=()=>clearInterval(v9Tick);
   async function fetchDirectoryUsers(){
     const token=++dirState.token;
     dirState.loading=true;
+    dirState.ready=false;
     try{
       const snap=await db.collection('users').get();
+      if(token!==dirState.token)return;
+      const docs=snap.docs.filter(d=>String(d.id)!==String(currentUser?.uid||''));
       const rows=[];
-      for(const d of snap.docs){
+      const batchSize=8;
+      for(let i=0;i<docs.length;i+=batchSize){
         if(token!==dirState.token)return;
-        const u={id:d.id,...(d.data()||{})};
-        if(String(u.id)===String(currentUser?.uid))continue;
-        let enrolledIds=[];
-        try{
-          const en=await d.ref.collection('enrolledCourses').get();
-          enrolledIds=en.docs.map(x=>String(x.id)).filter(Boolean);
-        }catch(_){
-          enrolledIds=Array.isArray(u.enrolledCourses)?u.enrolledCourses.map(x=>String(x.id||x)):[...new Set([...(u.enrolledCourseIds||[]).map(String),...(u.courseIds||[]).map(String)])];
-        }
-        rows.push({...u,enrolledCourseIds:[...new Set(enrolledIds)]});
+        const batch=docs.slice(i,i+batchSize);
+        const batchRows=await Promise.all(batch.map(async d=>{
+          const u={id:d.id,...(d.data()||{})};
+          let enrolledIds=[];
+          try{
+            const en=await d.ref.collection('enrolledCourses').get();
+            enrolledIds=en.docs.map(x=>String(x.id)).filter(Boolean);
+          }catch(_){
+            enrolledIds=Array.isArray(u.enrolledCourses)
+              ?u.enrolledCourses.map(x=>String(x?.id||x)).filter(Boolean)
+              :[...new Set([...(u.enrolledCourseIds||[]).map(String),...(u.courseIds||[]).map(String)])];
+          }
+          return {...u,enrolledCourseIds:[...new Set(enrolledIds)]};
+        }));
+        rows.push(...batchRows);
       }
-      dirState.users=rows;dirState.ready=true;
+      if(token!==dirState.token)return;
+      dirState.users=rows;
+      dirState.ready=true;
     }catch(e){
       console.error('final directory users',e);
-      dirState.users=[];dirState.ready=false;
-      const box=$('aaProfileDirectory');if(box)box.innerHTML='<div class="aa-profile-empty">تعذر تحميل الحسابات.</div>';
+      dirState.users=[];
+      dirState.ready=false;
+      const box=$('aaProfileDirectory');if(box)box.innerHTML='<div class="aa-profile-empty">تعذر تحميل الحسابات. حاول تحديث الملف الشخصي مرة أخرى.</div>';
     }finally{
-      dirState.loading=false;
-      renderFinalDirectory();
+      if(token===dirState.token){
+        dirState.loading=false;
+        renderFinalDirectory();
+      }
     }
   }
 
@@ -13218,10 +13232,12 @@ window.__aaV9Cleanup=()=>clearInterval(v9Tick);
   async function loadFinalDirectory(){
     const panel=$('aaProfileDirectoryPanel');
     if(!panel)return;
-    if(!isAdmin){panel.style.display='none';return;}
+    const admin=await resolveAdmin();
+    isAdmin=!!admin;
+    if(!admin){panel.style.display='none';return;}
     panel.style.display='block';
     ensureDirectoryControls();
-    if(!dirState.ready){await fetchDirectoryUsers();}
+    if(!dirState.ready && !dirState.loading)await fetchDirectoryUsers();
     renderFinalDirectory();
   }
 
