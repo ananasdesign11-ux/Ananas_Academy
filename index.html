@@ -3291,7 +3291,11 @@ label[for*="En"], input[id*="En"], textarea[id*="En"] { display:none !important;
                 try {
                     const snap = await db.collection('users').doc(uid).collection('enrolledCourses').get();
                     const nextMap = {};
-                    snap.forEach(doc => { nextMap[doc.id] = doc.data() || {}; });
+                    snap.forEach(doc => {
+                        const data = doc.data() || {};
+                        if (data.enrollmentActive === false) return;
+                        nextMap[doc.id] = data;
+                    });
                     userEnrollmentMap = nextMap;
                     enrollmentMapLoadedUid = uid;
                     enrollmentMapLoadedAt = Date.now();
@@ -3306,7 +3310,8 @@ label[for*="En"], input[id*="En"], textarea[id*="En"] { display:none !important;
 
         function getCourseActionHTML(courseId) {
             if (!currentUser) return `<button class="btn btn-outline" onclick="triggerAuth()">تسجيل الدخول</button>`;
-            if (userEnrollmentMap[courseId]) return `<button class="btn btn-primary" onclick="openCourse('${courseId}')">الدخول للدورة</button>`;
+            const enrollment = userEnrollmentMap[courseId];
+            if (enrollment && enrollment.enrollmentActive !== false) return `<button class="btn btn-primary" onclick="openCourse('${courseId}')">الدخول للدورة</button>`;
             return `<button class="btn btn-primary" onclick="openCourse('${courseId}')">الاشتراك في الدورة</button>`;
         }
 
@@ -3467,10 +3472,13 @@ label[for*="En"], input[id*="En"], textarea[id*="En"] { display:none !important;
             // ===== Course access suspension check (linked to the CODE used for this enrollment) =====
             const enrollmentRef = db.collection('users').doc(currentUser.uid).collection('enrolledCourses').doc(courseId);
             const existingEnrollment = await enrollmentRef.get();
-            let isEnrolled = existingEnrollment.exists;
+            const existingEnrollmentData = existingEnrollment.exists ? (existingEnrollment.data() || {}) : {};
+            // Preserve the enrollment document after a code expires or is deleted.
+            // Only an explicitly inactive record is treated as unsubscribed.
+            let isEnrolled = existingEnrollment.exists && existingEnrollmentData.enrollmentActive !== false;
 
             if (isEnrolled) {
-                const enrollment = existingEnrollment.data() || {};
+                const enrollment = existingEnrollmentData;
                 let codeId = enrollment.codeId || null;
                 // Backward compatibility: older enrollments only stored codeUsed.
                 // Resolve the original code once so its suspension applies to existing subscribers too.
@@ -3652,15 +3660,27 @@ label[for*="En"], input[id*="En"], textarea[id*="En"] { display:none !important;
                                 transaction.update(codeRef,{usedCount:1,usedBy:[currentUser.uid],usedByInfo:[usedByInfo]});
                             });
 
+                            // Reactivate the existing enrollment instead of replacing it.
+                            // This preserves all existing progress/history fields.
                             await db.collection('users').doc(currentUser.uid).collection('enrolledCourses').doc(courseId).set({
+                                enrollmentActive: true,
                                 enrolledAt: firebase.firestore.FieldValue.serverTimestamp(),
                                 codeUsed: enteredCode,
                                 codeId: codeDoc.id,
                                 termsAccepted: courseTerms.length ? true : false,
                                 termsAcceptedAt: courseTerms.length ? firebase.firestore.FieldValue.serverTimestamp() : null,
                                 termsSnapshot: courseTerms.slice(),
-                                termsVersion: termsSnap.exists ? (termsSnap.data()?.termsUpdatedAt || null) : null
-                            });
+                                termsVersion: termsSnap.exists ? (termsSnap.data()?.termsUpdatedAt || null) : null,
+                                reactivatedAt: existingEnrollment.exists ? firebase.firestore.FieldValue.serverTimestamp() : null,
+                                subscriptionEndedAt: firebase.firestore.FieldValue.delete(),
+                                previousSubscriptionEndReason: firebase.firestore.FieldValue.delete(),
+                                accessBlocked: firebase.firestore.FieldValue.delete(),
+                                codeDeleted: firebase.firestore.FieldValue.delete(),
+                                accessBlockReason: firebase.firestore.FieldValue.delete(),
+                                accessUpdatedAt: firebase.firestore.FieldValue.delete(),
+                                blockedUntil: firebase.firestore.FieldValue.delete(),
+                                blockReason: firebase.firestore.FieldValue.delete()
+                            }, {merge:true});
 
                             isEnrolled = true;
                             userEnrollmentMap[courseId] = { enrolledAt: new Date(), codeUsed: enteredCode };
@@ -11807,9 +11827,7 @@ const esc=(window.escapeHtml||((v)=>String(v??'').replace(/[&<>'"]/g,c=>({'&':'&
 const dateAr=(v)=>{try{const d=v?.toDate?v.toDate():new Date(v||0);return d&&!isNaN(d)?d.toLocaleDateString('ar-SA',{year:'numeric',month:'long',day:'numeric'}):'—';}catch(_){return '—';}};
 const rowList=(items,empty)=>items.length?items.join(''):`<div class="aa-profile-empty">${esc(empty)}</div>`;
 
-let __aaProfileRenderToken=0;
 async function renderAuthoritativeProfile(uid,isSelf){
-  const token=++__aaProfileRenderToken;
   const page=$id('aaRebuiltProfilePage'); if(!page)return;
   page.classList.add('active');document.body.classList.add('aa-profile-open');
   ['aaProfileXP','aaProfileLessons','aaProfileQuizzes','aaProfileWorks'].forEach(id=>{if($id(id))$id(id).textContent='—';});
@@ -11819,7 +11837,6 @@ async function renderAuthoritativeProfile(uid,isSelf){
       db.collection('users').doc(uid).get(),
       window.__authoritativeLiveProfile(uid)
     ]);
-    if(token!==__aaProfileRenderToken)return;
     if(!userSnap.exists){showCustomAlert?.('غير متاح','الحساب غير موجود.');return;}
     const u=userSnap.data()||{};
     const name=u.displayName||u.name||(isSelf?currentUser?.displayName:'')||'مستخدم';
@@ -11841,7 +11858,6 @@ async function renderAuthoritativeProfile(uid,isSelf){
       return;
     }
 
-    if(token!==__aaProfileRenderToken)return;
     $id('aaProfileXP').textContent=Number(live.xp||0).toLocaleString('ar-SA');
     $id('aaProfileLessons').textContent=live.lessons.length;
     $id('aaProfileQuizzes').textContent=live.quizzes.length;
@@ -11865,7 +11881,6 @@ async function renderAuthoritativeProfile(uid,isSelf){
     ].sort((a,b)=>new Date(b.d?.toDate?b.d.toDate():b.d||0)-new Date(a.d?.toDate?a.d.toDate():a.d||0));
     $id('aaProfileActivity').innerHTML=rowList(activities.slice(0,100).map(x=>`<div class="aa-profile-row"><strong>${esc(x.t)}</strong><small>${esc(dateAr(x.d))}</small></div>`),'لا يوجد نشاط حالي.');
 
-    if(token!==__aaProfileRenderToken)return;
     const cards=[...live.portfolio.map(x=>({kind:'portfolio',...x})),...live.assignmentWorks.map(x=>({kind:'assignment',...x}))];
     $id('aaProfileGallery').innerHTML=rowList(cards.map(x=>{
       const imgs=Array.isArray(x.images)?x.images.filter(Boolean):(x.imageUrl?[x.imageUrl]:[]),img=imgs[0]||'';
@@ -11882,19 +11897,10 @@ async function renderAuthoritativeProfile(uid,isSelf){
   }
 }
 
+const previousAAOpen=window.aaOpenProfile;
 window.aaOpenProfile=async function(uid,opts={}){
-  if(!uid) return;
-  /* Single authoritative profile renderer: do not invoke any legacy renderer
-     before the current data is loaded, because doing so causes stale/wrong
-     profile data to flash briefly on screen. */
-  const page=$id('aaRebuiltProfilePage');
-  if(page){
-    page.classList.add('active');
-    document.body.classList.add('aa-profile-open');
-    ['aaProfileXP','aaProfileLessons','aaProfileQuizzes','aaProfileWorks'].forEach(id=>{if($id(id))$id(id).textContent='—';});
-    ['aaProfileData','aaProfileCourses','aaProfileLessonList','aaProfileQuizList','aaProfileActivity','aaProfileGallery'].forEach(id=>{if($id(id))$id(id).innerHTML='<div class="aa-profile-empty">جاري تحميل البيانات...</div>';});
-  }
-  return renderAuthoritativeProfile(uid,uid===currentUser?.uid);
+  try{await previousAAOpen?.(uid,opts);}catch(e){console.warn('previous profile navigation',e);}
+  await renderAuthoritativeProfile(uid,uid===currentUser?.uid);
 };
 window.__renderAuthoritativeProfile=renderAuthoritativeProfile;
 window.openUserProfilePage=()=>currentUser&&window.aaOpenProfile(currentUser.uid,{kind:'self'});
@@ -12871,7 +12877,7 @@ async function aaInspectEnrollment(courseId){
   if(!currentUser||!courseId||isAdmin)return;
   const er=db.collection('users').doc(currentUser.uid).collection('enrolledCourses').doc(courseId);
   const snap=await er.get();if(!snap.exists)return aaSafeEject('لم يعد لديك اشتراك فعال في هذه الدورة.');
-  const e=snap.data()||{};if(!e.codeId)return;
+  const e=snap.data()||{};if(e.enrollmentActive===false)return;if(!e.codeId)return;
   const cr=db.collection('courses').doc(courseId).collection('codes').doc(e.codeId);
   const cs=await cr.get();if(!cs.exists)return aaSafeEject('تم إنهاء كود الاشتراك المرتبط بحسابك.');
   const c=cs.data()||{};const now=Date.now();
@@ -13303,34 +13309,51 @@ const s=document.createElement('style');s.textContent=`
     }catch(e){console.warn('refresh main course buttons',e)}
   }
 
-  async function removeEnrollmentForCode(courseId,codeId,codeData,reason){
+  async function deactivateEnrollmentPreservingData(courseId,uid,codeId,codeData,reason){
+    if(!courseId||!uid) return false;
+    const ref=db.collection('users').doc(String(uid)).collection('enrolledCourses').doc(courseId);
+    try{
+      const snap=await ref.get();
+      if(!snap.exists) return false;
+      const e=snap.data()||{};
+      const linked=!codeId || String(e.codeId||'')===String(codeId) || String(e.codeUsed||'')===String(codeData?.code||'');
+      if(!linked) return false;
+      // Keep the enrollment document and all progress/history. Only subscription/access state changes.
+      await ref.set({
+        enrollmentActive:false,
+        previousCodeId:e.codeId||codeId||null,
+        previousCode:e.codeUsed||codeData?.code||null,
+        subscriptionEndedAt:firebase.firestore.FieldValue.serverTimestamp(),
+        previousSubscriptionEndReason:reason||'انتهى/حُذف كود الاشتراك.',
+        accessBlocked:false,
+        accessBlockReason:null,
+        blockedUntil:null,
+        blockReason:null,
+        codeDeleted:reason==='deleted',
+        codeId:null,
+        codeUsed:null,
+        accessUpdatedAt:firebase.firestore.FieldValue.serverTimestamp()
+      },{merge:true});
+      return true;
+    }catch(err){console.warn('deactivate enrollment preserving data',uid,courseId,err);return false;}
+  }
+  window.__aaDeactivateEnrollmentPreservingData=deactivateEnrollmentPreservingData;
+
+  async function deactivateEnrollmentsForCode(courseId,codeId,codeData,reason){
     if(!courseId||!codeId) return [];
     const uids=[];
     for(const x of (Array.isArray(codeData?.usedBy)?codeData.usedBy:[])){
       const uid=uidOf(x); if(uid) uids.push(uid);
     }
     const unique=[...new Set(uids)];
-    if(!unique.length) return [];
-    for(const uid of unique){
-      const ref=db.collection('users').doc(uid).collection('enrolledCourses').doc(courseId);
-      try{
-        const snap=await ref.get();
-        if(!snap.exists) continue;
-        const e=snap.data()||{};
-        // The code owns this enrollment. Delete it so the course card becomes
-        // "الاشتراك في الدورة" again on the next render.
-        if(String(e.codeId||'')===String(codeId) || String(e.codeUsed||'')===String(codeData?.code||'')){
-          await ref.delete();
-        }
-      }catch(err){console.warn('remove enrollment',uid,courseId,err)}
-    }
+    for(const uid of unique) await deactivateEnrollmentPreservingData(courseId,uid,codeId,codeData,reason);
     await refreshMainCourseButtons();
     return unique;
   }
-  window.__aaRemoveEnrollmentForCode=removeEnrollmentForCode;
+  window.__aaRemoveEnrollmentForCode=deactivateEnrollmentsForCode;
 
-  async function ejectWithEnrollmentRemoval(courseId,codeId,codeData,message){
-    try{await removeEnrollmentForCode(courseId,codeId,codeData,message)}catch(_){ }
+  async function ejectWithEnrollmentRemoval(courseId,codeId,codeData,message,reason){
+    try{await deactivateEnrollmentsForCode(courseId,codeId,codeData,reason||'expired')}catch(_){ }
     if(typeof window.aaEjectFromCourse==='function') window.aaEjectFromCourse(message);
     else {
       const oldCourse=window.activeCourseId;
@@ -13363,6 +13386,7 @@ const s=document.createElement('style');s.textContent=`
         return;
       }
       const e=snap.data()||{};
+      if(e.enrollmentActive===false){ await refreshMainCourseButtons(); return; }
       const codeId=String(e.codeId||'');
       if(!codeId){ return; }
       const cr=db.collection('courses').doc(courseId).collection('codes').doc(codeId);
@@ -13370,7 +13394,7 @@ const s=document.createElement('style');s.textContent=`
       window.__aaExpiryTimers?.forEach?.(t=>clearTimeout(t)); window.__aaExpiryTimers=[];
       window.__aaExpiryCodeUnsub=cr.onSnapshot(async cs=>{
         if(!cs.exists){
-          await ejectWithEnrollmentRemoval(courseId,codeId,{usedBy:[currentUser.uid]},'تم حذف كود الاشتراك، وعاد الدخول إلى الدورة إلى الاشتراك من جديد.');
+          await ejectWithEnrollmentRemoval(courseId,codeId,{usedBy:[currentUser.uid]},'تم حذف كود الاشتراك، وعاد الدخول إلى الدورة إلى الاشتراك من جديد.','deleted');
           return;
         }
         const c=cs.data()||{},now=Date.now();
@@ -13380,7 +13404,7 @@ const s=document.createElement('style');s.textContent=`
         if(end && !isNaN(end.getTime())){
           const ms=end.getTime()-now;
           if(ms<=0){
-            await ejectWithEnrollmentRemoval(courseId,codeId,c,'انتهى كود الاشتراك، وتم إخراجك من الدورة. يمكنك الاشتراك من جديد باستخدام كود صالح.');
+            await ejectWithEnrollmentRemoval(courseId,codeId,c,'انتهى كود الاشتراك، وتم إخراجك من الدورة. يمكنك الاشتراك من جديد باستخدام كود صالح.','expired');
             return;
           }
           window.__aaExpiryTimers.push(setTimeout(()=>window.watchCourseAccess?.(courseId),ms+80));
@@ -13461,7 +13485,7 @@ const s=document.createElement('style');s.textContent=`
           await db.collection('courses').doc(courseId).collection('codeArchive').doc(String(codeData.normalizedCode||codeData.code||codeId).toLowerCase())
             .set({normalizedCode:String(codeData.normalizedCode||codeData.code||codeId).toLowerCase(),code:codeData.code||codeId,reason:'deleted',archivedAt:fsField()},{merge:true});
         }catch(_){ }
-        await removeEnrollmentForCode(courseId,codeId,codeData,'deleted');
+        await deactivateEnrollmentsForCode(courseId,codeId,codeData,'deleted');
         await ref.delete();
         if(String(window.activeCourseId||'')===String(courseId) && !isAdmin) window.aaEjectFromCourse?.('تم حذف كود الاشتراك.');
         await refreshMainCourseButtons();
@@ -13484,7 +13508,7 @@ const s=document.createElement('style');s.textContent=`
       const e=es.data()||{}; if(!e.codeId)return;
       const cs=await db.collection('courses').doc(courseId).collection('codes').doc(e.codeId).get();
       if(!cs.exists){
-        await er.delete();
+        await deactivateEnrollmentPreservingData(courseId,currentUser.uid,e.codeId,e,'deleted');
         await refreshMainCourseButtons();
       }
     }catch(_){ }
@@ -13495,23 +13519,6 @@ const s=document.createElement('style');s.textContent=`
     if(document.hidden||!window.activeCourseId||!currentUser||isAdmin)return;
     repairCurrentUserDeletedCode(window.activeCourseId).finally(()=>window.watchCourseAccess?.(window.activeCourseId));
   });
-})();
-</script>
-\n<script id="final-single-profile-click-binding">
-(function(){
-  'use strict';
-  const old=document.getElementById('authToggleBtn');
-  if(!old)return;
-  const clone=old.cloneNode(true);
-  old.replaceWith(clone);
-  clone.addEventListener('click',function(e){
-    e.preventDefault();
-    e.stopPropagation();
-    if(e.stopImmediatePropagation)e.stopImmediatePropagation();
-    if(window.currentUser||typeof currentUser!=='undefined' && currentUser){
-      window.openUserProfilePage?.();
-    }
-  },false);
 })();
 </script>
 </body>
