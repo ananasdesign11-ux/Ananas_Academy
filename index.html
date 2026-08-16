@@ -12672,13 +12672,80 @@ window.__aaV9Cleanup=()=>clearInterval(v9Tick);
     };
   }
 
-  const originalProfileOpen=window.aaOpenProfile;
-  if(originalProfileOpen && !window.__v10WrappedOpen){
-    window.__v10WrappedOpen=true;
-    window.aaOpenProfile=async function(uid,source){
-      const r=await originalProfileOpen.apply(this,arguments);
-      if(isAdmin)renderFinalDirectory();
-      return r;
+  /*
+   * Final profile-open gate:
+   * never call an older profile renderer here. Older versions caused the
+   * profile to render several times with stale/partial data before the
+   * authoritative data arrived. One request now owns the whole render.
+   */
+  if(!window.__aaStableProfileOpen){
+    window.__aaStableProfileOpen=true;
+    let pendingPromise=null;
+    let pendingUid='';
+    let renderToken=0;
+
+    window.aaOpenProfile=async function(uid,source={}){
+      if(!currentUser||!uid)return triggerAuth?.();
+      uid=String(uid);
+
+      /* Coalesce duplicate listeners/click handlers for the same account. */
+      if(pendingPromise && pendingUid===uid)return pendingPromise;
+
+      const token=++renderToken;
+      pendingUid=uid;
+
+      const sourceKind=source?.kind||'link';
+      const returnPoint=source?.returnPoint||((typeof profileReturnPoint==='function')?profileReturnPoint():null);
+      profileState={
+        uid,
+        isSelf:uid===String(currentUser.uid),
+        source:{kind:sourceKind},
+        returnPoint,
+        busy:false
+      };
+
+      try{window.hideLegacyProfilesV17?.();}catch(_){}
+      try{window.hideLegacy?.();}catch(_){}
+      const page=typeof ensureProfilePage==='function'?ensureProfilePage():document.getElementById('aaRebuiltProfilePage');
+      if(!page)return;
+
+      page.classList.add('active');
+      page.style.visibility='hidden';
+      page.style.pointerEvents='none';
+      document.body.classList.add('aa-profile-open');
+
+      const job=(async()=>{
+        try{
+          /* Only the final authoritative renderer is allowed to paint data. */
+          if(typeof window.__renderAuthoritativeProfile==='function'){
+            await window.__renderAuthoritativeProfile(uid,uid===String(currentUser.uid));
+          }else if(typeof window.__renderReliableProfile==='function'){
+            await window.__renderReliableProfile(uid,uid===String(currentUser.uid));
+          }
+
+          /* Ignore late results from an earlier account switch. */
+          if(token!==renderToken)return;
+          page.style.visibility='visible';
+          page.style.pointerEvents='auto';
+          if(isAdmin)renderFinalDirectory();
+        }catch(err){
+          console.error('stable profile open',err);
+          if(token===renderToken){
+            page.style.visibility='visible';
+            page.style.pointerEvents='auto';
+            showCustomAlert?.('خطأ','تعذر تحميل بيانات الملف الشخصي.');
+          }
+          throw err;
+        }finally{
+          if(token===renderToken){
+            pendingPromise=null;
+            pendingUid='';
+          }
+        }
+      })();
+
+      pendingPromise=job;
+      return job;
     };
   }
 
