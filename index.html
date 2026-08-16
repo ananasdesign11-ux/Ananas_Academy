@@ -13142,38 +13142,33 @@ window.__aaV9Cleanup=()=>clearInterval(v9Tick);
     const token=++dirState.token;
     dirState.loading=true;
     dirState.ready=false;
+    const box=$('aaProfileDirectory');
+    if(box)box.innerHTML='<div class="aa-profile-empty">جاري تحميل الحسابات...</div>';
     try{
+      /* Fast path: read the users collection once. Do not read every
+         users/{uid}/enrolledCourses subcollection here; that made the
+         directory wait on N additional queries and could leave it stuck
+         on the loading state. Enrollment filters use denormalized fields
+         when available and otherwise treat the account as having zero
+         known enrollments until its profile is opened. */
       const snap=await db.collection('users').get();
       if(token!==dirState.token)return;
-      const docs=snap.docs.filter(d=>String(d.id)!==String(currentUser?.uid||''));
-      const rows=[];
-      const batchSize=8;
-      for(let i=0;i<docs.length;i+=batchSize){
-        if(token!==dirState.token)return;
-        const batch=docs.slice(i,i+batchSize);
-        const batchRows=await Promise.all(batch.map(async d=>{
+      const rows=snap.docs
+        .filter(d=>String(d.id)!==String(currentUser?.uid||''))
+        .map(d=>{
           const u={id:d.id,...(d.data()||{})};
-          let enrolledIds=[];
-          try{
-            const en=await d.ref.collection('enrolledCourses').get();
-            enrolledIds=en.docs.map(x=>String(x.id)).filter(Boolean);
-          }catch(_){
-            enrolledIds=Array.isArray(u.enrolledCourses)
-              ?u.enrolledCourses.map(x=>String(x?.id||x)).filter(Boolean)
-              :[...new Set([...(u.enrolledCourseIds||[]).map(String),...(u.courseIds||[]).map(String)])];
-          }
-          return {...u,enrolledCourseIds:[...new Set(enrolledIds)]};
-        }));
-        rows.push(...batchRows);
-      }
-      if(token!==dirState.token)return;
+          const ids=Array.isArray(u.enrolledCourses)
+            ?u.enrolledCourses.map(x=>String(x?.id||x)).filter(Boolean)
+            :[...new Set([...(Array.isArray(u.enrolledCourseIds)?u.enrolledCourseIds.map(String):[]),...(Array.isArray(u.courseIds)?u.courseIds.map(String):[])])];
+          return {...u,enrolledCourseIds:[...new Set(ids)]};
+        });
       dirState.users=rows;
       dirState.ready=true;
     }catch(e){
       console.error('final directory users',e);
       dirState.users=[];
       dirState.ready=false;
-      const box=$('aaProfileDirectory');if(box)box.innerHTML='<div class="aa-profile-empty">تعذر تحميل الحسابات. حاول تحديث الملف الشخصي مرة أخرى.</div>';
+      if(box)box.innerHTML='<div class="aa-profile-empty">تعذر تحميل الحسابات. حاول تحديث الملف الشخصي مرة أخرى.</div>';
     }finally{
       if(token===dirState.token){
         dirState.loading=false;
