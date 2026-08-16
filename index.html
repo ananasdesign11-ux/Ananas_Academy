@@ -3582,14 +3582,16 @@ label[for*="En"], input[id*="En"], textarea[id*="En"] { display:none !important;
         }
 
         function stopLessonForNavigation() {
-            /* Capture the exact position synchronously before destroying the player.
-               The local resume record is written immediately; the Firestore write can
-               continue in the background without depending on the player remaining alive. */
+            /* Save the exact playback point before any linked page or course section
+               is opened. The synchronous local snapshot is the immediate fallback;
+               Firestore save continues in the background and is merged later. */
             try {
                 if(activeCourseId && activeLessonId && lessonPlayer && currentUser){
+                    try{ lessonPlayer.pauseVideo?.(); }catch(_){}
+                    try{ lessonPlayer.pause?.(); }catch(_){}
                     const pos = Number(lessonPlayer.getCurrentTime?.() || 0);
                     const duration = Number(lessonPlayer.getDuration?.() || lessonWatchState.duration || 0);
-                    if(Number.isFinite(pos) && Number.isFinite(duration)){
+                    if(Number.isFinite(pos) && Number.isFinite(duration) && duration>=0){
                         writeLocalLessonResume(activeCourseId, activeLessonId, pos, duration);
                     }
                 }
@@ -7751,19 +7753,35 @@ window.openAssignmentDetail=async function(courseId,assignmentId,fromLesson=fals
 
 async function __restoreLessonAndPlay(courseId,lessonId){
   if(!courseId||!lessonId)return;
-  window.__lessonResumePosition=0;
-  try{
-    const ref=db.collection('users').doc(currentUser.uid).collection('courseProgress').doc(courseId).collection('lessons').doc(lessonId);
-    const snap=await ref.get();if(snap.exists)window.__lessonResumePosition=Number(snap.data()?.lastPosition||0);
-    const st=await db.collection('users').doc(currentUser.uid).collection('courseState').doc(courseId).get();
-    if(st.exists&&String(st.data()?.lessonId)===String(lessonId))window.__lessonResumePosition=Math.max(window.__lessonResumePosition,Number(st.data()?.lessonTime||0));
-  }catch(e){}
-  window.__lessonResumeAutoplay=true;
-  activeCourseId=courseId;activeLessonId=lessonId;currentCoursePage='lessonPlayer';
+  activeCourseId=courseId;
+  activeLessonId=lessonId;
+  currentCoursePage='lessonPlayer';
   document.getElementById('quizOverlay')?.classList.remove('active');
   document.getElementById('courseAssignmentDetailPage')?.classList.remove('active');
+
+  /* Use the same authoritative resume pipeline as normal lesson entry.
+     It merges localStorage, Firestore lesson progress and courseState, so
+     returning from a quiz/assignment/file cannot reset the saved position. */
+  window.__lessonResumePosition=0;
+  try{
+    if(typeof window.prepareLessonResume==='function'){
+      await window.prepareLessonResume(courseId,lessonId);
+    }else{
+      const local=readLocalLessonResume(courseId,lessonId);
+      window.__lessonResumePosition=Number(local?.position||0);
+    }
+  }catch(e){
+    try{window.__lessonResumePosition=Number(readLocalLessonResume(courseId,lessonId)?.position||0);}catch(_){}
+  }
+
+  /* Returning to the lesson should continue from the saved point. */
+  window.__lessonResumeAutoplay=true;
   __origSwitchCoursePage('learning');
-  const wait=()=>{if(Array.isArray(lessonListCache)&&lessonListCache.some(l=>String(l.id)===String(lessonId))){openLessonPlayer(courseId,lessonId);}else setTimeout(wait,100);};
+  const wait=()=>{
+    if(Array.isArray(lessonListCache)&&lessonListCache.some(l=>String(l.id)===String(lessonId))){
+      openLessonPlayer(courseId,lessonId);
+    }else setTimeout(wait,100);
+  };
   wait();
 }
 window.returnToQuizLesson=function(){const x=window.__quizOpenedFromLesson||{};return __restoreLessonAndPlay(x.courseId||activeCourseId,x.lessonId||activeLessonId);};
