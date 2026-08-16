@@ -3076,13 +3076,21 @@ label[for*="En"], input[id*="En"], textarea[id*="En"] { display:none !important;
                                 db.collection('courses').doc(course.id).collection('lessons').get(),
                                 db.collection('courses').doc(course.id).collection('quizzes').get()
                             ]);
-                            let mins = 0; ls.forEach(d => mins += Number(d.data()?.duration)||0);
+                            let mins = 0;
+                            let lessonCount = 0;
+                            ls.forEach(d => {
+                                if ((d.data() || {}).deleted === true) return;
+                                lessonCount++;
+                                mins += getLessonDurationMinutes(d.data());
+                            });
                             const liveQuizCount = qs.docs.filter(d => d.data()?.deleted !== true).length;
-                            course.lessons = ls.size;
-                            course.hours = Math.round((mins/60)*10)/10;
+                            course.lessons = lessonCount;
+                            course.totalMinutes = mins;
+                            course.hours = mins / 60;
                             course.quizzes = liveQuizCount;
                             await db.collection('courses').doc(course.id).set({
-                                lessons:ls.size,
+                                lessons:lessonCount,
+                                totalMinutes:mins,
                                 hours:course.hours,
                                 quizzes:liveQuizCount
                             },{merge:true});
@@ -3137,8 +3145,16 @@ label[for*="En"], input[id*="En"], textarea[id*="En"] { display:none !important;
             return enrollmentLoadInFlight;
         }
 
-        function formatCourseDuration(hoursValue) {
-            const totalMinutes = Math.max(0, Math.round((Number(hoursValue) || 0) * 60));
+        function getLessonDurationMinutes(data) {
+            const l = data || {};
+            if (l.deleted === true) return 0;
+            const raw = l.duration ?? l.durationMinutes ?? l.minutes ?? 0;
+            const minutes = Number(raw);
+            return Number.isFinite(minutes) ? Math.max(0, Math.round(minutes)) : 0;
+        }
+
+        function formatCourseDurationFromMinutes(minutesValue) {
+            const totalMinutes = Math.max(0, Math.round(Number(minutesValue) || 0));
             const hours = Math.floor(totalMinutes / 60);
             const minutes = totalMinutes % 60;
             if (hours === 0) return `${minutes} دقيقة`;
@@ -3146,6 +3162,40 @@ label[for*="En"], input[id*="En"], textarea[id*="En"] { display:none !important;
             const hourText = hours === 1 ? '1 ساعة' : hours === 2 ? 'ساعتان' : `${hours} ساعات`;
             return `${hourText} و ${minutes} دقيقة`;
         }
+
+        function formatCourseDuration(hoursValue) {
+            return formatCourseDurationFromMinutes((Number(hoursValue) || 0) * 60);
+        }
+
+        async function recalculateCourseDuration(courseId, options = {}) {
+            if (!courseId) return { lessons: 0, totalMinutes: 0, hours: 0 };
+            const snap = await db.collection('courses').doc(courseId).collection('lessons').get();
+            let totalMinutes = 0;
+            let lessonCount = 0;
+            snap.forEach(d => {
+                const minutes = getLessonDurationMinutes(d.data());
+                if ((d.data() || {}).deleted === true) return;
+                lessonCount++;
+                totalMinutes += minutes;
+            });
+            const hours = totalMinutes / 60;
+            const course = coursesData?.find(c => String(c.id) === String(courseId));
+            if (course) {
+                course.lessons = lessonCount;
+                course.totalMinutes = totalMinutes;
+                course.hours = hours;
+            }
+            if (options.persist !== false) {
+                await db.collection('courses').doc(courseId).set({
+                    lessons: lessonCount,
+                    totalMinutes,
+                    hours
+                }, { merge: true });
+            }
+            if (options.render !== false) renderCourses?.();
+            return { lessons: lessonCount, totalMinutes, hours };
+        }
+        window.recalculateCourseDuration = recalculateCourseDuration;
 
         function getCourseActionHTML(courseId) {
             if (!currentUser) return `<button class="btn btn-outline" onclick="triggerAuth()">تسجيل الدخول</button>`;
@@ -3190,7 +3240,7 @@ label[for*="En"], input[id*="En"], textarea[id*="En"] { display:none !important;
                 return `<div class="course-card" data-course-id="${escapeHtml(course.id)}">
                     <div class="course-img">${image}</div>${admin}
                     <div class="course-body"><h3>${escapeHtml(title)}</h3><p>${escapeHtml(desc)}</p>
-                    <div class="course-meta"><span><i class="fas fa-book-open"></i> ${Math.max(0, Number(course.lessons)||0)} ${t.cLessonsLbl||'Lessons'}</span><span><i class="fas fa-clock"></i> ${formatCourseDuration(course.hours)}</span><span><i class="fas fa-tasks"></i> ${Math.max(0, Number(course.quizzes)||0)} ${t.cQuizzesLbl||'Quizzes'}</span></div>
+                    <div class="course-meta"><span><i class="fas fa-book-open"></i> ${Math.max(0, Number(course.lessons)||0)} ${t.cLessonsLbl||'Lessons'}</span><span><i class="fas fa-clock"></i> ${formatCourseDurationFromMinutes(Number(course.totalMinutes) || (Number(course.hours)||0)*60)}</span><span><i class="fas fa-tasks"></i> ${Math.max(0, Number(course.quizzes)||0)} ${t.cQuizzesLbl||'Quizzes'}</span></div>
                     <span class="course-price">${escapeHtml(course.price || 0)} ر.س</span>
                     <div class="course-actions"><span class="course-enroll-action" data-course-id="${escapeHtml(course.id)}">${getCourseActionHTML(course.id)}</span></div></div></div>`;
             }).join('');
@@ -3581,12 +3631,23 @@ label[for*="En"], input[id*="En"], textarea[id*="En"] { display:none !important;
             const imgEl = document.getElementById('overviewImg');
             if (course.image) { imgEl.src = course.image; } else { imgEl.src = 'https://i.postimg.cc/q7Frnj7k/image.png'; }
             document.getElementById('ovLessons').textContent = Math.max(0, Number(course.lessons) || 0);
-            document.getElementById('ovHours').textContent = formatCourseDuration(course.hours);
+            document.getElementById('ovHours').textContent = formatCourseDurationFromMinutes(Number(course.totalMinutes) || (Number(course.hours)||0)*60);
             const ovHoursLabel = document.getElementById('cHoursLbl');
             if (ovHoursLabel) ovHoursLabel.textContent = '';
             // The authoritative quiz count comes from the actual quizzes subcollection.
             const cachedQuizCount = Math.max(0, Number(course.quizzes) || 0);
             document.getElementById('ovQuizzes').textContent = cachedQuizCount;
+            recalculateCourseDuration(courseId, { render: false }).then(result => {
+                course.lessons = result.lessons;
+                course.totalMinutes = result.totalMinutes;
+                course.hours = result.hours;
+                document.getElementById('ovLessons').textContent = result.lessons;
+                document.getElementById('ovHours').textContent = formatCourseDurationFromMinutes(result.totalMinutes);
+                const card = document.querySelector(`.course-card[data-course-id=\"${CSS.escape(String(courseId))}\"]`);
+                const meta = card?.querySelector('.fa-clock')?.parentElement;
+                if (meta) meta.innerHTML = `<i class=\"fas fa-clock\"></i> ${formatCourseDurationFromMinutes(result.totalMinutes)}`;
+                try { sessionStorage.setItem('ananas_courses_cache', JSON.stringify({at:Date.now(),data:coursesData})); } catch(e) {}
+            }).catch(e => console.warn('تعذر تحديث مدة الدورة مباشرة:', courseId, e));
             try {
                 const quizCountSnap = await db.collection('courses').doc(courseId).collection('quizzes').get();
                 const liveQuizCount = quizCountSnap.docs.filter(d => d.data()?.deleted !== true).length;
@@ -4294,29 +4355,9 @@ label[for*="En"], input[id*="En"], textarea[id*="En"] { display:none !important;
                         }
                     }
                     
-                    // Update course stats. Editing a lesson must NOT increase the lesson count.
-                    const courseDoc = await db.collection('courses').doc(activeCourseId).get();
-                    if(courseDoc.exists) {
-                        const currentData = courseDoc.data() || {};
-                        if(!isEditingLesson) {
-                            const currentHours = Number(currentData.hours) || 0;
-                            const totalHours = currentHours + (duration / 60);
-                            const roundedHours = Math.round(totalHours * 10) / 10;
-                            await db.collection('courses').doc(activeCourseId).update({
-                                lessons: firebase.firestore.FieldValue.increment(1),
-                                hours: roundedHours
-                            });
-                        } else {
-                            // Recalculate from the actual lessons collection to repair stale counters too.
-                            const allLessons = await db.collection('courses').doc(activeCourseId).collection('lessons').get();
-                            let totalMinutes = 0;
-                            allLessons.forEach(d => { totalMinutes += Number(d.data()?.duration) || 0; });
-                            await db.collection('courses').doc(activeCourseId).update({
-                                lessons: allLessons.size,
-                                hours: Math.round((totalMinutes / 60) * 10) / 10
-                            });
-                        }
-                    }
+                    // Always recalculate from the actual lessons collection so add/edit
+                    // operations keep both counters and displayed minutes authoritative.
+                    await recalculateCourseDuration(activeCourseId, { render: false });
                     
                     document.getElementById('addLessonModal').classList.remove('active');
                     loadLessonsForCourse(activeCourseId);
@@ -4405,6 +4446,7 @@ label[for*="En"], input[id*="En"], textarea[id*="En"] { display:none !important;
                     await assignSnapshot.docs[0].ref.delete();
                 }
 
+                await recalculateCourseDuration(courseId, { render: false });
                 document.getElementById('addLessonModal').classList.remove('active');
                 loadLessonsForCourse(courseId);
                 window.saveLesson = originalSave;
@@ -4421,16 +4463,8 @@ label[for*="En"], input[id*="En"], textarea[id*="En"] { display:none !important;
                 const l = doc.data();
                 await db.collection('courses').doc(courseId).collection('lessons').doc(lessonId).delete();
                 
-                // Recalculate and round total hours
-                const remainingSnap = await db.collection('courses').doc(courseId).collection('lessons').get();
-                let totalMinutes = 0;
-                remainingSnap.forEach(d => { totalMinutes += (d.data().duration || 0); });
-                const newHours = Math.round((totalMinutes / 60) * 10) / 10;
-
-                await db.collection('courses').doc(courseId).update({
-                    lessons: firebase.firestore.FieldValue.increment(-1),
-                    hours: Math.max(0,newHours)
-                });
+                // Recalculate from the remaining live lessons so deleted lessons never count.
+                await recalculateCourseDuration(courseId, { render: false });
                 document.querySelector(`#lessonsCardsContainer .lesson-card[data-id="${lessonId}"]`)?.remove();
                 if(!document.querySelector('#lessonsCardsContainer .lesson-card')) document.getElementById('lessonsCardsContainer').innerHTML='<p style="color:var(--text-muted);text-align:center;grid-column:1/-1;padding:50px;">لا توجد حصص مضافة بعد.</p>';
                 loadLessonsForCourse(courseId);
@@ -7650,13 +7684,9 @@ label[for*="En"], input[id*="En"], textarea[id*="En"] { display:none !important;
     if(!courseId) return;
     try {
       const snap = await db.collection('courses').doc(courseId).collection('lessons').get();
-      let minutes = 0; snap.forEach(d => minutes += Number(d.data()?.duration)||0);
-      await db.collection('courses').doc(courseId).set({
-        lessons: snap.size,
-        hours: Math.round((minutes/60)*10)/10
-      }, {merge:true});
+      const result = await recalculateCourseDuration(courseId, { render: false });
       const course = coursesData?.find(c=>c.id===courseId);
-      if(course){ course.lessons=snap.size; course.hours=Math.round((minutes/60)*10)/10; }
+      if(course){ course.lessons=result.lessons; course.totalMinutes=result.totalMinutes; course.hours=result.hours; }
       renderCourses?.();
     } catch(e){ console.warn('تعذر إصلاح عداد الحصص:',e); }
   };
