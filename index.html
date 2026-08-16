@@ -3582,12 +3582,37 @@ label[for*="En"], input[id*="En"], textarea[id*="En"] { display:none !important;
         }
 
         function stopLessonForNavigation() {
+            /* Capture the exact position synchronously before destroying the player.
+               The local resume record is written immediately; the Firestore write can
+               continue in the background without depending on the player remaining alive. */
+            try {
+                if(activeCourseId && activeLessonId && lessonPlayer && currentUser){
+                    const pos = Number(lessonPlayer.getCurrentTime?.() || 0);
+                    const duration = Number(lessonPlayer.getDuration?.() || lessonWatchState.duration || 0);
+                    if(Number.isFinite(pos) && Number.isFinite(duration)){
+                        writeLocalLessonResume(activeCourseId, activeLessonId, pos, duration);
+                    }
+                }
+            } catch(e) {}
             try {
                 const pending = window.saveLessonPositionBeforeLeaving?.();
                 if(pending && typeof pending.catch === 'function') pending.catch(()=>{});
             } catch(e) {}
             destroyLessonVideo();
         }
+
+        /* Save the last position even when the browser hides/unloads the page.
+           localStorage is synchronous, so this survives navigation/reload immediately. */
+        function saveLessonResumeSnapshot(){
+            try{
+                if(currentCoursePage !== 'lessonPlayer' || !activeCourseId || !activeLessonId || !lessonPlayer || !currentUser)return;
+                const pos=Number(lessonPlayer.getCurrentTime?.()||0);
+                const duration=Number(lessonPlayer.getDuration?.()||lessonWatchState.duration||0);
+                if(Number.isFinite(pos)&&Number.isFinite(duration))writeLocalLessonResume(activeCourseId,activeLessonId,pos,duration);
+            }catch(e){}
+        }
+        window.addEventListener('pagehide',saveLessonResumeSnapshot,{capture:true});
+        document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden')saveLessonResumeSnapshot();},{capture:true});
 
         window.registerMobileNavPage=function(page,label,icon){
             const nav=document.getElementById('mobileBottomNav');if(!nav||nav.querySelector(`[data-page="${page}"]`))return;
@@ -8924,8 +8949,18 @@ function v12VideoCommand(action,arg){
     if(action==='rate')return Promise.resolve(lessonPlayer.setPlaybackRate?.(arg));
   }catch(e){console.warn('Video command failed:',e);return false}
 }
-function v12TogglePlayback(){if(!lessonPlayerReady||!lessonPlayer)return;const s=lessonPlayer.getPlayerState?.();const playing=s===LESSON_MEDIA_STATE.PLAYING||(window.YT&&s===YT.PlayerState.PLAYING);playing?v12VideoCommand('pause'):v12VideoCommand('play');}
-document.getElementById('lessonPlayPauseBtn')?.addEventListener('click',e=>{e.preventDefault();e.stopPropagation();v12TogglePlayback()},true);
+function v12TogglePlayback(){
+  if(!lessonPlayerReady||!lessonPlayer)return;
+  try{
+    const state=lessonPlayer.getPlayerState?.();
+    const playing=state===LESSON_MEDIA_STATE.PLAYING || (window.YT&&state===YT.PlayerState.PLAYING);
+    const action=playing?'pause':'play';
+    const result=v12VideoCommand(action);
+    if(result&&typeof result.catch==='function')result.catch(err=>console.warn('تعذر تغيير حالة تشغيل الفيديو:',err));
+    updateLessonControls();
+  }catch(err){console.warn('تعذر تبديل تشغيل الفيديو:',err);}
+}
+document.getElementById('lessonPlayPauseBtn')?.addEventListener('click',e=>{e.preventDefault();e.stopImmediatePropagation();v12TogglePlayback()},true);
 document.getElementById('lessonCenterPlayBtn')?.addEventListener('click',e=>{e.preventDefault();e.stopPropagation();v12TogglePlayback()},true);
 
 /* Leaving the lesson player through any related action must stop the media first. */
