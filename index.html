@@ -3067,15 +3067,28 @@ label[for*="En"], input[id*="En"], textarea[id*="En"] { display:none !important;
                         return bv - av;
                     });
                     coursesData = nextCourses;
-                    // Reconcile the displayed lesson counter with the real lessons subcollection.
+                    // Reconcile displayed counters with the real subcollections.
+                    // Lesson count is derived from lessons; quiz count is derived from
+                    // courses/{courseId}/quizzes instead of trusting the cached course.quizzes field.
                     await Promise.all(coursesData.map(async course => {
                         try {
-                            const ls = await db.collection('courses').doc(course.id).collection('lessons').get();
+                            const [ls, qs] = await Promise.all([
+                                db.collection('courses').doc(course.id).collection('lessons').get(),
+                                db.collection('courses').doc(course.id).collection('quizzes').get()
+                            ]);
                             let mins = 0; ls.forEach(d => mins += Number(d.data()?.duration)||0);
+                            const liveQuizCount = qs.docs.filter(d => d.data()?.deleted !== true).length;
                             course.lessons = ls.size;
                             course.hours = Math.round((mins/60)*10)/10;
-                            await db.collection('courses').doc(course.id).set({lessons:ls.size,hours:course.hours},{merge:true});
-                        } catch(e) { console.warn('تعذر مزامنة عداد الحصص:',course.id,e); }
+                            course.quizzes = liveQuizCount;
+                            await db.collection('courses').doc(course.id).set({
+                                lessons:ls.size,
+                                hours:course.hours,
+                                quizzes:liveQuizCount
+                            },{merge:true});
+                        } catch(e) {
+                            console.warn('تعذر مزامنة عدادات الدورة:',course.id,e);
+                        }
                     }));
                     coursesLastLoadedAt = Date.now();
                     coursesLastLoadedUid = uid;
@@ -3559,7 +3572,21 @@ label[for*="En"], input[id*="En"], textarea[id*="En"] { display:none !important;
             if (course.image) { imgEl.src = course.image; } else { imgEl.src = 'https://i.postimg.cc/q7Frnj7k/image.png'; }
             document.getElementById('ovLessons').textContent = Math.max(0, Number(course.lessons) || 0);
             document.getElementById('ovHours').textContent = Math.max(0, Number(course.hours) || 0);
-            document.getElementById('ovQuizzes').textContent = Math.max(0, Number(course.quizzes) || 0);
+            // The authoritative quiz count comes from the actual quizzes subcollection.
+            const cachedQuizCount = Math.max(0, Number(course.quizzes) || 0);
+            document.getElementById('ovQuizzes').textContent = cachedQuizCount;
+            try {
+                const quizCountSnap = await db.collection('courses').doc(courseId).collection('quizzes').get();
+                const liveQuizCount = quizCountSnap.docs.filter(d => d.data()?.deleted !== true).length;
+                document.getElementById('ovQuizzes').textContent = liveQuizCount;
+                if (Number(course.quizzes) !== liveQuizCount) {
+                    course.quizzes = liveQuizCount;
+                    await db.collection('courses').doc(courseId).set({quizzes:liveQuizCount},{merge:true}).catch(()=>{});
+                    try { sessionStorage.setItem('ananas_courses_cache', JSON.stringify({at:Date.now(),data:coursesData})); } catch(e) {}
+                }
+            } catch(e) {
+                console.warn('تعذر تحديث عداد اختبارات الدورة:', courseId, e);
+            }
             
             // Switch Views: always reset every course sub-view before showing the overview.
             // This prevents a previously-open dashboard/page from remaining visible underneath
@@ -8639,7 +8666,7 @@ setInterval(()=>{if(currentChatLock?.locked&&currentChatLock.endAt){const ms=cur
 /* ---------- E. User full profile page ---------- */
 function ensureProfilePage(){
  if($('userProfilePage'))return;
- const page=document.createElement('div');page.id='userProfilePage';page.innerHTML='<div class="profile-page-inner"><div class="profile-hero"><div class="profile-avatar" id="profilePageAvatar">م</div><div><div class="profile-name" id="profilePageName">مستخدم</div><div class="profile-email" id="profilePageEmail">—</div><div class="profile-stat-grid"><div class="profile-stat"><b id="profileXP">0</b><span>نقاط الخبرة</span></div><div class="profile-stat"><b id="profileLessons">0</b><span>حصص مكتملة</span></div><div class="profile-stat"><b id="profileQuizzes">0</b><span>اختبارات مكتملة</span></div><div class="profile-stat"><b id="profileAssignments">0</b><span>أعمال مرفوعة</span></div></div></div><div class="profile-close-wrap"><button class="auth-btn" id="profilePageClose"><i class="fas fa-arrow-right"></i><span>العودة</span></button></div></div><div class="profile-sections"><section class="profile-panel"><h3>البيانات الشخصية</h3><div class="profile-list" id="profileDataList"></div></section><section class="profile-panel"><h3>إنجازات الحصص</h3><div class="profile-list" id="profileLessonsList"></div></section><section class="profile-panel"><h3>نتائج الاختبارات</h3><div class="profile-list" id="profileQuizzesList"></div></section><section class="profile-panel"><h3>الأعمال والواجبات</h3><div class="profile-list" id="profileAssignmentsList"></div></section><section class="profile-panel" style="grid-column:1/-1"><h3>سجل النشاط</h3><div class="profile-list" id="profileActivityList"></div></section></div></div>';
+ const page=document.createElement('div');page.id='userProfilePage';page.innerHTML='<div class="profile-page-inner"><div class="profile-hero"><div class="profile-avatar" id="profilePageAvatar">م</div><div><div class="profile-name" id="profilePageName">مستخدم</div><div class="profile-email" id="profilePageEmail">—</div><div class="profile-stat-grid"><div class="profile-stat"><b id="profileXP">0</b><span>نقاط الخبرة</span></div><div class="profile-stat"><b id="profileLessons">0</b><span>حصص مكتملة</span></div><div class="profile-stat"><b id="profileQuizzes">0</b><span>الاختبارات</span></div><div class="profile-stat"><b id="profileAssignments">0</b><span>أعمال مرفوعة</span></div></div></div><div class="profile-close-wrap"><button class="auth-btn" id="profilePageClose"><i class="fas fa-arrow-right"></i><span>العودة</span></button></div></div><div class="profile-sections"><section class="profile-panel"><h3>البيانات الشخصية</h3><div class="profile-list" id="profileDataList"></div></section><section class="profile-panel"><h3>إنجازات الحصص</h3><div class="profile-list" id="profileLessonsList"></div></section><section class="profile-panel"><h3>نتائج الاختبارات</h3><div class="profile-list" id="profileQuizzesList"></div></section><section class="profile-panel"><h3>الأعمال والواجبات</h3><div class="profile-list" id="profileAssignmentsList"></div></section><section class="profile-panel" style="grid-column:1/-1"><h3>سجل النشاط</h3><div class="profile-list" id="profileActivityList"></div></section></div></div>';
  document.body.appendChild(page);$('profilePageClose').onclick=()=>page.classList.remove('active');
 }
 window.openUserProfilePage=async function(){if(!currentUser)return;ensureProfilePage();const p=currentUserProfile||{};$('profilePageName').textContent=p.displayName||currentUser.displayName||'مستخدم';$('profilePageEmail').textContent=p.email||currentUser.email||'—';$('profilePageAvatar').textContent=(p.displayName||currentUser.displayName||'م')[0];
@@ -8765,6 +8792,7 @@ async function getActiveCatalog(){
 
 async function getEffectiveProfileData(uid){
   const cat=await getActiveCatalog();
+  const currentQuizCount=[...cat.quizzes.values()].filter(q=>q?.deleted!==true).length;
   const completedLessonsSnap=await db.collection('users').doc(uid).collection('completedLessons').get();
   const completedQuizzesSnap=await db.collection('userStats').doc(uid).collection('completedQuizzes').get();
   const completedAssignmentsSnap=await db.collection('userStats').doc(uid).collection('completedAssignments').get().catch(()=>({empty:true,docs:[]}));
@@ -8802,7 +8830,7 @@ async function getEffectiveProfileData(uid){
     if(activeAssignmentIds.has(d.id)||activeAssignmentIds.has(x.assignmentId)) return;
     assignmentXP+=Number(x.xpEarned)||0;
   });
-  return {cat,activeLessons,activeQuizzes,assignmentWorks,lessonXP,quizXP,assignmentXP,effectiveXP:lessonXP+quizXP+assignmentXP};
+  return {cat,activeLessons,activeQuizzes,assignmentWorks,lessonXP,quizXP,assignmentXP,currentQuizCount,effectiveXP:lessonXP+quizXP+assignmentXP};
 }
 
 /* ---------------- FILE UPLOAD MODAL ---------------- */
@@ -8933,7 +8961,7 @@ async function openPublicProfileFinal(uid){
 }
 async function renderProfileForUidFinal(uid,isSelf){
   const data=await getEffectiveProfileData(uid);
-  $('profileXP').textContent=data.effectiveXP.toLocaleString('ar-SA');$('profileLessons').textContent=data.activeLessons.length;$('profileQuizzes').textContent=data.activeQuizzes.length;$('profileAssignments').textContent=data.assignmentWorks.length;
+  $('profileXP').textContent=data.effectiveXP.toLocaleString('ar-SA');$('profileLessons').textContent=data.activeLessons.length;$('profileQuizzes').textContent=Number(data.currentQuizCount)||0;$('profileAssignments').textContent=data.assignmentWorks.length;
   $('profileLessonsList').innerHTML=data.activeLessons.length?data.activeLessons.slice().sort((a,b)=>String(b.completedAt?.seconds||0)-String(a.completedAt?.seconds||0)).slice(0,40).map(x=>`<div class="profile-list-item"><strong>${esc(x.titleAr||'حصة')}</strong><small>${esc(x.courseTitle)} · +${Number(x.xpEarned)||0} XP</small></div>`).join(''):'<div class="profile-empty">لا توجد حصص مكتملة حاليًا.</div>';
   $('profileQuizzesList').innerHTML=data.activeQuizzes.length?data.activeQuizzes.slice().sort((a,b)=>String(b.passedAt?.seconds||0)-String(a.passedAt?.seconds||0)).slice(0,40).map(x=>`<div class="profile-list-item"><strong>${esc(x.titleAr||'اختبار')}</strong><small>${Number(x.score)||0}% · +${Number(x.xpEarned)||0} XP</small></div>`).join(''):'<div class="profile-empty">لا توجد اختبارات مكتملة حاليًا.</div>';
   const activity=[...data.activeLessons.map(x=>({t:`أكمل الحصة: ${x.titleAr||'حصة'}`,d:fmtDate(x.completedAt)})),...data.activeQuizzes.map(x=>({t:`أكمل الاختبار: ${x.titleAr||'اختبار'} بنسبة ${Number(x.score)||0}%`,d:fmtDate(x.passedAt)})),...data.assignmentWorks.map(x=>({t:`رفع عملًا في: ${x.assignmentTitle}`,d:fmtDate(x.uploadedAt)}))].slice(0,50);
@@ -10014,7 +10042,7 @@ const esc2=(window.escapeHtml||((v)=>String(v??'').replace(/[&<>'"]/g,c=>({'&':'
  * - XP: لا نقرأ userStats.xp الإجمالي نهائيًا؛ نحسب فقط من العناصر الحالية التي ما زال لها وجود.
  */
 async function authoritativeLiveProfile(uid){
-  const out={xp:0,lessons:[],quizzes:[],assignmentWorks:[],portfolio:[],courses:[]};
+  const out={xp:0,lessons:[],quizzes:[],assignmentWorks:[],portfolio:[],courses:[],availableQuizzes:0};
   const emptySnap={docs:[],empty:true};
   const num=v=>{const n=Number(v);return Number.isFinite(n)?n:0;};
   const isLiveDoc=d=>d && d.data?.().deleted!==true;
@@ -10044,6 +10072,7 @@ async function authoritativeLiveProfile(uid){
     const liveLessonDocs=lessonSnap.docs.filter(isLiveDoc);
     const liveQuizDocs=quizSnap.docs.filter(isLiveDoc);
     const liveAssignmentDocs=assignmentSnap.docs.filter(isLiveDoc);
+    out.availableQuizzes+=liveQuizDocs.length;
     const lessonMap=new Map(liveLessonDocs.map(d=>[d.id,d]));
     const quizMap=new Map(liveQuizDocs.map(d=>[d.id,d]));
 
@@ -10360,7 +10389,7 @@ async function renderAuthoritativeProfile(uid,isSelf){
     $id('aaProfileLogout').style.display=isSelf?'inline-flex':'none';
     $id('aaProfileXP').textContent=privateProfile?'—':Number(live.xp||0).toLocaleString('ar-SA');
     $id('aaProfileLessons').textContent=privateProfile?'—':live.lessons.length;
-    $id('aaProfileQuizzes').textContent=privateProfile?'—':live.quizzes.length;
+    $id('aaProfileQuizzes').textContent=privateProfile?'—':Number(live.availableQuizzes||0);
     $id('aaProfileWorks').textContent=privateProfile?'—':live.portfolio.length+live.assignmentWorks.filter(x=>x.approved).length;
     $id('aaProfileData').innerHTML=dataHtml;
     $id('aaProfileCourses').innerHTML=coursesHtml;
