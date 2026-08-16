@@ -9781,6 +9781,10 @@ hideLegacy();
     if(!title){status.textContent='اكتب عنوان العمل.';return;}if(!type){status.textContent='اكتب نوع العمل.';return;}if(!files.length){status.textContent='اختر صورة واحدة على الأقل.';return;}
     btn.disabled=true;status.textContent='جاري رفع الصور وإضافة العمل...';try{const urls=[];for(const f of files){const u=await uploadImage(f);if(!u)throw Error('upload');urls.push(u);}await db.collection('users').doc(currentUser.uid).collection('portfolioWorks').add({title,type,description,images:urls,createdAt:firebase.firestore.FieldValue.serverTimestamp(),updatedAt:firebase.firestore.FieldValue.serverTimestamp(),deleted:false});$p('aaProfileSelfWorkModal').classList.remove('active');status.textContent='';if(window.openUserProfilePage)await window.openUserProfilePage();showCustomAlert?.('تمت الإضافة','تمت إضافة العمل إلى معرضك الشخصي.');}catch(e){console.error('save profile work',e);status.textContent='تعذر إضافة العمل.';showCustomAlert?.('خطأ','تعذر إضافة العمل إلى المعرض.')}finally{btn.disabled=false;}
   }
+  window.__aaEnsureSelfModals=ensureSelfModals;
+  window.__aaOpenSelfEdit=openSelfEdit;
+  window.__aaOpenSelfWork=openSelfWork;
+
   function patchProfileUI(){
     const host=getProfileHost();if(!host)return false;wireSelfButtons();
     const add=$p('aaProfileAddWork'),edit=$p('aaProfileEdit');if(add&&add.textContent.indexOf('إضافة عمل')===-1)add.innerHTML='<i class="fas fa-plus"></i><span>إضافة عمل</span>';if(edit)edit.innerHTML='<i class="fas fa-user-pen"></i><span>تعديل الملف</span>';return true;
@@ -12283,6 +12287,70 @@ const s=document.createElement('style');s.textContent=`
   window.__ananasResumeCurrentLesson=resumeCurrentLesson;
 })();
 
+</script>
+<!-- ===== FINAL PROFILE MODAL LAYER / BUTTON REBIND PATCH ===== -->
+<script id="final-profile-modal-layer-fix">
+(function(){
+  'use strict';
+  const $=id=>document.getElementById(id);
+
+  function liftProfileModal(modal){
+    if(!modal)return;
+    if(modal.parentElement!==document.body) document.body.appendChild(modal);
+    modal.style.setProperty('position','fixed','important');
+    modal.style.setProperty('inset','0','important');
+    modal.style.setProperty('z-index','300000','important');
+    modal.style.setProperty('display',modal.classList.contains('active')?'flex':'none','important');
+    modal.style.setProperty('align-items','center','important');
+    modal.style.setProperty('justify-content','center','important');
+    modal.style.setProperty('padding','20px','important');
+    modal.style.setProperty('box-sizing','border-box','important');
+  }
+
+  function ensureProfileModals(){
+    try{ window.__aaEnsureSelfModals?.(); }catch(e){ console.warn('profile modal ensure',e); }
+    liftProfileModal($('aaProfileSelfEditModal'));
+    liftProfileModal($('aaProfileSelfWorkModal'));
+  }
+
+  function openEdit(){
+    if(!currentUser)return triggerAuth?.();
+    ensureProfileModals();
+    if(typeof window.__aaOpenSelfEdit==='function'){
+      Promise.resolve(window.__aaOpenSelfEdit()).then(()=>liftProfileModal($('aaProfileSelfEditModal'))).catch(e=>console.warn('open profile edit',e));
+      return;
+    }
+    const m=$('aaProfileSelfEditModal'); if(m)m.classList.add('active');
+  }
+
+  function openWork(){
+    if(!currentUser)return triggerAuth?.();
+    ensureProfileModals();
+    if(typeof window.__aaOpenSelfWork==='function') window.__aaOpenSelfWork();
+    const m=$('aaProfileSelfWorkModal');
+    if(m){m.classList.add('active');liftProfileModal(m);}
+  }
+
+  // Capture phase ensures this final binding wins over the older empty handler.
+  document.addEventListener('click',function(e){
+    const edit=e.target?.closest?.('#aaProfileEdit');
+    if(edit){e.preventDefault();e.stopImmediatePropagation();openEdit();return;}
+    const add=e.target?.closest?.('#aaProfileAddWork');
+    if(add){e.preventDefault();e.stopImmediatePropagation();openWork();return;}
+  },true);
+
+  // Keep the two dialogs above the profile page even when the page is rebuilt.
+  const obs=new MutationObserver(()=>{
+    const edit=$('aaProfileSelfEditModal'),work=$('aaProfileSelfWorkModal');
+    if(edit||work){liftProfileModal(edit);liftProfileModal(work);}
+  });
+  obs.observe(document.body,{subtree:true,childList:true});
+
+  // Re-lift when a dialog becomes active.
+  document.addEventListener('click',()=>{
+    setTimeout(()=>{liftProfileModal($('aaProfileSelfEditModal'));liftProfileModal($('aaProfileSelfWorkModal'));},0);
+  },true);
+})();
 </script>
 </body>
 </html>
