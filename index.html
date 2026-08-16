@@ -13069,7 +13069,7 @@ window.__aaV9Cleanup=()=>clearInterval(v9Tick);
   /* ================================================================
      FINAL ADMIN DIRECTORY: one renderer + robust filters + live search
      ================================================================ */
-  const dirState={users:[],courses:[],ready:false,loading:false,token:0};
+  const dirState={users:[],courses:[],coursesById:new Map(),ready:false,loading:false,membershipsReady:false,membershipsLoading:false,token:0};
 
   function escapeHtml(v){
     try{return String(v??'').replace(/[&<>'"]/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[m]));}catch(_){return ''}
@@ -13155,80 +13155,90 @@ window.__aaV9Cleanup=()=>clearInterval(v9Tick);
     }
   }
 
-  async function mapDirectoryMemberships(users,courseDocs,token){
-    const liveCourseIds=new Set(courseDocs.filter(d=>{
-      const c=d.data()||{};
-      return !(c.deleted===true||c.isDeleted===true||c.archived===true||String(c.status||'').toLowerCase()==='deleted');
-    }).map(d=>String(d.id)));
-    const courseById=new Map(courseDocs.map(d=>[String(d.id),d]));
-    const rows=users.slice();
-    const concurrency=6;let cursor=0;
+  async function hydrateDirectoryMemberships(token, onlyForFiltering=false){
+    if(token!==dirState.token || dirState.membershipsLoading)return;
+    const users=dirState.users.slice();
+    if(!users.length)return;
+    dirState.membershipsLoading=true;
+    const liveCourseIds=new Set(dirState.courses.map(c=>String(c.id)));
+    let cursor=0, changed=0, lastRender=Date.now();
+    const concurrency=8;
     async function worker(){
       while(true){
-        const index=cursor++;if(index>=rows.length)return;
-        const row=rows[index];
+        const index=cursor++;
+        if(index>=users.length)return;
+        if(token!==dirState.token)return;
+        const row=users[index];
         try{
           const snap=await db.collection('users').doc(row.id).collection('enrolledCourses').get();
-          const validCourseIds=[];const memberships={};
-          for(const ed of snap.docs){
-            const cid=String(ed.id);
-            if(!liveCourseIds.has(cid))continue;
-            const en=ed.data()||{};
-            if(en.codeDeleted===true||en.accessBlocked===true)continue;
-            const course=courseById.get(cid)?.data()||{};
-            if(en.adminEnrollment===true){
-              validCourseIds.push(cid);
-              memberships[cid]={courseId:cid,courseTitle:course.titleAr||course.title||'دورة',enrolledAt:en.enrolledAt||null,codeEndTime:null,adminEnrollment:true};
-              continue;
-            }
-            const codeId=String(en.codeId||'').trim();
-            if(!codeId)continue;
-            const codeSnap=await db.collection('courses').doc(cid).collection('codes').doc(codeId).get().catch(()=>null);
-            if(!codeSnap?.exists)continue;
-            const code=codeSnap.data()||{};
-            if(code.deleted===true||code.archived===true)continue;
-            validCourseIds.push(cid);
-            memberships[cid]={courseId:cid,courseTitle:course.titleAr||course.title||'دورة',enrolledAt:en.enrolledAt||null,codeEndTime:code.endTime||null,codeId};
-          }
-          row.enrolledCourseIds=[...new Set(validCourseIds)];
+          const valid=[], memberships={};
+          snap.docs.forEach(ed=>{
+            const cid=String(ed.id), en=ed.data()||{};
+            if(!liveCourseIds.has(cid))return;
+            if(en.codeDeleted===true||en.accessBlocked===true)return;
+            const course=dirState.coursesById.get(cid)||{};
+            valid.push(cid);
+            memberships[cid]={courseId:cid,courseTitle:course.titleAr||course.title||'دورة',enrolledAt:en.enrolledAt||null,codeEndTime:en.codeEndTime||en.endTime||null,codeId:String(en.codeId||'')};
+          });
+          row.enrolledCourseIds=[...new Set(valid)];
           row.enrolledMemberships=memberships;
         }catch(_){
-          row.enrolledCourseIds=[];row.enrolledMemberships={};
+          row.enrolledCourseIds=[];
+          row.enrolledMemberships={};
         }
-        if(token!==dirState.token)return;
+        row.membershipsReady=true;
+        changed++;
+        if(changed<=4 || changed%8===0 || Date.now()-lastRender>180){
+          lastRender=Date.now();
+          dirState.users=users.slice();
+          if(token===dirState.token)renderFinalDirectory();
+        }
       }
     }
-    await Promise.all(Array.from({length:Math.min(concurrency,rows.length)},worker));
-    return rows;
+    try{await Promise.all(Array.from({length:Math.min(concurrency,users.length)},worker));}
+    finally{
+      if(token===dirState.token){
+        dirState.users=users.slice();
+        dirState.membershipsLoading=false;
+        dirState.membershipsReady=true;
+        renderFinalDirectory();
+      }
+    }
   }
 
   async function fetchDirectoryUsers(){
     const token=++dirState.token;
     dirState.loading=true;
     dirState.ready=false;
+    dirState.membershipsReady=false;
+    dirState.membershipsLoading=false;
     const box=$('aaProfileDirectory');
     if(box)box.innerHTML='<div class="aa-profile-empty">جاري تحميل الحسابات...</div>';
     try{
-      const [usersSnap,coursesSnap]=await Promise.all([db.collection('users').get(),db.collection('courses').get()]);
+      const [usersSnap,coursesSnap]=await Promise.all([
+        db.collection('users').get(),
+        db.collection('courses').get()
+      ]);
       if(token!==dirState.token)return;
-      const rows=usersSnap.docs
-        .filter(d=>String(d.id)!==String(currentUser?.uid||''))
-        .map(d=>({id:d.id,...(d.data()||{})}));
-      dirState.courses=coursesSnap.docs.map(d=>({id:d.id,...(d.data()||{})}))
+      const activeCourses=coursesSnap.docs
+        .map(d=>({id:d.id,...(d.data()||{})}))
         .filter(c=>!(c.deleted===true||c.isDeleted===true||c.archived===true||String(c.status||'').toLowerCase()==='deleted'))
         .sort((a,b)=>normalizeArabic(a.titleAr||a.title).localeCompare(normalizeArabic(b.titleAr||b.title),'ar'));
-      dirState.users=await mapDirectoryMemberships(rows,coursesSnap.docs,token);
-      if(token!==dirState.token)return;
+      dirState.courses=activeCourses;
+      dirState.coursesById=new Map(activeCourses.map(c=>[String(c.id),c]));
+      dirState.users=usersSnap.docs
+        .filter(d=>String(d.id)!==String(currentUser?.uid||''))
+        .map(d=>({id:d.id,...(d.data()||{}),enrolledCourseIds:[],enrolledMemberships:{},membershipsReady:false}));
       dirState.ready=true;
+      dirState.loading=false;
+      renderFinalDirectory();
+      /* Fast first paint: hydrate membership metadata after the cards are visible. */
+      hydrateDirectoryMemberships(token,false).catch(e=>console.warn('directory membership hydration',e));
     }catch(e){
       console.error('final directory users',e);
-      dirState.users=[];
-      dirState.ready=false;
-      if(box)box.innerHTML='<div class="aa-profile-empty">تعذر تحميل الحسابات. حاول تحديث الملف الشخصي مرة أخرى.</div>';
-    }finally{
       if(token===dirState.token){
-        dirState.loading=false;
-        renderFinalDirectory();
+        dirState.users=[];dirState.ready=false;dirState.loading=false;
+        if(box)box.innerHTML='<div class="aa-profile-empty">تعذر تحميل الحسابات. حاول تحديث الملف الشخصي مرة أخرى.</div>';
       }
     }
   }
@@ -13245,27 +13255,27 @@ window.__aaV9Cleanup=()=>clearInterval(v9Tick);
     const courseEnabled=membership==='enrolled';
     const courseId=courseEnabled?($('aaDirCourseFilter')?.value||'all'):'all';
     const query=normalizeArabic($('aaDirNameSearch')?.value||'').trim();
-    syncDirectoryCourseFilterState();
-    let users=dirState.users.slice();
-    if(membership==='none')users=users.filter(u=>!u.enrolledCourseIds.length);
-    if(membership==='enrolled')users=users.filter(u=>u.enrolledCourseIds.length>0);
-    if(courseEnabled&&courseId!=='all')users=users.filter(u=>u.enrolledCourseIds.includes(String(courseId)));
-    if(query)users=users.filter(u=>normalizeArabic(getUserName(u)).includes(query));
     const viewedUid=String(window.__aaViewedProfileUid||state.openUid||window.profileState?.uid||'');
-    users=users.filter(u=>String(u.id)!==viewedUid);
+    syncDirectoryCourseFilterState();
+    let users=dirState.users.slice().filter(u=>String(u.id)!==String(currentUser?.uid)&&String(u.id)!==viewedUid);
+    if(membership==='none')users=users.filter(u=>u.membershipsReady?u.enrolledCourseIds.length===0:false);
+    if(membership==='enrolled')users=users.filter(u=>u.membershipsReady&&u.enrolledCourseIds.length>0);
+    if(courseEnabled&&courseId!=='all')users=users.filter(u=>u.membershipsReady&&u.enrolledCourseIds.includes(String(courseId)));
+    if(query)users=users.filter(u=>normalizeArabic(getUserName(u)).includes(query));
     users.sort((a,b)=>normalizeArabic(getUserName(a)).localeCompare(normalizeArabic(getUserName(b)),'ar'));
     const count=$('aaProfileDirectoryCount');if(count)count.textContent=`${users.length} حساب`;
-    if(!users.length){box.innerHTML='<div class="aa-profile-empty">لا توجد حسابات مطابقة للفلاتر الحالية.</div>';return;}
+    if(!users.length){
+      if((membership==='enrolled'||membership==='none')&&!dirState.membershipsReady){box.innerHTML='<div class="aa-profile-empty">جاري تحديث حالة الاشتراك...</div>';}
+      else box.innerHTML='<div class="aa-profile-empty">لا توجد حسابات مطابقة للفلاتر الحالية.</div>';
+      return;
+    }
+    const usedByInitial=new Map();
     box.innerHTML=users.map(u=>{
       const name=getUserName(u),photo=getUserPhoto(u),uid=escapeHtml(u.id);
-      const avatar=photo?`<img src="${escapeHtml(photo)}" alt="" loading="lazy">`:escapeHtml(name.trim().slice(0,1)||'م');
-      const courseCount=u.enrolledCourseIds.length;
-      const status=courseCount?`مشترك في ${courseCount} دورة`:'غير مشترك في أي دورة';
-      return `<button type="button" class="aa-profile-directory-card" data-aa-v10-uid="${uid}">
-        <span class="aa-profile-directory-avatar">${avatar}</span>
-        <span class="aa-profile-directory-copy"><strong>${escapeHtml(name)}</strong><small>${u.profilePublic===false?'حساب خاص':'حساب عام'} · ${status}</small></span>
-        <i class="fas fa-chevron-left"></i>
-      </button>`;
+      const avatar=photo?`<img src="${escapeHtml(photo)}" alt="" loading="lazy" decoding="async">`:escapeHtml(name.trim().slice(0,1)||'م');
+      const courseCount=u.membershipsReady?u.enrolledCourseIds.length:null;
+      const status=courseCount===null?'جاري تحديث الاشتراك…':(courseCount?`مشترك في ${courseCount} دورة`:'غير مشترك في أي دورة');
+      return `<button type="button" class="aa-profile-directory-card" data-aa-v10-uid="${uid}"><span class="aa-profile-directory-avatar">${avatar}</span><span class="aa-profile-directory-copy"><strong>${escapeHtml(name)}</strong><small>${u.profilePublic===false?'حساب خاص':'حساب عام'} · ${status}</small></span><i class="fas fa-chevron-left"></i></button>`;
     }).join('');
     box.querySelectorAll('[data-aa-v10-uid]').forEach(btn=>{
       btn.addEventListener('click',e=>{
@@ -13275,6 +13285,10 @@ window.__aaV9Cleanup=()=>clearInterval(v9Tick);
         if(typeof window.aaOpenProfile==='function')window.aaOpenProfile(uid,{kind:'admin-directory'});
       });
     });
+    /* If an enrolled filter is requested before hydration completes, ensure it runs once memberships finish. */
+    if((membership==='enrolled'||membership==='none')&&!dirState.membershipsReady&&!dirState.membershipsLoading){
+      hydrateDirectoryMemberships(dirState.token,true).catch(e=>console.warn('directory filter hydration',e));
+    }
   }
 
   async function loadFinalDirectory(){
@@ -13285,8 +13299,8 @@ window.__aaV9Cleanup=()=>clearInterval(v9Tick);
     if(!admin){panel.style.display='none';return;}
     panel.style.display='block';
     ensureDirectoryControls();
-    if(!dirState.ready && !dirState.loading)await fetchDirectoryUsers();
-    renderFinalDirectory();
+    if(!dirState.ready&&!dirState.loading)await fetchDirectoryUsers();
+    else renderFinalDirectory();
   }
 
   window.__v10LoadDirectory=loadFinalDirectory;
