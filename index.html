@@ -5260,6 +5260,7 @@ label[for*="En"], input[id*="En"], textarea[id*="En"] { display:none !important;
             if(!document.fullscreenElement) el.requestFullscreen?.(); else document.exitFullscreen?.();
         });
         document.getElementById('backToLessonsBtn')?.addEventListener('click',async()=>{
+            try{window.pauseLessonForInternalNavigation?.();}catch(e){}
             try{await window.saveLessonProgressNow?.();}catch(e){}
             try{await window.persistCourseState?.();}catch(e){}
             destroyLessonVideo();
@@ -6531,6 +6532,7 @@ label[for*="En"], input[id*="En"], textarea[id*="En"] { display:none !important;
         document.getElementById('coursesNavBtn')?.addEventListener('click',e=>{e.preventDefault();mobileNavigate('courses');});
 
         document.getElementById('backToCoursesBtn').addEventListener('click', () => {
+            try{stopLessonForNavigation();}catch(e){}
             document.getElementById('courseDetailView').style.display = 'none';
             document.getElementById('coursesGridContainer').style.display = 'grid';
             const coursesHeader = document.getElementById('coursesListPageHeader');
@@ -7800,7 +7802,10 @@ window.openQuiz=async function(courseId,quizId,fromLesson=false){
 };
 const __baseOpenAssignment=window.openAssignmentDetail;
 window.openAssignmentDetail=async function(courseId,assignmentId,fromLesson=false){
-  if(fromLesson) window.__assignmentOpenedFromLesson={courseId,lessonId:activeLessonId,assignmentId};
+  if(fromLesson){
+    try{window.pauseLessonForInternalNavigation?.();}catch(_e){}
+    window.__assignmentOpenedFromLesson={courseId,lessonId:activeLessonId,assignmentId};
+  }
   const result=await __baseOpenAssignment.apply(this,arguments);
   const nav=document.getElementById('assignmentRouteNav');
   if(nav) nav.style.display=fromLesson?'flex':'none';
@@ -8703,6 +8708,7 @@ ensureChatLockModalFinal();
 const $=id=>document.getElementById(id), esc=window.escapeHtml||((v)=>String(v??''));
 function fileAllowedForViewer(f){return !!f && !f.deleted;}
 window.openCourseFileViewer=function(f){
+  if(currentCoursePage==='lessonPlayer'){try{window.pauseLessonForInternalNavigation?.();}catch(_e){}}
   if(!fileAllowedForViewer(f))return showCustomAlert('غير متاح','هذا الملف لم يعد متاحًا.');
   let ov=$('fileViewerOverlay');
   if(!ov){ov=document.createElement('div');ov.id='fileViewerOverlay';ov.className='file-viewer-overlay';ov.innerHTML='<div class="file-viewer-box"><div class="file-viewer-head"><strong id="fileViewerTitle"></strong><div style="display:flex;gap:8px"><a id="fileViewerDownload" class="ananas-primary-btn" target="_blank" rel="noopener"><i class="fas fa-download"></i> تحميل</a><button id="fileViewerClose" type="button" class="ananas-secondary-btn">إغلاق</button></div></div><div id="fileViewerContent" class="file-viewer-content"></div></div>';document.body.appendChild(ov);$('fileViewerClose').onclick=()=>ov.classList.remove('active');ov.addEventListener('click',e=>{if(e.target===ov)ov.classList.remove('active')});}
