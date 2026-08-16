@@ -1953,7 +1953,7 @@ label[for*="En"], input[id*="En"], textarea[id*="En"] { display:none !important;
                             <div class="admin-controls admin-only">
                                 <button class="btn" id="fullPageAddQuizBtn" style="background: var(--accent-gradient); color: #fff; border: none; padding: 8px 16px; border-radius: var(--btn-radius);"><i class="fas fa-plus"></i> اختبار جديد</button>
                             </div>
-                            <button class="full-page-back-btn" onclick="switchCoursePage('dashboard')"><i class="fas fa-arrow-right"></i> العودة</button>
+                            <button class="full-page-back-btn" onclick="returnToLessonResourcePage('quizzes')"><i class="fas fa-arrow-right"></i> العودة</button>
                         </div>
                     </div>
                     <div id="fullPageQuizzesContainer">
@@ -1969,7 +1969,7 @@ label[for*="En"], input[id*="En"], textarea[id*="En"] { display:none !important;
                             <div class="admin-controls admin-only">
                                 <button class="btn" id="fullPageAddAssignmentBtn" style="background: var(--accent-gradient); color: #fff; border: none; padding: 8px 16px; border-radius: var(--btn-radius);"><i class="fas fa-plus"></i> واجب جديد</button>
                             </div>
-                            <button class="full-page-back-btn" onclick="switchCoursePage('dashboard')"><i class="fas fa-arrow-right"></i> العودة</button>
+                            <button class="full-page-back-btn" onclick="returnToLessonResourcePage('assignments')"><i class="fas fa-arrow-right"></i> العودة</button>
                         </div>
                     </div>
                     <div id="fullPageAssignmentsContainer">
@@ -1990,7 +1990,7 @@ label[for*="En"], input[id*="En"], textarea[id*="En"] { display:none !important;
                 <div id="courseFilesPage" style="display:none;position:absolute;inset:0;overflow-y:auto;padding:28px;">
                     <div class="page-title">
                         <div><h2>ملفات الدورة</h2><p style="color:var(--text-muted);margin-top:6px;">جميع ملفات وصور الدورة، مع إمكانية ربط أي ملف بحصة محددة.</p></div>
-                        <button class="full-page-back-btn" onclick="switchCoursePage('dashboard')"><i class="fas fa-arrow-right"></i> العودة</button>
+                        <button class="full-page-back-btn" onclick="returnToLessonResourcePage('files')"><i class="fas fa-arrow-right"></i> العودة</button>
                     </div>
                     <div class="course-files-upload-panel admin-only">
                         <div style="font-weight:900;font-size:1.05rem;margin-bottom:12px;"><i class="fas fa-cloud-arrow-up"></i> إضافة ملف جديد</div>
@@ -3592,6 +3592,7 @@ label[for*="En"], input[id*="En"], textarea[id*="En"] { display:none !important;
                         writeLocalLessonResume(activeCourseId, activeLessonId, pos, duration);
                     }
                     window.__lessonResumeTarget={courseId:activeCourseId,lessonId:activeLessonId};
+                    window.__lessonReturnContext={courseId:activeCourseId,lessonId:activeLessonId};
                 }
             } catch(e) {}
             try {
@@ -3932,6 +3933,13 @@ label[for*="En"], input[id*="En"], textarea[id*="En"] { display:none !important;
         };
 
         window.closeAssignmentDetail=function(){
+            const ctx=window.__lessonReturnContext||window.__assignmentOpenedFromLesson||null;
+            if(ctx?.courseId&&ctx?.lessonId){
+                document.getElementById('courseAssignmentDetailPage')?.classList.remove('active');
+                activeCourseId=ctx.courseId;activeLessonId=ctx.lessonId;
+                window.__lessonResumeAutoplay=true;window.__resumeLessonAutoplay=true;
+                return window.__restoreLessonAndPlay?.(ctx.courseId,ctx.lessonId);
+            }
             document.getElementById('courseAssignmentDetailPage')?.classList.remove('active');
             document.getElementById('courseAssignmentsPage').style.display='block';
             window.__ananasProfileReturnPoint={type:'assignments',courseId:activeCourseId||null};
@@ -4509,9 +4517,14 @@ label[for*="En"], input[id*="En"], textarea[id*="En"] { display:none !important;
             }
 
             const resumeTarget=window.__lessonResumeTarget||null;
-            const shouldResumeAutoplay=!!(resumeTarget && String(resumeTarget.courseId)===String(courseId) && String(resumeTarget.lessonId)===String(lessonId));
+            const targetMatches=!!(resumeTarget && String(resumeTarget.courseId)===String(courseId) && String(resumeTarget.lessonId)===String(lessonId));
+            const returnContext=window.__lessonReturnContext||null;
+            const contextMatches=!!(returnContext && String(returnContext.courseId)===String(courseId) && String(returnContext.lessonId)===String(lessonId));
+            const shouldResumeAutoplay=targetMatches||contextMatches||!!window.__lessonResumeAutoplay||!!window.__resumeLessonAutoplay;
             window.__resumeLessonAutoplay=shouldResumeAutoplay;
+            window.__lessonResumeAutoplay=shouldResumeAutoplay;
             if(shouldResumeAutoplay) window.__lessonResumeTarget=null;
+            if(contextMatches) window.__lessonReturnContext=null;
             activeCourseId = courseId;
             activeLessonId = lessonId;
             currentCoursePage = 'lessonPlayer';
@@ -7777,7 +7790,10 @@ window.openQuiz=async function(courseId,quizId,fromLesson=false){
 };
 const __baseOpenAssignment=window.openAssignmentDetail;
 window.openAssignmentDetail=async function(courseId,assignmentId,fromLesson=false){
-  if(fromLesson) window.__assignmentOpenedFromLesson={courseId,lessonId:activeLessonId,assignmentId};
+  if(fromLesson){
+    window.__assignmentOpenedFromLesson={courseId,lessonId:activeLessonId,assignmentId};
+    try{window.stopLessonForNavigation?.();}catch(e){}
+  }
   const result=await __baseOpenAssignment.apply(this,arguments);
   const nav=document.getElementById('assignmentRouteNav');
   if(nav) nav.style.display=fromLesson?'flex':'none';
@@ -7794,6 +7810,8 @@ async function __restoreLessonAndPlay(courseId,lessonId){
     if(st.exists&&String(st.data()?.lessonId)===String(lessonId))window.__lessonResumePosition=Math.max(window.__lessonResumePosition,Number(st.data()?.lessonTime||0));
   }catch(e){}
   window.__lessonResumeAutoplay=true;
+  window.__resumeLessonAutoplay=true;
+  window.__lessonReturnContext={courseId,lessonId};
   activeCourseId=courseId;activeLessonId=lessonId;currentCoursePage='lessonPlayer';
   document.getElementById('quizOverlay')?.classList.remove('active');
   document.getElementById('courseAssignmentDetailPage')?.classList.remove('active');
@@ -7801,8 +7819,23 @@ async function __restoreLessonAndPlay(courseId,lessonId){
   const wait=()=>{if(Array.isArray(lessonListCache)&&lessonListCache.some(l=>String(l.id)===String(lessonId))){openLessonPlayer(courseId,lessonId);}else setTimeout(wait,100);};
   wait();
 }
-window.returnToQuizLesson=function(){const x=window.__quizOpenedFromLesson||{};return __restoreLessonAndPlay(x.courseId||activeCourseId,x.lessonId||activeLessonId);};
-window.returnToAssignmentLesson=function(){const x=window.__assignmentOpenedFromLesson||{};return __restoreLessonAndPlay(x.courseId||activeCourseId,x.lessonId||activeLessonId);};
+window.__restoreLessonAndPlay=__restoreLessonAndPlay;
+window.returnToQuizLesson=function(){const x=window.__quizOpenedFromLesson||window.__lessonReturnContext||{};return __restoreLessonAndPlay(x.courseId||activeCourseId,x.lessonId||activeLessonId);};
+window.returnToAssignmentLesson=function(){const x=window.__assignmentOpenedFromLesson||window.__lessonReturnContext||{};return __restoreLessonAndPlay(x.courseId||activeCourseId,x.lessonId||activeLessonId);};
+
+window.returnToLessonResourcePage=function(source){
+  const ctx=window.__lessonReturnContext||window.__assignmentOpenedFromLesson||window.__quizOpenedFromLesson||null;
+  if(!ctx?.courseId||!ctx?.lessonId){return switchCoursePage('dashboard');}
+  activeCourseId=ctx.courseId;activeLessonId=ctx.lessonId;
+  window.__lessonResumeAutoplay=true;window.__resumeLessonAutoplay=true;
+  document.getElementById('quizOverlay')?.classList.remove('active');
+  document.getElementById('courseAssignmentDetailPage')?.classList.remove('active');
+  activeQuizId=null;activeQuizData=null;
+  if(typeof window.__restoreLessonAndPlay==='function')return window.__restoreLessonAndPlay(ctx.courseId,ctx.lessonId);
+  switchCoursePage('learning');
+  const wait=()=>{if(Array.isArray(lessonListCache)&&lessonListCache.some(l=>String(l.id)===String(ctx.lessonId))){openLessonPlayer(ctx.courseId,ctx.lessonId);}else setTimeout(wait,100);};
+  wait();
+};
 
 /* Ensure YouTube autoplay/resume also works when the iframe API loads after this patch. */
 function installYTResume(){
@@ -8265,7 +8298,7 @@ const originalLessonActions=window.renderLessonRelatedActions;
 window.renderLessonRelatedActions=async function(courseId,lessonId){
  await originalLessonActions?.(courseId,lessonId);const area=$('lessonRelatedActions');if(!area)return;
  area.querySelectorAll('[data-ananas-file-action]').forEach(x=>x.remove());
- try{const files=await getFiles(courseId,lessonId);const b=document.createElement('button');b.className='related-action';b.dataset.ananasFileAction='1';b.innerHTML=`<i class="fas fa-folder-open"></i> ملفات الحصة${files.length?` (${files.length})`:''}`;b.onclick=()=>{if(files.length===1){openCourseFileViewer(files[0]);return;}window.switchCoursePage('files');setTimeout(()=>{getFiles(courseId,lessonId).then(x=>renderFilesGrid(x,$('courseFilesPageGrid')))},80)};area.appendChild(b);if(isAdmin){const up=document.createElement('button');up.className='related-action';up.dataset.ananasFileAction='1';up.innerHTML='<i class="fas fa-cloud-arrow-up"></i> رفع ملف للحصة';up.onclick=()=>$('lessonFilesUploadInput')?.click();area.appendChild(up)}}catch(e){console.warn(e)}
+ try{const files=await getFiles(courseId,lessonId);const b=document.createElement('button');b.className='related-action';b.dataset.ananasFileAction='1';b.innerHTML=`<i class="fas fa-folder-open"></i> ملفات الحصة${files.length?` (${files.length})`:''}`;b.onclick=()=>{if(files.length===1){openCourseFileViewer(files[0]);return;}window.__lessonReturnContext={courseId,lessonId};window.switchCoursePage('files');setTimeout(()=>{getFiles(courseId,lessonId).then(x=>renderFilesGrid(x,$('courseFilesPageGrid')))},80)};area.appendChild(b);if(isAdmin){const up=document.createElement('button');up.className='related-action';up.dataset.ananasFileAction='1';up.innerHTML='<i class="fas fa-cloud-arrow-up"></i> رفع ملف للحصة';up.onclick=()=>$('lessonFilesUploadInput')?.click();area.appendChild(up)}}catch(e){console.warn(e)}
 };
 $('lessonFilesUploadInput')?.addEventListener('change',async e=>{if(!isAdmin||!activeCourseId||!activeLessonId)return;for(const f of [...(e.target.files||[])]){try{await uploadAnyCourseFile(f,activeLessonId)}catch(err){console.error(err)}}e.target.value='';await window.renderLessonRelatedActions(activeCourseId,activeLessonId)});
 
