@@ -10179,32 +10179,51 @@ async function authoritativeLiveProfile(uid){
 
   out.portfolio=portfolioSnap.docs.map(d=>({id:d.id,...(d.data()||{})})).filter(x=>x.deleted!==true);
 
-  /* Current active subscriptions only: preserve the enrollment document for re-subscription, but don't display stale/inactive access. */
+  /* Current active subscriptions only. Students also receive the linked code end date for profile display. */
   const activeCourseRows=[];
-  for(const d of enrolled.docs){
-    const e=d.data()||{};
-    if(e.enrollmentActive===false || e.active===false)continue;
-    const courseDoc=courseMap.get(d.id); if(!courseDoc)continue;
-    let active=true;
-    let codeId=String(e.codeId||'');
-    if(!codeId && e.codeUsed){
-      const legacy=await courseDoc.ref.collection('codes').where('code','==',String(e.codeUsed)).limit(1).get().catch(()=>null);
-      if(legacy && !legacy.empty)codeId=legacy.docs[0].id; else if(legacy && legacy.empty)active=false;
+  const isAdminSelf=!!(isAdmin && currentUser?.uid && String(currentUser.uid)===String(uid));
+  if(isAdminSelf){
+    /* The admin is automatically available in every live course, with no subscription start/end dates. */
+    for(const courseDoc of liveCourseDocs){
+      const c=courseDoc.data()||{};
+      activeCourseRows.push({
+        id:courseDoc.id,
+        titleAr:c.titleAr||c.title||'دورة',
+        title:c.titleAr||c.title||'دورة',
+        isAdminEnrollment:true,
+        enrolledAt:null,
+        codeEndAt:null
+      });
     }
-    if(codeId && active){
-      const codeSnap=await courseDoc.ref.collection('codes').doc(codeId).get().catch(()=>null);
-      if(!codeSnap?.exists)active=false;
-      else{
-        const c=codeSnap.data()||{};
-        const now=Date.now();
-        const end=c.endTime?.toDate?c.endTime.toDate().getTime():new Date(c.endTime||0).getTime();
-        const until=c.suspendedUntil?.toDate?c.suspendedUntil.toDate().getTime():new Date(c.suspendedUntil||0).getTime();
-        if(Number.isFinite(end)&&end>0&&end<=now)active=false;
-        if(c.disabled===true && (!Number.isFinite(until)||until<=now))active=false;
-        if(c.disabled===true && Number.isFinite(until)&&until>now)active=false;
+  }else{
+    for(const d of enrolled.docs){
+      const e=d.data()||{};
+      if(e.enrollmentActive===false || e.active===false)continue;
+      const courseDoc=courseMap.get(d.id); if(!courseDoc)continue;
+      let active=true;
+      let codeId=String(e.codeId||'');
+      let codeEndAt=null;
+      if(!codeId && e.codeUsed){
+        const legacy=await courseDoc.ref.collection('codes').where('code','==',String(e.codeUsed)).limit(1).get().catch(()=>null);
+        if(legacy && !legacy.empty)codeId=legacy.docs[0].id; else if(legacy && legacy.empty)active=false;
       }
+      if(codeId && active){
+        const codeSnap=await courseDoc.ref.collection('codes').doc(codeId).get().catch(()=>null);
+        if(!codeSnap?.exists)active=false;
+        else{
+          const c=codeSnap.data()||{};
+          const now=Date.now();
+          const endDate=c.endTime?.toDate?c.endTime.toDate():(c.endTime?new Date(c.endTime):null);
+          const end=Number.isFinite(endDate?.getTime?.())?endDate.getTime():0;
+          const until=c.suspendedUntil?.toDate?c.suspendedUntil.toDate().getTime():new Date(c.suspendedUntil||0).getTime();
+          if(end>0)codeEndAt=endDate;
+          if(end>0&&end<=now)active=false;
+          if(c.disabled===true && (!Number.isFinite(until)||until<=now))active=false;
+          if(c.disabled===true && Number.isFinite(until)&&until>now)active=false;
+        }
+      }
+      if(active)activeCourseRows.push({id:d.id,...e,codeEndAt});
     }
-    if(active)activeCourseRows.push({id:d.id,...e});
   }
   out.courses=activeCourseRows;
   return out;
@@ -10427,7 +10446,15 @@ async function renderAuthoritativeProfile(uid,isSelf){
       const privateHtml='<div class="aa-profile-private"><i class="fas fa-lock"></i><strong>الحساب خاص</strong><span>صاحب الحساب أخفى تفاصيل ملفه.</span></div>';
       coursesHtml=lessonsHtml=quizzesHtml=activityHtml=galleryHtml=privateHtml;
     }else{
-      coursesHtml=rowList(live.courses.map(c=>`<div class="aa-profile-row"><div><strong>${esc(c.titleAr||c.title||'دورة')}</strong><small>تاريخ الاشتراك: ${esc(dateAr(c.enrolledAt))}</small></div><i class="fas fa-circle-check" style="color:#22c55e"></i></div>`),'لا توجد دورات مشتركة حاليًا.');
+      coursesHtml=rowList(live.courses.map(c=>{
+        const courseName=esc(c.titleAr||c.title||'دورة');
+        if(c.isAdminEnrollment){
+          return `<div class="aa-profile-row"><div><strong>${courseName}</strong><small>متاحة للمشرف — لا يوجد تاريخ بداية أو نهاية للاشتراك</small></div><i class="fas fa-user-shield" style="color:#6c5ce7"></i></div>`;
+        }
+        const start=esc(dateAr(c.enrolledAt));
+        const end=c.codeEndAt?esc(dateAr(c.codeEndAt)):'بدون تاريخ نهاية';
+        return `<div class="aa-profile-row"><div><strong>${courseName}</strong><small>تاريخ الاشتراك: ${start} · نهاية الكود: ${end}</small></div><i class="fas fa-circle-check" style="color:#22c55e"></i></div>`;
+      }),'لا توجد دورات مشتركة حاليًا.');
       lessonsHtml=rowList(live.lessons.slice().sort((a,b)=>new Date(b.completedAt||0)-new Date(a.completedAt||0)).map(x=>`<div class="aa-profile-row"><div><strong>${esc(x.title)}</strong><small>${esc(x.courseTitle)} · +${Number(x.xpEarned||0)} XP · ${esc(dateAr(x.completedAt))}</small></div></div>`),'لا توجد حصص مكتملة حاليًا.');
       quizzesHtml=rowList(live.quizzes.slice().sort((a,b)=>new Date(b.passedAt||0)-new Date(a.passedAt||0)).map(x=>`<div class="aa-profile-row"><div><strong>${esc(x.title)}</strong><small>${Number(x.score||0)}% · +${Number(x.xpEarned||0)} XP · ${esc(dateAr(x.passedAt))}</small></div></div>`),'لا توجد اختبارات مكتملة حاليًا.');
       const activities=[...live.lessons.map(x=>({t:`أكمل الحصة: ${x.title}`,d:x.completedAt})),...live.quizzes.map(x=>({t:`أكمل الاختبار: ${x.title}`,d:x.passedAt})),...live.assignmentWorks.map(x=>({t:`رفع عملًا في: ${x.assignmentTitle}`,d:x.uploadedAt})),...live.portfolio.map(x=>({t:`أضاف عملًا للمعرض: ${x.title||'عمل'}`,d:x.createdAt||x.uploadedAt}))].sort((a,b)=>new Date(b.d?.toDate?b.d.toDate():b.d||0)-new Date(a.d?.toDate?a.d.toDate():a.d||0));
