@@ -4466,8 +4466,14 @@ label[for*="En"], input[id*="En"], textarea[id*="En"] { display:none !important;
             const wrapper=document.getElementById('lessonVideoWrapper');
             if(!wrapper || wrapper.dataset.controlsAutoHideBound==='1') return;
             wrapper.dataset.controlsAutoHideBound='1';
-            const wake=()=>{
+            const wake=(event)=>{
                 if(currentCoursePage!=='lessonPlayer') return;
+                /* On touch devices, let the dedicated touch handler observe the
+                   hidden state before revealing controls. Otherwise the generic
+                   pointer/touch wake handler would reveal them first and the
+                   first tap could accidentally toggle playback. */
+                const isTouchEvent = event?.type==='touchstart' || (event?.type==='pointerdown' && event?.pointerType==='touch');
+                if(isTouchEvent && wrapper.classList.contains('lesson-controls-hidden')) return;
                 showLessonControls();
             };
             wrapper.addEventListener('pointermove',wake,{passive:true});
