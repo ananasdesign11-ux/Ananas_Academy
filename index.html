@@ -12621,12 +12621,7 @@ function renderDirectoryEnhanced(){
 }
 window.loadDirectory=loadDirectoryEnhanced;
 
-/* Re-run directory whenever a profile becomes visible, including return to admin profile. */
-const oldReliableRender=window.__renderReliableProfile;
-if(oldReliableRender&&!window.__aaDirectoryPatched){
-  window.__aaDirectoryPatched=true;
-  window.__renderReliableProfile=async function(){const r=await oldReliableRender.apply(this,arguments);if(isAdmin){await loadDirectoryEnhanced();}return r;};
-}
+/* Legacy directory renderer is intentionally not invoked; the authoritative live directory below owns rendering. */
 
 /* ---------- Active profile avatar fallback ---------- */
 function refreshProfileAvatar(){
@@ -13159,83 +13154,175 @@ window.__aaV9Cleanup=()=>clearInterval(v9Tick);
     }
   }
 
+  /* ================================================================
+     AUTHORITATIVE LIVE ADMIN DIRECTORY
+     One source of truth: users + courses + enrolledCourses + codes.
+     No stale cache is rendered when live data is available.
+     ================================================================ */
   let directoryUnsubs=[];
-  let directoryStateLive={users:[],courses:[],enrollments:new Map(),ready:false,loading:false,token:0};
+  const directoryStateLive={
+    users:new Map(),
+    courses:new Map(),
+    enrollments:new Map(),
+    codes:new Map(),
+    codesReady:false,
+    rows:[],
+    liveStarted:false,
+    ready:false,
+    loading:false,
+    token:0,
+    renderQueued:false
+  };
 
-  function stopDirectoryLive(){directoryUnsubs.forEach(fn=>{try{fn?.()}catch(_){}});directoryUnsubs=[];}
+  function stopDirectoryLive(){
+    directoryUnsubs.forEach(fn=>{try{fn?.()}catch(_){}});
+    directoryUnsubs=[];
+    directoryStateLive.liveStarted=false;
+    directoryStateLive.ready=false;
+    directoryStateLive.loading=false;
+    directoryStateLive.renderQueued=false;
+  }
 
-  async function rebuildDirectoryLive(){
-    const token=directoryStateLive.token;
-    if(!isAdmin||token!==directoryStateLive.token)return;
-    const users=[...directoryStateLive.users];
+  function scheduleDirectoryRender(){
+    if(directoryStateLive.renderQueued)return;
+    directoryStateLive.renderQueued=true;
+    requestAnimationFrame(()=>{
+      directoryStateLive.renderQueued=false;
+      try{rebuildDirectoryLive();}catch(e){console.warn('directory render',e)}
+    });
+  }
+
+  function rebuildDirectoryLive(){
+    if(!isAdmin)return;
+    const courseMap=directoryStateLive.courses;
+    const codeMap=directoryStateLive.codes;
     const rows=[];
-    const courseMap=new Map(directoryStateLive.courses.map(c=>[String(c.id),c]));
-    const enrollMap=directoryStateLive.enrollments;
-    for(const u of users){
-      if(String(u.id)===String(currentUser?.uid))continue;
-      const raw=enrollMap.get(String(u.id))||[];
+    directoryStateLive.users.forEach((u,uid)=>{
+      if(String(uid)===String(currentUser?.uid||''))return;
+      const raw=directoryStateLive.enrollments.get(String(uid))||[];
       const active=[];
       for(const e of raw){
-        if(e.codeDeleted===true)continue;
-        const c=courseMap.get(String(e.id));
+        if(!e||e.codeDeleted===true||e.accessBlocked===true)continue;
+        const courseId=String(e.id||e.courseId||'');
+        if(!courseId)continue;
+        const c=courseMap.get(courseId);
         if(!c||c.deleted===true||c.isDeleted===true||c.archived===true)continue;
-        active.push({...e,courseId:String(e.id),courseTitle:c.titleAr||c.title||'دورة'});
+        /* A normal code-backed enrollment is valid only while its code record exists.
+           Legacy/manual enrollments without a codeId are retained unless explicitly blocked. */
+        const codeId=String(e.codeId||'');
+        if(directoryStateLive.codesReady && codeId && !e.adminEnrollment && !codeMap.has(`${courseId}/${codeId}`))continue;
+        const code=codeId?codeMap.get(`${courseId}/${codeId}`):null;
+        if(code?.deleted===true||code?.codeDeleted===true)continue;
+        active.push({
+          ...e,
+          courseId,
+          courseTitle:c.titleAr||c.title||'دورة',
+          codeEndTime:code?.endTime??e.codeEndTime??e.endTime??null,
+          codeId:codeId||null
+        });
       }
-      rows.push({...u,enrolledCourses:active,enrolledCourseIds:[...new Set(active.map(x=>String(x.id)))]});
-    }
+      rows.push({
+        ...u,
+        enrolledCourses:active,
+        enrolledCourseIds:[...new Set(active.map(x=>String(x.courseId)))]
+      });
+    });
     directoryStateLive.rows=rows;
+    directoryStateLive.ready=true;
     __directoryCache={users:rows,ready:true};
+    window.__directoryCache=__directoryCache;
     renderFinalDirectory();
   }
 
+  function consumeDirectorySnapshot(snap,targetMap,mapper){
+    targetMap.clear();
+    snap.forEach(d=>{
+      const value=mapper(d);
+      targetMap.set(String(value.id),value);
+    });
+  }
+
   function ensureDirectoryLive(){
-    if(directoryStateLive.liveStarted||!isAdmin)return;
+    if(!isAdmin)return;
+    if(directoryStateLive.liveStarted)return;
     directoryStateLive.liveStarted=true;
     directoryStateLive.loading=true;
-    directoryStateLive.token++;
+    const token=++directoryStateLive.token;
     stopDirectoryLive();
+    directoryStateLive.liveStarted=true;
+    directoryUnsubs=[];
+
     directoryUnsubs.push(db.collection('users').onSnapshot(snap=>{
-      directoryStateLive.users=snap.docs.map(d=>({id:d.id,...(d.data()||{})}));
-      rebuildDirectoryLive().finally(()=>{directoryStateLive.loading=false;});
+      if(token!==directoryStateLive.token)return;
+      consumeDirectorySnapshot(snap,directoryStateLive.users,d=>({id:d.id,...(d.data()||{})}));
+      directoryStateLive.loading=false;
+      scheduleDirectoryRender();
     },err=>{console.warn('live directory users',err);directoryStateLive.loading=false;}));
+
     directoryUnsubs.push(db.collection('courses').onSnapshot(snap=>{
-      directoryStateLive.courses=snap.docs.map(d=>({id:d.id,...(d.data()||{})}));
-      rebuildDirectoryLive();
+      if(token!==directoryStateLive.token)return;
+      consumeDirectorySnapshot(snap,d=>({id:d.id,...(d.data()||{})}),directoryStateLive.courses);
     },err=>console.warn('live directory courses',err)));
-    // Collection-group listener keeps course membership counts current when an enrollment/code is changed or deleted.
+
+    directoryUnsubs.push(db.collectionGroup('enrolledCourses').onSnapshot(snap=>{
+      if(token!==directoryStateLive.token)return;
+      const map=new Map();
+      snap.forEach(d=>{
+        const uid=d.ref.parent?.parent?.id;
+        if(!uid)return;
+        const arr=map.get(String(uid))||[];
+        arr.push({id:d.id,...(d.data()||{})});
+        map.set(String(uid),arr);
+      });
+      directoryStateLive.enrollments=map;
+      scheduleDirectoryRender();
+    },err=>console.warn('live directory enrollments',err)));
+
     try{
-      directoryUnsubs.push(db.collectionGroup('enrolledCourses').onSnapshot(snap=>{
-        const map=new Map();
+      directoryUnsubs.push(db.collectionGroup('codes').onSnapshot(snap=>{
+        if(token!==directoryStateLive.token)return;
+        directoryStateLive.codes.clear();
+        directoryStateLive.codesReady=true;
         snap.forEach(d=>{
-          const uid=d.ref.parent?.parent?.id;
-          if(!uid)return;
-          const arr=map.get(String(uid))||[];
-          arr.push({id:d.id,...(d.data()||{})});
-          map.set(String(uid),arr);
+          const courseId=d.ref.parent?.parent?.id;
+          if(!courseId)return;
+          directoryStateLive.codes.set(`${courseId}/${d.id}`,{id:d.id,...(d.data()||{})});
         });
-        directoryStateLive.enrollments=map;
-        rebuildDirectoryLive();
-      },err=>console.warn('live directory enrollments',err)));
-    }catch(e){console.warn('collectionGroup enrolledCourses unavailable',e);}
+        scheduleDirectoryRender();
+      },err=>console.warn('live directory codes',err)));
+    }catch(e){console.warn('collectionGroup codes unavailable',e)}
   }
 
   async function fetchDirectoryUsers(){
+    if(!isAdmin)return;
     ensureDirectoryLive();
-    if(!directoryStateLive.users.length){
-      const snap=await db.collection('users').get().catch(()=>null);
-      if(snap)directoryStateLive.users=snap.docs.map(d=>({id:d.id,...(d.data()||{})}));
+    const [usersSnap,coursesSnap]=await Promise.all([
+      db.collection('users').get().catch(()=>null),
+      db.collection('courses').get().catch(()=>null)
+    ]);
+    if(usersSnap)consumeDirectorySnapshot(usersSnap,directoryStateLive.users,d=>({id:d.id,...(d.data()||{})}));
+    if(coursesSnap)consumeDirectorySnapshot(coursesSnap,directoryStateLive.courses,d=>({id:d.id,...(d.data()||{})}));
+
+    if(!directoryStateLive.enrollments.size&&usersSnap?.docs?.length){
+      const pairs=await Promise.all(usersSnap.docs.map(async d=>{
+        const es=await d.ref.collection('enrolledCourses').get().catch(()=>null);
+        return [String(d.id),es?es.docs.map(x=>({id:x.id,...(x.data()||{})})):[]];
+      }));
+      directoryStateLive.enrollments=new Map(pairs);
     }
-    const cs=await db.collection('courses').get().catch(()=>null);
-    if(cs)directoryStateLive.courses=cs.docs.map(d=>({id:d.id,...(d.data()||{})}));
-    if(directoryStateLive.users.length && !directoryStateLive.enrollments.size){
-      const map=new Map();
-      for(const u of directoryStateLive.users){
-        const es=await db.collection('users').doc(u.id).collection('enrolledCourses').get().catch(()=>null);
-        if(es)map.set(String(u.id),es.docs.map(d=>({id:d.id,...(d.data()||{})})));
-      }
-      directoryStateLive.enrollments=map;
+    if(!directoryStateLive.codes.size){
+      try{
+        const codesSnap=await db.collectionGroup('codes').get();
+        directoryStateLive.codes.clear();
+        directoryStateLive.codesReady=true;
+        codesSnap.forEach(d=>{
+          const courseId=d.ref.parent?.parent?.id;
+          if(courseId)directoryStateLive.codes.set(`${courseId}/${d.id}`,{id:d.id,...(d.data()||{})});
+        });
+      }catch(e){console.warn('directory initial codes',e)}
     }
-    await rebuildDirectoryLive();
+    directoryStateLive.loading=false;
+    rebuildDirectoryLive();
   }
 
   function syncDirectoryCourseFilterState(){
@@ -13250,11 +13337,11 @@ window.__aaV9Cleanup=()=>clearInterval(v9Tick);
   function renderFinalDirectory(){
     const panel=$('aaProfileDirectoryPanel'),box=$('aaProfileDirectory');
     if(!panel||!box)return;
-    if(!isAdmin){panel.style.display='none';stopDirectoryLive();return;}
+    if(!isAdmin){panel.style.display='none';return;}
     panel.style.display='block';
     ensureDirectoryControls();
     syncDirectoryCourseFilterState();
-    if(!directoryStateLive.ready && !directoryStateLive.users.length){box.innerHTML='<div class="aa-profile-empty">جاري تحميل الحسابات...</div>';return;}
+    if(!directoryStateLive.ready){box.innerHTML='<div class="aa-profile-empty">جاري تحميل الحسابات...</div>';return;}
     const membership=$('aaDirMembershipFilter')?.value||'all';
     const courseId=$('aaDirCourseFilter')?.value||'all';
     const query=normalizeArabic($('aaDirNameSearch')?.value||'').trim();
@@ -13269,12 +13356,16 @@ window.__aaV9Cleanup=()=>clearInterval(v9Tick);
     const used=new Map();
     box.innerHTML=users.length?users.map(u=>{
       const name=getUserName(u),photo=getUserPhoto(u),courses=u.enrolledCourses||[],uid=escapeHtml(u.id);
-      const email=String(u.email||u.emailAddress||'');
-      const details=[u.profilePublic===false?'حساب خاص':'حساب عام',courses.length?`مشترك في ${courses.length} دورة`:'غير مشترك في أي دورة'];
-      if(email)details.push(email);
-      return `<button type="button" class="aa-profile-directory-card" data-aa-v10-uid="${uid}"><span class="aa-profile-directory-avatar">${photo?`<img src="${escapeHtml(photo)}" alt="" loading="lazy">`:escapeHtml(name.trim().slice(0,1)||'م')}</span><span class="aa-profile-directory-copy"><strong>${escapeHtml(name)}</strong><small>${escapeHtml(details.join(' · '))}</small></span><i class="fas fa-chevron-left"></i></button>`;
+      const detailStatus=u.profilePublic===false?'حساب خاص':'حساب عام';
+      const courseText=courses.length?`مشترك في ${courses.length} دورة`:'غير مشترك في أي دورة';
+      return `<button type="button" class="aa-profile-directory-card" data-aa-v10-uid="${uid}"><span class="aa-profile-directory-avatar">${photo?`<img src="${escapeHtml(photo)}" alt="" loading="lazy" decoding="async">`:escapeHtml(name.trim().slice(0,1)||'م')}</span><span class="aa-profile-directory-copy"><strong>${escapeHtml(name)}</strong><small>${escapeHtml(detailStatus+' · '+courseText)}</small></span><i class="fas fa-chevron-left"></i></button>`;
     }).join(''):'<div class="aa-profile-empty">لا توجد حسابات مطابقة للفلاتر الحالية.</div>';
-    box.querySelectorAll('[data-aa-v10-uid]').forEach(btn=>btn.addEventListener('click',e=>{e.preventDefault();const uid=btn.dataset.aaV10Uid;window.__aaViewedProfileUid=uid;window.aaOpenProfile?.(uid,{kind:'admin-directory'});}));
+    box.querySelectorAll('[data-aa-v10-uid]').forEach(btn=>btn.addEventListener('click',e=>{
+      e.preventDefault();e.stopPropagation();
+      const uid=String(btn.dataset.aaV10Uid||'');
+      window.__aaViewedProfileUid=uid;
+      window.aaOpenProfile?.(uid,{kind:'admin-directory'});
+    }));
   }
 
   async function loadFinalDirectory(){
@@ -13284,45 +13375,32 @@ window.__aaV9Cleanup=()=>clearInterval(v9Tick);
     ensureDirectoryControls();
     syncDirectoryCourseFilterState();
     ensureDirectoryLive();
-    if(!directoryStateLive.ready || !directoryStateLive.rows){await fetchDirectoryUsers();}else renderFinalDirectory();
+    if(!directoryStateLive.ready)await fetchDirectoryUsers();
+    else renderFinalDirectory();
   }
 
+  /* This is the sole directory loader used by profile rendering. */
+  window.__loadDirectory=loadFinalDirectory;
   window.__v10LoadDirectory=loadFinalDirectory;
   window.loadDirectory=loadFinalDirectory;
   window.__aaFinalDirectoryV10=dirState;
 
-  /* Prevent old renderers from replacing the final directory cards. */
+  /* Keep only the authoritative live renderer active. */
   const originalRenderReliable=window.__renderReliableProfile;
   if(originalRenderReliable && !window.__v10WrappedRender){
     window.__v10WrappedRender=true;
     window.__renderReliableProfile=async function(){
       const r=await originalRenderReliable.apply(this,arguments);
-      if(isAdmin)loadFinalDirectory();else if($('aaProfileDirectoryPanel'))$('aaProfileDirectoryPanel').style.display='none';
+      if(isAdmin)await loadFinalDirectory();
+      else if($('aaProfileDirectoryPanel'))$('aaProfileDirectoryPanel').style.display='none';
       return r;
     };
   }
 
-  const originalProfileOpen=window.aaOpenProfile;
-  if(originalProfileOpen && !window.__v10WrappedOpen){
-    window.__v10WrappedOpen=true;
-    window.aaOpenProfile=async function(uid,source){
-      const r=await originalProfileOpen.apply(this,arguments);
-      if(isAdmin)renderFinalDirectory();
-      return r;
-    };
-  }
-
-  /* On every visibility tick, admin-only directory + filters stay consistent. */
-  setInterval(()=>{
-    const panel=$('aaProfileDirectoryPanel');
-    if(panel)panel.style.display=isAdmin?'block':'none';
-    if(isAdmin && panel?.offsetParent!==null)ensureDirectoryControls();
-  },1200);
-
-  /* Refresh directory after profile return to admin. */
+  /* Refresh immediately when returning to the admin profile. */
   document.addEventListener('click',e=>{
-    const back=e.target.closest?.('#aaProfileBack');
-    if(back)setTimeout(()=>{if(isAdmin)loadFinalDirectory();},250);
+    const back=e.target.closest?.('#aaProfileBack,#acpBack');
+    if(back&&isAdmin)setTimeout(()=>loadFinalDirectory(),0);
   },true);
 })();
 
