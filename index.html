@@ -15978,17 +15978,22 @@ window.loadAssignmentsPage = async function(courseId){
 };
 
 /* Canonical files loader: no dependency on legacy navigation wrappers. */
-window.loadCourseFilesPage = async function(){
-  const page=$('courseFilesPage'), box=$('courseFilesPageGrid'), cid=String(activeCourseId||'').trim();
-  if(!page||!box||!cid)return;
+window.loadCourseFilesPage = async function(courseId){
+  const page=$('courseFilesPage'), box=$('courseFilesPageGrid');
+  const cid=String(courseId||window.activeCourseId||activeCourseId||'').trim();
+  if(!page||!box||!cid)return false;
+  try{ activeCourseId=cid; }catch(_){}
+  window.activeCourseId=cid;
   try{
     let files=await getFiles(cid);
     if(!Array.isArray(files))files=[];
     renderFilesGrid(files,box);
     page.classList.add('active','is-mobile-active'); page.style.display='block';
+    return true;
   }catch(e){
     console.error('Canonical files loader:',e);
     box.innerHTML='<div style="grid-column:1/-1;padding:40px;text-align:center;color:#e74c3c">تعذر تحميل الملفات.</div>';
+    return false;
   }
 };
 
@@ -16007,8 +16012,9 @@ window.__openCourseFilesPage = async function(){
   try{ document.querySelectorAll('.custom-alert-modal.active,.auth-popup.active,.edit-modal.active').forEach(x=>x.classList.remove('active')); }catch(_){}
   document.body.classList.remove('aa-modal-lock','aa-v9-modal-locked','aa-v28-modal-open');
   document.documentElement.classList.remove('aa-v9-modal-locked');
-  currentCoursePage='files';
+  try{ activeCourseId=cid; }catch(_){}
   window.activeCourseId=cid;
+  currentCoursePage='files';
   try{ ensureFilesShell?.(); }catch(e){ console.warn('ensure files shell',e); }
   const ids=['courseOverviewContainer','courseDashboard','courseLessonsPage','courseLessonPlayerPage','courseQuizzesPage','courseAssignmentsPage','courseAssignmentDetailPage','courseFilesPage','courseChatPage','courseLearningView','fullChatPage'];
   ids.forEach(id=>{ const el=$(id); if(!el)return; el.classList.remove('active','is-mobile-active'); el.style.setProperty('display','none','important'); });
@@ -16016,7 +16022,7 @@ window.__openCourseFilesPage = async function(){
   page.classList.add('active','is-mobile-active');
   page.style.setProperty('display','block','important');
   try{ setMobileNavActive?.('files'); }catch(_){}
-  try{ await window.loadCourseFilesPage?.(); }catch(e){ console.error('open files page',e); }
+  try{ const loaded=await window.loadCourseFilesPage?.(cid); if(loaded===false) throw new Error('FILES_LOAD_FAILED'); }catch(e){ console.error('open files page',e); }
   try{ await window.populateFileLessonSelect?.(); }catch(_){}
   try{ persistCourseState?.(); }catch(_){}
   return true;
@@ -16114,5 +16120,3 @@ if(window.__courseLiveUnsubs instanceof Map){
   ob.observe(document.getElementById('courseDashboard')||document.body,{subtree:true,childList:true});
 })();
 </script>
-
-        
