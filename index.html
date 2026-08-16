@@ -1926,9 +1926,13 @@ label[for*="En"], input[id*="En"], textarea[id*="En"] { display:none !important;
                                 <div class="lesson-player-brand"><i class="fas fa-play-circle"></i><span>مشغل أناناس</span></div>
                                 <div class="lesson-resume-indicator" id="lessonResumeIndicator"></div>
                                 <div class="custom-video-controls lesson-platform-controls" id="lessonCustomControls">
-                                    <div class="progress-bar-wrap" id="lessonProgressBarWrap" role="slider" aria-label="شريط تقدم الفيديو" tabindex="0">
+                                    <div class="progress-bar-wrap" id="lessonProgressBarWrap" role="slider" aria-label="شريط تقدم الفيديو" tabindex="0" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
                                         <div class="progress-bar-fill" id="lessonProgressBarFill"></div>
                                         <div class="progress-bar-thumb" id="lessonProgressBarThumb"></div>
+                                        <div class="lesson-seek-preview" id="lessonSeekPreview" aria-hidden="true">
+                                            <video id="lessonSeekPreviewVideo" muted playsinline preload="auto"></video>
+                                            <span class="lesson-seek-preview-time" id="lessonSeekPreviewTime">00:00</span>
+                                        </div>
                                     </div>
                                     <div class="controls-row">
                                         <div class="controls-left">
@@ -5042,21 +5046,24 @@ label[for*="En"], input[id*="En"], textarea[id*="En"] { display:none !important;
 
                 const fill = document.getElementById('lessonProgressBarFill');
                 const timer = document.getElementById('lessonTimerDisplay');
+                const isScrubbing=!!window.__lessonSeekScrubber?.isDragging?.();
 
-                if(fill) {
-                    const pct=Math.min(100, Math.max(0, (current / duration) * 100));
-                    fill.style.width=pct+'%';
-                    const thumb=document.getElementById('lessonProgressBarThumb'); if(thumb) thumb.style.left=pct+'%';
+                if(!isScrubbing){
+                    if(fill) {
+                        const pct=Math.min(100, Math.max(0, (current / duration) * 100));
+                        fill.style.width=pct+'%';
+                        const thumb=document.getElementById('lessonProgressBarThumb'); if(thumb) thumb.style.left=pct+'%';
+                    }
+
+                    if(timer) {
+                        timer.textContent =
+                            `${formatVideoTime(current)} / ${formatVideoTime(duration)}`;
+                    }
+
+                    const pct=Math.min(100,Math.max(0,(current/duration)*100));
+                    const thumb=document.getElementById('lessonProgressBarThumb');
+                    if(thumb)thumb.style.left=pct+'%';
                 }
-
-                if(timer) {
-                    timer.textContent =
-                        `${formatVideoTime(current)} / ${formatVideoTime(duration)}`;
-                }
-
-                const pct=Math.min(100,Math.max(0,(current/duration)*100));
-                const thumb=document.getElementById('lessonProgressBarThumb');
-                if(thumb)thumb.style.left=pct+'%';
             } catch(e) {}
         }
 
@@ -5344,15 +5351,101 @@ label[for*="En"], input[id*="En"], textarea[id*="En"] { display:none !important;
             },{passive:false});
         })();
 
-        document.getElementById('lessonProgressBarWrap')?.addEventListener('click',(e)=>{
-            if(!lessonPlayerReady||!lessonPlayer)return;
-            const rect=e.currentTarget.getBoundingClientRect(),ratio=Math.max(0,Math.min(1,(e.clientX-rect.left)/rect.width)),duration=Number(lessonPlayer.getDuration?.()||0);
-            try{lessonPlayer.seekTo(duration*ratio,true);}catch(err){try{lessonPlayer.seekTo(duration*ratio);}catch(_){}}
-            updateLessonControls();window.saveLessonProgressNow?.();
-        });
-        document.getElementById('lessonProgressBarWrap')?.addEventListener('keydown',e=>{
-            if(e.key==='ArrowLeft'){e.preventDefault();seekLessonBy(-5);}else if(e.key==='ArrowRight'){e.preventDefault();seekLessonBy(5);}else if(e.key==='Home'){e.preventDefault();seekLessonBy(-999999);}else if(e.key==='End'){e.preventDefault();seekLessonBy(999999);}
-        });
+        /* Progress bar: click or drag the thumb; live preview never moves the real video until release. */
+        (function bindLessonSeekScrubber(){
+            const wrap=document.getElementById('lessonProgressBarWrap');
+            const fill=document.getElementById('lessonProgressBarFill');
+            const thumb=document.getElementById('lessonProgressBarThumb');
+            const preview=document.getElementById('lessonSeekPreview');
+            const previewVideo=document.getElementById('lessonSeekPreviewVideo');
+            const previewTime=document.getElementById('lessonSeekPreviewTime');
+            if(!wrap||!fill||!thumb||wrap.dataset.scrubberBound==='1')return;
+            wrap.dataset.scrubberBound='1';
+            let dragging=false,pointerId=null,pendingRatio=0,rafId=0,previewRequest=0,previewReady=false,previewTarget=0;
+            const clampRatio=r=>Math.max(0,Math.min(1,Number(r)||0));
+            const getDuration=()=>Number(lessonPlayer?.getDuration?.()||lessonWatchState.duration||0);
+            const ratioFromEvent=ev=>{const rect=wrap.getBoundingClientRect();return clampRatio((Number(ev.clientX)-rect.left)/Math.max(1,rect.width));};
+            const paintScrub=ratio=>{
+                const d=getDuration(),t=d>0?d*ratio:0,pct=(ratio*100).toFixed(3)+'%';
+                fill.style.width=pct;thumb.style.left=pct;wrap.setAttribute('aria-valuenow',String(Math.round(ratio*100)));
+                if(previewTime)previewTime.textContent=formatVideoTime(t);
+                pendingRatio=ratio;return t;
+            };
+            const positionPreview=ratio=>{
+                if(!preview)return;
+                const rect=wrap.getBoundingClientRect(),pw=preview.offsetWidth||176,half=pw/2;
+                const x=Math.min(Math.max(rect.left+rect.width*ratio,half+8),window.innerWidth-half-8);
+                preview.style.left=`${x-rect.left}px`;
+            };
+            const ensurePreviewVideo=()=>{
+                if(!previewVideo||lessonPlayerType!=='html5'||!lessonHtmlVideo)return false;
+                const src=String(lessonHtmlVideo.currentSrc||lessonHtmlVideo.src||'').trim();if(!src)return false;
+                if(previewVideo.dataset.source!==src){
+                    try{previewVideo.pause();}catch(e){}
+                    previewVideo.src=src;previewVideo.dataset.source=src;previewReady=false;previewVideo.load();
+                }
+                return true;
+            };
+            const requestPreview=time=>{
+                previewTarget=Math.max(0,Number(time)||0);
+                if(!ensurePreviewVideo())return;
+                preview.classList.add('show');
+                positionPreview(pendingRatio);
+                const token=++previewRequest;
+                const render=()=>{
+                    if(token!==previewRequest||!previewVideo)return;
+                    if(!previewReady&&!previewVideo.readyState){setTimeout(render,50);return;}
+                    const duration=Number(previewVideo.duration)||0;
+                    const target=Math.max(0,Math.min(previewTarget,duration||previewTarget));
+                    const done=()=>{
+                        previewVideo.removeEventListener('seeked',done);
+                        if(token!==previewRequest)return;
+                        try{previewVideo.pause();}catch(e){}
+                    };
+                    previewVideo.addEventListener('seeked',done,{once:true});
+                    try{previewVideo.currentTime=target;}catch(e){previewVideo.removeEventListener('seeked',done);}
+                };
+                render();
+            };
+            previewVideo?.addEventListener('loadedmetadata',()=>{previewReady=true;});
+            previewVideo?.addEventListener('loadeddata',()=>{previewReady=true;});
+            const showPreviewForRatio=ratio=>{const t=paintScrub(ratio);positionPreview(ratio);requestPreview(t);};
+            const releasePreview=()=>{previewRequest++;preview?.classList.remove('show');try{previewVideo?.pause();}catch(e){}};
+            const commitRatio=ratio=>{
+                if(!lessonPlayerReady||!lessonPlayer)return;
+                const d=getDuration();if(d<=0)return;
+                const target=d*clampRatio(ratio);window.__allowedLessonSeekUntil=Date.now()+1500;
+                try{lessonPlayer.seekTo(target,true);}catch(err){try{lessonPlayer.seekTo(target);}catch(_){} }
+                window.__lessonResumePosition=target;lessonWatchState.lastObservedPosition=target;updateLessonControls();window.saveLessonProgressNow?.();
+            };
+            wrap.addEventListener('pointerdown',ev=>{
+                if(!lessonPlayerReady||!lessonPlayer||ev.button>0)return;
+                dragging=true;pointerId=ev.pointerId;wrap.classList.add('dragging');
+                try{wrap.setPointerCapture(pointerId);}catch(e){}
+                showLessonControls();showPreviewForRatio(ratioFromEvent(ev));ev.preventDefault();
+            });
+            wrap.addEventListener('pointermove',ev=>{
+                if(!dragging||ev.pointerId!==pointerId)return;
+                pendingRatio=ratioFromEvent(ev);
+                if(!rafId)rafId=requestAnimationFrame(()=>{rafId=0;if(dragging)showPreviewForRatio(pendingRatio);});
+                ev.preventDefault();
+            },{passive:false});
+            const finish=ev=>{
+                if(!dragging||ev.pointerId!==pointerId)return;
+                const ratio=ratioFromEvent(ev);dragging=false;pointerId=null;wrap.classList.remove('dragging');
+                try{wrap.releasePointerCapture?.(ev.pointerId);}catch(e){}
+                if(rafId){cancelAnimationFrame(rafId);rafId=0;}
+                paintScrub(ratio);commitRatio(ratio);releasePreview();ev.preventDefault();
+            };
+            wrap.addEventListener('pointerup',finish,{passive:false});
+            wrap.addEventListener('pointercancel',finish,{passive:false});
+            wrap.addEventListener('lostpointercapture',()=>{
+                if(!dragging)return;const ratio=clampRatio(pendingRatio);dragging=false;pointerId=null;wrap.classList.remove('dragging');commitRatio(ratio);releasePreview();
+            });
+            window.addEventListener('resize',()=>{if(dragging)positionPreview(pendingRatio);},{passive:true});
+            window.addEventListener('orientationchange',()=>{setTimeout(()=>{if(dragging)positionPreview(pendingRatio);},60);},{passive:true});
+            window.__lessonSeekScrubber={isDragging:()=>dragging};
+        })();
         function positionLessonSpeedDropdown(){
             const btn=document.getElementById('lessonSpeedBtn');
             const menu=document.getElementById('lessonSpeedDropdown');
@@ -8218,6 +8311,48 @@ body.light-mode .full-page-card:hover,body.light-mode .lesson-card:hover,body.li
   z-index:2;
   will-change:left;
   pointer-events:none !important;
+}
+.lesson-seek-preview{
+  position:absolute;
+  bottom:18px;
+  left:0;
+  width:176px;
+  padding:5px;
+  border-radius:10px;
+  background:rgba(0,0,0,.92);
+  border:1px solid rgba(255,255,255,.14);
+  box-shadow:0 10px 28px rgba(0,0,0,.34);
+  transform:translateX(-50%);
+  pointer-events:none;
+  opacity:0;
+  visibility:hidden;
+  transition:opacity .12s ease,visibility .12s ease;
+  z-index:8;
+}
+.lesson-seek-preview.show{opacity:1;visibility:visible;}
+.lesson-seek-preview video{
+  display:block;
+  width:100%;
+  aspect-ratio:16/9;
+  object-fit:contain;
+  background:#05070b;
+  border-radius:7px;
+}
+.lesson-seek-preview-time{
+  display:block;
+  margin-top:4px;
+  color:#fff;
+  text-align:center;
+  font-size:.72rem;
+  font-weight:800;
+  direction:ltr;
+  font-variant-numeric:tabular-nums;
+}
+.lesson-platform-controls .progress-bar-wrap.dragging{cursor:grabbing;}
+.lesson-platform-controls .progress-bar-wrap:not(.dragging){cursor:pointer;}
+@media(max-width:768px){
+  .lesson-seek-preview{width:148px;bottom:24px;}
+  .lesson-seek-preview-time{font-size:.68rem;}
 }
 
 /* ---------- Mobile: the content viewport is physically between the two fixed bars ---------- */
