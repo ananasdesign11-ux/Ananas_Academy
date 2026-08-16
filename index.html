@@ -1762,7 +1762,8 @@ label[for*="En"], input[id*="En"], textarea[id*="En"] { display:none !important;
 <style id="lesson-mobile-touch-fullscreen-v27">
 #lessonVideoWrapper:fullscreen{width:100vw!important;height:100vh!important;max-width:none!important;max-height:none!important;aspect-ratio:auto!important;border-radius:0!important;margin:0!important;background:#000!important;}
 #lessonVideoWrapper:fullscreen .yt-player-container,#lessonVideoWrapper:fullscreen .yt-player-container>video,#lessonVideoWrapper:fullscreen iframe{width:100%!important;height:100%!important;}
-#lessonCenterPlayBtn{touch-action:manipulation;}
+#lessonCenterPlayBtn{touch-action:manipulation;position:absolute!important;z-index:60!important;}
+#lessonVideoWrapper.show-center-play .lesson-video-center-play{opacity:1!important;pointer-events:auto!important;z-index:60!important;}
 @media(max-width:768px){#lessonCenterPlayBtn{z-index:40;width:76px;height:76px;}}
 </style>
 </head>
@@ -4466,9 +4467,16 @@ label[for*="En"], input[id*="En"], textarea[id*="En"] { display:none !important;
             const wrapper=document.getElementById('lessonVideoWrapper');
             if(!wrapper || wrapper.dataset.controlsAutoHideBound==='1') return;
             wrapper.dataset.controlsAutoHideBound='1';
-            const wake=()=>{
+            const wake=(event)=>{
                 if(currentCoursePage!=='lessonPlayer') return;
+                const wasHidden=wrapper.classList.contains('lesson-controls-hidden');
+                const isTouchEvent=event?.type==='touchstart'||event?.pointerType==='touch';
                 showLessonControls();
+                if(isTouchEvent && wasHidden){
+                    window.__lessonTouchRevealAt=Date.now();
+                    window.__lessonSuppressVideoClickUntil=Date.now()+900;
+                    showLessonCenterActionForTouch();
+                }
             };
             wrapper.addEventListener('pointermove',wake,{passive:true});
             wrapper.addEventListener('pointerdown',wake,{passive:true});
@@ -5294,31 +5302,28 @@ label[for*="En"], input[id*="En"], textarea[id*="En"] { display:none !important;
             }
         },true);
 
-        /* Mobile touch behavior: first touch only reveals controls when hidden; double-tap still seeks. */
+        /* Mobile touch behavior: first touch reveals the controls when hidden; double-tap still seeks. */
         (function bindMobileDoubleTap(){
             const wrapper=document.getElementById('lessonVideoWrapper');
             if(!wrapper || wrapper.dataset.doubleTapBound==='1') return;
             wrapper.dataset.doubleTapBound='1';
-            let lastTap=0, lastSide='', revealTapAt=0;
-            wrapper.addEventListener('touchstart',function(e){
-                if(currentCoursePage!=='lessonPlayer'||!lessonPlayerReady||!lessonPlayer)return;
-                if(e.target.closest('.lesson-platform-controls,.lesson-video-center-play,button,input,.settings-dropdown'))return;
-                const wasHidden=wrapper.classList.contains('lesson-controls-hidden');
-                if(wasHidden){
-                    revealTapAt=Date.now();
-                    window.__lessonSuppressVideoClickUntil=Date.now()+520;
-                    showLessonControls();
-                    showLessonCenterActionForTouch();
-                }
-            },{passive:true});
+            let lastTap=0, lastSide='';
             wrapper.addEventListener('touchend',function(e){
                 if(currentCoursePage!=='lessonPlayer'||!lessonPlayerReady||!lessonPlayer)return;
                 if(e.target.closest('.lesson-platform-controls,.lesson-video-center-play,button,input,.settings-dropdown')) return;
                 const touch=e.changedTouches?.[0]; if(!touch)return;
+                const now=Date.now();
+                const revealedAt=Number(window.__lessonTouchRevealAt||0);
+                if(revealedAt && now-revealedAt<900){
+                    window.__lessonTouchRevealAt=0;
+                    lastTap=0;
+                    lastSide='';
+                    window.__lessonSuppressVideoClickUntil=now+900;
+                    return;
+                }
                 const rect=wrapper.getBoundingClientRect();
                 const x=touch.clientX-rect.left;
                 const side=x < rect.width/2 ? 'left':'right';
-                const now=Date.now();
                 if(lastTap && now-lastTap<=320 && side===lastSide){
                     e.preventDefault();
                     window.__allowedLessonSeekUntil=Date.now()+1200;
@@ -5329,7 +5334,6 @@ label[for*="En"], input[id*="En"], textarea[id*="En"] { display:none !important;
                     lastTap=0; lastSide='';
                 }else{
                     lastTap=now; lastSide=side;
-                    if(now-revealTapAt<520)window.__lessonSuppressVideoClickUntil=now+520;
                 }
             },{passive:false});
         })();
@@ -9204,10 +9208,14 @@ async function getLessonMediaDimensions(){
 }
 
 async function lockLessonScreenOrientation(kind){
-  const type=kind==='portrait'?'portrait':'landscape';
-  try{
-    if(screen.orientation?.lock){await screen.orientation.lock(type);return true;}
-  }catch(e){}
+  const types=kind==='portrait' ? ['portrait-primary','portrait'] : ['landscape-primary','landscape'];
+  if(!screen.orientation?.lock) return false;
+  for(const type of types){
+    try{
+      await screen.orientation.lock(type);
+      return true;
+    }catch(e){}
+  }
   return false;
 }
 
@@ -9224,9 +9232,13 @@ async function enterLessonFullscreen(){
   try{
     if(el.requestFullscreen){
       await el.requestFullscreen();
+      /* Lock immediately after entering fullscreen while the user gesture is still active. */
+      if(isLessonTouchDevice()) await lockLessonScreenOrientation(orientation);
+      return;
     }else if(lessonHtmlVideo?.webkitEnterFullscreen){
       lessonHtmlVideo.webkitEnterFullscreen();
       try{await lockLessonScreenOrientation(orientation);}catch(e){}
+      return;
     }else{
       return;
     }
@@ -9242,12 +9254,20 @@ async function enterLessonFullscreen(){
 
 async function exitLessonFullscreen(){
   try{
+    /* On touch devices, request portrait while still fullscreen, then exit. */
+    if(isLessonTouchDevice() && (document.fullscreenElement||document.webkitFullscreenElement)) {
+      try{await lockLessonScreenOrientation('portrait');}catch(e){}
+    }
     if(document.fullscreenElement&&document.exitFullscreen){
       await document.exitFullscreen();
     }else if(document.webkitFullscreenElement&&document.webkitExitFullscreen){
       document.webkitExitFullscreen();
     }
-  }catch(e){try{document.exitFullscreen?.();}catch(_){} }
+    if(isLessonTouchDevice()) setTimeout(()=>unlockLessonScreenOrientation(),250);
+  }catch(e){
+    try{document.exitFullscreen?.();}catch(_){}
+    if(isLessonTouchDevice()) setTimeout(()=>unlockLessonScreenOrientation(),300);
+  }
 }
 
 async function toggleLessonFullscreenWithOrientation(){
@@ -9263,18 +9283,9 @@ async function handleLessonFullscreenStateChange(){
   const active=!!(document.fullscreenElement||document.webkitFullscreenElement);
   if(active){
     if(fs)fs.innerHTML='<i class="fas fa-compress"></i>';
-    if(isLessonTouchDevice()){
-      const pending=window.__lessonPendingFullscreenOrientation||'landscape';
-      await lockLessonScreenOrientation(pending);
-    }
   }else{
-    unlockLessonScreenOrientation();
     window.__lessonPendingFullscreenOrientation=null;
     if(fs)fs.innerHTML='<i class="fas fa-expand"></i>';
-    /* The course is portrait-first after leaving fullscreen on touch devices. */
-    if(isLessonTouchDevice()){
-      setTimeout(()=>{try{screen.orientation?.lock?.('portrait');}catch(e){}},120);
-    }
   }
 }
 
