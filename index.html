@@ -3573,6 +3573,25 @@ label[for*="En"], input[id*="En"], textarea[id*="En"] { display:none !important;
         // ================================================================
         // ===== NEW: PAGE SWITCHER LOGIC =====
         // ================================================================
+        function captureLessonResumePosition(reason='navigation') {
+            if (!activeCourseId || !activeLessonId || !lessonPlayer) return null;
+            let position = 0;
+            let duration = 0;
+            try { position = Number(lessonPlayer.getCurrentTime?.() || 0); } catch(e) {}
+            try { duration = Number(lessonPlayer.getDuration?.() || 0); } catch(e) {}
+            position = Number.isFinite(position) ? Math.max(0, position) : 0;
+            duration = Number.isFinite(duration) ? Math.max(0, duration) : 0;
+            window.__lessonResumeOnReturn = {courseId: activeCourseId, lessonId: activeLessonId, position, reason, savedAt: Date.now()};
+            window.__lessonResumePosition = position;
+            window.__lessonResumeAutoplay = true;
+            try {
+                const key = `ananas.lessonResume.${currentUser?.uid || 'guest'}.${activeCourseId}.${activeLessonId}`;
+                localStorage.setItem(key, JSON.stringify({position, duration, updatedAt: Date.now()}));
+            } catch(e) {}
+            return {courseId: activeCourseId, lessonId: activeLessonId, position, duration, reason};
+        }
+        window.captureLessonResumePosition = captureLessonResumePosition;
+
         async function saveLessonPositionBeforeLeaving() {
             if(!activeCourseId || !activeLessonId || !lessonPlayer || !currentUser) return;
             try {
@@ -3581,20 +3600,10 @@ label[for*="En"], input[id*="En"], textarea[id*="En"] { display:none !important;
             } catch(e) { console.warn('تعذر حفظ موضع الحصة:',e); }
         }
 
-        function stopLessonForNavigation() {
+        function stopLessonForNavigation(reason='navigation') {
             try {
                 if(currentCoursePage === 'lessonPlayer' && activeCourseId && activeLessonId && lessonPlayer){
-                    let position=0, duration=0;
-                    try{ position=Number(lessonPlayer.getCurrentTime?.()||0); duration=Number(lessonPlayer.getDuration?.()||0); }catch(e){}
-                    position=Number.isFinite(position)?position:0;
-                    duration=Number.isFinite(duration)?duration:0;
-                    window.__lessonResumeOnReturn={courseId:activeCourseId,lessonId:activeLessonId,position};
-                    window.__lessonResumePosition=position;
-                    window.__lessonResumeAutoplay=true;
-                    try{
-                        const key=`ananas.lessonResume.${currentUser?.uid||'guest'}.${activeCourseId}.${activeLessonId}`;
-                        localStorage.setItem(key,JSON.stringify({position,duration,updatedAt:Date.now()}));
-                    }catch(e){}
+                    captureLessonResumePosition(reason);
                     try{ if(typeof lessonPlayer.pauseVideo==='function') lessonPlayer.pauseVideo(); else lessonPlayer.pause?.(); }catch(e){}
                     const pending = window.saveLessonPositionBeforeLeaving?.();
                     if(pending && typeof pending.catch === 'function') pending.catch(()=>{});
@@ -3603,19 +3612,10 @@ label[for*="En"], input[id*="En"], textarea[id*="En"] { display:none !important;
             destroyLessonVideo();
         }
 
-        function pauseLessonForInternalNavigation(){
+        function pauseLessonForInternalNavigation(reason='internal-navigation'){
             try{
                 if(currentCoursePage!=='lessonPlayer'||!activeCourseId||!activeLessonId||!lessonPlayer)return false;
-                let position=0,duration=0;
-                try{position=Number(lessonPlayer.getCurrentTime?.()||0);duration=Number(lessonPlayer.getDuration?.()||0);}catch(e){}
-                position=Number.isFinite(position)?position:0; duration=Number.isFinite(duration)?duration:0;
-                window.__lessonResumeOnReturn={courseId:activeCourseId,lessonId:activeLessonId,position};
-                window.__lessonResumePosition=position;
-                window.__lessonResumeAutoplay=true;
-                try{
-                    const key=`ananas.lessonResume.${currentUser?.uid||'guest'}.${activeCourseId}.${activeLessonId}`;
-                    localStorage.setItem(key,JSON.stringify({position,duration,updatedAt:Date.now()}));
-                }catch(e){}
+                captureLessonResumePosition(reason);
                 try{if(typeof lessonPlayer.pauseVideo==='function')lessonPlayer.pauseVideo();else lessonPlayer.pause?.();}catch(e){}
                 try{window.saveLessonProgressNow?.();}catch(e){}
                 try{window.persistCourseState?.();}catch(e){}
@@ -3678,8 +3678,9 @@ label[for*="En"], input[id*="En"], textarea[id*="En"] { display:none !important;
 
         function switchCoursePage(page) {
             if(currentCoursePage === 'lessonPlayer' && page !== 'lessonPlayer'){
-                if(['quizzes','assignments','files','chat'].includes(page)) pauseLessonForInternalNavigation();
-                else stopLessonForNavigation();
+                const reason = `course-page:${page}`;
+                if(['quizzes','assignments','files','chat'].includes(page)) pauseLessonForInternalNavigation(reason);
+                else stopLessonForNavigation(reason);
             }
             currentCoursePage = page;
             document.getElementById('courseDashboard').style.display = 'none';
@@ -4556,6 +4557,7 @@ label[for*="En"], input[id*="En"], textarea[id*="En"] { display:none !important;
             if(window.prepareLessonResume) await window.prepareLessonResume(courseId,lessonId);
             loadLessonVideo(lesson);
             persistCourseState();
+            setTimeout(()=>window.__ananasResumeCurrentLesson?.(),150);
         }
 
         function resetLessonWatchState(lessonId, durationMinutes) {
@@ -4647,7 +4649,7 @@ label[for*="En"], input[id*="En"], textarea[id*="En"] { display:none !important;
             if(lessonPlaybackTimer){clearInterval(lessonPlaybackTimer);lessonPlaybackTimer=null;}
             if(lessonPlayer&&typeof lessonPlayer.destroy==='function'){try{lessonPlayer.destroy();}catch(e){}}
             if(lessonVimeoInstance){try{lessonVimeoInstance.destroy();}catch(e){}}
-            lessonVimeoInstance=null;lessonHtmlVideo=null;lessonPlayer=null;lessonPlayerType=null;lessonPlayerReady=false;
+            lessonVimeoInstance=null;lessonHtmlVideo=null;lessonPlayer=null;window.lessonPlayer=null;lessonPlayerType=null;lessonPlayerReady=false;
             const c=document.getElementById('lessonYtPlayerContainer');if(c)c.innerHTML='';
             const controls=document.getElementById('lessonCustomControls');if(controls)controls.style.display='';
             document.getElementById('lessonVideoWrapper')?.classList.remove('show-center-play');
@@ -4825,7 +4827,7 @@ label[for*="En"], input[id*="En"], textarea[id*="En"] { display:none !important;
         function createLessonHTML5Player(url){
             const c=document.getElementById('lessonYtPlayerContainer');c.innerHTML='';
             const v=document.createElement('video');v.preload='metadata';v.playsInline=true;v.controls=false;v.disablePictureInPicture=true;v.setAttribute('controlsList','nodownload noplaybackrate');v.src=url;c.appendChild(v);
-            lessonHtmlVideo=v;lessonPlayerType='html5';lessonPlayer=buildHtmlLessonAdapter(v);
+            lessonHtmlVideo=v;lessonPlayerType='html5';lessonPlayer=buildHtmlLessonAdapter(v);window.lessonPlayer=lessonPlayer;
             v.addEventListener('loadedmetadata',async()=>{
                 lessonPlayerReady=true;
                 lessonWatchState.duration=lessonPlayer.getDuration()||lessonWatchState.duration;
@@ -4845,7 +4847,7 @@ label[for*="En"], input[id*="En"], textarea[id*="En"] { display:none !important;
             const c=document.getElementById('lessonYtPlayerContainer');c.innerHTML='';
             const host=document.createElement('div');host.style.width='100%';host.style.height='100%';c.appendChild(host);
             const p=new Vimeo.Player(host,{id:videoId,controls:false,title:false,byline:false,portrait:false,autoplay:false,dnt:true,playsinline:true});
-            lessonVimeoInstance=p;lessonPlayer=buildVimeoLessonAdapter(p);lessonPlayerType='vimeo';window.__vimeoLessonState=LESSON_MEDIA_STATE.PAUSED;window.__vimeoLessonVolume=1;
+            lessonVimeoInstance=p;lessonPlayer=buildVimeoLessonAdapter(p);lessonPlayerType='vimeo';window.lessonPlayer=lessonPlayer;window.__vimeoLessonState=LESSON_MEDIA_STATE.PAUSED;window.__vimeoLessonVolume=1;
             p.on('loaded',async()=>{
                 window.__vimeoLessonDuration=Number(await p.getDuration())||lessonWatchState.duration;
                 lessonPlayerReady=true;
@@ -4881,6 +4883,7 @@ label[for*="En"], input[id*="En"], textarea[id*="En"] { display:none !important;
                     },
                     onStateChange:e=>{if(e.data===YT.PlayerState.PLAYING)handleLessonPlaybackPlaying();else handleLessonPlaybackStopped(e.data);}
                 }});
+            window.lessonPlayer=lessonPlayer;
         }
 
         function startLessonPlaybackMonitor() {
@@ -6949,8 +6952,6 @@ label[for*="En"], input[id*="En"], textarea[id*="En"] { display:none !important;
             }catch(e){console.warn('restore route failed',e);} finally { setTimeout(()=>window.__restoredCourseRoute=false,300); }
         }
         // ===== Persistent page / language / theme state =====
-        window.addEventListener('beforeunload',()=>{try{saveLessonPositionBeforeLeaving();persistCourseState();}catch(e){}});
-        document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden'){try{saveLessonPositionBeforeLeaving();}catch(e){}}});
         function restorePersistentState(){
             try{
                 const raw=localStorage.getItem('ananas.lastCourseState'); if(!raw)return;
@@ -7647,42 +7648,8 @@ window.prepareLessonResume=async function(courseId,lessonId){
     window.__lessonResumePosition=Math.max(0,best);
   }catch(e){window.__lessonResumePosition=Math.max(0,Number(readLocalLessonResume(courseId,lessonId).position||0));}
 };
-const oldCreateYT=window.createLessonYTPlayer;
-/* The original createLessonYTPlayer is a lexical function; patch the saved-position field used by it. */
-const originalLoadLessonVideo=window.loadLessonVideo;
-window.__resumeLessonAutoplay=false;
-function markResumeAutoplay(){window.__resumeLessonAutoplay=true;}
-window.markResumeAutoplay=markResumeAutoplay;
-
-/* Persist watched progress while playing; this supplements courseState and survives devices. */
+/* Persist watched progress while playing; this supplements Firestore and local resume state. */
 setInterval(()=>{if(currentUser&&activeCourseId&&activeLessonId&&lessonPlayerReady&&lessonPlayer){saveLessonProgressNow();}},5000);
-
-/* Return from a linked quiz/assignment: restore and autoplay the exact lesson. */
-const oldReturnLesson=window.returnToQuizLesson;
-window.returnToQuizLesson=function(){markResumeAutoplay(); return oldReturnLesson?oldReturnLesson.apply(this,arguments):null;};
-const oldReturnAssignmentLesson=window.returnToAssignmentLesson;
-window.returnToAssignmentLesson=function(){markResumeAutoplay(); return oldReturnAssignmentLesson?oldReturnAssignmentLesson.apply(this,arguments):null;};
-
-/* Patch YouTube ready handler by wrapping player construction once. */
-const originalYTPlayer=window.YT;
-function installYTResume(){
-  if(!window.YT||!YT.Player||window.__ananasYTResumePatched)return;
-  const Orig=YT.Player;
-  YT.Player=function(container,opts){
-    const oldReady=opts?.events?.onReady;
-    opts.events=opts.events||{};
-    opts.events.onReady=async function(ev){
-      if(typeof oldReady==='function') await oldReady(ev);
-      const p=lessonPlayer;
-      const saved=Number(window.__lessonResumePosition||0);
-      if(p&&saved>2){try{p.seekTo(saved,true);}catch(e){}}
-      if(window.__lessonResumeAutoplay){window.__lessonResumeAutoplay=false;try{p.playVideo();}catch(e){}}
-    };
-    return new Orig(container,opts);
-  };
-  YT.Player.prototype=Orig.prototype;window.__ananasYTResumePatched=true;
-}
-try{installYTResume();}catch(e){}
 
 /* ---------- B. One-time codes, lifetime uniqueness, details and tabs ---------- */
 function normCode(v){return String(v||'').toUpperCase().replace(/\s+/g,'').trim();}
@@ -7814,7 +7781,9 @@ window.openAssignmentDetail=async function(courseId,assignmentId,fromLesson=fals
 
 function resumeLessonFromInternalPage(courseId,lessonId,fromFiles=false){
   if(!courseId||!lessonId)return false;
-  if(String(activeCourseId||'')!==String(courseId)||String(activeLessonId||'')!==String(lessonId)||!lessonPlayer)return false;
+  if(String(activeCourseId||'')!==String(courseId)||String(activeLessonId||'')!==String(lessonId)||!lessonPlayer){
+    try{__restoreLessonAndPlay(courseId,lessonId);return true;}catch(e){return false;}
+  }
   try{
     document.getElementById('quizOverlay')?.classList.remove('active');
     document.getElementById('courseAssignmentDetailPage')?.classList.remove('active');
@@ -7862,7 +7831,7 @@ async function __restoreLessonAndPlay(courseId,lessonId){
     if(st.exists&&String(st.data()?.lessonId)===String(lessonId))window.__lessonResumePosition=Math.max(window.__lessonResumePosition,Number(st.data()?.lessonTime||0));
   }catch(e){}
   window.__lessonResumeAutoplay=true;
-  activeCourseId=courseId;activeLessonId=lessonId;currentCoursePage='lessonPlayer';
+  activeCourseId=courseId;activeLessonId=lessonId;currentCoursePage='learning';
   document.getElementById('quizOverlay')?.classList.remove('active');
   document.getElementById('courseAssignmentDetailPage')?.classList.remove('active');
   __origSwitchCoursePage('learning');
@@ -7955,10 +7924,6 @@ if(typeof oldSwitch==='function'&&!window.__ananasFinalSwitch){
   };
   window.__ananasFinalSwitch=true;
 }
-function hardSave(){try{window.saveLessonProgressNow?.();}catch(e){} try{window.saveLessonPositionBeforeLeaving?.();}catch(e){} try{window.persistCourseState?.();}catch(e){}}
-window.addEventListener('pagehide',hardSave,{capture:true});
-window.addEventListener('beforeunload',hardSave,{capture:true});
-document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden')hardSave();},{capture:true});
 const st=document.createElement('style');
 st.textContent=`
 .lesson-external-fallback{height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;padding:30px;text-align:center;background:radial-gradient(circle at 50% 35%,rgba(108,92,231,.15),transparent 50%),#05070b;color:#fff}
@@ -11883,6 +11848,176 @@ const s=document.createElement('style');s.textContent=`
     repairCurrentUserDeletedCode(window.activeCourseId).finally(()=>window.watchCourseAccess?.(window.activeCourseId));
   });
 })();
+
+
+/* ===== FINAL LESSON VIDEO LIFECYCLE CONTROLLER =====
+   One authoritative path for stopping/saving the lesson video when leaving it. */
+(function(){
+  if(window.__ananasVideoLifecycleController) return;
+  window.__ananasVideoLifecycleController=true;
+
+  const pauseAndSave = (reason, destroy=false) => {
+    try{
+      if(currentCoursePage!=='lessonPlayer' || !activeCourseId || !activeLessonId || !lessonPlayer) return false;
+      window.captureLessonResumePosition?.(reason);
+      try{ if(typeof lessonPlayer.pauseVideo==='function') lessonPlayer.pauseVideo(); else lessonPlayer.pause?.(); }catch(e){}
+      try{ const p=window.saveLessonProgressNow?.(); if(p?.catch) p.catch(()=>{}); }catch(e){}
+      try{ const p=window.persistCourseState?.(); if(p?.catch) p.catch(()=>{}); }catch(e){}
+      if(destroy) try{destroyLessonVideo();}catch(e){}
+      return true;
+    }catch(e){ return false; }
+  };
+  window.__ananasPauseAndSaveLesson=pauseAndSave;
+
+  const oldSwitchFinal=window.switchCoursePage;
+  if(typeof oldSwitchFinal==='function' && !oldSwitchFinal.__ananasVideoLifecycleWrapped){
+    const wrapped=function(page){
+      if(currentCoursePage==='lessonPlayer' && page!=='lessonPlayer'){
+        const internal=['quizzes','assignments','files','chat'].includes(page);
+        pauseAndSave(`switch:${page}`,!internal);
+      }
+      return oldSwitchFinal.apply(this,arguments);
+    };
+    wrapped.__ananasVideoLifecycleWrapped=true;
+    wrapped.__original=oldSwitchFinal;
+    window.switchCoursePage=wrapped;
+  }
+
+  const originalLessonRouteWrapper=window.switchCoursePage;
+  if(typeof originalLessonRouteWrapper==='function'&&!originalLessonRouteWrapper.__ananasVideoResumeHook){
+    const wrappedLessonRoute=function(page){
+      const result=originalLessonRouteWrapper.apply(this,arguments);
+      if(page==='lessonPlayer') setTimeout(()=>window.__ananasResumeCurrentLesson?.(),0);
+      return result;
+    };
+    wrappedLessonRoute.__ananasVideoResumeHook=true;
+    wrappedLessonRoute.__original=originalLessonRouteWrapper;
+    window.switchCoursePage=wrappedLessonRoute;
+  }
+
+  const oldOpenQuizFinal=window.openQuiz;
+  if(typeof oldOpenQuizFinal==='function' && !oldOpenQuizFinal.__ananasVideoLifecycleWrapped){
+    const wrapped=async function(courseId,quizId,fromLesson=false){
+      if(currentCoursePage==='lessonPlayer'){
+        window.__quizOpenedFromLesson={courseId:courseId,lessonId:activeLessonId,quizId:quizId,position:Number(lessonPlayer?.getCurrentTime?.()||0)};
+        pauseAndSave('open-quiz',false);
+      }
+      return oldOpenQuizFinal.apply(this,arguments);
+    };
+    wrapped.__ananasVideoLifecycleWrapped=true;
+    wrapped.__original=oldOpenQuizFinal;
+    window.openQuiz=wrapped;
+  }
+
+  const oldOpenAssignmentFinal=window.openAssignmentDetail;
+  if(typeof oldOpenAssignmentFinal==='function' && !oldOpenAssignmentFinal.__ananasVideoLifecycleWrapped){
+    const wrapped=async function(courseId,assignmentId,fromLesson=false){
+      if(currentCoursePage==='lessonPlayer'){
+        window.__assignmentOpenedFromLesson={courseId:courseId,lessonId:activeLessonId,assignmentId:assignmentId,position:Number(lessonPlayer?.getCurrentTime?.()||0)};
+        window.__lessonReturnContext={courseId:courseId,lessonId:activeLessonId};
+        pauseAndSave('open-assignment',false);
+      }
+      return oldOpenAssignmentFinal.apply(this,arguments);
+    };
+    wrapped.__ananasVideoLifecycleWrapped=true;
+    wrapped.__original=oldOpenAssignmentFinal;
+    window.openAssignmentDetail=wrapped;
+  }
+
+  const oldOpenFileFinal=window.openCourseFileViewer;
+  if(typeof oldOpenFileFinal==='function' && !oldOpenFileFinal.__ananasVideoLifecycleWrapped){
+    const wrapped=function(file){
+      if(currentCoursePage==='lessonPlayer'){
+        window.__lessonReturnContext={courseId:activeCourseId,lessonId:activeLessonId};
+        pauseAndSave('open-file',false);
+      }
+      return oldOpenFileFinal.apply(this,arguments);
+    };
+    wrapped.__ananasVideoLifecycleWrapped=true;
+    wrapped.__original=oldOpenFileFinal;
+    window.openCourseFileViewer=wrapped;
+    window.openFileViewer=wrapped;
+  }
+
+  const oldMobileNavigate=window.mobileNavigate;
+  if(typeof oldMobileNavigate==='function' && !oldMobileNavigate.__ananasVideoLifecycleWrapped){
+    const wrapped=function(page){
+      if(currentCoursePage==='lessonPlayer' && page!=='learning') pauseAndSave(`mobile:${page}`,page!=='quizzes'&&page!=='assignments'&&page!=='chat');
+      return oldMobileNavigate.apply(this,arguments);
+    };
+    wrapped.__ananasVideoLifecycleWrapped=true;
+    wrapped.__original=oldMobileNavigate;
+    window.mobileNavigate=wrapped;
+  }
+
+  const oldProfileOpen=window.aaOpenProfile;
+  if(typeof oldProfileOpen==='function' && !oldProfileOpen.__ananasVideoLifecycleWrapped){
+    const wrapped=async function(){
+      if(currentCoursePage==='lessonPlayer') pauseAndSave('open-profile',true);
+      return oldProfileOpen.apply(this,arguments);
+    };
+    wrapped.__ananasVideoLifecycleWrapped=true;
+    wrapped.__original=oldProfileOpen;
+    window.aaOpenProfile=wrapped;
+  }
+
+  const oldSignOut=window.signOutUser;
+  if(typeof oldSignOut==='function' && !oldSignOut.__ananasVideoLifecycleWrapped){
+    const wrapped=async function(){
+      pauseAndSave('sign-out',true);
+      return oldSignOut.apply(this,arguments);
+    };
+    wrapped.__ananasVideoLifecycleWrapped=true;
+    wrapped.__original=oldSignOut;
+    window.signOutUser=wrapped;
+  }
+
+  if(auth?.signOut && !auth.signOut.__ananasVideoLifecycleWrapped){
+    const oldAuthSignOut=auth.signOut.bind(auth);
+    const wrapped=async function(){
+      pauseAndSave('auth-sign-out',true);
+      return oldAuthSignOut.apply(this,arguments);
+    };
+    wrapped.__ananasVideoLifecycleWrapped=true;
+    auth.signOut=wrapped;
+  }
+
+  // Direct buttons that do not pass through switchCoursePage/openQuiz/openAssignment.
+  document.addEventListener('click',function(e){
+    if(currentCoursePage!=='lessonPlayer') return;
+    const target=e.target?.closest?.('#openFullChatBtn,#backToLessonsBtn,#coursesNavBtn,.logo,.mobile-bottom-nav .mobile-nav-item,#lessonPlayerList .lesson-player-item');
+    if(!target) return;
+    if(target.closest('#lessonVideoWrapper')) return;
+    pauseAndSave(`click:${target.id||target.dataset?.page||target.className||'navigation'}`,target.matches('#coursesNavBtn,.logo,.mobile-bottom-nav .mobile-nav-item'));
+  },true);
+
+  // Browser/tab/page lifecycle: always capture synchronously before the page disappears.
+  document.addEventListener('visibilitychange',function(){
+    if(document.visibilityState==='hidden') pauseAndSave('visibility-hidden',false);
+    else if(document.visibilityState==='visible'&&currentCoursePage==='lessonPlayer'&&window.__lessonResumeAutoplay){
+      setTimeout(()=>window.__ananasResumeCurrentLesson?.(),80);
+    }
+  },true);
+  window.addEventListener('pagehide',function(){ pauseAndSave('pagehide',true); },{capture:true});
+  window.addEventListener('beforeunload',function(){
+    try{window.captureLessonResumePosition?.('beforeunload');}catch(e){}
+  },{capture:true});
+
+  // When we explicitly return to the lesson, resume the saved position immediately.
+  const resumeCurrentLesson=()=>{
+    if(currentCoursePage!=='lessonPlayer'||!lessonPlayer||!lessonPlayerReady||!activeCourseId||!activeLessonId) return;
+    let saved=Number(window.__lessonResumePosition||0);
+    try{const uid=currentUser?.uid||'guest';const raw=localStorage.getItem(`ananas.lessonResume.${uid}.${activeCourseId}.${activeLessonId}`);if(raw){const d=JSON.parse(raw)||{};saved=Math.max(saved,Number(d.position||0));}}catch(e){}
+    if(saved>0.5){try{lessonPlayer.seekTo(saved,true);}catch(e){try{lessonPlayer.seekTo(saved);}catch(_){} }window.__lessonResumePosition=saved;}
+    if(window.__lessonResumeAutoplay){
+      window.__lessonResumeAutoplay=false;
+      try{const p=typeof lessonPlayer.playVideo==='function'?lessonPlayer.playVideo():lessonPlayer.play?.();if(p?.catch)p.catch(()=>{});}catch(e){}
+    }
+    updateLessonControls?.();
+  };
+  window.__ananasResumeCurrentLesson=resumeCurrentLesson;
+})();
+
 </script>
 </body>
 </html>
