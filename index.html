@@ -12944,204 +12944,6 @@ const s=document.createElement('style');s.textContent=`
 </script>
 
 
-<style id="lesson-touch-controls-final-v8">
-/* Touch-only controls behavior:
-   - Playing: controls can auto-hide after the normal inactivity period.
-   - Paused: controls remain visible until the user explicitly hides them.
-   - A touch on the video background toggles the controls and keeps the center button in sync. */
-@media (pointer:coarse),(hover:none){
-  #lessonVideoWrapper .lesson-platform-controls{
-    transition:opacity .28s ease,transform .28s ease;
-  }
-  #lessonVideoWrapper.lesson-controls-hidden .lesson-platform-controls{
-    opacity:0!important;
-    pointer-events:none!important;
-    transform:translateY(2px)!important;
-  }
-}
-</style>
-<script id="lesson-touch-controls-final-v8-script">
-(function(){
-  'use strict';
-  const wrapper=document.getElementById('lessonVideoWrapper');
-  if(!wrapper) return;
-
-  function isTouchSurface(){
-    try{return window.matchMedia('(pointer:coarse),(hover:none)').matches;}catch(_){return (navigator.maxTouchPoints||0)>0;}
-  }
-  function currentState(){
-    try{
-      if(typeof window.v12GetPlaybackState==='function') return window.v12GetPlaybackState();
-      if(typeof lessonPlayerType!=='undefined' && lessonPlayerType==='html5' && window.lessonHtmlVideo){
-        return window.lessonHtmlVideo.paused ? 2 : 1;
-      }
-    }catch(_){ }
-    return 2;
-  }
-  function playing(){return currentState()===LESSON_MEDIA_STATE.PLAYING || currentState()===1;}
-  function clearTimer(){
-    try{if(typeof lessonControlsHideTimer!=='undefined' && lessonControlsHideTimer){clearTimeout(lessonControlsHideTimer);lessonControlsHideTimer=null;}}catch(_){ }
-  }
-
-  /* Replace the global helper so every existing caller respects the paused-state rule on touch. */
-  window.showLessonControls=function(delay=2800){
-    const w=document.getElementById('lessonVideoWrapper');
-    if(!w) return;
-    clearTimer();
-    w.classList.remove('lesson-controls-hidden');
-    if(typeof currentCoursePage!=='undefined' && currentCoursePage!=='lessonPlayer') return;
-    if(isTouchSurface() && !playing()) return;
-    try{
-      lessonControlsHideTimer=setTimeout(()=>{
-        if(typeof currentCoursePage==='undefined' || currentCoursePage==='lessonPlayer'){
-          w.classList.add('lesson-controls-hidden');
-          w.classList.remove('lesson-touch-controls-visible');
-        }
-        lessonControlsHideTimer=null;
-      },Math.max(1200,Number(delay)||2800));
-    }catch(_){ }
-  };
-
-  /* Keep a touch snapshot before the legacy pointer handler mutates the classes. */
-  wrapper.addEventListener('pointerdown',function(e){
-    if(!isTouchSurface() || e.pointerType!=='touch')return;
-    if(e.target.closest('.lesson-platform-controls,.lesson-video-center-play,button,input,.settings-dropdown'))return;
-    wrapper.dataset.v8TouchWasHidden=wrapper.classList.contains('lesson-controls-hidden')?'1':'0';
-  },true);
-
-  /* Final touch-background toggle. This runs before the legacy wrapper click handler. */
-  document.addEventListener('click',function(e){
-    if(!isTouchSurface())return;
-    if(e.target.closest('.lesson-platform-controls,.lesson-video-center-play,button,input,.settings-dropdown'))return;
-    const w=e.target.closest?.('#lessonVideoWrapper');
-    if(w!==wrapper)return;
-    if(typeof currentCoursePage!=='undefined' && currentCoursePage!=='lessonPlayer')return;
-    const wasHidden=wrapper.dataset.v8TouchWasHidden==='1';
-    delete wrapper.dataset.v8TouchWasHidden;
-    e.preventDefault();
-    e.stopImmediatePropagation();
-    clearTimer();
-    if(wasHidden){
-      wrapper.classList.remove('lesson-controls-hidden');
-      wrapper.classList.add('lesson-touch-controls-visible','show-center-play');
-      window.showLessonControls();
-      try{window.updateLessonCenterButton?.();}catch(_){ }
-    }else{
-      wrapper.classList.add('lesson-controls-hidden');
-      wrapper.classList.remove('lesson-touch-controls-visible');
-      /* Hidden means hidden; the next touch will reveal it again. */
-    }
-  },true);
-
-  /* When playback pauses/ends on touch, cancel any pending auto-hide immediately. */
-  const observer=new MutationObserver(()=>{
-    if(!isTouchSurface())return;
-    if(!playing())clearTimer();
-  });
-  observer.observe(wrapper,{subtree:false,attributes:true,attributeFilter:['class']});
-})();
-</script>
-
-
-
-
-<!-- ===== FINAL TOUCH UI BEHAVIOR V10 ===== -->
-<style id="lesson-touch-ui-v10-style">
-@media (pointer:coarse),(hover:none){
-  #lessonVideoWrapper .lesson-platform-controls{
-    transition:opacity .28s ease,transform .28s ease!important;
-  }
-  #lessonVideoWrapper.lesson-controls-hidden .lesson-platform-controls{
-    opacity:0!important;
-    pointer-events:none!important;
-    transform:translateY(3px)!important;
-  }
-}
-</style>
-<script id="lesson-touch-ui-v10-script">
-(function(){
-  'use strict';
-  const wrapper=document.getElementById('lessonVideoWrapper');
-  if(!wrapper || wrapper.dataset.touchUiV10Bound==='1') return;
-  wrapper.dataset.touchUiV10Bound='1';
-
-  const touchSurface=()=>{
-    try{return window.matchMedia('(pointer:coarse),(hover:none)').matches || (navigator.maxTouchPoints||0)>0;}
-    catch(_){return (navigator.maxTouchPoints||0)>0;}
-  };
-  const isLessonPage=()=>{
-    try{return typeof currentCoursePage==='undefined' || currentCoursePage==='lessonPlayer';}
-    catch(_){return true;}
-  };
-  const state=()=>{
-    try{
-      const n=Number(window.v12GetPlaybackState?.());
-      if(Number.isFinite(n)) return n;
-    }catch(_){ }
-    try{
-      if(typeof lessonPlayerType!=='undefined' && lessonPlayerType==='html5' && window.lessonHtmlVideo){
-        return window.lessonHtmlVideo.paused ? 2 : 1;
-      }
-    }catch(_){ }
-    return 2;
-  };
-  const playing=()=>state()===1;
-  const clearHide=()=>{
-    try{
-      if(typeof lessonControlsHideTimer!=='undefined' && lessonControlsHideTimer){
-        clearTimeout(lessonControlsHideTimer);
-        lessonControlsHideTimer=null;
-      }
-    }catch(_){ }
-  };
-  const show=()=>{
-    clearHide();
-    wrapper.classList.remove('lesson-controls-hidden');
-    wrapper.classList.add('lesson-touch-controls-visible','show-center-play');
-    try{window.updateLessonCenterButton?.();}catch(_){ }
-    if(playing()){
-      try{
-        lessonControlsHideTimer=setTimeout(()=>{
-          if(isLessonPage() && playing()){
-            wrapper.classList.add('lesson-controls-hidden');
-            wrapper.classList.remove('lesson-touch-controls-visible');
-          }
-          lessonControlsHideTimer=null;
-        },2800);
-      }catch(_){ }
-    }
-  };
-  const hide=()=>{
-    clearHide();
-    wrapper.classList.add('lesson-controls-hidden');
-    wrapper.classList.remove('lesson-touch-controls-visible');
-  };
-
-  wrapper.addEventListener('pointerup',function(e){
-    if(!touchSurface() || e.pointerType!=='touch' || !isLessonPage()) return;
-    if(e.target.closest('.lesson-platform-controls,.lesson-video-center-play,button,input,.settings-dropdown,.lesson-seek-feedback')) return;
-    e.preventDefault();
-    e.stopImmediatePropagation();
-    if(wrapper.classList.contains('lesson-controls-hidden')) show();
-    else hide();
-  },true);
-
-  wrapper.addEventListener('touchend',function(e){
-    if(!touchSurface() || !isLessonPage()) return;
-    if(e.target.closest('.lesson-platform-controls,.lesson-video-center-play,button,input,.settings-dropdown,.lesson-seek-feedback')) return;
-    e.preventDefault();
-    e.stopImmediatePropagation();
-  },{capture:true,passive:false});
-
-  document.addEventListener('visibilitychange',()=>{
-    if(document.hidden) clearHide();
-  });
-})();
-</script>
-
-
-
-
 <!-- ===== FINAL LESSON OPEN SAFETY PATCH ===== -->
 <script id="final-lesson-open-safety-patch">
 (function(){
@@ -13258,182 +13060,120 @@ const s=document.createElement('style');s.textContent=`
 })();
 </script>
 
-<style id="lesson-touch-controls-final-v8">
-/* Touch-only controls behavior:
-   - Playing: controls can auto-hide after the normal inactivity period.
-   - Paused: controls remain visible until the user explicitly hides them.
-   - A touch on the video background toggles the controls and keeps the center button in sync. */
+<!-- FINAL TOUCH CONTROL VISIBILITY V12: authoritative touch-only behavior -->
+<style id="lesson-touch-control-visibility-v12-style">
 @media (pointer:coarse),(hover:none){
   #lessonVideoWrapper .lesson-platform-controls{
-    transition:opacity .28s ease,transform .28s ease;
+    transition:opacity .28s ease,transform .28s ease!important;
   }
   #lessonVideoWrapper.lesson-controls-hidden .lesson-platform-controls{
     opacity:0!important;
     pointer-events:none!important;
-    transform:translateY(2px)!important;
+    transform:translateY(3px)!important;
   }
 }
 </style>
-<script id="lesson-touch-controls-final-v8-script">
+<script id="lesson-touch-control-visibility-v12-script">
 (function(){
   'use strict';
   const wrapper=document.getElementById('lessonVideoWrapper');
-  if(!wrapper) return;
+  if(!wrapper || wrapper.dataset.authoritativeTouchV12==='1') return;
+  wrapper.dataset.authoritativeTouchV12='1';
 
-  function isTouchSurface(){
-    try{return window.matchMedia('(pointer:coarse),(hover:none)').matches;}catch(_){return (navigator.maxTouchPoints||0)>0;}
-  }
-  function currentState(){
-    try{
-      if(typeof window.v12GetPlaybackState==='function') return window.v12GetPlaybackState();
-      if(typeof lessonPlayerType!=='undefined' && lessonPlayerType==='html5' && window.lessonHtmlVideo){
-        return window.lessonHtmlVideo.paused ? 2 : 1;
-      }
-    }catch(_){ }
-    return 2;
-  }
-  function playing(){return currentState()===LESSON_MEDIA_STATE.PLAYING || currentState()===1;}
-  function clearTimer(){
-    try{if(typeof lessonControlsHideTimer!=='undefined' && lessonControlsHideTimer){clearTimeout(lessonControlsHideTimer);lessonControlsHideTimer=null;}}catch(_){ }
-  }
-
-  /* Replace the global helper so every existing caller respects the paused-state rule on touch. */
-  window.showLessonControls=function(delay=2800){
-    const w=document.getElementById('lessonVideoWrapper');
-    if(!w) return;
-    clearTimer();
-    w.classList.remove('lesson-controls-hidden');
-    if(typeof currentCoursePage!=='undefined' && currentCoursePage!=='lessonPlayer') return;
-    if(isTouchSurface() && !playing()) return;
-    try{
-      lessonControlsHideTimer=setTimeout(()=>{
-        if(typeof currentCoursePage==='undefined' || currentCoursePage==='lessonPlayer'){
-          w.classList.add('lesson-controls-hidden');
-          w.classList.remove('lesson-touch-controls-visible');
-        }
-        lessonControlsHideTimer=null;
-      },Math.max(1200,Number(delay)||2800));
-    }catch(_){ }
+  const isTouchSurface=()=>{
+    try{return window.matchMedia('(pointer:coarse),(hover:none)').matches || (navigator.maxTouchPoints||0)>0;}
+    catch(_){return (navigator.maxTouchPoints||0)>0;}
   };
-
-  /* Keep a touch snapshot before the legacy pointer handler mutates the classes. */
-  wrapper.addEventListener('pointerdown',function(e){
-    if(!isTouchSurface() || e.pointerType!=='touch')return;
-    if(e.target.closest('.lesson-platform-controls,.lesson-video-center-play,button,input,.settings-dropdown'))return;
-    wrapper.dataset.v8TouchWasHidden=wrapper.classList.contains('lesson-controls-hidden')?'1':'0';
-  },true);
-
-  /* Final touch-background toggle. This runs before the legacy wrapper click handler. */
-  document.addEventListener('click',function(e){
-    if(!isTouchSurface())return;
-    if(e.target.closest('.lesson-platform-controls,.lesson-video-center-play,button,input,.settings-dropdown'))return;
-    const w=e.target.closest?.('#lessonVideoWrapper');
-    if(w!==wrapper)return;
-    if(typeof currentCoursePage!=='undefined' && currentCoursePage!=='lessonPlayer')return;
-    const wasHidden=wrapper.dataset.v8TouchWasHidden==='1';
-    delete wrapper.dataset.v8TouchWasHidden;
-    e.preventDefault();
-    e.stopImmediatePropagation();
-    clearTimer();
-    if(wasHidden){
-      wrapper.classList.remove('lesson-controls-hidden');
-      wrapper.classList.add('lesson-touch-controls-visible','show-center-play');
-      window.showLessonControls();
-      try{window.updateLessonCenterButton?.();}catch(_){ }
-    }else{
-      wrapper.classList.add('lesson-controls-hidden');
-      wrapper.classList.remove('lesson-touch-controls-visible');
-      /* Hidden means hidden; the next touch will reveal it again. */
-    }
-  },true);
-
-  /* When playback pauses/ends on touch, cancel any pending auto-hide immediately. */
-  const observer=new MutationObserver(()=>{
-    if(!isTouchSurface())return;
-    if(!playing())clearTimer();
-  });
-  observer.observe(wrapper,{subtree:false,attributes:true,attributeFilter:['class']});
-})();
-</script>
-
-
-<!-- FINAL TOUCH CONTROL VISIBILITY V11 -->
-<style id="lesson-touch-control-visibility-v11-style">
-@media (pointer:coarse),(hover:none){
-  #lessonVideoWrapper .lesson-platform-controls{
-    transition:opacity .28s ease, transform .28s ease !important;
-  }
-  #lessonVideoWrapper.lesson-controls-hidden .lesson-platform-controls{
-    opacity:0 !important;
-    pointer-events:none !important;
-    transform:translateY(3px) !important;
-  }
-}
-</style>
-<script id="lesson-touch-control-visibility-v11-script">
-(function(){
-  'use strict';
-  const w=document.getElementById('lessonVideoWrapper');
-  if(!w || w.dataset.authoritativeTouchV11==='1')return;
-  w.dataset.authoritativeTouchV11='1';
-  const isTouch=()=>{
-    try{return window.matchMedia('(pointer:coarse),(hover:none)').matches || (navigator.maxTouchPoints||0)>0;}catch(_){return (navigator.maxTouchPoints||0)>0;}
+  const isLessonPage=()=>{
+    try{return typeof currentCoursePage==='undefined' || currentCoursePage==='lessonPlayer';}
+    catch(_){return true;}
   };
-  const isLesson=()=>{try{return typeof currentCoursePage==='undefined' || currentCoursePage==='lessonPlayer';}catch(_){return true;}};
   const isPlaying=()=>{
-    try{return Number(window.v12GetPlaybackState?.())===1;}catch(_){ }
-    try{return typeof lessonPlayerType!=='undefined' && lessonPlayerType==='html5' && window.lessonHtmlVideo ? !window.lessonHtmlVideo.paused : false;}catch(_){return false;}
+    try{ const n=Number(window.v12GetPlaybackState?.()); if(Number.isFinite(n)) return n===1; }catch(_){ }
+    try{ return typeof lessonPlayerType!=='undefined' && lessonPlayerType==='html5' && !!window.lessonHtmlVideo ? !window.lessonHtmlVideo.paused : false; }catch(_){return false;}
   };
   const clearHide=()=>{
-    try{if(typeof lessonControlsHideTimer!=='undefined' && lessonControlsHideTimer){clearTimeout(lessonControlsHideTimer);lessonControlsHideTimer=null;}}catch(_){ }
+    try{
+      if(typeof lessonControlsHideTimer!=='undefined' && lessonControlsHideTimer){
+        clearTimeout(lessonControlsHideTimer); lessonControlsHideTimer=null;
+      }
+    }catch(_){ }
   };
-  const backgroundTarget=target=>!!target && !target.closest?.('.lesson-platform-controls,.lesson-video-center-play,button,input,.settings-dropdown,.lesson-seek-feedback,.lesson-player-brand,.lesson-resume-indicator');
-  const reveal=()=>{
+  const show=()=>{
     clearHide();
-    w.classList.remove('lesson-controls-hidden');
-    w.classList.add('lesson-touch-controls-visible','show-center-play');
+    wrapper.classList.remove('lesson-controls-hidden');
+    wrapper.classList.add('lesson-touch-controls-visible');
     try{window.updateLessonCenterButton?.();}catch(_){ }
+    // Paused: stay visible. Playing: use the existing normal auto-hide timing.
     if(isPlaying()){
       try{
         lessonControlsHideTimer=setTimeout(()=>{
-          if(isLesson() && isPlaying()){
-            w.classList.add('lesson-controls-hidden');
-            w.classList.remove('lesson-touch-controls-visible');
+          if(isLessonPage() && isPlaying()){
+            wrapper.classList.add('lesson-controls-hidden');
+            wrapper.classList.remove('lesson-touch-controls-visible');
           }
           lessonControlsHideTimer=null;
         },2800);
       }catch(_){ }
     }
   };
-  const conceal=()=>{
+  const hide=()=>{
     clearHide();
-    w.classList.add('lesson-controls-hidden');
-    w.classList.remove('lesson-touch-controls-visible');
+    wrapper.classList.add('lesson-controls-hidden');
+    wrapper.classList.remove('lesson-touch-controls-visible');
     try{window.updateLessonCenterButton?.();}catch(_){ }
   };
-  /* Capture before the older target handlers. One touch = one state change. */
-  document.addEventListener('pointerup',e=>{
-    if(!isTouch() || e.pointerType!=='touch' || !isLesson())return;
-    if(e.target.closest?.('#lessonVideoWrapper')!==w || !backgroundTarget(e.target))return;
+  const isBackground=(target)=>{
+    return !!target && !target.closest?.('.lesson-platform-controls,.lesson-video-center-play,button,input,.settings-dropdown,.lesson-seek-feedback,.lesson-player-brand,.lesson-resume-indicator');
+  };
+
+  // One authoritative touch gesture: visible -> hide, hidden -> show.
+  // The paused state does NOT force the UI visible again; the user can hide it manually.
+  document.addEventListener('pointerup',function(e){
+    if(!isTouchSurface() || e.pointerType!=='touch' || !isLessonPage()) return;
+    if(e.target.closest?.('#lessonVideoWrapper')!==wrapper || !isBackground(e.target)) return;
     e.preventDefault();
     e.stopImmediatePropagation();
-    w.dataset.suppressTouchClickUntil=String(Date.now()+700);
-    if(w.classList.contains('lesson-controls-hidden'))reveal();
-    else conceal();
+    wrapper.dataset.suppressTouchClickUntil=String(Date.now()+700);
+    if(wrapper.classList.contains('lesson-controls-hidden')) show();
+    else hide();
   },true);
-  document.addEventListener('click',e=>{
-    if(!isTouch())return;
-    const until=Number(w.dataset.suppressTouchClickUntil||0);
-    if(!until || Date.now()>until)return;
-    if(e.target.closest?.('#lessonVideoWrapper')!==w || !backgroundTarget(e.target))return;
-    delete w.dataset.suppressTouchClickUntil;
+
+  document.addEventListener('click',function(e){
+    if(!isTouchSurface()) return;
+    const until=Number(wrapper.dataset.suppressTouchClickUntil||0);
+    if(!until || Date.now()>until) return;
+    if(e.target.closest?.('#lessonVideoWrapper')!==wrapper || !isBackground(e.target)) return;
+    delete wrapper.dataset.suppressTouchClickUntil;
     e.preventDefault();
     e.stopImmediatePropagation();
   },true);
+
+  // Playback state changes: paused keeps the current visibility; playing may auto-hide.
+  const syncPlaybackVisibility=()=>{
+    if(!isTouchSurface() || !isLessonPage()) return;
+    if(!isPlaying()){
+      clearHide();
+      // Do not forcibly reveal: user may have intentionally hidden the UI while paused.
+      return;
+    }
+    if(!wrapper.classList.contains('lesson-controls-hidden')){
+      clearHide();
+      try{
+        lessonControlsHideTimer=setTimeout(()=>{
+          if(isLessonPage() && isPlaying()){
+            wrapper.classList.add('lesson-controls-hidden');
+            wrapper.classList.remove('lesson-touch-controls-visible');
+          }
+          lessonControlsHideTimer=null;
+        },2800);
+      }catch(_){ }
+    }
+  };
+  ['play','playing','pause','ended'].forEach(type=>wrapper.addEventListener(type,syncPlaybackVisibility,true));
   document.addEventListener('visibilitychange',()=>{if(document.hidden)clearHide();});
 })();
 </script>
-
 
 
 <!-- FINAL LESSON CONTROL ORDER V13 -->
