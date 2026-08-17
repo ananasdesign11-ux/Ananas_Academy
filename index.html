@@ -14314,38 +14314,56 @@ const s=document.createElement('style');s.textContent=`
     btn.dataset.finalDirectPlayBound='1';
     let down=false,timer=null,held=false,restore=1;
     const clear=()=>{if(timer){clearTimeout(timer);timer=null;}};
+    const directToggle=async()=>{
+      try{
+        if(!ready())return;
+        const s=state();
+        if(lessonPlayerType==='html5' && window.lessonHtmlVideo){
+          if(window.lessonHtmlVideo.paused || window.lessonHtmlVideo.ended){
+            const r=window.lessonHtmlVideo.play(); if(r?.catch)r.catch(()=>{});
+          }else window.lessonHtmlVideo.pause();
+          return;
+        }
+        if(typeof lessonPlayer?.getPlayerState==='function'){
+          const ps=Number(lessonPlayer.getPlayerState());
+          const playing=(ps===LESSON_MEDIA_STATE.PLAYING||ps===1);
+          if(playing) await Promise.resolve(lessonPlayer.pauseVideo?.());
+          else await Promise.resolve(lessonPlayer.playVideo?.());
+          return;
+        }
+        if(s===LESSON_MEDIA_STATE.PLAYING) await Promise.resolve(lessonPlayer?.pauseVideo?.());
+        else await Promise.resolve(lessonPlayer?.playVideo?.());
+      }catch(err){console.warn('desktop play button direct toggle failed',err);}
+      finally{refreshIcon();showLessonControls?.(2800);}
+    };
     const finish=(e)=>{
       if(!down)return;
       down=false;clear();
+      try{btn.releasePointerCapture?.(e?.pointerId);}catch(_){ }
+      e?.preventDefault?.();e?.stopImmediatePropagation?.();e?.stopPropagation?.();
       if(held){
         held=false;
         try{
-          const set=window.lessonPlayer?.setPlaybackRate;
-          if(typeof set==='function'){
-            const r=set(restore||1); if(r?.catch)r.catch(()=>{});
-          }else if(typeof lessonPlayerType!=='undefined'&&lessonPlayerType==='html5'&&window.lessonHtmlVideo){
-            window.lessonHtmlVideo.playbackRate=restore||1;
-          }
+          if(lessonPlayerType==='html5'&&window.lessonHtmlVideo) window.lessonHtmlVideo.playbackRate=restore||1;
+          else lessonPlayer?.setPlaybackRate?.(restore||1);
         }catch(_){ }
         refreshIcon();
-        e?.preventDefault?.();e?.stopImmediatePropagation?.();
         return;
       }
-      e?.preventDefault?.();e?.stopImmediatePropagation?.();
-      toggle();
+      directToggle();
     };
     btn.addEventListener('pointerdown',e=>{
       if(!mouseMode()||!ready()||e.button!==0)return;
-      e.preventDefault();e.stopImmediatePropagation();
-      down=true;held=false;restore=Number(window.lessonPlayer?.getPlaybackRate?.()||1)||1;clear();
+      e.preventDefault();e.stopImmediatePropagation();e.stopPropagation();
+      down=true;held=false;restore=Number(lessonPlayer?.getPlaybackRate?.()||window.lessonHtmlVideo?.playbackRate||1)||1;clear();
       try{btn.setPointerCapture?.(e.pointerId);}catch(_){ }
       timer=setTimeout(()=>{
         timer=null;
         if(!down||!ready())return;
         held=true;
         try{
-          if(typeof lessonPlayerType!=='undefined'&&lessonPlayerType==='html5'&&window.lessonHtmlVideo)window.lessonHtmlVideo.playbackRate=2;
-          else window.lessonPlayer?.setPlaybackRate?.(2);
+          if(lessonPlayerType==='html5'&&window.lessonHtmlVideo) window.lessonHtmlVideo.playbackRate=2;
+          else lessonPlayer?.setPlaybackRate?.(2);
         }catch(_){ }
         flash();
       },450);
@@ -14353,7 +14371,7 @@ const s=document.createElement('style');s.textContent=`
     btn.addEventListener('pointerup',finish,true);
     btn.addEventListener('pointercancel',finish,true);
     btn.addEventListener('lostpointercapture',e=>finish(e),true);
-    btn.addEventListener('click',e=>{e.preventDefault();e.stopImmediatePropagation();},true);
+    btn.addEventListener('click',e=>{e.preventDefault();e.stopImmediatePropagation();e.stopPropagation();},true);
   }
 
   /* Ensure the center icon flashes when playback actually starts. */
@@ -14381,5 +14399,69 @@ const s=document.createElement('style');s.textContent=`
 })();
 </script>
 
+</body>
+</html>
+
+<!-- FINAL FULLSCREEN PLAYBACK ISOLATION PATCH -->
+<script id="aa-final-fullscreen-playback-isolation-v2">
+(function(){
+  'use strict';
+  if(window.__aaFinalFullscreenPlaybackIsolationV2)return;
+  window.__aaFinalFullscreenPlaybackIsolationV2=true;
+
+  const getBtn=()=>document.getElementById('lessonFullscreenBtn');
+  const isLesson=()=>{
+    try{return typeof currentCoursePage==='undefined'||currentCoursePage==='lessonPlayer';}catch(_){return true;}
+  };
+  const invokeFullscreen=async()=>{
+    if(!isLesson())return;
+    try{
+      if(typeof window.enterLessonFullscreen==='function'){
+        await window.enterLessonFullscreen();
+        return;
+      }
+      const el=document.getElementById('lessonVideoWrapper');
+      if(!el)return;
+      if(document.fullscreenElement||document.webkitFullscreenElement){
+        if(document.exitFullscreen)await document.exitFullscreen();
+        else if(document.webkitExitFullscreen)await document.webkitExitFullscreen();
+        return;
+      }
+      const req=el.requestFullscreen?.bind(el)||el.webkitRequestFullscreen?.bind(el);
+      if(req){const r=req();if(r?.then)await r;}
+    }catch(err){console.warn('fullscreen v2 failed',err);}
+  };
+
+  const stopEvent=e=>{
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    e.stopPropagation();
+  };
+
+  const bind=()=>{
+    const btn=getBtn();
+    if(!btn||btn.dataset.aaFsV2Bound==='1')return;
+    btn.dataset.aaFsV2Bound='1';
+    ['pointerdown','mousedown','pointerup','mouseup'].forEach(type=>{
+      btn.addEventListener(type,stopEvent,true);
+    });
+    btn.addEventListener('click',async e=>{
+      stopEvent(e);
+      await invokeFullscreen();
+    },true);
+    btn.addEventListener('keydown',async e=>{
+      if(e.key==='Enter'||e.key===' '){
+        stopEvent(e);
+        await invokeFullscreen();
+      }
+    },true);
+  };
+
+  bind();
+  document.addEventListener('DOMContentLoaded',bind,{once:true});
+  const obs=new MutationObserver(bind);
+  obs.observe(document.body,{subtree:true,childList:true});
+})();
+</script>
 </body>
 </html>
