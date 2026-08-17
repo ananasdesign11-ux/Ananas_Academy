@@ -14011,104 +14011,159 @@ const s=document.createElement('style');s.textContent=`
 </script>
 
 
-<!-- FINAL HOLD 2X UI: hide controls and show transient 2x banner only while long-press is active -->
-<style id="aa-final-hold2x-ui-style">
-#lessonVideoWrapper.aa-hold2x-active .lesson-platform-controls,
-#lessonVideoWrapper.aa-hold2x-active .custom-video-controls{
-  opacity:0!important;
-  pointer-events:none!important;
-  visibility:hidden!important;
-}
-#lessonVideoWrapper .aa-hold2x-banner{
-  position:absolute;top:14px;left:50%;transform:translate(-50%,-8px) scale(.96);
-  z-index:140;display:flex;align-items:center;gap:8px;padding:8px 14px;
-  border:1px solid rgba(255,255,255,.18);border-radius:999px;
-  background:rgba(10,10,10,.58);backdrop-filter:blur(12px);
-  color:#fff;font-size:.78rem;font-weight:900;letter-spacing:.02em;
-  opacity:0;visibility:hidden;transition:opacity .18s ease,transform .18s ease,visibility .18s ease;
-  pointer-events:none;white-space:nowrap;
-}
-#lessonVideoWrapper .aa-hold2x-banner.show{
-  opacity:.92;visibility:visible;transform:translate(-50%,0) scale(1);
-}
-#lessonVideoWrapper .aa-hold2x-banner i{font-size:.8rem;opacity:.9;}
+
+<!-- FINAL HOLD-2X OVERLAY / CONTROL VISIBILITY PATCH -->
+<style id="aa-final-hold2x-overlay-style">
+  #lessonVideoWrapper.aa-hold2x-active .lesson-platform-controls{
+    opacity:0!important;
+    visibility:hidden!important;
+    pointer-events:none!important;
+  }
+  #lessonVideoWrapper.aa-hold2x-active .lesson-video-center-play{
+    opacity:0!important;
+    visibility:hidden!important;
+    pointer-events:none!important;
+  }
+  #lessonVideoWrapper.aa-hold2x-active .lesson-player-brand,
+  #lessonVideoWrapper.aa-hold2x-active .lesson-resume-indicator{
+    opacity:0!important;
+    visibility:hidden!important;
+    pointer-events:none!important;
+  }
+  #lessonVideoWrapper .aa-hold2x-indicator{
+    position:absolute;
+    top:14px;
+    left:50%;
+    transform:translateX(-50%) translateY(-8px);
+    z-index:80;
+    padding:7px 13px;
+    border-radius:999px;
+    background:rgba(5,7,11,.42);
+    border:1px solid rgba(255,255,255,.18);
+    backdrop-filter:blur(10px);
+    -webkit-backdrop-filter:blur(10px);
+    color:#fff;
+    font:800 .78rem/1 Cairo,sans-serif;
+    white-space:nowrap;
+    opacity:0;
+    visibility:hidden;
+    pointer-events:none;
+    transition:opacity .18s ease,transform .18s ease,visibility .18s ease;
+  }
+  #lessonVideoWrapper.aa-hold2x-active .aa-hold2x-indicator{
+    opacity:.94;
+    visibility:visible;
+    transform:translateX(-50%) translateY(0);
+  }
+  #lessonVideoWrapper.aa-hold2x-active .lesson-platform-controls #lessonDesktopPlayBtn{
+    display:none!important;
+  }
+  @media(max-width:1024px){
+    #lessonVideoWrapper.aa-hold2x-active .lesson-platform-controls #lessonCenterPlayBtn,
+    #lessonVideoWrapper.aa-hold2x-active .lesson-platform-controls #lessonDesktopPlayBtn{display:none!important;}
+  }
 </style>
-<script id="aa-final-hold2x-ui-script">
+<script id="aa-final-hold2x-overlay-script">
 (function(){
   'use strict';
   const wrapper=document.getElementById('lessonVideoWrapper');
-  if(!wrapper||window.__aaFinalHold2xUI)return;
-  window.__aaFinalHold2xUI=true;
-  let banner=wrapper.querySelector('.aa-hold2x-banner');
-  if(!banner){
-    banner=document.createElement('div');
-    banner.className='aa-hold2x-banner';
-    banner.innerHTML='<i class="fas fa-gauge-high"></i><span>×2 • تشغيل سريع</span>';
-    wrapper.appendChild(banner);
-  }
-  let pointerTimer=null, pointerPending=false, pointerHolding=false, spaceTimer=null, spacePending=false, spaceHolding=false;
-  const setUI=on=>{
-    wrapper.classList.toggle('aa-hold2x-active',!!on);
-    banner.classList.toggle('show',!!on);
-    if(on) wrapper.setAttribute('aria-busy','true'); else wrapper.removeAttribute('aria-busy');
+  if(!wrapper||window.__aaFinalHold2xOverlayBound)return;
+  window.__aaFinalHold2xOverlayBound=true;
+
+  const ready=()=>{try{return currentCoursePage==='lessonPlayer'&&!!lessonPlayerReady&&!!lessonPlayer;}catch(_){return false;}};
+  const getRate=()=>{try{
+    if(typeof lessonPlayerType!=='undefined'&&lessonPlayerType==='html5'&&lessonHtmlVideo)return Number(lessonHtmlVideo.playbackRate)||1;
+    const n=Number(lessonPlayer?.getPlaybackRate?.());
+    return Number.isFinite(n)&&n>0?n:1;
+  }catch(_){return 1;}};
+  const setRate=async r=>{try{
+    const n=Number(r)||1;
+    if(typeof lessonPlayerType!=='undefined'&&lessonPlayerType==='html5'&&lessonHtmlVideo){lessonHtmlVideo.playbackRate=n;return;}
+    if(typeof lessonPlayer?.setPlaybackRate==='function')await lessonPlayer.setPlaybackRate(n);
+  }catch(e){console.warn('hold2x overlay rate',e);}};
+  const playing=()=>{try{
+    if(typeof v12GetPlaybackState==='function'&&typeof LESSON_MEDIA_STATE!=='undefined')return v12GetPlaybackState()===LESSON_MEDIA_STATE.PLAYING;
+    if(typeof lessonPlayerType!=='undefined'&&lessonPlayerType==='html5'&&lessonHtmlVideo)return !lessonHtmlVideo.paused;
+    return true;
+  }catch(_){return true;}};
+  const ensureIndicator=()=>{
+    let el=wrapper.querySelector('.aa-hold2x-indicator');
+    if(!el){
+      el=document.createElement('div');
+      el.className='aa-hold2x-indicator';
+      el.setAttribute('aria-hidden','true');
+      el.innerHTML='<i class="fas fa-gauge-high" aria-hidden="true"></i><span>الفيديو مسرّع ×2</span>';
+      wrapper.appendChild(el);
+    }
+    return el;
   };
-  const clearPointerTimer=()=>{if(pointerTimer){clearTimeout(pointerTimer);pointerTimer=null;}};
-  const clearSpaceTimer=()=>{if(spaceTimer){clearTimeout(spaceTimer);spaceTimer=null;}};
-  const stopPointer=()=>{
-    clearPointerTimer();
-    const was=pointerHolding;
-    pointerPending=false;pointerHolding=false;
-    if(was) setUI(false);
-  };
-  const stopSpace=()=>{
-    clearSpaceTimer();
-    const was=spaceHolding;
-    spacePending=false;spaceHolding=false;
-    if(was) setUI(false);
-  };
-  const surfaceTarget=t=>{
-    if(!t?.closest)return false;
-    return !t.closest('.lesson-platform-controls,.custom-video-controls,.lesson-video-center-play,button,input,.settings-dropdown,.aa-hold2x-banner');
+  const activate=()=>{wrapper.classList.add('aa-hold2x-active');ensureIndicator();};
+  const deactivate=()=>{wrapper.classList.remove('aa-hold2x-active');};
+
+  let pointerId=null,timer=null,holding=false,restore=1,source='';
+  const excluded=t=>!!t?.closest?.('.lesson-platform-controls,.lesson-video-center-play,button,input,.settings-dropdown,.lesson-seek-feedback,.lesson-player-brand,.lesson-resume-indicator');
+  const clear=()=>{if(timer){clearTimeout(timer);timer=null;}};
+  const release=async ev=>{
+    if(pointerId===null)return;
+    if(ev?.pointerId!=null&&ev.pointerId!==pointerId)return;
+    const was=holding;
+    clear();pointerId=null;holding=false;
+    if(was){
+      await setRate(restore||1);
+      deactivate();
+      wrapper.dataset.suppressNextTapClick='1';
+      setTimeout(()=>delete wrapper.dataset.suppressNextTapClick,450);
+    }
   };
 
   wrapper.addEventListener('pointerdown',e=>{
-    if((e.pointerType!=='touch'&&e.pointerType!=='mouse')||!surfaceTarget(e.target))return;
+    if(!ready()||excluded(e.target))return;
     if(e.pointerType==='mouse'&&e.button!==0)return;
-    clearPointerTimer();pointerPending=true;pointerHolding=false;
-    pointerTimer=setTimeout(()=>{
-      pointerTimer=null;
-      if(!pointerPending)return;
-      pointerHolding=true;
-      setUI(true);
-    },430);
+    pointerId=e.pointerId;restore=getRate();source=e.pointerType||'pointer';holding=false;clear();
+    try{wrapper.setPointerCapture?.(pointerId);}catch(_){ }
+    timer=setTimeout(async()=>{
+      timer=null;
+      if(pointerId===null||!ready()||!playing())return;
+      holding=true;source=e.pointerType||'pointer';
+      activate();
+      await setRate(2);
+    },450);
   },true);
-  const pointerEnd=e=>{
-    if(e?.pointerType&&e.pointerType!=='touch'&&e.pointerType!=='mouse')return;
-    stopPointer();
-  };
-  wrapper.addEventListener('pointerup',pointerEnd,true);
-  wrapper.addEventListener('pointercancel',pointerEnd,true);
-  wrapper.addEventListener('lostpointercapture',pointerEnd,true);
+  wrapper.addEventListener('pointerup',release,true);
+  wrapper.addEventListener('pointercancel',release,true);
+  wrapper.addEventListener('lostpointercapture',e=>{if(pointerId!==null)release(e);},true);
 
-  document.addEventListener('keydown',e=>{
-    if(e.code!=='Space'||e.repeat)return;
-    if(typeof currentCoursePage!=='undefined'&&currentCoursePage!=='lessonPlayer')return;
-    if(e.ctrlKey||e.altKey||e.metaKey)return;
-    clearSpaceTimer();spacePending=true;spaceHolding=false;
-    spaceTimer=setTimeout(()=>{
-      spaceTimer=null;
-      if(!spacePending)return;
-      spaceHolding=true;
-      setUI(true);
-    },430);
+  if(!window.__aaHold2xSpaceOverlayBound){
+    window.__aaHold2xSpaceOverlayBound=true;
+    let down=false,timer2=null,holding2=false,restore2=1;
+    const clear2=()=>{if(timer2){clearTimeout(timer2);timer2=null;}};
+    document.addEventListener('keydown',e=>{
+      if(e.code!=='Space'||!ready()||currentCoursePage!=='lessonPlayer')return;
+      if(e.ctrlKey||e.altKey||e.metaKey)return;
+      if(down){e.preventDefault();e.stopImmediatePropagation();return;}
+      down=true;holding2=false;restore2=getRate();clear2();
+      e.preventDefault();e.stopImmediatePropagation();
+      timer2=setTimeout(async()=>{
+        timer2=null;if(!down||!ready()||!playing())return;
+        holding2=true;activate();await setRate(2);
+      },450);
+    },true);
+    document.addEventListener('keyup',async e=>{
+      if(e.code!=='Space'||!down)return;
+      e.preventDefault();e.stopImmediatePropagation();clear2();down=false;
+      if(holding2){holding2=false;await setRate(restore2||1);deactivate();return;}
+      try{window.v12TogglePlayback?.();}catch(_){ }
+    },true);
+    window.addEventListener('blur',async()=>{
+      if(!down)return;clear2();down=false;
+      if(holding2){holding2=false;await setRate(restore2||1);deactivate();}
+    },{passive:true});
+  }
+
+  wrapper.addEventListener('click',e=>{
+    if(wrapper.dataset.suppressNextTapClick==='1'){delete wrapper.dataset.suppressNextTapClick;e.preventDefault();e.stopImmediatePropagation();}
   },true);
-  document.addEventListener('keyup',e=>{
-    if(e.code!=='Space')return;
-    stopSpace();
-  },true);
-  window.addEventListener('blur',()=>{stopPointer();stopSpace();},{passive:true});
 })();
 </script>
-
 </body>
 </html>
