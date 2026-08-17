@@ -9667,23 +9667,6 @@ videoWrap?.addEventListener('click',e=>{
   }
   v12TogglePlayback();
 });
-document.addEventListener('keydown',e=>{
-  if(currentCoursePage!=='lessonPlayer'||!lessonPlayerReady||!lessonPlayer)return;
-  const a=document.activeElement;
-  const code=String(e.code||'');
-  if(['INPUT','TEXTAREA','SELECT'].includes(a?.tagName))return;
-  if(code==='ArrowUp'||code==='ArrowDown'){
-    e.preventDefault();e.stopPropagation();
-    const delta=code==='ArrowUp'?5:-5;
-    const current=Number(lessonPlayerType==='html5'&&lessonHtmlVideo?lessonHtmlVideo.volume*100:(lessonPlayer.getVolume?.()||$('lessonVolumeSlider')?.value||0));
-    const next=Math.max(0,Math.min(100,current+delta));
-    const sl=$('lessonVolumeSlider');if(sl)sl.value=String(next);
-    try{if(lessonPlayerType==='html5'&&lessonHtmlVideo){lessonHtmlVideo.muted=false;lessonHtmlVideo.volume=next/100;}else{lessonPlayer.unMute?.();lessonPlayer.setVolume?.(next);}}catch(_){}
-    const mb=$('lessonMuteBtn');if(mb)mb.innerHTML=next===0?'<i class=\"fas fa-volume-mute\"></i>':'<i class=\"fas fa-volume-up\"></i>';
-  }else if(code==='ArrowLeft'||code==='ArrowRight'){e.preventDefault();e.stopPropagation();window.__allowedLessonSeekUntil=Date.now()+1200;seekLessonBy(code==='ArrowLeft'?-10:10);}
-},true);
-
-
 /* 5) Personal portfolio work: replace the old assignment-linked uploader with a true personal portfolio item. */
 function ensurePortfolioWorkV12(){
   let m=$('ananasPortfolioWorkModal');if(m)return m;
@@ -14309,167 +14292,6 @@ const s=document.createElement('style');s.textContent=`
 })();
 </script>
 
-<!-- FINAL AUTHORITATIVE KEYBOARD SHORTCUTS: Space / F / M -->
-<script id="aa-final-keyboard-fmx-authoritative">
-(function(){
-  'use strict';
-  if(window.__aaFinalKeyboardFMX_v2)return;
-  window.__aaFinalKeyboardFMX_v2=true;
-
-  const wrapper=()=>document.getElementById('lessonVideoWrapper');
-  const playerReady=()=>{
-    try{
-      const page=document.getElementById('courseLessonPlayerPage');
-      const visible=!!page && page.classList.contains('active') && getComputedStyle(page).display!=='none';
-      return visible && !!lessonPlayer && !!lessonPlayerReady;
-    }catch(_){return false;}
-  };
-  const getState=()=>{
-    try{
-      if(typeof lessonPlayerType!=='undefined' && lessonPlayerType==='html5' && lessonHtmlVideo){
-        if(lessonHtmlVideo.ended)return LESSON_MEDIA_STATE.ENDED;
-        return lessonHtmlVideo.paused?LESSON_MEDIA_STATE.PAUSED:LESSON_MEDIA_STATE.PLAYING;
-      }
-      const s=lessonPlayer?.getPlayerState?.();
-      if(s===LESSON_MEDIA_STATE.PLAYING || (window.YT&&s===YT.PlayerState.PLAYING))return LESSON_MEDIA_STATE.PLAYING;
-      if(s===LESSON_MEDIA_STATE.ENDED || s===LESSON_MEDIA_STATE.PAUSED || (window.YT&&(s===YT.PlayerState.ENDED||s===YT.PlayerState.PAUSED)))return LESSON_MEDIA_STATE.PAUSED;
-    }catch(_){ }
-    return LESSON_MEDIA_STATE.PAUSED;
-  };
-  const getRate=()=>{
-    try{
-      if(typeof lessonPlayerType!=='undefined' && lessonPlayerType==='html5' && lessonHtmlVideo)return Number(lessonHtmlVideo.playbackRate)||1;
-      const r=Number(lessonPlayer?.getPlaybackRate?.());
-      return Number.isFinite(r)&&r>0?r:1;
-    }catch(_){return 1;}
-  };
-  const setRate=async(rate)=>{
-    try{
-      const n=Number(rate)||1;
-      if(typeof lessonPlayerType!=='undefined' && lessonPlayerType==='html5' && lessonHtmlVideo){lessonHtmlVideo.playbackRate=n;return;}
-      if(typeof lessonPlayer?.setPlaybackRate==='function')await lessonPlayer.setPlaybackRate(n);
-    }catch(_){ }
-  };
-  const ensureIndicator=()=>{
-    const w=wrapper();if(!w)return null;
-    let el=w.querySelector('.aa-hold2x-indicator');
-    if(!el){
-      el=document.createElement('div');
-      el.className='aa-hold2x-indicator';
-      el.setAttribute('aria-hidden','true');
-      el.innerHTML='<i class="fas fa-forward"></i><span>الفيديو مسرّع ×2</span>';
-      w.appendChild(el);
-    }
-    return el;
-  };
-  const showHold2x=()=>{
-    const w=wrapper();
-    try{w?.classList.add('aa-hold2x-space-active','aa-hold2x-active');}catch(_){ }
-    ensureIndicator();
-    try{window.showLessonControls?.(0);}catch(_){ }
-  };
-  const hideHold2x=()=>{
-    const w=wrapper();
-    try{w?.classList.remove('aa-hold2x-space-active','aa-hold2x-active');}catch(_){ }
-  };
-
-  let spaceDown=false;
-  let hold2x=false;
-  let holdTimer=null;
-  let restoreRate=1;
-
-  const togglePlayback=()=>{
-    if(!playerReady())return;
-    const state=getState();
-    try{
-      if(typeof lessonPlayerType!=='undefined' && lessonPlayerType==='html5' && lessonHtmlVideo){
-        if(state===LESSON_MEDIA_STATE.PLAYING)lessonHtmlVideo.pause();
-        else {const r=lessonHtmlVideo.play();if(r?.catch)r.catch(()=>{});}
-      }else if(state===LESSON_MEDIA_STATE.PLAYING){
-        const r=lessonPlayer?.pauseVideo?.() ?? lessonPlayer?.pause?.();if(r?.catch)r.catch(()=>{});
-      }else{
-        const r=lessonPlayer?.playVideo?.() ?? lessonPlayer?.play?.();if(r?.catch)r.catch(()=>{});
-      }
-      setTimeout(()=>window.updateLessonCenterButton?.(),0);
-    }catch(_){ }
-  };
-
-  const toggleMute=()=>{
-    if(!playerReady())return;
-    try{
-      const btn=document.getElementById('lessonMuteBtn');
-      if(typeof lessonPlayerType!=='undefined' && lessonPlayerType==='html5' && lessonHtmlVideo){
-        lessonHtmlVideo.muted=!lessonHtmlVideo.muted;
-        if(btn)btn.innerHTML=lessonHtmlVideo.muted?'<i class="fas fa-volume-mute"></i>':'<i class="fas fa-volume-up"></i>';
-      }else{
-        const muted=!!lessonPlayer?.isMuted?.();
-        const r=muted?lessonPlayer?.unMute?.():lessonPlayer?.mute?.();if(r?.catch)r.catch(()=>{});
-        if(btn)btn.innerHTML=muted?'<i class="fas fa-volume-up"></i>':'<i class="fas fa-volume-mute"></i>';
-      }
-    }catch(_){ }
-  };
-
-  const onKeyDown=e=>{
-    if(!(e.code==='Space'||e.code==='KeyF'||e.code==='KeyM'||e.key===' '||String(e.key||'').toLowerCase()==='f'||String(e.key||'').toLowerCase()==='m'))return;
-    if(!playerReady())return;
-    e.preventDefault();e.stopPropagation();e.stopImmediatePropagation();
-
-    if(e.code==='KeyF'||String(e.key||'').toLowerCase()==='f'){
-      const btn=document.getElementById('lessonFullscreenBtn');
-      if(btn)btn.dispatchEvent(new MouseEvent('click',{bubbles:false,cancelable:true,view:window}));
-      return;
-    }
-    if(e.code==='KeyM'||String(e.key||'').toLowerCase()==='m'){
-      toggleMute();
-      return;
-    }
-
-    if(spaceDown)return;
-    spaceDown=true;
-    hold2x=false;
-    restoreRate=getRate();
-    clearTimeout(holdTimer);
-    holdTimer=setTimeout(async()=>{
-      if(!spaceDown||getState()!==LESSON_MEDIA_STATE.PLAYING)return;
-      hold2x=true;
-      showHold2x();
-      await setRate(2);
-    },450);
-  };
-
-  const onKeyUp=async e=>{
-    if(e.code!=='Space' && e.key!==' ')return;
-    if(!spaceDown)return;
-    e.preventDefault();e.stopPropagation();e.stopImmediatePropagation();
-    spaceDown=false;
-    clearTimeout(holdTimer);holdTimer=null;
-    if(hold2x){
-      hold2x=false;
-      await setRate(restoreRate);
-      hideHold2x();
-      return;
-    }
-    togglePlayback();
-  };
-
-  const onBlur=async()=>{
-    if(!spaceDown)return;
-    spaceDown=false;clearTimeout(holdTimer);holdTimer=null;
-    if(hold2x){hold2x=false;await setRate(restoreRate);hideHold2x();}
-  };
-
-  document.addEventListener('keydown',onKeyDown,true);
-  document.addEventListener('keyup',onKeyUp,true);
-  window.addEventListener('blur',onBlur,{passive:true});
-  window.__aaFinalKeyboardFMX_v2Cleanup=()=>{
-    document.removeEventListener('keydown',onKeyDown,true);
-    document.removeEventListener('keyup',onKeyUp,true);
-    window.removeEventListener('blur',onBlur);
-    clearTimeout(holdTimer);
-  };
-})();
-</script>
-
 <!-- FINAL DESKTOP CENTER PLAY/PAUSE FLASH PATCH -->
 <style id="aa-final-desktop-center-play-pause-v2-style">
 @media (hover:hover) and (pointer:fine){
@@ -14549,25 +14371,27 @@ const s=document.createElement('style');s.textContent=`
 })();
 </script>
 
-<!-- FINAL SPACE SHORT-TOGGLE / LONG-HOLD-2X V3 -->
-<script id="aa-final-space-short-toggle-long2x-v3">
+
+<!-- FINAL UNIFIED LESSON KEYBOARD CONTROLLER V4 -->
+<script id="aa-final-unified-lesson-keyboard-v4">
 (function(){
   'use strict';
-  try{ window.__aaFinalKeyboardFMX_v2Cleanup?.(); }catch(_){ }
-  if(window.__aaFinalSpaceV3Bound)return;
-  window.__aaFinalSpaceV3Bound=true;
-  const getPage=()=>document.getElementById('courseLessonPlayerPage');
-  const getWrapper=()=>document.getElementById('lessonVideoWrapper');
+  if(window.__aaUnifiedLessonKeyboardV4)return;
+  window.__aaUnifiedLessonKeyboardV4=true;
+
+  const page=()=>document.getElementById('courseLessonPlayerPage');
+  const wrapper=()=>document.getElementById('lessonVideoWrapper');
   const ready=()=>{
     try{
-      const page=getPage();
-      return !!page && page.classList.contains('active') && !!lessonPlayer && !!lessonPlayerReady;
+      const p=page();
+      return !!p && p.classList.contains('active') && getComputedStyle(p).display!=='none' && !!lessonPlayer && !!lessonPlayerReady;
     }catch(_){return false;}
   };
   const state=()=>{
     try{
-      if(typeof lessonPlayerType!=='undefined'&&lessonPlayerType==='html5'&&lessonHtmlVideo){
-        return lessonHtmlVideo.ended?LESSON_MEDIA_STATE.ENDED:(lessonHtmlVideo.paused?LESSON_MEDIA_STATE.PAUSED:LESSON_MEDIA_STATE.PLAYING);
+      if(typeof lessonPlayerType!=='undefined' && lessonPlayerType==='html5' && lessonHtmlVideo){
+        if(lessonHtmlVideo.ended)return LESSON_MEDIA_STATE.ENDED;
+        return lessonHtmlVideo.paused?LESSON_MEDIA_STATE.PAUSED:LESSON_MEDIA_STATE.PLAYING;
       }
       const s=lessonPlayer?.getPlayerState?.();
       if(s===LESSON_MEDIA_STATE.PLAYING || (window.YT&&s===YT.PlayerState.PLAYING))return LESSON_MEDIA_STATE.PLAYING;
@@ -14575,84 +14399,157 @@ const s=document.createElement('style');s.textContent=`
     }catch(_){ }
     return LESSON_MEDIA_STATE.PAUSED;
   };
-  const rate=()=>{
+  const getRate=()=>{
     try{
       if(typeof lessonPlayerType!=='undefined'&&lessonPlayerType==='html5'&&lessonHtmlVideo)return Number(lessonHtmlVideo.playbackRate)||1;
       const r=Number(lessonPlayer?.getPlaybackRate?.());
       return Number.isFinite(r)&&r>0?r:1;
     }catch(_){return 1;}
   };
-  const setRate=async r=>{
+  const setRate=async rate=>{
     try{
-      const n=Number(r)||1;
+      const n=Number(rate)||1;
       if(typeof lessonPlayerType!=='undefined'&&lessonPlayerType==='html5'&&lessonHtmlVideo){lessonHtmlVideo.playbackRate=n;return;}
       if(typeof lessonPlayer?.setPlaybackRate==='function')await lessonPlayer.setPlaybackRate(n);
     }catch(_){ }
   };
-  const toggle=()=>{
+  const togglePlayback=()=>{
     if(!ready())return;
     try{
       const playing=state()===LESSON_MEDIA_STATE.PLAYING;
-      const fn=playing?(lessonPlayer?.pauseVideo||lessonPlayer?.pause):(lessonPlayer?.playVideo||lessonPlayer?.play);
-      const r=fn?.call(lessonPlayer);
-      if(r?.catch)r.catch(()=>{});
+      if(typeof lessonPlayerType!=='undefined'&&lessonPlayerType==='html5'&&lessonHtmlVideo){
+        const r=playing?lessonHtmlVideo.pause():lessonHtmlVideo.play();
+        if(r?.catch)r.catch(()=>{});
+      }else{
+        const r=playing?(lessonPlayer?.pauseVideo?.()??lessonPlayer?.pause?.()):(lessonPlayer?.playVideo?.()??lessonPlayer?.play?.());
+        if(r?.catch)r.catch(()=>{});
+      }
       setTimeout(()=>window.updateLessonCenterButton?.(),0);
     }catch(_){ }
   };
+  const toggleMute=()=>{
+    if(!ready())return;
+    try{
+      const btn=document.getElementById('lessonMuteBtn');
+      if(typeof lessonPlayerType!=='undefined'&&lessonPlayerType==='html5'&&lessonHtmlVideo){
+        lessonHtmlVideo.muted=!lessonHtmlVideo.muted;
+        if(btn)btn.innerHTML=lessonHtmlVideo.muted?'<i class="fas fa-volume-mute"></i>':'<i class="fas fa-volume-up"></i>';
+      }else{
+        const muted=!!lessonPlayer?.isMuted?.();
+        const r=muted?lessonPlayer?.unMute?.():lessonPlayer?.mute?.();
+        if(r?.catch)r.catch(()=>{});
+        if(btn)btn.innerHTML=muted?'<i class="fas fa-volume-up"></i>':'<i class="fas fa-volume-mute"></i>';
+      }
+    }catch(_){ }
+  };
+  const changeVolume=delta=>{
+    if(!ready())return;
+    try{
+      const current=Number(typeof lessonPlayerType!=='undefined'&&lessonPlayerType==='html5'&&lessonHtmlVideo
+        ? lessonHtmlVideo.volume*100
+        : (lessonPlayer?.getVolume?.() ?? document.getElementById('lessonVolumeSlider')?.value ?? 0));
+      const next=Math.max(0,Math.min(100,current+delta));
+      const slider=document.getElementById('lessonVolumeSlider');
+      if(slider)slider.value=String(next);
+      if(typeof lessonPlayerType!=='undefined'&&lessonPlayerType==='html5'&&lessonHtmlVideo){lessonHtmlVideo.muted=false;lessonHtmlVideo.volume=next/100;}
+      else{lessonPlayer?.unMute?.();lessonPlayer?.setVolume?.(next);}
+      const mb=document.getElementById('lessonMuteBtn');
+      if(mb)mb.innerHTML=next===0?'<i class="fas fa-volume-mute"></i>':'<i class="fas fa-volume-up"></i>';
+    }catch(_){ }
+  };
+  const seek=seconds=>{
+    if(!ready())return;
+    try{
+      window.__allowedLessonSeekUntil=Date.now()+1200;
+      if(typeof seekLessonBy==='function')seekLessonBy(seconds);
+      else{
+        const now=Number(lessonPlayer?.getCurrentTime?.()||0),dur=Number(lessonPlayer?.getDuration?.()||Infinity);
+        const next=Math.max(0,Math.min(dur,now+Number(seconds)||0));
+        lessonPlayer?.seekTo?.(next,true);
+        window.updateLessonControls?.();
+      }
+    }catch(_){ }
+  };
+  const fullscreen=()=>{
+    if(!ready())return;
+    const btn=document.getElementById('lessonFullscreenBtn');
+    if(btn){
+      try{btn.click();return;}catch(_){ }
+    }
+    try{window.__aaLessonFullscreenOnlyInvoke?.();}catch(_){ }
+  };
   const show2x=()=>{
-    const w=getWrapper(); if(!w)return;
+    const w=wrapper();if(!w)return;
     w.classList.add('aa-hold2x-space-active','aa-hold2x-active');
     let i=w.querySelector('.aa-hold2x-indicator');
     if(!i){
-      i=document.createElement('div');
-      i.className='aa-hold2x-indicator';
-      i.setAttribute('aria-hidden','true');
-      i.innerHTML='<i class="fas fa-forward"></i><span>الفيديو مسرّع ×2</span>';
-      w.appendChild(i);
+      i=document.createElement('div');i.className='aa-hold2x-indicator';i.setAttribute('aria-hidden','true');
+      i.innerHTML='<i class="fas fa-forward"></i><span>الفيديو مسرّع ×2</span>';w.appendChild(i);
     }
   };
-  const hide2x=()=>{const w=getWrapper();w?.classList.remove('aa-hold2x-space-active','aa-hold2x-active');};
-  let down=false,holding=false,timer=null,restore=1;
-  const clear=()=>{if(timer){clearTimeout(timer);timer=null;}};
-  const finish=async()=>{
-    if(!down)return;
-    down=false;clear();
-    if(holding){
-      holding=false;
-      await setRate(restore);
-      hide2x();
-      return;
+  const hide2x=()=>wrapper()?.classList.remove('aa-hold2x-space-active','aa-hold2x-active');
+
+  let spaceDown=false,hold2x=false,holdTimer=null,restoreRate=1;
+  const clearTimer=()=>{if(holdTimer){clearTimeout(holdTimer);holdTimer=null;}};
+  const finishSpace=async()=>{
+    if(!spaceDown)return;
+    spaceDown=false;clearTimer();
+    if(hold2x){hold2x=false;await setRate(restoreRate);hide2x();return;}
+    togglePlayback();
+  };
+
+  const onKeyDown=e=>{
+    if(!ready())return;
+    const code=String(e.code||'');
+    const key=String(e.key||'');
+    const lower=key.toLowerCase();
+    const isSpace=code==='Space' || key===' ';
+    const isF=code==='KeyF' || lower==='f';
+    const isM=code==='KeyM' || lower==='m';
+    const isLeft=code==='ArrowLeft';
+    const isRight=code==='ArrowRight';
+    const isUp=code==='ArrowUp';
+    const isDown=code==='ArrowDown';
+    if(!(isSpace||isF||isM||isLeft||isRight||isUp||isDown))return;
+
+    // These shortcuts are deliberately global within the lesson player,
+    // including when focus is on a range/select/input control.
+    e.preventDefault();e.stopPropagation();e.stopImmediatePropagation();
+
+    if(isF){if(!e.repeat)fullscreen();return;}
+    if(isM){if(!e.repeat)toggleMute();return;}
+    if(isLeft){if(!e.repeat)seek(-10);return;}
+    if(isRight){if(!e.repeat)seek(10);return;}
+    if(isUp){if(!e.repeat)changeVolume(5);return;}
+    if(isDown){if(!e.repeat)changeVolume(-5);return;}
+
+    if(isSpace){
+      if(e.repeat||spaceDown)return;
+      spaceDown=true;hold2x=false;restoreRate=getRate();clearTimer();
+      holdTimer=setTimeout(async()=>{
+        holdTimer=null;
+        if(!spaceDown || state()!==LESSON_MEDIA_STATE.PLAYING)return;
+        hold2x=true;show2x();await setRate(2);
+      },450);
     }
-    toggle();
   };
-  const onDown=e=>{
-    if(e.code!=='Space')return;
-    if(!ready() || down)return;
-    e.preventDefault();e.stopImmediatePropagation();
-    down=true;holding=false;restore=rate();clear();
-    timer=setTimeout(async()=>{
-      timer=null;
-      if(!down || state()!==LESSON_MEDIA_STATE.PLAYING)return;
-      holding=true;show2x();await setRate(2);
-    },450);
+  const onKeyUp=e=>{
+    if(e.code!=='Space'&&e.key!==' ')return;
+    e.preventDefault();e.stopPropagation();e.stopImmediatePropagation();
+    finishSpace();
   };
-  const onUp=e=>{
-    if(e.code!=='Space')return;
-    e.preventDefault();e.stopImmediatePropagation();
-    finish();
-  };
-  const onBlur=()=>{finish();};
-  document.addEventListener('keydown',onDown,true);
-  document.addEventListener('keyup',onUp,true);
+  const onBlur=()=>{finishSpace();};
+
+  document.addEventListener('keydown',onKeyDown,true);
+  document.addEventListener('keyup',onKeyUp,true);
   window.addEventListener('blur',onBlur,{passive:true});
-  window.__aaFinalSpaceV3Cleanup=()=>{
-    document.removeEventListener('keydown',onDown,true);
-    document.removeEventListener('keyup',onUp,true);
+  window.__aaUnifiedLessonKeyboardV4Cleanup=()=>{
+    document.removeEventListener('keydown',onKeyDown,true);
+    document.removeEventListener('keyup',onKeyUp,true);
     window.removeEventListener('blur',onBlur);
-    clear();
+    clearTimer();
   };
 })();
 </script>
 </body>
 </html>
-
