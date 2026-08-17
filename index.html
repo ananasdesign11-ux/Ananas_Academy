@@ -13853,18 +13853,14 @@ const s=document.createElement('style');s.textContent=`
   },true);
   window.addEventListener('blur',async()=>{if(!spDown)return;clearSp();spDown=false;if(spLong){spLong=false;await setRate(spRestore||1);wrap.classList.remove('lesson-hold-2x');wrap.classList.add('lesson-controls-hidden');}},{passive:true});
 
-  // Never let a control interaction toggle playback through the video surface.
-  document.addEventListener('pointerdown',e=>{
-    const control=e.target?.closest?.('#lessonVideoWrapper .lesson-platform-controls,#lessonVideoWrapper #lessonCenterPlayBtn,#lessonVideoWrapper button,#lessonVideoWrapper input,#lessonVideoWrapper .settings-dropdown');
-    if(!control)return;
-    e.stopImmediatePropagation();
-  },true);
+  // Control isolation: do NOT cancel native pointer events on controls.
+  // Only stop the video-surface click from treating a control click as play/pause.
   document.addEventListener('click',e=>{
-    const control=e.target?.closest?.('#lessonVideoWrapper .lesson-platform-controls,#lessonVideoWrapper #lessonCenterPlayBtn,#lessonVideoWrapper button,#lessonVideoWrapper input,#lessonVideoWrapper .settings-dropdown');
+    const target=e.target;
+    if(!target?.closest?.('#lessonVideoWrapper'))return;
+    const control=target.closest?.('#lessonVideoWrapper .lesson-platform-controls,#lessonVideoWrapper #lessonCenterPlayBtn,#lessonVideoWrapper button,#lessonVideoWrapper input,#lessonVideoWrapper .settings-dropdown');
     if(!control)return;
-    const play=control.closest?.('#lessonDesktopPlayBtn,#lessonCenterPlayBtn');
-    if(play){e.preventDefault();e.stopImmediatePropagation();Promise.resolve(window.v12TogglePlayback?.()).catch(()=>{});return;}
-    e.preventDefault();e.stopImmediatePropagation();
+    e.stopPropagation();
   },true);
 
   // Speed button opens slider on both desktop and touch, directly above itself.
@@ -13878,6 +13874,21 @@ const s=document.createElement('style');s.textContent=`
   },true);
   window.addEventListener('resize',positionSliderMenu,{passive:true});
   window.addEventListener('orientationchange',()=>setTimeout(positionSliderMenu,50),{passive:true});
+
+  // Final direct play/pause + fullscreen handlers. These do not intercept pointerdown,
+  // so the progress scrubber and native range interactions remain fully functional.
+  document.addEventListener('click',e=>{
+    if(!isReady())return;
+    const t=e.target?.closest?.('#lessonDesktopPlayBtn,#lessonFullscreenBtn');
+    if(!t)return;
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    if(t.id==='lessonDesktopPlayBtn'){Promise.resolve(window.v12TogglePlayback?.()).catch(()=>{});return;}
+    if(t.id==='lessonFullscreenBtn'){try{window.enterLessonFullscreen?.();}catch(_){}return;}
+  },true);
+
+  // Progress scrubber: never intercept its pointer events here. The dedicated scrubber
+  // listener owns pointerdown/move/up and commits the seek on release.
 
   // Keep arrows independent of focus: left/right seek, up/down volume only.
   document.addEventListener('keydown',e=>{
