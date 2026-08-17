@@ -1821,6 +1821,70 @@ label[for*="En"], input[id*="En"], textarea[id*="En"] { display:none !important;
     pointer-events:none !important;
 }
 </style>
+
+<style id="lesson-controls-final-layout-v6">
+/* Final requested lesson-controls order. The DOM remains unchanged; only visual order changes. */
+#lessonVideoWrapper .lesson-platform-controls .controls-row{
+  display:flex!important;
+  align-items:center!important;
+  justify-content:flex-start!important;
+  direction:rtl!important;
+  gap:8px!important;
+  min-height:38px!important;
+  padding:0!important;
+  flex-wrap:nowrap!important;
+}
+#lessonVideoWrapper .lesson-platform-controls .controls-left,
+#lessonVideoWrapper .lesson-platform-controls .controls-right{
+  display:contents!important;
+}
+#lessonVideoWrapper #lessonFullscreenBtn{order:1!important;}
+#lessonVideoWrapper #lessonMuteBtn{order:2!important;}
+#lessonVideoWrapper .lesson-volume-wrap{order:3!important;display:flex!important;align-items:center!important;gap:4px!important;}
+#lessonVideoWrapper #lessonTimerDisplay{order:4!important;position:static!important;transform:none!important;min-width:90px!important;flex:0 0 auto!important;text-align:center!important;}
+#lessonVideoWrapper #lessonSeekBackBtn{order:5!important;}
+#lessonVideoWrapper #lessonSeekForwardBtn{order:6!important;}
+#lessonVideoWrapper #lessonSpeedBtn{order:7!important;}
+#lessonVideoWrapper #lessonDesktopPlayBtn{order:8!important;}
+#lessonVideoWrapper #lessonSpeedDropdown{order:7!important;}
+#lessonVideoWrapper .lesson-platform-controls .controls-btn{flex:0 0 auto!important;}
+
+/* Touch: only fullscreen + timer + speed, in RTL order: fullscreen / timer / speed. */
+@media (pointer:coarse),(hover:none){
+  #lessonVideoWrapper .lesson-platform-controls .controls-row{justify-content:space-between!important;}
+  #lessonVideoWrapper #lessonFullscreenBtn{display:inline-flex!important;order:1!important;}
+  #lessonVideoWrapper #lessonTimerDisplay{display:block!important;order:2!important;min-width:0!important;flex:1 1 auto!important;}
+  #lessonVideoWrapper #lessonSpeedBtn{display:inline-flex!important;order:3!important;}
+  #lessonVideoWrapper #lessonMuteBtn,
+  #lessonVideoWrapper .lesson-volume-wrap,
+  #lessonVideoWrapper #lessonSeekBackBtn,
+  #lessonVideoWrapper #lessonSeekForwardBtn,
+  #lessonVideoWrapper #lessonDesktopPlayBtn{display:none!important;}
+  #lessonVideoWrapper #lessonSpeedDropdown{order:3!important;}
+}
+
+/* Fine-pointer/desktop: exact RTL order: fullscreen, mute, volume, timer, seek-back, seek-forward, speed, play. */
+@media (hover:hover) and (pointer:fine){
+  #lessonVideoWrapper .lesson-platform-controls .controls-row{justify-content:flex-start!important;}
+  #lessonVideoWrapper #lessonFullscreenBtn{display:inline-flex!important;order:1!important;}
+  #lessonVideoWrapper #lessonMuteBtn{display:inline-flex!important;order:2!important;}
+  #lessonVideoWrapper .lesson-volume-wrap{display:flex!important;order:3!important;}
+  #lessonVideoWrapper #lessonTimerDisplay{display:block!important;order:4!important;}
+  #lessonVideoWrapper #lessonSeekBackBtn{display:inline-flex!important;order:5!important;}
+  #lessonVideoWrapper #lessonSeekForwardBtn{display:inline-flex!important;order:6!important;}
+  #lessonVideoWrapper #lessonSpeedBtn{display:inline-flex!important;order:7!important;}
+  #lessonVideoWrapper #lessonDesktopPlayBtn{display:inline-flex!important;order:8!important;}
+}
+
+/* Long-press acceleration state. */
+#lessonVideoWrapper.lesson-hold-2x{cursor:grabbing!important;}
+#lessonVideoWrapper.lesson-hold-2x .lesson-platform-controls,
+#lessonVideoWrapper.lesson-hold-2x .lesson-seek-feedback{filter:saturate(1.04);}
+@media (pointer:coarse),(hover:none){
+  #lessonVideoWrapper .lesson-platform-controls .lesson-volume-wrap{display:none!important;}
+}
+</style>
+
 </head>
 <body class="light-mode">
     
@@ -12840,6 +12904,93 @@ const s=document.createElement('style');s.textContent=`
   },true);
 })();
 </script>
+
+<script id="lesson-long-press-2x-v6">
+(function(){
+  'use strict';
+  const wrapper=document.getElementById('lessonVideoWrapper');
+  if(!wrapper || wrapper.dataset.hold2xBound==='1') return;
+  wrapper.dataset.hold2xBound='1';
+  let holdTimer=null;
+  let holding=false;
+  let restoreRate=1;
+  let activePointerId=null;
+  const HOLD_MS=360;
+
+  const isExcludedTarget=(target)=>!!target?.closest?.('.lesson-platform-controls button,.lesson-platform-controls input,.settings-dropdown,.lesson-video-center-play,.lesson-player-brand,.lesson-resume-indicator,.lesson-seek-feedback');
+  const getRate=()=>{
+    try{
+      if(lessonPlayerType==='html5' && lessonHtmlVideo) return Number(lessonHtmlVideo.playbackRate)||1;
+      if(typeof lessonPlayer?.getPlaybackRate==='function') return Number(lessonPlayer.getPlaybackRate())||1;
+    }catch(_){ }
+    return 1;
+  };
+  const setRate=async(rate)=>{
+    try{
+      if(lessonPlayerType==='html5' && lessonHtmlVideo){ lessonHtmlVideo.playbackRate=Number(rate)||1; return; }
+      if(typeof lessonPlayer?.setPlaybackRate==='function') await lessonPlayer.setPlaybackRate(Number(rate)||1);
+    }catch(e){ console.warn('long-press playback rate failed:',e); }
+  };
+  const clearHoldTimer=()=>{if(holdTimer){clearTimeout(holdTimer);holdTimer=null;}};
+  const stopHold=async(suppressClick)=>{
+    clearHoldTimer();
+    if(!holding)return;
+    holding=false;
+    wrapper.classList.remove('lesson-hold-2x');
+    wrapper.dataset.hold2x='';
+    if(suppressClick)wrapper.dataset.suppressNextTapClick='1';
+    await setRate(restoreRate||1);
+  };
+  const startHold=(e)=>{
+    if(currentCoursePage!=='lessonPlayer'||!lessonPlayerReady||!lessonPlayer)return;
+    if(activePointerId!==null)return;
+    if(isExcludedTarget(e.target))return;
+    activePointerId=e.pointerId;
+    restoreRate=getRate();
+    clearHoldTimer();
+    holdTimer=setTimeout(async()=>{
+      holdTimer=null;
+      if(activePointerId===null)return;
+      holding=true;
+      wrapper.classList.add('lesson-hold-2x');
+      wrapper.dataset.hold2x='1';
+      await setRate(2);
+    },HOLD_MS);
+  };
+  wrapper.addEventListener('pointerdown',startHold,true);
+  wrapper.addEventListener('pointerup',async e=>{
+    if(activePointerId!==e.pointerId)return;
+    activePointerId=null;
+    await stopHold(true);
+  },true);
+  wrapper.addEventListener('pointercancel',async e=>{
+    if(activePointerId!==e.pointerId)return;
+    activePointerId=null;
+    await stopHold(false);
+  },true);
+  wrapper.addEventListener('pointerleave',async e=>{
+    if(e.pointerType==='mouse' && activePointerId===e.pointerId){
+      activePointerId=null;
+      await stopHold(false);
+    }
+  },true);
+  wrapper.addEventListener('lostpointercapture',async()=>{
+    activePointerId=null;
+    await stopHold(false);
+  },true);
+  window.addEventListener('blur',async()=>{
+    activePointerId=null;
+    await stopHold(false);
+  });
+  document.addEventListener('click',e=>{
+    if(wrapper.dataset.suppressNextTapClick==='1' && !isExcludedTarget(e.target)){
+      delete wrapper.dataset.suppressNextTapClick;
+      e.preventDefault();e.stopImmediatePropagation();
+    }
+  },true);
+})();
+</script>
+
 </body>
 </html>
 
