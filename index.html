@@ -13725,5 +13725,137 @@ const s=document.createElement('style');s.textContent=`
   #lessonCustomControls #lessonDesktopPlayBtn{grid-area:play !important;justify-self:end !important;}
 }
 </style>
+
+<!-- FINAL VIDEO CONTROL DISTRIBUTION + TOUCH TOGGLE DE-DUPE V11 -->
+<style id="lesson-player-control-distribution-v11">
+@media (hover:hover) and (pointer:fine){
+  #lessonCustomControls .controls-row{
+    position:relative !important;
+    display:flex !important;
+    align-items:center !important;
+    justify-content:center !important;
+    width:100% !important;
+    min-width:0 !important;
+    padding-inline:8px !important;
+    box-sizing:border-box !important;
+    direction:ltr !important;
+  }
+  #lessonCustomControls .controls-left,
+  #lessonCustomControls .controls-right{
+    position:absolute !important;
+    top:0 !important;
+    bottom:0 !important;
+    display:flex !important;
+    align-items:center !important;
+    gap:clamp(6px,0.75vw,12px) !important;
+    min-width:0 !important;
+  }
+  /* Physical left side: play | speed | forward | back */
+  #lessonCustomControls .controls-left{
+    left:8px !important;
+    flex-direction:row-reverse !important;
+  }
+  /* Physical right side: volume | mute | fullscreen */
+  #lessonCustomControls .controls-right{
+    right:8px !important;
+    flex-direction:row !important;
+  }
+  #lessonCustomControls .controls-timer{
+    position:absolute !important;
+    left:50% !important;
+    top:50% !important;
+    transform:translate(-50%,-50%) !important;
+    width:max-content !important;
+    max-width:30% !important;
+    min-width:0 !important;
+    margin:0 !important;
+    white-space:nowrap !important;
+    text-align:center !important;
+    z-index:2 !important;
+  }
+  #lessonCustomControls .controls-left > *,
+  #lessonCustomControls .controls-right > *{
+    position:relative !important;
+    flex:0 0 auto !important;
+    min-width:0 !important;
+  }
+  #lessonCustomControls .lesson-volume-wrap{
+    width:clamp(72px,11vw,132px) !important;
+    min-width:0 !important;
+    max-width:132px !important;
+  }
+  #lessonCustomControls #lessonDesktopPlayBtn{order:1 !important;}
+  #lessonCustomControls #lessonSpeedBtn{order:2 !important;}
+  #lessonCustomControls #lessonMuteBtn{order:2 !important;}
+  #lessonCustomControls #lessonFullscreenBtn{order:3 !important;}
+}
+</style>
+<script id="lesson-player-control-distribution-v11-script">
+(function(){
+  'use strict';
+  function arrangeControls(){
+    const row=document.getElementById('lessonCustomControls')?.querySelector('.controls-row');
+    if(!row || row.dataset.v11Arranged==='1') return;
+    const left=row.querySelector('.controls-left');
+    const right=row.querySelector('.controls-right');
+    if(!left || !right) return;
+    const back=document.getElementById('lessonSeekBackBtn');
+    const forward=document.getElementById('lessonSeekForwardBtn');
+    const mute=document.getElementById('lessonMuteBtn');
+    const volume=row.querySelector('.lesson-volume-wrap');
+    const timer=document.getElementById('lessonTimerDisplay');
+    const play=document.getElementById('lessonDesktopPlayBtn');
+    const speed=document.getElementById('lessonSpeedBtn');
+    const fullscreen=document.getElementById('lessonFullscreenBtn');
+    if(!back||!forward||!mute||!volume||!timer||!play||!speed||!fullscreen) return;
+
+    /* Desktop groups: left = play,speed,forward,back; right = volume,mute,fullscreen.
+       Moving existing nodes preserves all previously attached event listeners by ID/reference. */
+    left.append(play,speed,forward,back);
+    right.append(volume,mute,fullscreen);
+    row.dataset.v11Arranged='1';
+  }
+
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',arrangeControls,{once:true});
+  else arrangeControls();
+  setTimeout(arrangeControls,120);
+  setTimeout(arrangeControls,500);
+  window.__aaArrangeLessonControlsV11=arrangeControls;
+})();
+
+(function(){
+  'use strict';
+  const wrapper=document.getElementById('lessonVideoWrapper');
+  if(!wrapper || wrapper.dataset.v11TouchClickGuard==='1') return;
+  wrapper.dataset.v11TouchClickGuard='1';
+  const isTouch=()=>{
+    try{return window.matchMedia('(pointer:coarse),(hover:none)').matches || (navigator.maxTouchPoints||0)>0;}
+    catch(_){return (navigator.maxTouchPoints||0)>0;}
+  };
+  const isBackground=e=>{
+    const t=e.target;
+    return !t.closest?.('.lesson-platform-controls,.lesson-video-center-play,button,input,.settings-dropdown,.lesson-seek-feedback');
+  };
+
+  /* The current touch pointer handler toggles the UI once. A legacy click handler
+     then used to toggle it a second time after finger-up. Suppress only that
+     synthetic click so the visible state persists after the finger is lifted. */
+  wrapper.addEventListener('pointerup',e=>{
+    if(!isTouch() || e.pointerType!=='touch' || !isBackground(e)) return;
+    wrapper.dataset.v11TouchToggleAt=String(Date.now());
+  },true);
+
+  document.addEventListener('click',e=>{
+    if(!isTouch()) return;
+    if(!isBackground(e)) return;
+    if(e.target.closest?.('#lessonVideoWrapper')!==wrapper) return;
+    const at=Number(wrapper.dataset.v11TouchToggleAt||0);
+    if(!at || Date.now()-at>700) return;
+    delete wrapper.dataset.v11TouchToggleAt;
+    e.preventDefault();
+    e.stopImmediatePropagation();
+  },true);
+})();
+</script>
 </body>
 </html>
