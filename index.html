@@ -14058,6 +14058,18 @@ const s=document.createElement('style');s.textContent=`
   #lessonVideoWrapper.aa-hold2x-active .lesson-platform-controls #lessonDesktopPlayBtn{
     display:none!important;
   }
+
+  #lessonVideoWrapper.aa-hold2x-space-active .lesson-platform-controls{
+    opacity:0!important;visibility:hidden!important;pointer-events:none!important;
+  }
+  #lessonVideoWrapper.aa-hold2x-space-active .lesson-video-center-play,
+  #lessonVideoWrapper.aa-hold2x-space-active .lesson-player-brand,
+  #lessonVideoWrapper.aa-hold2x-space-active .lesson-resume-indicator{
+    opacity:0!important;visibility:hidden!important;pointer-events:none!important;
+  }
+  #lessonVideoWrapper.aa-hold2x-space-active .aa-hold2x-indicator{
+    opacity:.94!important;visibility:visible!important;transform:translateX(-50%) translateY(0)!important;
+  }
   @media(max-width:1024px){
     #lessonVideoWrapper.aa-hold2x-active .lesson-platform-controls #lessonCenterPlayBtn,
     #lessonVideoWrapper.aa-hold2x-active .lesson-platform-controls #lessonDesktopPlayBtn{display:none!important;}
@@ -14145,18 +14157,18 @@ const s=document.createElement('style');s.textContent=`
       e.preventDefault();e.stopImmediatePropagation();
       timer2=setTimeout(async()=>{
         timer2=null;if(!down||!ready()||!playing())return;
-        holding2=true;activate();await setRate(2);
+        holding2=true;wrapper.classList.add('aa-hold2x-space-active');ensureIndicator();await setRate(2);
       },450);
     },true);
     document.addEventListener('keyup',async e=>{
       if(e.code!=='Space'||!down)return;
       e.preventDefault();e.stopImmediatePropagation();clear2();down=false;
-      if(holding2){holding2=false;await setRate(restore2||1);deactivate();return;}
+      if(holding2){holding2=false;await setRate(restore2||1);wrapper.classList.remove('aa-hold2x-space-active');return;}
       try{window.v12TogglePlayback?.();}catch(_){ }
     },true);
     window.addEventListener('blur',async()=>{
       if(!down)return;clear2();down=false;
-      if(holding2){holding2=false;await setRate(restore2||1);deactivate();}
+      if(holding2){holding2=false;await setRate(restore2||1);wrapper.classList.remove('aa-hold2x-space-active');}
     },{passive:true});
   }
 
@@ -14165,5 +14177,87 @@ const s=document.createElement('style');s.textContent=`
   },true);
 })();
 </script>
+
+<!-- FINAL KEYBOARD / FULLSCREEN ISOLATION PATCH -->
+<script id="aa-final-keyboard-fullscreen-isolation-v1">
+(function(){
+  'use strict';
+  if(window.__aaFinalKeyboardFullscreenIsolationV1)return;
+  window.__aaFinalKeyboardFullscreenIsolationV1=true;
+
+  const isLessonReady=()=>{
+    try{return typeof lessonPlayerReady!=='undefined' && lessonPlayerReady && !!lessonPlayer && currentCoursePage==='lessonPlayer';}
+    catch(_){return false;}
+  };
+  const isMediaRangeTarget=el=>!!(el && (el.id==='lessonVolumeSlider' || el.closest?.('.lesson-volume-slider')));
+  const currentVolume=()=>{
+    try{
+      if(typeof lessonPlayerType!=='undefined'&&lessonPlayerType==='html5'&&lessonHtmlVideo)
+        return Math.max(0,Math.min(100,Math.round((Number(lessonHtmlVideo.volume)||0)*100)));
+      const v=Number(lessonPlayer?.getVolume?.());
+      if(Number.isFinite(v))return Math.max(0,Math.min(100,Math.round(v)));
+    }catch(_){ }
+    const sl=document.getElementById('lessonVolumeSlider');
+    return Math.max(0,Math.min(100,Number(sl?.value)||0));
+  };
+  const setVolume=n=>{
+    const v=Math.max(0,Math.min(100,Math.round(Number(n)||0)));
+    try{
+      if(typeof lessonPlayerType!=='undefined'&&lessonPlayerType==='html5'&&lessonHtmlVideo){
+        lessonHtmlVideo.muted=false;lessonHtmlVideo.volume=v/100;
+      }else{
+        lessonPlayer?.unMute?.();lessonPlayer?.setVolume?.(v);
+      }
+      const sl=document.getElementById('lessonVolumeSlider');if(sl)sl.value=String(v);
+      const mb=document.getElementById('lessonMuteBtn');if(mb)mb.innerHTML=v===0?'<i class="fas fa-volume-mute"></i>':'<i class="fas fa-volume-up"></i>';
+      window.showLessonControls?.(2200);
+    }catch(_){ }
+  };
+
+  /* Keyboard arrows are authoritative: left/right NEVER change a focused range input. */
+  document.addEventListener('keydown',e=>{
+    if(!isLessonReady())return;
+    const code=String(e.code||'');
+    if(code!=='ArrowLeft'&&code!=='ArrowRight'&&code!=='ArrowUp'&&code!=='ArrowDown')return;
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    if(code==='ArrowLeft'||code==='ArrowRight'){
+      window.__allowedLessonSeekUntil=Date.now()+1200;
+      try{window.seekLessonBy?.(code==='ArrowLeft'?-10:10);}catch(_){ }
+      return;
+    }
+    const step=code==='ArrowUp'?5:-5;
+    setVolume(currentVolume()+step);
+  },true);
+
+  /* Fullscreen button: run fullscreen only; never let its click reach playback handlers. */
+  const bindFullscreen=()=>{
+    const btn=document.getElementById('lessonFullscreenBtn');
+    if(!btn||btn.dataset.aaFsIsolationBound==='1')return;
+    btn.dataset.aaFsIsolationBound='1';
+    btn.addEventListener('click',async e=>{
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      try{
+        const el=document.getElementById('lessonVideoWrapper');
+        if(!el)return;
+        if(document.fullscreenElement||document.webkitFullscreenElement){
+          if(document.exitFullscreen) await document.exitFullscreen();
+          else if(document.webkitExitFullscreen) document.webkitExitFullscreen();
+          return;
+        }
+        const req=el.requestFullscreen?.bind(el)||el.webkitRequestFullscreen?.bind(el);
+        if(req){const r=req();if(r?.then)await r;return;}
+        if(typeof lessonHtmlVideo!=='undefined'&&lessonHtmlVideo?.webkitEnterFullscreen)lessonHtmlVideo.webkitEnterFullscreen();
+      }catch(err){console.warn('isolated fullscreen failed',err);}
+    },true);
+  };
+  bindFullscreen();
+  document.addEventListener('DOMContentLoaded',bindFullscreen,{once:true});
+  const obs=new MutationObserver(bindFullscreen);
+  obs.observe(document.body,{subtree:true,childList:true});
+})();
+</script>
+
 </body>
 </html>
