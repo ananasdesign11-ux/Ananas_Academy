@@ -1760,6 +1760,11 @@ label[for*="En"], input[id*="En"], textarea[id*="En"] { display:none !important;
 }
 #lessonVideoWrapper .lesson-video-center-play:hover{background:rgba(108,92,231,.46)!important;}
 #lessonVideoWrapper .lesson-video-center-play{width:58px!important;height:58px!important;background:rgba(108,92,231,.34)!important;}
+@media(min-width:769px){
+  #lessonVideoWrapper .lesson-video-center-play{opacity:0!important;pointer-events:none!important;transform:translate(-50%,-50%) scale(.96)!important;}
+  #lessonVideoWrapper.lesson-center-flash .lesson-video-center-play{opacity:.42!important;pointer-events:none!important;transform:translate(-50%,-50%) scale(1)!important;}
+}
+
 .lesson-seek-feedback{
     position:absolute;top:50%;left:50%;z-index:19;display:flex;align-items:center;gap:9px;
     padding:9px 14px;border-radius:999px;background:rgba(6,8,14,.34);
@@ -5053,9 +5058,11 @@ label[for*="En"], input[id*="En"], textarea[id*="En"] { display:none !important;
             const wrapper=document.getElementById('lessonVideoWrapper');
             if(wrapper){
                 wrapper.classList.remove('lesson-center-flash');
-                if(state!==LESSON_MEDIA_STATE.PLAYING){
+                if(window.innerWidth>768){
+                    wrapper.classList.remove('show-center-play');
+                    if(state!==LESSON_MEDIA_STATE.PLAYING)flashLessonCenterButton();
+                }else if(state!==LESSON_MEDIA_STATE.PLAYING){
                     wrapper.classList.add('show-center-play');
-                    if(window.innerWidth>768)flashLessonCenterButton();
                 }
             }
             showLessonControls();
@@ -5107,7 +5114,7 @@ label[for*="En"], input[id*="En"], textarea[id*="En"] { display:none !important;
                     window.__lessonResumeAutoplay=false;
                     try{const playPromise=lessonPlayer.playVideo?.();if(playPromise?.catch)playPromise.catch(()=>{});}catch(e){}
                 }
-                if(!lessonWatchState.lastTick)document.getElementById('lessonVideoWrapper')?.classList.add('show-center-play');
+                if(!lessonWatchState.lastTick){const w=document.getElementById('lessonVideoWrapper');if(w){if(window.innerWidth>768){w.classList.remove('show-center-play');flashLessonCenterButton();}else w.classList.add('show-center-play');}}
             },{once:true});
             v.addEventListener('play',handleLessonPlaybackPlaying);v.addEventListener('pause',()=>handleLessonPlaybackStopped(LESSON_MEDIA_STATE.PAUSED));v.addEventListener('ended',()=>handleLessonPlaybackStopped(LESSON_MEDIA_STATE.ENDED));
             v.addEventListener('error',()=>{const s=document.getElementById('lessonCompletionStatus');if(s){s.style.display='block';s.className='lesson-completion-status';s.innerHTML='<i class="fas fa-triangle-exclamation"></i> تعذر تشغيل ملف الفيديو من هذا الرابط. استخدم رابط فيديو مباشر.';}});
@@ -5154,7 +5161,7 @@ label[for*="En"], input[id*="En"], textarea[id*="En"] { display:none !important;
                             window.__lessonResumeAutoplay=false;
                             setTimeout(()=>{try{lessonPlayer.playVideo();}catch(e){}},120);
                         }
-                        if(!lessonWatchState.lastTick)document.getElementById('lessonVideoWrapper')?.classList.add('show-center-play');
+                        if(!lessonWatchState.lastTick){const w=document.getElementById('lessonVideoWrapper');if(w){if(window.innerWidth>768){w.classList.remove('show-center-play');flashLessonCenterButton();}else w.classList.add('show-center-play');}}
                     },
                     onStateChange:e=>{if(e.data===YT.PlayerState.PLAYING)handleLessonPlaybackPlaying();else handleLessonPlaybackStopped(e.data);}
                 }});
@@ -5521,25 +5528,7 @@ label[for*="En"], input[id*="En"], textarea[id*="En"] { display:none !important;
             }catch(e){console.warn('Mute toggle failed:',e);}
         });
         document.getElementById('lessonVolumeSlider')?.addEventListener('input',e=>{if(!lessonPlayerReady)return;const v=Number(e.target.value);lessonPlayer.unMute();lessonPlayer.setVolume(v);document.getElementById('lessonMuteBtn').innerHTML=v===0?'<i class="fas fa-volume-mute"></i>':'<i class="fas fa-volume-up"></i>';});
-        document.addEventListener('keydown',e=>{
-            if(currentCoursePage!=='lessonPlayer'||!lessonPlayerReady||!lessonPlayer)return;
-            const active=document.activeElement;
-            const typing=['INPUT','TEXTAREA'].includes(active?.tagName);
-            const speedOpen=document.getElementById('lessonSpeedDropdown')?.classList.contains('show');
-            if(typing && !['ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.key))return;
-            if(speedOpen && ['ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.key)){document.getElementById('lessonSpeedDropdown')?.classList.remove('show');}
-            if(e.key==='ArrowUp'||e.key==='ArrowDown'){
-                e.preventDefault();e.stopPropagation();
-                const delta=e.key==='ArrowUp'?5:-5;
-                const current=Number(lessonPlayer.getVolume?.()||document.getElementById('lessonVolumeSlider')?.value||0);
-                const next=Math.max(0,Math.min(100,current+delta));
-                const sl=document.getElementById('lessonVolumeSlider');if(sl)sl.value=String(next);
-                try{lessonPlayer.unMute?.();lessonPlayer.setVolume?.(next);}catch(_){}
-                const mb=document.getElementById('lessonMuteBtn');if(mb)mb.innerHTML=next===0?'<i class="fas fa-volume-mute"></i>':'<i class="fas fa-volume-up"></i>';
-            }else if(e.key==='ArrowLeft'||e.key==='ArrowRight'){
-                e.preventDefault();e.stopPropagation();window.__allowedLessonSeekUntil=Date.now()+1200;seekLessonBy(e.key==='ArrowLeft'?-10:10);
-            }
-        },true);
+        /* Legacy keyboard handler removed; final capture-phase controller is authoritative. */
 
         /* Mobile multi-tap seek: two taps start at 10s, each extra tap adds 10s in the same direction. */
         (function bindMobileDoubleTap(){
@@ -9598,32 +9587,53 @@ function v12GetPlaybackState(){
   }catch(e){}
   return LESSON_MEDIA_STATE.PAUSED;
 }
+let __v12PlaybackBusy=false;
 async function v12TogglePlayback(){
-  if(!lessonPlayerReady||!lessonPlayer)return;
-  const state=v12GetPlaybackState();
-  const shouldPlay=state!==LESSON_MEDIA_STATE.PLAYING;
+  if(__v12PlaybackBusy||!lessonPlayerReady||!lessonPlayer)return;
+  __v12PlaybackBusy=true;
   try{
+    const state=v12GetPlaybackState();
+    const shouldPlay=state!==LESSON_MEDIA_STATE.PLAYING;
     if(lessonPlayerType==='html5' && lessonHtmlVideo){
       if(shouldPlay){
-        const r=lessonHtmlVideo.play();
-        if(r?.catch)await r.catch(()=>{});
-      }else lessonHtmlVideo.pause();
-    }else if(shouldPlay){
-      await Promise.resolve(lessonPlayer.playVideo?.());
+        const result=lessonHtmlVideo.play();
+        if(result?.catch)await result.catch(err=>{throw err;});
+      }else{
+        lessonHtmlVideo.pause();
+      }
     }else{
-      await Promise.resolve(lessonPlayer.pauseVideo?.());
+      if(shouldPlay) await Promise.resolve(lessonPlayer.playVideo?.());
+      else await Promise.resolve(lessonPlayer.pauseVideo?.());
     }
     updateLessonCenterButton();
     showLessonControls(2800);
     flashLessonCenterButton();
   }catch(e){
     console.warn('Unified lesson play/pause failed:',e);
+    showLessonControls(2200);
     updateLessonCenterButton();
+  }finally{
+    setTimeout(()=>{__v12PlaybackBusy=false;},150);
   }
 }
+
 document.getElementById('lessonCenterPlayBtn')?.addEventListener('click',e=>{e.preventDefault();e.stopPropagation();v12TogglePlayback()},true);
 document.getElementById('lessonCenterPlayBtn')?.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();e.stopPropagation();v12TogglePlayback()}},true);
 document.getElementById('lessonDesktopPlayBtn')?.addEventListener('click',e=>{e.preventDefault();e.stopPropagation();v12TogglePlayback()},true);
+/* Desktop play/pause bridge: capture the interaction before wrapper handlers. */
+document.addEventListener('pointerdown',e=>{
+  if(window.innerWidth<=768)return;
+  const btn=e.target.closest?.('#lessonDesktopPlayBtn');
+  if(!btn)return;
+  e.preventDefault();e.stopImmediatePropagation();
+  v12TogglePlayback();
+},true);
+document.addEventListener('click',e=>{
+  if(window.innerWidth<=768)return;
+  const btn=e.target.closest?.('#lessonDesktopPlayBtn');
+  if(!btn)return;
+  e.preventDefault();e.stopImmediatePropagation();
+},true);
 
 /* Leaving the lesson player through any related action must stop the media first. */
 const lessonRelatedStopHandler=document.getElementById('lessonRelatedActions');
@@ -9700,7 +9710,7 @@ document.addEventListener('keydown',e=>{
     }catch(_){}
     const mb=$('lessonMuteBtn');if(mb)mb.innerHTML=next===0?'<i class=\"fas fa-volume-mute\"></i>':'<i class=\"fas fa-volume-up\"></i>';
   }else if(code==='ArrowLeft'||code==='ArrowRight'){
-    e.preventDefault();e.stopPropagation();seekLessonBy(code==='ArrowLeft'?-10:10);
+    e.preventDefault();e.stopPropagation();window.__allowedLessonSeekUntil=Date.now()+1200;seekLessonBy(code==='ArrowLeft'?-10:10);
   }
 },true);
 
