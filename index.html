@@ -3995,55 +3995,80 @@ label[for*="En"], input[id*="En"], textarea[id*="En"] { display:none !important;
 
         async function loadAssignmentsPage(courseId) {
             const container = document.getElementById('fullPageAssignmentsContainer');
-            if(!container) return;
-            // Keep existing cards visible while refreshing. This prevents the page from flashing or looking like a reload.
-            if(!container.querySelector('.assignment-page-grid') && !container.dataset.loaded){
+            if(!container || !courseId) return;
+
+            container.style.display = '';
+            container.dataset.loaded = '';
+            if(!container.querySelector('.assignment-page-grid')){
                 container.innerHTML = `<div class="page-inline-loader" style="display:flex;justify-content:center;align-items:center;gap:10px;padding:45px;color:var(--text-muted);"><span class="mini-spin" style="display:inline-block;width:22px;height:22px;border-radius:50%;border:3px solid var(--border);border-top-color:var(--accent1);animation:spin 1s linear infinite;"></span><span>جاري تحميل الواجبات...</span></div>`;
             }
+
             try {
-                const snap = await db.collection('courses').doc(courseId).collection('assignments').get();
-                const previousGrid = container.querySelector('.assignment-page-grid');
-                const liveAssignmentDocs=snap.docs.filter(d=>d.data()?.deleted!==true).sort((a,b)=>{const av=a.data()?.createdAt;const bv=b.data()?.createdAt;const am=typeof av?.toMillis==='function'?av.toMillis():(av?Date.parse(av):0);const bm=typeof bv?.toMillis==='function'?bv.toMillis():(bv?Date.parse(bv):0);return bm-am;});
-                if(!liveAssignmentDocs.length){
-                    container.innerHTML = `<p style="color:var(--text-muted);text-align:center;padding:60px 20px;">لا توجد واجبات مضافة بعد.</p>`;
+                const ref = db.collection('courses').doc(String(courseId)).collection('assignments');
+                const snap = await ref.get();
+
+                /* Read every assignment document. Only an explicit boolean deleted=true removes it. */
+                const docs = snap.docs
+                    .filter(doc => (doc.data() || {}).deleted !== true)
+                    .sort((a,b) => {
+                        const av=(a.data()||{}).createdAt, bv=(b.data()||{}).createdAt;
+                        const toMs=v=>{
+                            try{
+                                if(v && typeof v.toMillis==='function') return v.toMillis();
+                                if(v instanceof Date) return v.getTime();
+                                if(typeof v==='number') return v;
+                                if(typeof v==='string') { const n=Date.parse(v); return Number.isFinite(n)?n:0; }
+                            }catch(_){ }
+                            return 0;
+                        };
+                        return toMs(bv)-toMs(av);
+                    });
+
+                const grid = document.createElement('div');
+                grid.className='assignment-page-grid';
+
+                if(!docs.length){
+                    container.innerHTML = `<div style="color:var(--text-muted);text-align:center;padding:60px 20px;"><i class="fas fa-folder-open" style="font-size:2.6rem;display:block;margin-bottom:12px;color:var(--accent1);"></i><strong style="display:block;color:var(--text-primary);margin-bottom:5px;">لا توجد واجبات متاحة حاليًا.</strong><span>لم يتم العثور على واجبات غير محذوفة في هذه الدورة.</span></div>`;
                     container.dataset.loaded='1';
                     return;
                 }
-                const grid = document.createElement('div');
-                grid.className = 'assignment-page-grid';
-                liveAssignmentDocs.forEach(doc => {
-                    const a = doc.data() || {};
-                    const card = document.createElement('div');
-                    card.className = 'full-page-card full-page-card assignment-full-card';
-                    card.dataset.id = doc.id;
-                    const submissions = (Array.isArray(a.submissions) ? a.submissions : []).filter(x=>x&&x.deleted!==true);
-                    const approvedCount = submissions.filter(x=>x.approved).length;
-                    const title = a.titleAr || 'واجب';
-                    const desc = a.descAr || '';
-                    card.innerHTML = `
+
+                docs.forEach(doc=>{
+                    const a=doc.data()||{};
+                    const submissions=Array.isArray(a.submissions)?a.submissions.filter(sub=>sub && sub.deleted!==true):[];
+                    const approvedCount=submissions.filter(sub=>sub.approved===true).length;
+                    const title=a.titleAr||a.title||'واجب';
+                    const desc=a.descAr||a.descriptionAr||a.descEn||a.description||'';
+                    const card=document.createElement('div');
+                    card.className='full-page-card assignment-full-card';
+                    card.dataset.id=doc.id;
+                    card.innerHTML=`
                         <div style="display:flex;justify-content:space-between;gap:15px;align-items:flex-start;">
-                            <div style="min-width:0;flex:1;">
-                                <h3 style="font-size:1.2rem;margin-bottom:7px;">${escapeHtml(title || 'واجب')}</h3>
+                            <div style="min-width:0;flex:1;cursor:pointer;" onclick="openAssignmentDetail('${String(courseId)}','${doc.id}')">
+                                <h3 style="font-size:1.2rem;margin-bottom:7px;">${escapeHtml(title)}</h3>
                                 <p style="color:var(--text-muted);line-height:1.6;margin-bottom:8px;">${escapeHtml(desc)}</p>
                                 <div style="display:flex;gap:12px;flex-wrap:wrap;color:var(--text-muted);font-size:.84rem;">
                                     <span><i class="fas fa-star"></i> XP: ${Math.max(0,Number(a.xpReward)||0)}</span>
-                                    <span><i class="fas fa-images"></i> ${approvedCount} أعمال معتمدة</span>
+                                    <span><i class="fas fa-images"></i> ${submissions.length} أعمال</span>
+                                    <span><i class="fas fa-check-circle"></i> ${approvedCount} معتمد</span>
                                 </div>
                             </div>
-                            ${isAdmin ? `<div style="display:flex;gap:6px;flex:0 0 auto;"><button title="حذف" class="admin-only show" onclick="event.stopPropagation();deleteAssignment('${courseId}','${doc.id}')" style="border:1px solid var(--border);background:var(--bg-secondary);color:#e74c3c;width:36px;height:36px;border-radius:50%;cursor:pointer;"><i class="fas fa-trash"></i></button></div>` : ''}
+                            ${isAdmin ? `<div style="display:flex;gap:6px;flex:0 0 auto;"><button title="حذف" class="admin-only show" onclick="event.stopPropagation();deleteAssignment('${String(courseId)}','${doc.id}')" style="border:1px solid var(--border);background:var(--bg-secondary);color:#e74c3c;width:36px;height:36px;border-radius:50%;cursor:pointer;"><i class="fas fa-trash"></i></button></div>` : ''}
                         </div>
-                        <div class="card-actions"><button class="assignment-card-button" onclick="openAssignmentDetail('${courseId}','${doc.id}')"><i class="fas fa-folder-open"></i> فتح الواجب ومشاهدة الأعمال</button></div>`;
+                        <div class="card-actions"><button class="assignment-card-button" type="button" onclick="openAssignmentDetail('${String(courseId)}','${doc.id}')"><i class="fas fa-folder-open"></i> فتح الواجب ومشاهدة الأعمال</button></div>`;
                     grid.appendChild(card);
                 });
-                // Replace the grid atomically; no empty flash and no duplicate cards.
-                previousGrid?.replaceWith(grid);
-                if(!previousGrid) container.innerHTML='',container.appendChild(grid);
+
+                container.innerHTML='';
+                container.appendChild(grid);
                 container.dataset.loaded='1';
             } catch(e) {
                 console.error('Assignments page load error:',e);
-                if(!container.querySelector('.assignment-page-grid')) container.innerHTML = `<p style="color:#e74c3c;text-align:center;padding:40px;">حدث خطأ في تحميل الواجبات.</p>`;
+                container.innerHTML = `<div style="color:#e74c3c;text-align:center;padding:40px;"><i class="fas fa-triangle-exclamation" style="font-size:2rem;display:block;margin-bottom:10px;"></i><strong>تعذر تحميل الواجبات.</strong><div style="margin-top:6px;font-size:.82rem;opacity:.8;">تحقق من اتصال Firestore وصلاحيات قراءة الواجبات.</div></div>`;
+                container.dataset.loaded='1';
             }
         }
+        window.loadAssignmentsPage = loadAssignmentsPage;
 
         async function getAssignmentData(courseId, assignmentId){
             const snap = await db.collection('courses').doc(courseId).collection('assignments').doc(assignmentId).get();
@@ -14537,5 +14562,67 @@ body.light-mode #lessonVideoWrapper .aa-speed-value{color:#172033!important;}
   }
 }
 </style>
+
+<script id="final-authoritative-assignments-route">
+(function(){
+  'use strict';
+  if(window.__ananasAuthoritativeAssignmentsRoute)return;
+  window.__ananasAuthoritativeAssignmentsRoute=true;
+  const $=id=>document.getElementById(id);
+  function forceAssignmentsShell(courseId){
+    const detail=$('courseDetailView'), overview=$('courseOverviewContainer'), dash=$('courseDashboard'),
+          lessons=$('courseLessonsPage'), player=$('courseLessonPlayerPage'), quizzes=$('courseQuizzesPage'),
+          assignments=$('courseAssignmentsPage'), chat=$('courseChatPage'), files=$('courseFilesPage'), learning=$('courseLearningView');
+    if(!detail||!assignments)return;
+    if(!courseId && typeof activeCourseId!=='undefined') courseId=activeCourseId;
+    if(!courseId)return;
+    detail.style.display='flex';
+    if(overview)overview.style.display='none';
+    if(dash)dash.style.display='none';
+    if(lessons)lessons.classList.remove('active');
+    if(player)player.classList.remove('active');
+    if(quizzes)quizzes.style.display='none';
+    if(chat)chat.style.display='none';
+    if(files){files.style.display='none';files.classList.remove('active');}
+    if(learning)learning.classList.remove('active');
+    assignments.classList.add('active');
+    assignments.style.display='block';
+    assignments.style.visibility='visible';
+    assignments.style.opacity='1';
+    assignments.style.zIndex='30';
+    window.currentCoursePage='assignments';
+  }
+  const originalSwitch=window.switchCoursePage;
+  if(typeof originalSwitch==='function'&&!originalSwitch.__ananasAssignmentsAuthoritative){
+    const wrapped=function(page){
+      if(page!=='assignments')return originalSwitch.apply(this,arguments);
+      const cid=window.activeCourseId||activeCourseId;
+      if(!cid)return originalSwitch.apply(this,arguments);
+      try{if(currentCoursePage==='lessonPlayer')window.pauseLessonForInternalNavigation?.('open-assignments');}catch(_){}
+      forceAssignmentsShell(cid);
+      const r=window.loadAssignmentsPage?.(cid);
+      if(r&&typeof r.catch==='function')r.catch(e=>console.warn('authoritative assignments load',e));
+      setTimeout(()=>forceAssignmentsShell(cid),0);
+      setTimeout(()=>forceAssignmentsShell(cid),120);
+      return r;
+    };
+    wrapped.__ananasAssignmentsAuthoritative=true;
+    wrapped.__original=originalSwitch;
+    window.switchCoursePage=wrapped;
+  }
+  document.addEventListener('click',e=>{
+    const btn=e.target?.closest?.('#courseDashboard .dashboard-btn');
+    if(!btn)return;
+    const raw=btn.getAttribute('onclick')||'';
+    if(!/switchCoursePage\([\"']assignments[\"']\)/.test(raw))return;
+    const cid=window.activeCourseId||activeCourseId;
+    if(!cid)return;
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    forceAssignmentsShell(cid);
+    window.loadAssignmentsPage?.(cid);
+  },true);
+})();
+</script>
 </body>
 </html>
