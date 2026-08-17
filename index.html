@@ -13770,6 +13770,7 @@ const s=document.createElement('style');s.textContent=`
   if(!wrapper.querySelector('.lesson-hold-2x-indicator')){const el=document.createElement('div');el.className='lesson-hold-2x-indicator';el.innerHTML='<i class="fas fa-forward"></i><span>2× سرعة</span>';wrapper.appendChild(el);}
 })();
 </script>
+
 </body>
 </html>\n\n
 <!-- FINAL V17: authoritative keyboard + control click isolation + universal speed slider -->
@@ -13898,5 +13899,154 @@ const s=document.createElement('style');s.textContent=`
   },true);
 })();
 </script>
+
+<style id="aa-final-v18-space-speed-mobile-fix">
+/* Final V18: mobile control stability, compact speed slider, and clean Space behavior. */
+#lessonVideoWrapper .lesson-platform-controls #lessonSpeedDropdown{
+  width:132px!important;min-width:132px!important;max-width:132px!important;
+  max-height:58px!important;height:58px!important;padding:7px!important;
+  overflow:hidden!important;box-sizing:border-box!important;
+  border-radius:12px!important;
+}
+#lessonVideoWrapper #lessonSpeedDropdown .aa-speed-range-row{
+  height:18px!important;min-height:18px!important;margin:0 0 4px!important;
+  display:flex!important;align-items:center!important;justify-content:space-between!important;
+  font-size:.66rem!important;line-height:1!important;
+}
+#lessonVideoWrapper #lessonSpeedDropdown .aa-speed-range{
+  display:block!important;width:100%!important;height:24px!important;margin:0!important;
+  accent-color:var(--accent1);
+}
+@media(max-width:768px),(hover:none),(pointer:coarse){
+  #lessonVideoWrapper .lesson-platform-controls #lessonSpeedDropdown{
+    width:132px!important;min-width:132px!important;max-width:132px!important;
+    height:58px!important;max-height:58px!important;
+  }
+  #lessonVideoWrapper .lesson-platform-controls{
+    touch-action:manipulation!important;
+  }
+  #lessonVideoWrapper .lesson-platform-controls .controls-row{touch-action:manipulation!important;}
+  #lessonVideoWrapper #lessonFullscreenBtn,
+  #lessonVideoWrapper #lessonSpeedBtn,
+  #lessonVideoWrapper #lessonTimerDisplay{
+    touch-action:manipulation!important;
+  }
+  #lessonVideoWrapper #lessonFullscreenBtn{
+    position:absolute!important;right:0!important;left:auto!important;top:50%!important;
+    transform:translateY(-50%)!important;z-index:40!important;
+  }
+  #lessonVideoWrapper #lessonSpeedBtn{
+    position:absolute!important;left:0!important;right:auto!important;top:50%!important;
+    transform:translateY(-50%)!important;z-index:40!important;
+  }
+  #lessonVideoWrapper #lessonTimerDisplay{
+    position:absolute!important;left:50%!important;right:auto!important;top:50%!important;
+    transform:translate(-50%,-50%)!important;z-index:39!important;
+  }
+}
+</style>
+<script id="aa-final-v18-space-speed-mobile-fix">
+(function(){
+  'use strict';
+  const wrap=document.getElementById('lessonVideoWrapper');
+  if(!wrap||window.__aaFinalV18Bound)return;
+  window.__aaFinalV18Bound=true;
+  const $=id=>document.getElementById(id);
+  const isLesson=()=>{try{return currentCoursePage==='lessonPlayer'}catch(_){return true;}};
+  const ready=()=>{try{return !!(lessonPlayerReady&&lessonPlayer&&isLesson())}catch(_){return false;}};
+  const touchDevice=()=>{try{return matchMedia('(hover:none),(pointer:coarse)').matches||(navigator.maxTouchPoints||0)>0}catch(_){return (navigator.maxTouchPoints||0)>0}};
+  const playing=()=>{try{const s=Number(window.v12GetPlaybackState?.());if(Number.isFinite(s))return s===1}catch(_){}try{return lessonPlayerType==='html5'&&lessonHtmlVideo?!lessonHtmlVideo.paused&&!lessonHtmlVideo.ended:false}catch(_){return false}};
+  const rate=()=>{try{if(lessonPlayerType==='html5'&&lessonHtmlVideo)return Number(lessonHtmlVideo.playbackRate)||1;const n=Number(lessonPlayer?.getPlaybackRate?.());return Number.isFinite(n)&&n>0?n:1}catch(_){return 1}};
+  const setRate=async n=>{const r=Math.max(.5,Math.min(2,Number(n)||1));try{if(lessonPlayerType==='html5'&&lessonHtmlVideo){lessonHtmlVideo.playbackRate=r}else{await lessonPlayer?.setPlaybackRate?.(r)}}catch(_){}};
+  const toggle=()=>{try{window.v12TogglePlayback?.()}catch(_){}};
+  const fullscreen=()=>{try{window.enterLessonFullscreen?.()}catch(_){}};
+
+  /* Rebuild the slider-only menu whenever needed and keep it directly above its button. */
+  const menu=$('lessonSpeedDropdown'), speedBtn=$('lessonSpeedBtn');
+  const syncSlider=()=>{
+    if(!menu||!speedBtn)return;
+    let slider=menu.querySelector('.aa-speed-range');
+    if(!slider){
+      menu.innerHTML='<div class="aa-speed-range-row"><span>السرعة</span><strong class="aa-speed-value">1x</strong></div><input class="aa-speed-range" type="range" min="0.5" max="2" step="0.05" value="1" aria-label="سرعة التشغيل">';
+      slider=menu.querySelector('.aa-speed-range');
+      slider?.addEventListener('input',async e=>{e.stopPropagation();await setRate(e.target.value);syncSlider();},{capture:true});
+      slider?.addEventListener('pointerdown',e=>e.stopPropagation(),true);
+      slider?.addEventListener('click',e=>e.stopPropagation(),true);
+    }
+    const r=Math.max(.5,Math.min(2,rate()));
+    slider.value=String(r);
+    const label=menu.querySelector('.aa-speed-value'); if(label)label.textContent=`${Number(r).toFixed(2).replace(/\.00$/,'')}x`;
+    speedBtn.innerHTML=`${Number(r).toFixed(2).replace(/\.00$/,'')}x <i class="fas fa-caret-down"></i>`;
+  };
+  const placeMenu=()=>{
+    if(!menu||!speedBtn||!menu.classList.contains('show'))return;
+    menu.style.position='fixed';menu.style.visibility='hidden';menu.style.left='0px';menu.style.right='auto';menu.style.top='0px';menu.style.bottom='auto';
+    const br=speedBtn.getBoundingClientRect();
+    const mr=menu.getBoundingClientRect();
+    const gap=6;
+    let left=br.left+(br.width-mr.width)/2;
+    left=Math.max(gap,Math.min(innerWidth-mr.width-gap,left));
+    let top=br.top-mr.height-gap;
+    if(top<gap)top=Math.min(innerHeight-mr.height-gap,br.bottom+gap);
+    top=Math.max(gap,top);
+    menu.style.left=`${left}px`;menu.style.top=`${top}px`;menu.style.visibility='visible';
+  };
+  window.__aaV18PlaceSpeedMenu=placeMenu;
+  syncSlider();
+
+  /* Window capture runs before document-capture handlers from older patches. */
+  let spaceDown=false,spaceLong=false,spaceTimer=null,spaceRestore=1;
+  const clearSpace=()=>{if(spaceTimer){clearTimeout(spaceTimer);spaceTimer=null}};
+  window.addEventListener('keydown',e=>{
+    if(!ready()||e.code!=='Space'||e.ctrlKey||e.altKey||e.metaKey||e.isComposing)return;
+    if(spaceDown||e.repeat){e.preventDefault();e.stopImmediatePropagation();return;}
+    spaceDown=true;spaceLong=false;spaceRestore=rate();clearSpace();e.preventDefault();e.stopImmediatePropagation();
+    spaceTimer=setTimeout(async()=>{
+      spaceTimer=null;
+      if(!spaceDown)return;
+      spaceLong=true;
+      wrap.classList.add('lesson-hold-2x');
+      wrap.classList.add('lesson-controls-hidden');
+      await setRate(2);
+    },420);
+  },true);
+  window.addEventListener('keyup',async e=>{
+    if(e.code!=='Space'||!spaceDown)return;
+    e.preventDefault();e.stopImmediatePropagation();clearSpace();spaceDown=false;
+    if(spaceLong){spaceLong=false;await setRate(spaceRestore||1);wrap.classList.remove('lesson-hold-2x');wrap.classList.add('lesson-controls-hidden');return;}
+    toggle();
+  },true);
+  window.addEventListener('blur',async()=>{
+    if(!spaceDown)return;
+    clearSpace();spaceDown=false;
+    if(spaceLong){spaceLong=false;await setRate(spaceRestore||1);wrap.classList.remove('lesson-hold-2x');wrap.classList.add('lesson-controls-hidden');}
+  });
+
+  /* Prevent old surface click handlers from swallowing mobile play/fullscreen controls. */
+  window.addEventListener('click',e=>{
+    const fs=e.target?.closest?.('#lessonFullscreenBtn');
+    if(fs&&wrap.contains(fs)&&touchDevice()){
+      e.preventDefault();e.stopImmediatePropagation();fullscreen();return;
+    }
+    const center=e.target?.closest?.('#lessonVideoCenterPlay,#lessonCenterPlayBtn,.lesson-video-center-play');
+    if(center&&wrap.contains(center)&&touchDevice()){
+      e.preventDefault();e.stopImmediatePropagation();toggle();return;
+    }
+  },true);
+
+  /* Speed button: only this button toggles the slider. */
+  window.addEventListener('pointerdown',e=>{
+    const b=e.target?.closest?.('#lessonSpeedBtn');
+    if(!b||!wrap.contains(b)||!ready())return;
+    e.preventDefault();e.stopImmediatePropagation();
+    syncSlider();
+    menu?.classList.toggle('show');
+    if(menu?.classList.contains('show'))requestAnimationFrame(placeMenu);
+  },true);
+  window.addEventListener('resize',placeMenu,{passive:true});
+  window.addEventListener('orientationchange',()=>setTimeout(placeMenu,50),{passive:true});
+})();
+</script>
+
 </body>
 </html>
