@@ -4717,10 +4717,10 @@ label[for*="En"], input[id*="En"], textarea[id*="En"] { display:none !important;
                         ${isAdmin?`<div class="admin-actions admin-only show" style="display:flex;gap:6px;"><button title="تعديل" onclick="event.stopPropagation();editLesson('${courseId}','${lesson.id}')" style="border:1px solid var(--border);background:var(--bg-secondary);color:var(--text-primary);width:36px;height:36px;border-radius:50%;cursor:pointer;"><i class="fas fa-edit"></i></button><button title="حذف" onclick="event.stopPropagation();deleteLesson('${courseId}','${lesson.id}')" style="border:1px solid var(--border);background:var(--bg-secondary);color:#e74c3c;width:36px;height:36px;border-radius:50%;cursor:pointer;"><i class="fas fa-trash"></i></button></div>`:''}
                     </div>
                     <div class="card-actions">
-                        <button type="button" onclick="event.stopPropagation();openLessonPlayer('${courseId}','${lesson.id}')"><i class="fas fa-play"></i> مشاهدة الحصة</button>
+                        <button type="button" onclick="event.stopPropagation();window.openLessonPlayer?.('${courseId}','${lesson.id}')"><i class="fas fa-play"></i> مشاهدة الحصة</button>
                         ${readyToComplete ? `<button type="button" class="lesson-manual-complete-btn" data-lesson-complete="${lesson.id}" onclick="event.stopPropagation();completeLessonManually('${courseId}','${lesson.id}')"><i class="fas fa-check-circle"></i> إتمام الحصة</button>` : ''}
                     </div>`;
-                    card.onclick=()=>openLessonPlayer(courseId,lesson.id);fragment.appendChild(card);
+                    card.onclick=()=>window.openLessonPlayer?.(courseId,lesson.id);fragment.appendChild(card);
                 });
                 container.replaceChildren(fragment);container.dataset.loaded='1';renderLessonPlayerList();
             }catch(e){console.error('Lessons load error:',e);if(!container.querySelector('.lesson-card'))container.innerHTML='<p style="color:#e74c3c;text-align:center;grid-column:1/-1;padding:40px;">حدث خطأ أثناء تحميل الحصص.</p>';}
@@ -4738,7 +4738,7 @@ label[for*="En"], input[id*="En"], textarea[id*="En"] { display:none !important;
                     <div class="num">${index+1}</div>
                     <div class="info"><div class="title">${title || 'حصة'}</div><div class="meta">${lesson.duration || 0} دقيقة • ${lesson.xpReward || 0} XP</div></div>
                     <span class="done" data-done="${lesson.id}" style="display:none;">✓</span>`;
-                item.onclick = () => openLessonPlayer(activeCourseId, lesson.id);
+                item.onclick = () => window.openLessonPlayer?.(activeCourseId, lesson.id);
                 sidebar.appendChild(item);
             });
             refreshLessonDoneIndicators();
@@ -4757,47 +4757,81 @@ label[for*="En"], input[id*="En"], textarea[id*="En"] { display:none !important;
         }
 
         async function openLessonPlayer(courseId, lessonId) {
-            const lesson = lessonListCache.find(l => l.id === lessonId);
-            if(!lesson) return;
-
-            /* Save the lesson we are leaving BEFORE changing activeLessonId or
-               destroying its player. This fixes the case where clicking another
-               lesson caused the previous position to be lost. */
-            if (lessonPlayer && lessonPlayerReady && activeLessonId &&
-                String(activeLessonId) !== String(lessonId)) {
-                try { await window.saveLessonProgressNow?.(); } catch(e) {}
-                try { await window.persistCourseState?.(); } catch(e) {}
+            // Resolve the lesson robustly from the current cache first; if a stale
+            // cache is present, fall back to Firestore instead of silently aborting.
+            let lesson = Array.isArray(lessonListCache)
+                ? lessonListCache.find(l => String(l.id) === String(lessonId))
+                : null;
+            if(!lesson){
+                try{
+                    const snap=await db.collection('courses').doc(courseId).collection('lessons').doc(String(lessonId)).get();
+                    if(snap.exists){
+                        lesson={id:snap.id,...(snap.data()||{})};
+                        lessonListCache=Array.isArray(lessonListCache)?lessonListCache:[];
+                        const i=lessonListCache.findIndex(l=>String(l.id)===String(lessonId));
+                        if(i>=0)lessonListCache[i]=lesson; else lessonListCache.push(lesson);
+                    }
+                }catch(e){console.warn('تعذر جلب الحصة مباشرة:',e);}
             }
+            if(!lesson)return;
 
-            activeCourseId = courseId;
-            activeLessonId = lessonId;
-            currentCoursePage = 'lessonPlayer';
-            lessonCurrentData = lesson;
-            document.getElementById('courseLessonsPage').classList.remove('active');
-            document.getElementById('courseLessonPlayerPage').classList.add('active');
-            document.getElementById('lessonPlayerTitle').textContent = lesson.titleAr || 'حصة';
-            document.getElementById('lessonPlayerMeta').textContent = `${lesson.duration || 0} دقيقة • ${lesson.xpReward || 0} XP`;
-            renderLessonPlayerList();
-            /* Open the actual player first. Secondary UI/status work must not block video start. */
-            resetLessonWatchState(lessonId, lesson.duration);
-            Promise.resolve(window.renderLessonRelatedActions?.(courseId, lessonId)).catch(()=>{});
-            Promise.resolve(window.renderLessonCompletionStatus?.(courseId, lessonId)).catch(()=>{});
-            Promise.resolve(db.collection('users').doc(currentUser.uid)
-                .collection('completedLessons').doc(lessonId).get())
-                .then(s=>{ lessonWatchState.granted=!!s?.exists; })
-                .catch(()=>{ lessonWatchState.granted=false; });
+            // Set the active lesson and expose the player immediately.
+            const previousLessonId=activeLessonId;
+            activeCourseId=courseId;
+            activeLessonId=lesson.id;
+            currentCoursePage='lessonPlayer';
+            lessonCurrentData=lesson;
+
+            const detail=document.getElementById('courseDetailView');
+            const lessonsPage=document.getElementById('courseLessonsPage');
+            const playerPage=document.getElementById('courseLessonPlayerPage');
+            if(detail){detail.style.display='flex';detail.style.visibility='visible';}
+            if(lessonsPage){lessonsPage.classList.remove('active');lessonsPage.style.display='none';}
+            if(playerPage){
+                playerPage.classList.add('active');
+                playerPage.style.display='block';
+                playerPage.style.visibility='visible';
+                playerPage.style.opacity='1';
+                playerPage.style.zIndex='40';
+            }
+            document.getElementById('lessonPlayerTitle').textContent=lesson.titleAr||'حصة';
+            document.getElementById('lessonPlayerMeta').textContent=`${lesson.duration||0} دقيقة • ${lesson.xpReward||0} XP`;
+            try{renderLessonPlayerList();}catch(e){}
+            try{setMobileNavActive?.('lessonPlayer');}catch(e){}
+
+            resetLessonWatchState(lesson.id,lesson.duration);
+
+            // Keep the UI/video path immediate. Secondary work runs in the background.
+            const wasPlayingBeforeSwitch=!!(previousLessonId && lessonPlayer && lessonPlayerReady && String(previousLessonId)!==String(lesson.id) && (()=>{try{const s=lessonPlayer.getPlayerState?.();return s===LESSON_MEDIA_STATE.PLAYING || (window.YT&&s===YT.PlayerState.PLAYING);}catch(_){return false;}})());
+            try{if(previousLessonId && lessonPlayer && lessonPlayerReady && String(previousLessonId)!==String(lesson.id)) window.saveLessonProgressNow?.();}catch(e){}
+            try{if(previousLessonId && String(previousLessonId)!==String(lesson.id)) window.persistCourseState?.();}catch(e){}
+
             const resumeOnReturn=window.__lessonResumeOnReturn &&
                 String(window.__lessonResumeOnReturn.courseId||'')===String(courseId) &&
-                String(window.__lessonResumeOnReturn.lessonId||'')===String(lessonId);
+                String(window.__lessonResumeOnReturn.lessonId||'')===String(lesson.id);
             if(resumeOnReturn){
                 window.__lessonResumePosition=Math.max(Number(window.__lessonResumePosition||0),Number(window.__lessonResumeOnReturn.position||0));
                 window.__lessonResumeAutoplay=window.__lessonResumeOnReturn.wasPlaying===true;
                 delete window.__lessonResumeOnReturn;
             }
-            if(window.prepareLessonResume) await window.prepareLessonResume(courseId,lessonId);
-            loadLessonVideo(lesson);
-            persistCourseState();
-            setTimeout(()=>window.__ananasResumeCurrentLesson?.(),150);
+
+            // Start the actual player without waiting for Firestore resume reads.
+            try{loadLessonVideo(lesson);}catch(e){console.error('تعذر فتح مشغل الحصة:',e);}
+            Promise.resolve(window.prepareLessonResume?.(courseId,lesson.id)).then(()=>{
+                if(String(activeLessonId)!==String(lesson.id) || currentCoursePage!=='lessonPlayer')return;
+                const pos=Number(window.__lessonResumePosition||0);
+                if(pos>0.5 && lessonPlayer?.seekTo){try{lessonPlayer.seekTo(pos,true);}catch(_){try{lessonPlayer.seekTo(pos);}catch(__){}}}
+                if(wasPlayingBeforeSwitch || window.__lessonResumeAutoplay){
+                    window.__lessonResumeAutoplay=false;
+                    try{const pp=lessonPlayer?.playVideo?.()||lessonPlayer?.play?.();if(pp?.catch)pp.catch(()=>{});}catch(_){ }
+                }
+            }).catch(()=>{});
+            Promise.resolve(window.renderLessonRelatedActions?.(courseId,lesson.id)).catch(()=>{});
+            Promise.resolve(window.renderLessonCompletionStatus?.(courseId,lesson.id)).catch(()=>{});
+            Promise.resolve(db.collection('users').doc(currentUser.uid).collection('completedLessons').doc(lesson.id).get())
+                .then(s=>{if(String(activeLessonId)===String(lesson.id))lessonWatchState.granted=!!s?.exists;})
+                .catch(()=>{if(String(activeLessonId)===String(lesson.id))lessonWatchState.granted=false;});
+            try{persistCourseState();}catch(e){}
         }
 
         function resetLessonWatchState(lessonId, durationMinutes) {
