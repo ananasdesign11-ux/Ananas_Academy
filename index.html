@@ -13127,17 +13127,42 @@ const s=document.createElement('style');s.textContent=`
     return !!target && !target.closest?.('.lesson-platform-controls,.lesson-video-center-play,button,input,.settings-dropdown,.lesson-seek-feedback,.lesson-player-brand,.lesson-resume-indicator');
   };
 
-  // One authoritative touch gesture: toggle on touch START, never on touch END.
-  // This prevents the controls from flashing on while the finger is down and
-  // disappearing again as soon as the finger is lifted.
+  // One authoritative touch gesture. Decide from the state at the START of the tap
+  // so other pointer handlers cannot make the controls appear/disappear before release
+  // and accidentally invert the requested result.
+  let touchToggleActive=false;
+  let touchStartedHidden=false;
+  let touchStartX=0, touchStartY=0;
+
   document.addEventListener('pointerdown',function(e){
     if(!isTouchSurface() || e.pointerType!=='touch' || !isLessonPage()) return;
     if(e.target.closest?.('#lessonVideoWrapper')!==wrapper || !isBackground(e.target)) return;
+    touchToggleActive=true;
+    touchStartedHidden=wrapper.classList.contains('lesson-controls-hidden');
+    touchStartX=Number(e.clientX)||0;
+    touchStartY=Number(e.clientY)||0;
+  },true);
+
+  document.addEventListener('pointerup',function(e){
+    if(!touchToggleActive || !isTouchSurface() || e.pointerType!=='touch' || !isLessonPage()) return;
+    if(e.target.closest?.('#lessonVideoWrapper')!==wrapper || !isBackground(e.target)){
+      touchToggleActive=false;
+      return;
+    }
+    const dx=(Number(e.clientX)||0)-touchStartX;
+    const dy=(Number(e.clientY)||0)-touchStartY;
+    touchToggleActive=false;
+    // Keep swipe/seek gestures out of the visibility toggle.
+    if(Math.hypot(dx,dy)>18)return;
     e.preventDefault();
     e.stopImmediatePropagation();
     wrapper.dataset.suppressTouchClickUntil=String(Date.now()+700);
-    if(wrapper.classList.contains('lesson-controls-hidden')) show();
+    if(touchStartedHidden) show();
     else hide();
+  },true);
+
+  document.addEventListener('pointercancel',function(e){
+    if(e.pointerType==='touch')touchToggleActive=false;
   },true);
 
   document.addEventListener('click',function(e){
@@ -13311,6 +13336,9 @@ const s=document.createElement('style');s.textContent=`
     padding:0 8px!important;
     white-space:nowrap!important;
   }
+  #lessonVideoWrapper #lessonFullscreenBtn{grid-column:1!important;grid-row:1!important;}
+  #lessonVideoWrapper #lessonTimerDisplay{grid-column:2!important;grid-row:1!important;}
+  #lessonVideoWrapper #lessonSpeedBtn{grid-column:3!important;grid-row:1!important;}
   #lessonVideoWrapper #lessonDesktopPlayBtn,
   #lessonVideoWrapper #lessonMuteBtn,
   #lessonVideoWrapper .lesson-volume-wrap,
@@ -13329,15 +13357,6 @@ const s=document.createElement('style');s.textContent=`
     flex:0 0 auto!important;
   }
   #lessonVideoWrapper .lesson-platform-controls .settings-dropdown{max-width:calc(100vw - 16px)!important;}
-}
-
-</style>
-<style id="aa-touch-controls-v13-final">
-@media (max-width:768px), (hover:none), (pointer:coarse){
-  #lessonVideoWrapper .lesson-platform-controls .controls-row{direction:rtl!important;}
-  #lessonVideoWrapper #lessonFullscreenBtn{grid-column:1!important;grid-row:1!important;justify-self:end!important;}
-  #lessonVideoWrapper #lessonTimerDisplay{grid-column:2!important;grid-row:1!important;justify-self:center!important;}
-  #lessonVideoWrapper #lessonSpeedBtn{grid-column:3!important;grid-row:1!important;justify-self:start!important;}
 }
 </style>
 </body>
