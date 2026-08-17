@@ -4380,6 +4380,9 @@ label[for*="En"], input[id*="En"], textarea[id*="En"] { display:none !important;
         document.getElementById('addLessonBtn').addEventListener('click', () => {
             if(!isAdmin) return showCustomAlert('غير مسموح', 'إضافة الحصص متاحة للمشرف فقط.');
             if(!activeCourseId) return showCustomAlert('تنبيه', 'الرجاء فتح الدورة أولاً.');
+            // This button is always the CREATE flow. Clear any stale lesson id
+            // left by a previous edit so we never call update() for a new lesson.
+            editingCourseId = null;
             document.getElementById('addLessonModal').classList.add('active');
             // Reset forms
             document.getElementById('addLessonTitleAr').value = '';
@@ -4396,7 +4399,6 @@ label[for*="En"], input[id*="En"], textarea[id*="En"] { display:none !important;
             document.getElementById('addLessonModalTitle').textContent = translations[currentLang]?.addLessonModalTitle || 'Add New Lesson';
             
             const originalSave = window.saveLesson;
-            const isEditingLesson = !!editingCourseId;
             window.saveLesson = async function() {
                 const titleAr = safeGetValue('addLessonTitleAr');
                 const titleEn = safeGetValue('addLessonTitleEn');
@@ -4445,8 +4447,13 @@ label[for*="En"], input[id*="En"], textarea[id*="En"] { display:none !important;
                     loadLessonsForCourse(activeCourseId);
                     loadCourses(true); // Update list stats
                     window.saveLesson = originalSave;
+                    editingCourseId = null;
                     showCustomAlert('تم الحفظ', 'تم حفظ الحصة بنجاح!');
-                } catch (error) { showCustomAlert('خطأ', 'خطأ: ' + error.message); }
+                } catch (error) {
+                    window.saveLesson = originalSave;
+                    editingCourseId = null;
+                    showCustomAlert('خطأ', 'خطأ: ' + error.message);
+                }
             };
             document.getElementById('addLessonModal').classList.add('active');
         });
