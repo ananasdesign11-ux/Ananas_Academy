@@ -13260,25 +13260,21 @@ const s=document.createElement('style');s.textContent=`
   const originalToggle=window.v12TogglePlayback;
   if(typeof originalToggle==='function' && !originalToggle.__aaManualResumeWrapped){
     const wrapped=async function(){
-      const before=(()=>{
+      /* The intent of the user action is more reliable than reading the
+         provider state immediately after play()/pause() (YouTube/Vimeo can
+         report the old state for a short moment). */
+      const wasPlaying=(()=>{
         try{return Number(window.v12GetPlaybackState?.())===1;}catch(_){return false;}
       })();
+      const intendedState=wasPlaying?'pause':'play';
       const result=await originalToggle.apply(this,arguments);
       try{
-        const after=Number(window.v12GetPlaybackState?.())===1;
-        /* Explicit user pause/play wins over any stale navigation snapshot. */
-        window.__lessonManualPlaybackOverride=after?'play':'pause';
-        window.__lessonResumeAutoplay=after;
+        /* Explicit user pause/play is authoritative for future navigation. */
+        window.__lessonManualPlaybackOverride=intendedState;
+        window.__lessonResumeAutoplay=intendedState==='play';
         if(window.__lessonResumeOnReturn){
-          window.__lessonResumeOnReturn.wasPlaying=after;
-          window.__lessonResumeOnReturn.manualOverride=after?'play':'pause';
-        }
-        if(!after){
-          window.__lessonResumeOnReturn=window.__lessonResumeOnReturn||null;
-          if(window.__lessonResumeOnReturn){
-            window.__lessonResumeOnReturn.wasPlaying=false;
-            window.__lessonResumeOnReturn.manualOverride='pause';
-          }
+          window.__lessonResumeOnReturn.wasPlaying=intendedState==='play';
+          window.__lessonResumeOnReturn.manualOverride=intendedState;
         }
       }catch(_){ }
       return result;
@@ -13454,8 +13450,9 @@ const s=document.createElement('style');s.textContent=`
   });
 })();
 </script>
-</body>
-</html>
+
+
+
 
 <!-- ===== FINAL LESSON OPEN SAFETY PATCH ===== -->
 <script id="final-lesson-open-safety-patch">
@@ -13672,190 +13669,197 @@ const s=document.createElement('style');s.textContent=`
 </script>
 
 
-<!-- FINAL DESKTOP CONTROL BAR ORDER V10 -->
-<style id="lesson-player-desktop-control-order-v10">
+<!-- FINAL VIDEO CONTROL BAR LAYOUT V12 -->
+<style id="lesson-player-control-layout-v12">
+/* One authoritative desktop layout. Mobile keeps its existing dedicated layout. */
 @media (hover:hover) and (pointer:fine){
-  /*
-     Desktop layout is content-driven: the two outer flexible columns absorb
-     whatever space is left, keeping the timer in the true visual center while
-     every control keeps its natural width.
-     RTL visual order: fullscreen | mute | volume | timer | back | forward | speed | play
-  */
   #lessonCustomControls .controls-row{
     display:grid !important;
-    grid-template-columns:minmax(0,1fr) auto auto minmax(0,auto) auto auto auto auto minmax(0,1fr) !important;
-    grid-template-areas:"fullscreen mute volume timer seekBack seekForward speed play ." !important;
+    grid-template-columns:minmax(0,1fr) auto minmax(0,1fr) !important;
+    grid-template-areas:"left timer right" !important;
     align-items:center !important;
-    justify-items:center !important;
-    column-gap:clamp(4px,0.9vw,12px) !important;
-    row-gap:0 !important;
-    direction:rtl !important;
     width:100% !important;
     min-width:0 !important;
-    position:relative !important;
-    padding-inline:clamp(4px,0.8vw,10px) !important;
+    padding:0 10px !important;
+    gap:clamp(8px,1vw,16px) !important;
     box-sizing:border-box !important;
+    direction:ltr !important;
+    position:relative !important;
   }
-  #lessonCustomControls .controls-left,
-  #lessonCustomControls .controls-right{display:contents !important;}
-  #lessonCustomControls #lessonFullscreenBtn{grid-area:fullscreen !important;justify-self:start !important;}
-  #lessonCustomControls #lessonMuteBtn{grid-area:mute !important;justify-self:center !important;}
-  #lessonCustomControls .lesson-volume-wrap{
-    grid-area:volume !important;
-    justify-self:center !important;
+  #lessonCustomControls .controls-left{
+    grid-area:left !important;
+    position:static !important;
     display:flex !important;
     align-items:center !important;
-    gap:clamp(4px,0.5vw,7px) !important;
+    justify-content:flex-start !important;
+    flex-direction:row !important;
+    gap:clamp(5px,.7vw,11px) !important;
     min-width:0 !important;
-    max-width:none !important;
-    width:clamp(70px,12vw,132px) !important;
+    width:max-content !important;
+    max-width:100% !important;
+    overflow:visible !important;
+  }
+  #lessonCustomControls .controls-right{
+    grid-area:right !important;
+    position:static !important;
+    display:flex !important;
+    align-items:center !important;
+    justify-content:flex-end !important;
+    flex-direction:row !important;
+    gap:clamp(5px,.7vw,11px) !important;
+    min-width:0 !important;
+    width:max-content !important;
+    max-width:100% !important;
+    margin-inline-start:auto !important;
+    overflow:visible !important;
   }
   #lessonCustomControls #lessonTimerDisplay{
     grid-area:timer !important;
+    position:static !important;
+    transform:none !important;
     justify-self:center !important;
+    align-self:center !important;
     width:max-content !important;
-    max-width:100% !important;
     min-width:0 !important;
-    text-align:center !important;
-    white-space:nowrap !important;
-  }
-  #lessonCustomControls #lessonSeekBackBtn{grid-area:seekBack !important;justify-self:center !important;}
-  #lessonCustomControls #lessonSeekForwardBtn{grid-area:seekForward !important;justify-self:center !important;}
-  #lessonCustomControls #lessonSpeedBtn{grid-area:speed !important;justify-self:center !important;}
-  #lessonCustomControls #lessonDesktopPlayBtn{grid-area:play !important;justify-self:end !important;}
-}
-</style>
-
-<!-- FINAL VIDEO CONTROL DISTRIBUTION + TOUCH TOGGLE DE-DUPE V11 -->
-<style id="lesson-player-control-distribution-v11">
-@media (hover:hover) and (pointer:fine){
-  #lessonCustomControls .controls-row{
-    position:relative !important;
-    display:flex !important;
-    align-items:center !important;
-    justify-content:center !important;
-    width:100% !important;
-    min-width:0 !important;
-    padding-inline:8px !important;
-    box-sizing:border-box !important;
-    direction:ltr !important;
-  }
-  #lessonCustomControls .controls-left,
-  #lessonCustomControls .controls-right{
-    position:absolute !important;
-    top:0 !important;
-    bottom:0 !important;
-    display:flex !important;
-    align-items:center !important;
-    gap:clamp(6px,0.75vw,12px) !important;
-    min-width:0 !important;
-  }
-  /* Physical left side: play | speed | forward | back */
-  #lessonCustomControls .controls-left{
-    left:8px !important;
-    flex-direction:row-reverse !important;
-  }
-  /* Physical right side: volume | mute | fullscreen */
-  #lessonCustomControls .controls-right{
-    right:8px !important;
-    flex-direction:row !important;
-  }
-  #lessonCustomControls .controls-timer{
-    position:absolute !important;
-    left:50% !important;
-    top:50% !important;
-    transform:translate(-50%,-50%) !important;
-    width:max-content !important;
-    max-width:30% !important;
-    min-width:0 !important;
+    max-width:min(30vw,260px) !important;
     margin:0 !important;
-    white-space:nowrap !important;
     text-align:center !important;
+    white-space:nowrap !important;
     z-index:2 !important;
   }
-  #lessonCustomControls .controls-left > *,
-  #lessonCustomControls .controls-right > *{
+  #lessonCustomControls .controls-btn,
+  #lessonCustomControls .lesson-volume-wrap{
     position:relative !important;
     flex:0 0 auto !important;
     min-width:0 !important;
   }
   #lessonCustomControls .lesson-volume-wrap{
-    width:clamp(72px,11vw,132px) !important;
-    min-width:0 !important;
+    width:clamp(72px,10vw,132px) !important;
     max-width:132px !important;
+    display:flex !important;
+    align-items:center !important;
+    gap:clamp(4px,.45vw,7px) !important;
   }
   #lessonCustomControls #lessonDesktopPlayBtn{order:1 !important;}
   #lessonCustomControls #lessonSpeedBtn{order:2 !important;}
+  #lessonCustomControls #lessonSeekForwardBtn{order:3 !important;}
+  #lessonCustomControls #lessonSeekBackBtn{order:4 !important;}
+  #lessonCustomControls #lessonFullscreenBtn{order:1 !important;}
   #lessonCustomControls #lessonMuteBtn{order:2 !important;}
-  #lessonCustomControls #lessonFullscreenBtn{order:3 !important;}
+  #lessonCustomControls .lesson-volume-wrap{order:3 !important;}
 }
 </style>
-<script id="lesson-player-control-distribution-v11-script">
+<script id="lesson-player-control-layout-v12-script">
 (function(){
   'use strict';
-  function arrangeControls(){
-    const row=document.getElementById('lessonCustomControls')?.querySelector('.controls-row');
-    if(!row || row.dataset.v11Arranged==='1') return;
+  if(window.__aaLessonControlLayoutV12)return;
+  window.__aaLessonControlLayoutV12=true;
+  function arrange(){
+    if(!window.matchMedia?.('(hover:hover) and (pointer:fine)').matches)return;
+    const row=document.querySelector('#lessonCustomControls .controls-row');
+    if(!row)return;
     const left=row.querySelector('.controls-left');
     const right=row.querySelector('.controls-right');
-    if(!left || !right) return;
-    const back=document.getElementById('lessonSeekBackBtn');
-    const forward=document.getElementById('lessonSeekForwardBtn');
-    const mute=document.getElementById('lessonMuteBtn');
-    const volume=row.querySelector('.lesson-volume-wrap');
-    const timer=document.getElementById('lessonTimerDisplay');
+    if(!left||!right)return;
     const play=document.getElementById('lessonDesktopPlayBtn');
     const speed=document.getElementById('lessonSpeedBtn');
+    const forward=document.getElementById('lessonSeekForwardBtn');
+    const back=document.getElementById('lessonSeekBackBtn');
     const fullscreen=document.getElementById('lessonFullscreenBtn');
-    if(!back||!forward||!mute||!volume||!timer||!play||!speed||!fullscreen) return;
-
-    /* Desktop groups: left = play,speed,forward,back; right = volume,mute,fullscreen.
-       Moving existing nodes preserves all previously attached event listeners by ID/reference. */
+    const mute=document.getElementById('lessonMuteBtn');
+    const volume=row.querySelector('.lesson-volume-wrap');
+    if(!play||!speed||!forward||!back||!fullscreen||!mute||!volume)return;
+    /* Physical left -> right: play, speed, forward, back. */
     left.append(play,speed,forward,back);
+    /* Physical left -> right: volume, mute, fullscreen. */
     right.append(volume,mute,fullscreen);
-    row.dataset.v11Arranged='1';
+    row.dataset.authoritativeControlLayout='v12';
   }
-
-  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',arrangeControls,{once:true});
-  else arrangeControls();
-  setTimeout(arrangeControls,120);
-  setTimeout(arrangeControls,500);
-  window.__aaArrangeLessonControlsV11=arrangeControls;
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',arrange,{once:true});
+  else arrange();
+  window.addEventListener('resize',arrange,{passive:true});
+  setTimeout(arrange,120);
+  setTimeout(arrange,500);
+  window.__aaArrangeLessonControlsV12=arrange;
 })();
-
+</script>
+<!-- FINAL TOUCH CONTROL VISIBILITY V11 -->
+<style id="lesson-touch-control-visibility-v11-style">
+@media (pointer:coarse),(hover:none){
+  #lessonVideoWrapper .lesson-platform-controls{
+    transition:opacity .28s ease, transform .28s ease !important;
+  }
+  #lessonVideoWrapper.lesson-controls-hidden .lesson-platform-controls{
+    opacity:0 !important;
+    pointer-events:none !important;
+    transform:translateY(3px) !important;
+  }
+}
+</style>
+<script id="lesson-touch-control-visibility-v11-script">
 (function(){
   'use strict';
-  const wrapper=document.getElementById('lessonVideoWrapper');
-  if(!wrapper || wrapper.dataset.v11TouchClickGuard==='1') return;
-  wrapper.dataset.v11TouchClickGuard='1';
+  const w=document.getElementById('lessonVideoWrapper');
+  if(!w || w.dataset.authoritativeTouchV11==='1')return;
+  w.dataset.authoritativeTouchV11='1';
   const isTouch=()=>{
-    try{return window.matchMedia('(pointer:coarse),(hover:none)').matches || (navigator.maxTouchPoints||0)>0;}
-    catch(_){return (navigator.maxTouchPoints||0)>0;}
+    try{return window.matchMedia('(pointer:coarse),(hover:none)').matches || (navigator.maxTouchPoints||0)>0;}catch(_){return (navigator.maxTouchPoints||0)>0;}
   };
-  const isBackground=e=>{
-    const t=e.target;
-    return !t.closest?.('.lesson-platform-controls,.lesson-video-center-play,button,input,.settings-dropdown,.lesson-seek-feedback');
+  const isLesson=()=>{try{return typeof currentCoursePage==='undefined' || currentCoursePage==='lessonPlayer';}catch(_){return true;}};
+  const isPlaying=()=>{
+    try{return Number(window.v12GetPlaybackState?.())===1;}catch(_){ }
+    try{return typeof lessonPlayerType!=='undefined' && lessonPlayerType==='html5' && window.lessonHtmlVideo ? !window.lessonHtmlVideo.paused : false;}catch(_){return false;}
   };
-
-  /* The current touch pointer handler toggles the UI once. A legacy click handler
-     then used to toggle it a second time after finger-up. Suppress only that
-     synthetic click so the visible state persists after the finger is lifted. */
-  wrapper.addEventListener('pointerup',e=>{
-    if(!isTouch() || e.pointerType!=='touch' || !isBackground(e)) return;
-    wrapper.dataset.v11TouchToggleAt=String(Date.now());
+  const clearHide=()=>{
+    try{if(typeof lessonControlsHideTimer!=='undefined' && lessonControlsHideTimer){clearTimeout(lessonControlsHideTimer);lessonControlsHideTimer=null;}}catch(_){ }
+  };
+  const backgroundTarget=target=>!!target && !target.closest?.('.lesson-platform-controls,.lesson-video-center-play,button,input,.settings-dropdown,.lesson-seek-feedback,.lesson-player-brand,.lesson-resume-indicator');
+  const reveal=()=>{
+    clearHide();
+    w.classList.remove('lesson-controls-hidden');
+    w.classList.add('lesson-touch-controls-visible','show-center-play');
+    try{window.updateLessonCenterButton?.();}catch(_){ }
+    if(isPlaying()){
+      try{
+        lessonControlsHideTimer=setTimeout(()=>{
+          if(isLesson() && isPlaying()){
+            w.classList.add('lesson-controls-hidden');
+            w.classList.remove('lesson-touch-controls-visible');
+          }
+          lessonControlsHideTimer=null;
+        },2800);
+      }catch(_){ }
+    }
+  };
+  const conceal=()=>{
+    clearHide();
+    w.classList.add('lesson-controls-hidden');
+    w.classList.remove('lesson-touch-controls-visible');
+    try{window.updateLessonCenterButton?.();}catch(_){ }
+  };
+  /* Capture before the older target handlers. One touch = one state change. */
+  document.addEventListener('pointerup',e=>{
+    if(!isTouch() || e.pointerType!=='touch' || !isLesson())return;
+    if(e.target.closest?.('#lessonVideoWrapper')!==w || !backgroundTarget(e.target))return;
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    w.dataset.suppressTouchClickUntil=String(Date.now()+700);
+    if(w.classList.contains('lesson-controls-hidden'))reveal();
+    else conceal();
   },true);
-
   document.addEventListener('click',e=>{
-    if(!isTouch()) return;
-    if(!isBackground(e)) return;
-    if(e.target.closest?.('#lessonVideoWrapper')!==wrapper) return;
-    const at=Number(wrapper.dataset.v11TouchToggleAt||0);
-    if(!at || Date.now()-at>700) return;
-    delete wrapper.dataset.v11TouchToggleAt;
+    if(!isTouch())return;
+    const until=Number(w.dataset.suppressTouchClickUntil||0);
+    if(!until || Date.now()>until)return;
+    if(e.target.closest?.('#lessonVideoWrapper')!==w || !backgroundTarget(e.target))return;
+    delete w.dataset.suppressTouchClickUntil;
     e.preventDefault();
     e.stopImmediatePropagation();
   },true);
+  document.addEventListener('visibilitychange',()=>{if(document.hidden)clearHide();});
 })();
 </script>
+
+
 </body>
 </html>
