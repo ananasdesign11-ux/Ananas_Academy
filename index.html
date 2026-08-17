@@ -14329,23 +14329,9 @@ const s=document.createElement('style');s.textContent=`
 </script>
 
 <style id="aa-final-speed-panel-and-video-size-v2">
-/* Unified video size: the minimized lesson player uses a true 16:9 frame. */
-#lessonVideoWrapper:not(:fullscreen){
-  aspect-ratio:16 / 9 !important;
-  width:100% !important;
-  height:auto !important;
-  min-height:0 !important;
-  max-height:none !important;
-}
-#lessonVideoWrapper:not(:fullscreen) .yt-player-container,
-#lessonVideoWrapper:not(:fullscreen) .yt-player-container > iframe,
-#lessonVideoWrapper:not(:fullscreen) .yt-player-container > video{
-  width:100% !important;
-  height:100% !important;
-}
-/* One anchored speed panel for both desktop and touch layouts. */
+/* Keep the existing video dimensions; this block only owns the speed panel. */
 #lessonVideoWrapper #lessonSpeedDropdown{
-  position:absolute !important;
+  position:fixed !important;
   z-index:100000 !important;
   width:150px !important;
   min-width:150px !important;
@@ -14378,12 +14364,11 @@ const s=document.createElement('style');s.textContent=`
 (function(){
   'use strict';
   const $=id=>document.getElementById(id);
-  const wrapper=$('lessonVideoWrapper'), btn=$('lessonSpeedBtn'), panel=$('lessonSpeedDropdown');
-  if(!wrapper||!btn||!panel)return;
+  const btn=$('lessonSpeedBtn'), panel=$('lessonSpeedDropdown');
+  if(!btn||!panel)return;
   function isOpen(){return panel.classList.contains('show');}
   function positionPanel(){
     if(!isOpen())return;
-    const wb=wrapper.getBoundingClientRect();
     const bb=btn.getBoundingClientRect();
     panel.style.visibility='hidden';
     panel.style.left='0px';
@@ -14392,10 +14377,12 @@ const s=document.createElement('style');s.textContent=`
     panel.style.bottom='auto';
     const pw=panel.offsetWidth||150;
     const ph=panel.offsetHeight||42;
-    let left=(bb.left-wb.left)+(bb.width-pw)/2;
-    let top=(bb.top-wb.top)-ph-8;
-    left=Math.max(8,Math.min(Math.max(8,wb.width-pw-8),left));
-    top=Math.max(8,top);
+    const gap=8;
+    let left=bb.left+(bb.width-pw)/2;
+    let top=bb.top-ph-gap;
+    const maxLeft=Math.max(8,window.innerWidth-pw-8);
+    left=Math.max(8,Math.min(maxLeft,left));
+    if(top<8)top=bb.bottom+gap;
     panel.style.setProperty('left',`${Math.round(left)}px`,'important');
     panel.style.setProperty('top',`${Math.round(top)}px`,'important');
     panel.style.setProperty('right','auto','important');
@@ -14410,14 +14397,12 @@ const s=document.createElement('style');s.textContent=`
     panel.setAttribute('aria-hidden',opening?'false':'true');
     if(opening)requestAnimationFrame(positionPanel);
   }
-  /* Remove any pre-existing listener effects by cloning the speed button once. */
   if(btn.dataset.speedPanelV2!=='1'){
     const fresh=btn.cloneNode(true);
     btn.replaceWith(fresh);
     fresh.dataset.speedPanelV2='1';
     fresh.addEventListener('click',openCloseSpeed,true);
   }
-  const freshBtn=$('lessonSpeedBtn');
   if(panel.dataset.speedPanelV2!=='1'){
     panel.dataset.speedPanelV2='1';
     panel.addEventListener('click',e=>e.stopImmediatePropagation(),true);
