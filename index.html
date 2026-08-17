@@ -14011,112 +14011,102 @@ const s=document.createElement('style');s.textContent=`
 </script>
 
 
-
-<!-- FINAL HOLD-2X UI STATE PATCH -->
-<style id="aa-final-hold2x-ui-state-style">
-#lessonVideoWrapper.aa-hold2x-hidden-ui .lesson-platform-controls,
-#lessonVideoWrapper.aa-hold2x-hidden-ui .custom-video-controls{
+<!-- FINAL HOLD 2X UI: hide controls and show transient 2x banner only while long-press is active -->
+<style id="aa-final-hold2x-ui-style">
+#lessonVideoWrapper.aa-hold2x-active .lesson-platform-controls,
+#lessonVideoWrapper.aa-hold2x-active .custom-video-controls{
   opacity:0!important;
   pointer-events:none!important;
   visibility:hidden!important;
 }
-#lessonVideoWrapper .aa-hold2x-indicator{
-  position:absolute;top:14px;left:50%;transform:translateX(-50%) scale(.96);
-  z-index:120;display:none;align-items:center;gap:8px;
-  padding:8px 14px;border-radius:999px;
-  background:rgba(8,10,16,.62);backdrop-filter:blur(10px);
-  color:#fff;border:1px solid rgba(255,255,255,.14);
-  box-shadow:0 10px 30px rgba(0,0,0,.28);
-  font-size:.82rem;font-weight:900;letter-spacing:.1px;
-  pointer-events:none;opacity:0;transition:opacity .18s ease,transform .18s ease;
+#lessonVideoWrapper .aa-hold2x-banner{
+  position:absolute;top:14px;left:50%;transform:translate(-50%,-8px) scale(.96);
+  z-index:140;display:flex;align-items:center;gap:8px;padding:8px 14px;
+  border:1px solid rgba(255,255,255,.18);border-radius:999px;
+  background:rgba(10,10,10,.58);backdrop-filter:blur(12px);
+  color:#fff;font-size:.78rem;font-weight:900;letter-spacing:.02em;
+  opacity:0;visibility:hidden;transition:opacity .18s ease,transform .18s ease,visibility .18s ease;
+  pointer-events:none;white-space:nowrap;
 }
-#lessonVideoWrapper.aa-hold2x-active .aa-hold2x-indicator{
-  display:flex;opacity:1;transform:translateX(-50%) scale(1);
+#lessonVideoWrapper .aa-hold2x-banner.show{
+  opacity:.92;visibility:visible;transform:translate(-50%,0) scale(1);
 }
-@media(max-width:768px){
-  #lessonVideoWrapper .aa-hold2x-indicator{top:10px;font-size:.76rem;padding:7px 12px;}
-}
+#lessonVideoWrapper .aa-hold2x-banner i{font-size:.8rem;opacity:.9;}
 </style>
-<script id="aa-final-hold2x-ui-state-script">
+<script id="aa-final-hold2x-ui-script">
 (function(){
   'use strict';
   const wrapper=document.getElementById('lessonVideoWrapper');
-  if(!wrapper||window.__aaFinalHold2xUiState)return;
-  window.__aaFinalHold2xUiState=true;
-  const uiSelector='.lesson-platform-controls,.custom-video-controls';
-  const isControl=e=>!!e.target?.closest?.(uiSelector+',button,input,.settings-dropdown,.lesson-video-center-play');
-  const isReady=()=>{try{return currentCoursePage==='lessonPlayer'&&lessonPlayerReady&&!!lessonPlayer;}catch(_){return false;}};
-  let touchDown=false,mouseDown=false,spaceDown=false;
-  let touchTimer=null,mouseTimer=null,spaceTimer=null;
-  let holdActive=false;
-  let longStarted=false;
-  const clear=t=>{if(t){clearTimeout(t);return null;}return null;};
-  const indicator=()=>{
-    let el=wrapper.querySelector('.aa-hold2x-indicator');
-    if(!el){el=document.createElement('div');el.className='aa-hold2x-indicator';el.innerHTML='<i class="fas fa-gauge-high"></i><span>×2 سرعة التشغيل</span>';wrapper.appendChild(el);}
-    return el;
+  if(!wrapper||window.__aaFinalHold2xUI)return;
+  window.__aaFinalHold2xUI=true;
+  let banner=wrapper.querySelector('.aa-hold2x-banner');
+  if(!banner){
+    banner=document.createElement('div');
+    banner.className='aa-hold2x-banner';
+    banner.innerHTML='<i class="fas fa-gauge-high"></i><span>×2 • تشغيل سريع</span>';
+    wrapper.appendChild(banner);
+  }
+  let pointerTimer=null, pointerPending=false, pointerHolding=false, spaceTimer=null, spacePending=false, spaceHolding=false;
+  const setUI=on=>{
+    wrapper.classList.toggle('aa-hold2x-active',!!on);
+    banner.classList.toggle('show',!!on);
+    if(on) wrapper.setAttribute('aria-busy','true'); else wrapper.removeAttribute('aria-busy');
   };
-  indicator();
-  const enterHold=()=>{
-    if(holdActive)return;
-    holdActive=true;longStarted=true;
-    wrapper.classList.add('aa-hold2x-active','aa-hold2x-hidden-ui');
-    indicator();
+  const clearPointerTimer=()=>{if(pointerTimer){clearTimeout(pointerTimer);pointerTimer=null;}};
+  const clearSpaceTimer=()=>{if(spaceTimer){clearTimeout(spaceTimer);spaceTimer=null;}};
+  const stopPointer=()=>{
+    clearPointerTimer();
+    const was=pointerHolding;
+    pointerPending=false;pointerHolding=false;
+    if(was) setUI(false);
   };
-  const leaveHold=()=>{
-    wrapper.classList.remove('aa-hold2x-active');
-    // Keep controls hidden after a long press. They are intentionally not shown here.
+  const stopSpace=()=>{
+    clearSpaceTimer();
+    const was=spaceHolding;
+    spacePending=false;spaceHolding=false;
+    if(was) setUI(false);
   };
-  const finishPointer=(e)=>{
-    if(e.pointerType==='touch'){
-      touchDown=false;touchTimer=clear(touchTimer);
-    }else if(e.pointerType==='mouse'){
-      mouseDown=false;mouseTimer=clear(mouseTimer);
-    }
-    if(longStarted){
-      longStarted=false;leaveHold();
-      wrapper.dataset.aaHold2xAwaitTap='1';
-      setTimeout(()=>{if(wrapper.dataset.aaHold2xAwaitTap==='1')delete wrapper.dataset.aaHold2xAwaitTap;},900);
-    }
+  const surfaceTarget=t=>{
+    if(!t?.closest)return false;
+    return !t.closest('.lesson-platform-controls,.custom-video-controls,.lesson-video-center-play,button,input,.settings-dropdown,.aa-hold2x-banner');
   };
+
   wrapper.addEventListener('pointerdown',e=>{
-    if(!isReady()||isControl(e.target))return;
+    if((e.pointerType!=='touch'&&e.pointerType!=='mouse')||!surfaceTarget(e.target))return;
     if(e.pointerType==='mouse'&&e.button!==0)return;
-    if(e.pointerType==='touch'){
-      touchDown=true;touchTimer=clear(touchTimer);
-      touchTimer=setTimeout(()=>{if(touchDown)enterHold();},450);
-    }else if(e.pointerType==='mouse'){
-      mouseDown=true;mouseTimer=clear(mouseTimer);
-      mouseTimer=setTimeout(()=>{if(mouseDown)enterHold();},450);
-    }
+    clearPointerTimer();pointerPending=true;pointerHolding=false;
+    pointerTimer=setTimeout(()=>{
+      pointerTimer=null;
+      if(!pointerPending)return;
+      pointerHolding=true;
+      setUI(true);
+    },430);
   },true);
-  wrapper.addEventListener('pointerup',finishPointer,true);
-  wrapper.addEventListener('pointercancel',finishPointer,true);
-  wrapper.addEventListener('lostpointercapture',finishPointer,true);
+  const pointerEnd=e=>{
+    if(e?.pointerType&&e.pointerType!=='touch'&&e.pointerType!=='mouse')return;
+    stopPointer();
+  };
+  wrapper.addEventListener('pointerup',pointerEnd,true);
+  wrapper.addEventListener('pointercancel',pointerEnd,true);
+  wrapper.addEventListener('lostpointercapture',pointerEnd,true);
+
   document.addEventListener('keydown',e=>{
-    if(e.code!=='Space'||!isReady()||e.repeat||e.ctrlKey||e.altKey||e.metaKey)return;
-    spaceDown=true;spaceTimer=clear(spaceTimer);
-    spaceTimer=setTimeout(()=>{if(spaceDown)enterHold();},450);
+    if(e.code!=='Space'||e.repeat)return;
+    if(typeof currentCoursePage!=='undefined'&&currentCoursePage!=='lessonPlayer')return;
+    if(e.ctrlKey||e.altKey||e.metaKey)return;
+    clearSpaceTimer();spacePending=true;spaceHolding=false;
+    spaceTimer=setTimeout(()=>{
+      spaceTimer=null;
+      if(!spacePending)return;
+      spaceHolding=true;
+      setUI(true);
+    },430);
   },true);
   document.addEventListener('keyup',e=>{
-    if(e.code!=='Space'||!spaceDown)return;
-    spaceDown=false;spaceTimer=clear(spaceTimer);
-    if(holdActive){longStarted=false;leaveHold();wrapper.dataset.aaHold2xAwaitTap='1';setTimeout(()=>{if(wrapper.dataset.aaHold2xAwaitTap==='1')delete wrapper.dataset.aaHold2xAwaitTap;},900);}
+    if(e.code!=='Space')return;
+    stopSpace();
   },true);
-  window.addEventListener('blur',()=>{
-    touchDown=false;mouseDown=false;spaceDown=false;
-    touchTimer=clear(touchTimer);mouseTimer=clear(mouseTimer);spaceTimer=clear(spaceTimer);
-    if(holdActive){longStarted=false;leaveHold();}
-  },{passive:true});
-
-  // A normal touch after a completed long-press is the explicit way to show controls again.
-  wrapper.addEventListener('click',e=>{
-    if(!isReady()||isControl(e.target))return;
-    if(wrapper.dataset.aaHold2xAwaitTap==='1'){
-      delete wrapper.dataset.aaHold2xAwaitTap;
-      if(e.detail>=1 && e.pointerType==='touch') wrapper.classList.remove('aa-hold2x-hidden-ui');
-    }
-  },true);
+  window.addEventListener('blur',()=>{stopPointer();stopSpace();},{passive:true});
 })();
 </script>
 
