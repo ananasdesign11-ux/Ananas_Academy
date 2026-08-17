@@ -14459,5 +14459,88 @@ const s=document.createElement('style');s.textContent=`
   obs.observe(document.body,{subtree:true,childList:true});
 })();
 </script>
+
+<!-- FINAL AUTHORITATIVE DESKTOP PLAY/PAUSE CONTROL -->
+<script id="aa-final-authoritative-desktop-play-v1">
+(function(){
+  'use strict';
+  if(window.__aaFinalAuthoritativeDesktopPlayV1)return;
+  window.__aaFinalAuthoritativeDesktopPlayV1=true;
+
+  const mouseMode=()=>{try{return window.matchMedia('(hover:hover) and (pointer:fine)').matches;}catch(_){return false;}};
+  const ready=()=>{
+    try{return currentCoursePage==='lessonPlayer' && !!lessonPlayerReady && !!lessonPlayer;}catch(_){return false;}
+  };
+  const getRate=()=>{
+    try{
+      if(typeof lessonPlayerType!=='undefined'&&lessonPlayerType==='html5'&&lessonHtmlVideo)return Number(lessonHtmlVideo.playbackRate)||1;
+      const r=Number(lessonPlayer?.getPlaybackRate?.());
+      return Number.isFinite(r)&&r>0?r:1;
+    }catch(_){return 1;}
+  };
+  const setRate=async rate=>{
+    const n=Number(rate)||1;
+    try{
+      if(typeof lessonPlayerType!=='undefined'&&lessonPlayerType==='html5'&&lessonHtmlVideo){lessonHtmlVideo.playbackRate=n;return;}
+      await Promise.resolve(lessonPlayer?.setPlaybackRate?.(n));
+    }catch(e){console.warn('desktop hold rate failed',e);}
+  };
+  const toggleNow=async()=>{
+    if(!ready())return;
+    try{
+      if(typeof lessonPlayerType!=='undefined'&&lessonPlayerType==='html5'&&lessonHtmlVideo){
+        if(lessonHtmlVideo.paused||lessonHtmlVideo.ended){
+          const p=lessonHtmlVideo.play();if(p?.catch)p.catch(()=>{});
+        }else lessonHtmlVideo.pause();
+      }else{
+        const s=lessonPlayer?.getPlayerState?.();
+        const playing=(s===LESSON_MEDIA_STATE.PLAYING || (window.YT&&s===YT.PlayerState.PLAYING));
+        if(playing)await Promise.resolve(lessonPlayer.pauseVideo?.());
+        else await Promise.resolve(lessonPlayer.playVideo?.());
+      }
+    }catch(e){console.warn('desktop play/pause failed',e);}
+    try{window.updateLessonCenterButton?.();window.showLessonControls?.(2800);}catch(_){}
+  };
+
+  function install(){
+    const old=document.getElementById('lessonDesktopPlayBtn');
+    if(!old||old.dataset.aaFinalAuthoritativeBound==='1')return;
+    /* Clone only this button to remove every older listener attached to it. */
+    const btn=old.cloneNode(true);
+    btn.dataset.aaFinalAuthoritativeBound='1';
+    old.replaceWith(btn);
+
+    let pointerId=null;
+    const finish=e=>{
+      if(pointerId===null)return;
+      if(e?.pointerId!=null&&pointerId!==e.pointerId)return;
+      pointerId=null;
+      try{if(e?.pointerId!=null)btn.releasePointerCapture?.(e.pointerId);}catch(_){ }
+      e?.preventDefault?.();e?.stopImmediatePropagation?.();e?.stopPropagation?.();
+      toggleNow();
+    };
+
+    btn.addEventListener('pointerdown',e=>{
+      if(!mouseMode()||e.button!==0||!ready())return;
+      e.preventDefault();e.stopImmediatePropagation();e.stopPropagation();
+      pointerId=e.pointerId;
+      try{btn.setPointerCapture?.(pointerId);}catch(_){ }
+    },true);
+
+    btn.addEventListener('pointerup',finish,true);
+    btn.addEventListener('pointercancel',finish,true);
+    btn.addEventListener('lostpointercapture',e=>finish(e),true);
+    btn.addEventListener('click',e=>{
+      e.preventDefault();e.stopImmediatePropagation();e.stopPropagation();
+      /* Pointer-up is authoritative; click is intentionally suppressed. */
+    },true);
+  }
+
+  install();
+  document.addEventListener('DOMContentLoaded',install,{once:true});
+  new MutationObserver(install).observe(document.body,{subtree:true,childList:true});
+})();
+</script>
+
 </body>
 </html>
