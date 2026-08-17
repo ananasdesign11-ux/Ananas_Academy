@@ -5767,15 +5767,6 @@ label[for*="En"], input[id*="En"], textarea[id*="En"] { display:none !important;
             const active=document.fullscreenElement||document.webkitFullscreenElement;
             if(!active)restoreLessonPortraitOrientation();
         });
-        document.getElementById('backToLessonsBtn')?.addEventListener('click',async()=>{
-            try{window.pauseLessonForInternalNavigation?.();}catch(e){}
-            try{await window.saveLessonProgressNow?.();}catch(e){}
-            try{await window.persistCourseState?.();}catch(e){}
-            destroyLessonVideo();
-            document.getElementById('courseLessonPlayerPage').classList.remove('active');
-            document.getElementById('courseLessonsPage').classList.add('active');
-            loadLessonsForCourse(activeCourseId);
-        });
         document.getElementById('fullPageAddLessonBtn')?.addEventListener('click',()=>document.getElementById('addLessonBtn')?.click());
 
         // === إدارة الاختبارات ===
@@ -12528,6 +12519,38 @@ const s=document.createElement('style');s.textContent=`
     wrapped.__ananasVideoLifecycleWrapped=true;
     auth.signOut=wrapped;
   }
+
+  // Final authoritative lesson-player back button: stop first, then open lessons immediately.
+  document.addEventListener('click',async function(e){
+    const btn=e.target?.closest?.('#backToLessonsBtn');
+    if(!btn || currentCoursePage!=='lessonPlayer') return;
+    e.preventDefault();
+    e.stopPropagation();
+    if(typeof e.stopImmediatePropagation==='function') e.stopImmediatePropagation();
+    try{
+      // Force media stop for every supported player before changing the page.
+      try{
+        if(typeof lessonPlayer?.pauseVideo==='function') await Promise.resolve(lessonPlayer.pauseVideo());
+        else if(typeof lessonPlayer?.pause==='function') await Promise.resolve(lessonPlayer.pause());
+      }catch(_){}
+      try{window.captureLessonResumePosition?.('back-to-lessons');}catch(_){}
+      try{const save=window.saveLessonProgressNow?.();if(save?.catch)save.catch(()=>{});}catch(_){}
+      try{const persist=window.persistCourseState?.();if(persist?.catch)persist.catch(()=>{});}catch(_){}
+    }finally{
+      try{window.__lessonResumeAutoplay=false;}catch(_){}
+      try{window.__lesson2xHoldActive=false;}catch(_){}
+      try{destroyLessonVideo();}catch(_){}
+      const playerPage=document.getElementById('courseLessonPlayerPage');
+      const lessonsPage=document.getElementById('courseLessonsPage');
+      const detail=document.getElementById('courseDetailView');
+      if(playerPage){playerPage.classList.remove('active');playerPage.style.display='none';}
+      if(lessonsPage){lessonsPage.classList.add('active');lessonsPage.style.display='block';}
+      if(detail){detail.style.display='block';}
+      currentCoursePage='learning';
+      try{window.activeLessonId=null;}catch(_){}
+      if(activeCourseId) Promise.resolve(loadLessonsForCourse(activeCourseId)).catch(()=>{});
+    }
+  },true);
 
   // Direct buttons that do not pass through switchCoursePage/openQuiz/openAssignment.
   document.addEventListener('click',function(e){
