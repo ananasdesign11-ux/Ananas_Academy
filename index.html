@@ -5066,7 +5066,6 @@ label[for*="En"], input[id*="En"], textarea[id*="En"] { display:none !important;
             const wrapper=document.getElementById('lessonVideoWrapper');
             if(wrapper){
                 wrapper.classList.remove('show-center-play');
-                if(lessonUsesMousePointer())flashLessonCenterButton();
             }
             updateLessonCenterButton();
             showLessonControls();
@@ -5080,7 +5079,6 @@ label[for*="En"], input[id*="En"], textarea[id*="En"] { display:none !important;
                 wrapper.classList.remove('lesson-center-flash');
                 if(lessonUsesMousePointer()){
                     wrapper.classList.remove('show-center-play');
-                    if(state!==LESSON_MEDIA_STATE.PLAYING)flashLessonCenterButton();
                 }else if(state!==LESSON_MEDIA_STATE.PLAYING){
                     wrapper.classList.add('show-center-play');
                 }
@@ -5134,7 +5132,7 @@ label[for*="En"], input[id*="En"], textarea[id*="En"] { display:none !important;
                     window.__lessonResumeAutoplay=false;
                     try{const playPromise=lessonPlayer.playVideo?.();if(playPromise?.catch)playPromise.catch(()=>{});}catch(e){}
                 }
-                if(!lessonWatchState.lastTick){const w=document.getElementById('lessonVideoWrapper');if(w){if(lessonUsesMousePointer()){w.classList.remove('show-center-play');flashLessonCenterButton();}else w.classList.add('show-center-play');}}
+                if(!lessonWatchState.lastTick){const w=document.getElementById('lessonVideoWrapper');if(w){if(lessonUsesMousePointer()){w.classList.remove('show-center-play');}else w.classList.add('show-center-play');}}
             },{once:true});
             v.addEventListener('play',handleLessonPlaybackPlaying);v.addEventListener('pause',()=>handleLessonPlaybackStopped(LESSON_MEDIA_STATE.PAUSED));v.addEventListener('ended',()=>handleLessonPlaybackStopped(LESSON_MEDIA_STATE.ENDED));
             v.addEventListener('error',()=>{const s=document.getElementById('lessonCompletionStatus');if(s){s.style.display='block';s.className='lesson-completion-status';s.innerHTML='<i class="fas fa-triangle-exclamation"></i> تعذر تشغيل ملف الفيديو من هذا الرابط. استخدم رابط فيديو مباشر.';}});
@@ -5181,7 +5179,7 @@ label[for*="En"], input[id*="En"], textarea[id*="En"] { display:none !important;
                             window.__lessonResumeAutoplay=false;
                             setTimeout(()=>{try{lessonPlayer.playVideo();}catch(e){}},120);
                         }
-                        if(!lessonWatchState.lastTick){const w=document.getElementById('lessonVideoWrapper');if(w){if(lessonUsesMousePointer()){w.classList.remove('show-center-play');flashLessonCenterButton();}else w.classList.add('show-center-play');}}
+                        if(!lessonWatchState.lastTick){const w=document.getElementById('lessonVideoWrapper');if(w){if(lessonUsesMousePointer()){w.classList.remove('show-center-play');}else w.classList.add('show-center-play');}}
                     },
                     onStateChange:e=>{if(e.data===YT.PlayerState.PLAYING)handleLessonPlaybackPlaying();else handleLessonPlaybackStopped(e.data);}
                 }});
@@ -9589,17 +9587,7 @@ function v12VideoCommand(action,arg){
     if(action==='rate')return Promise.resolve(lessonPlayer.setPlaybackRate?.(arg));
   }catch(e){console.warn('Video command failed:',e);return false}
 }
-let lessonCenterFlashTimer=null;
-function lessonUsesMousePointer(){
-  try{return window.matchMedia('(hover:hover) and (pointer:fine)').matches;}catch(_){return window.matchMedia?.('(pointer:fine)')?.matches ?? window.innerWidth>768;}
-}
-function flashLessonCenterButton(){
-  const wrapper=document.getElementById('lessonVideoWrapper');
-  if(!wrapper || !lessonUsesMousePointer())return;
-  wrapper.classList.add('lesson-center-flash');
-  clearTimeout(lessonCenterFlashTimer);
-  lessonCenterFlashTimer=setTimeout(()=>wrapper.classList.remove('lesson-center-flash'),500);
-}
+function lessonUsesMousePointer(){try{return window.matchMedia('(hover:hover) and (pointer:fine)').matches;}catch(_){return window.innerWidth>768;}}
 function v12GetPlaybackState(){
   if(!lessonPlayerReady||!lessonPlayer)return LESSON_MEDIA_STATE.PAUSED;
   try{
@@ -9633,7 +9621,6 @@ async function v12TogglePlayback(){
     }
     updateLessonCenterButton();
     showLessonControls(2800);
-    if(lessonUsesMousePointer())flashLessonCenterButton();
   }catch(e){
     console.warn('Unified lesson play/pause failed:',e);
     showLessonControls(2200);
@@ -14499,74 +14486,68 @@ const s=document.createElement('style');s.textContent=`
   }
 }
 </style>
-<script id="aa-final-desktop-center-play-pause-v2-script">
+
+
+
+
+<script id="aa-final-desktop-center-play-pause-v3">
 (function(){
   'use strict';
   const wrapper=document.getElementById('lessonVideoWrapper');
-  if(!wrapper || window.__aaDesktopCenterPlayPauseV2)return;
-  window.__aaDesktopCenterPlayPauseV2=true;
-
-  const desktop=()=>{try{return window.matchMedia('(hover:hover) and (pointer:fine)').matches;}catch(_){return false;}};
-  let last=null;
-  let timer=null;
-  let attachedVideo=null;
-
-  function flash(paused){
-    if(!desktop() || !wrapper)return;
-    const btn=document.getElementById('lessonCenterPlayBtn');
-    if(!btn)return;
-    btn.innerHTML=paused?'<i class="fas fa-pause"></i>':'<i class="fas fa-play"></i>';
-    btn.setAttribute('aria-label',paused?'إيقاف الفيديو':'تشغيل الفيديو');
-    btn.setAttribute('title',paused?'إيقاف الفيديو':'تشغيل الفيديو');
-    wrapper.classList.remove('lesson-seek-feedback-active','show-center-play');
-    wrapper.classList.remove('lesson-center-flash');
+  const btn=document.getElementById('lessonCenterPlayBtn');
+  if(!wrapper||!btn||window.__aaDesktopCenterPlayPauseV3)return;
+  window.__aaDesktopCenterPlayPauseV3=true;
+  const isDesktop=()=>{try{return window.matchMedia('(hover:hover) and (pointer:fine)').matches;}catch(_){return window.innerWidth>768;}};
+  let timer=null, observedVideo=null, lastState=null;
+  const state=()=>{
+    try{
+      if(window.lessonHtmlVideo){
+        observedVideo=window.lessonHtmlVideo;
+        return window.lessonHtmlVideo.paused||window.lessonHtmlVideo.ended?'paused':'playing';
+      }
+      const s=window.lessonPlayer?.getPlayerState?.();
+      if(s===LESSON_MEDIA_STATE?.PLAYING || (window.YT&&s===YT.PlayerState.PLAYING))return 'playing';
+      if(s===LESSON_MEDIA_STATE?.PAUSED || s===LESSON_MEDIA_STATE?.ENDED || (window.YT&&(s===YT.PlayerState.PAUSED||s===YT.PlayerState.ENDED)))return 'paused';
+    }catch(_){ }
+    return null;
+  };
+  const paint=(current)=>{
+    // User-requested mapping: paused => pause icon, playing => play icon.
+    btn.innerHTML=current==='paused'?'<i class="fas fa-pause"></i>':'<i class="fas fa-play"></i>';
+    btn.setAttribute('aria-label',current==='paused'?'إيقاف الفيديو':'تشغيل الفيديو');
+    btn.setAttribute('title',current==='paused'?'إيقاف الفيديو':'تشغيل الفيديو');
+    if(!isDesktop()){wrapper.classList.remove('lesson-center-flash');return;}
+    wrapper.classList.remove('show-center-play','lesson-center-flash');
     void wrapper.offsetWidth;
     wrapper.classList.add('lesson-center-flash');
     clearTimeout(timer);
-    timer=setTimeout(()=>wrapper.classList.remove('lesson-center-flash'),520);
-  }
-
-  function readState(){
-    try{
-      if(window.lessonHtmlVideo){
-        attachedVideo=window.lessonHtmlVideo;
-        return window.lessonHtmlVideo.paused || window.lessonHtmlVideo.ended ? 'paused' : 'playing';
-      }
-      const s=window.lessonPlayer?.getPlayerState?.();
-      if(s===1 || s===LESSON_MEDIA_STATE?.PLAYING || (window.YT&&s===YT.PlayerState.PLAYING))return 'playing';
-      if(s===0 || s===2 || s===LESSON_MEDIA_STATE?.PAUSED || s===LESSON_MEDIA_STATE?.ENDED || (window.YT&&(s===YT.PlayerState.PAUSED||s===YT.PlayerState.ENDED)))return 'paused';
-    }catch(_){ }
-    return null;
-  }
-
-  function ensureVideoEvents(){
-    const v=window.lessonHtmlVideo;
-    if(!v || v===attachedVideo && v.dataset.aaCenterFlashBound==='1')return;
-    attachedVideo=v;
-    if(v.dataset.aaCenterFlashBound==='1')return;
-    v.dataset.aaCenterFlashBound='1';
-    v.addEventListener('play',()=>{ if(desktop()){last='playing';flash(false);} });
-    v.addEventListener('pause',()=>{ if(desktop()){last='paused';flash(true);} });
-    v.addEventListener('ended',()=>{ if(desktop()){last='paused';flash(true);} });
-  }
-
-  const tick=()=>{
-    if(!desktop())return;
-    ensureVideoEvents();
-    const state=readState();
-    if(!state)return;
-    if(last===null){last=state;return;}
-    if(state!==last){last=state;flash(state==='paused');}
+    timer=setTimeout(()=>wrapper.classList.remove('lesson-center-flash'),500);
   };
-
-  document.addEventListener('visibilitychange',()=>{if(!document.hidden)tick();},{passive:true});
-  const timerId=setInterval(tick,180);
-  window.__aaDesktopCenterPlayPauseV2Cleanup=()=>{clearInterval(timerId);clearTimeout(timer);};
+  const bindVideo=()=>{
+    const v=window.lessonHtmlVideo;
+    if(!v||v===observedVideo&&v.dataset.aaDesktopCenterV3Bound==='1')return;
+    observedVideo=v;
+    if(v.dataset.aaDesktopCenterV3Bound==='1')return;
+    v.dataset.aaDesktopCenterV3Bound='1';
+    v.addEventListener('play',()=>{if(isDesktop())paint('playing');});
+    v.addEventListener('pause',()=>{if(isDesktop())paint('paused');});
+    v.addEventListener('ended',()=>{if(isDesktop())paint('paused');});
+  };
+  const tick=()=>{
+    if(!isDesktop())return;
+    bindVideo();
+    const cur=state();
+    if(!cur)return;
+    if(lastState===null){lastState=cur;return;}
+    if(cur!==lastState){lastState=cur;paint(cur);}
+  };
+  const onVisibility=()=>{if(!document.hidden)tick();};
+  document.addEventListener('visibilitychange',onVisibility,{passive:true});
+  const id=setInterval(tick,180);
+  window.__aaDesktopCenterPlayPauseV3Cleanup=()=>{clearInterval(id);clearTimeout(timer);document.removeEventListener('visibilitychange',onVisibility);};
   tick();
 })();
 </script>
-
-
 
 <!-- FINAL SPACE SHORT-TOGGLE / LONG-HOLD-2X V3 -->
 <script id="aa-final-space-short-toggle-long2x-v3">
@@ -14674,3 +14655,4 @@ const s=document.createElement('style');s.textContent=`
 </script>
 </body>
 </html>
+
