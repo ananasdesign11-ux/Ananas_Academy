@@ -13359,5 +13359,177 @@ const s=document.createElement('style');s.textContent=`
   #lessonVideoWrapper .lesson-platform-controls .settings-dropdown{max-width:calc(100vw - 16px)!important;}
 }
 </style>
+
+<!-- FINAL TOUCH BEHAVIOR V14: touch-only toggle + reliable auto-hide + fixed mobile order -->
+<style id="aa-touch-behavior-v14-style">
+@media (max-width:768px), (hover:none), (pointer:coarse){
+  #lessonVideoWrapper .lesson-platform-controls .controls-row{
+    display:flex!important;
+    flex-direction:row!important;
+    direction:rtl!important;
+    align-items:center!important;
+    justify-content:space-between!important;
+    gap:0!important;
+    width:100%!important;
+    min-width:0!important;
+    flex-wrap:nowrap!important;
+  }
+  #lessonVideoWrapper .lesson-platform-controls .controls-left,
+  #lessonVideoWrapper .lesson-platform-controls .controls-right{
+    display:contents!important;
+  }
+  #lessonVideoWrapper #lessonFullscreenBtn{
+    order:1!important;
+    margin-inline-start:0!important;
+    margin-inline-end:auto!important;
+  }
+  #lessonVideoWrapper #lessonTimerDisplay{
+    order:2!important;
+    flex:0 0 auto!important;
+    width:auto!important;
+    min-width:0!important;
+    margin-inline:auto!important;
+    justify-self:auto!important;
+    text-align:center!important;
+  }
+  #lessonVideoWrapper #lessonSpeedBtn{
+    order:3!important;
+    margin-inline-start:auto!important;
+    margin-inline-end:0!important;
+  }
+  #lessonVideoWrapper #lessonDesktopPlayBtn,
+  #lessonVideoWrapper #lessonMuteBtn,
+  #lessonVideoWrapper .lesson-volume-wrap,
+  #lessonVideoWrapper #lessonSeekForwardBtn,
+  #lessonVideoWrapper #lessonSeekBackBtn,
+  #lessonVideoWrapper .quality-btn,
+  #lessonVideoWrapper .skip-ad-btn{
+    display:none!important;
+  }
+  #lessonVideoWrapper .lesson-platform-controls .controls-btn{
+    position:static!important;
+    float:none!important;
+    transform:none!important;
+    inset:auto!important;
+  }
+}
+</style>
+<script id="aa-touch-behavior-v14-script">
+(function(){
+  'use strict';
+  const wrapper=document.getElementById('lessonVideoWrapper');
+  if(!wrapper || wrapper.dataset.touchV14==='1') return;
+  wrapper.dataset.touchV14='1';
+
+  const isTouchDevice=()=>{
+    try{return window.matchMedia('(hover:none), (pointer:coarse)').matches || (navigator.maxTouchPoints||0)>0;}
+    catch(_){return (navigator.maxTouchPoints||0)>0;}
+  };
+  const isLessonPage=()=>{
+    try{return typeof currentCoursePage==='undefined' || currentCoursePage==='lessonPlayer';}
+    catch(_){return true;}
+  };
+  const isPlayingNow=()=>{
+    try{
+      const state=Number(window.v12GetPlaybackState?.());
+      if(Number.isFinite(state)) return state===1;
+    }catch(_){ }
+    try{
+      if(typeof lessonPlayerType!=='undefined' && lessonPlayerType==='html5' && window.lessonHtmlVideo)
+        return !window.lessonHtmlVideo.paused && !window.lessonHtmlVideo.ended;
+    }catch(_){ }
+    return false;
+  };
+  const clearAnyHide=()=>{
+    try{
+      if(typeof lessonControlsHideTimer!=='undefined' && lessonControlsHideTimer){
+        clearTimeout(lessonControlsHideTimer);
+        lessonControlsHideTimer=null;
+      }
+    }catch(_){ }
+    if(wrapper.__touchV14Timer){clearTimeout(wrapper.__touchV14Timer);wrapper.__touchV14Timer=null;}
+  };
+  const showTouchControls=(autoHide=true)=>{
+    if(!isTouchDevice()||!isLessonPage())return;
+    clearAnyHide();
+    wrapper.classList.remove('lesson-controls-hidden');
+    wrapper.classList.add('lesson-touch-controls-visible');
+    if(autoHide && isPlayingNow()){
+      wrapper.__touchV14Timer=setTimeout(()=>{
+        wrapper.__touchV14Timer=null;
+        if(isTouchDevice() && isLessonPage() && isPlayingNow()){
+          wrapper.classList.add('lesson-controls-hidden');
+          wrapper.classList.remove('lesson-touch-controls-visible');
+          try{window.updateLessonCenterButton?.();}catch(_){ }
+        }
+      },2800);
+    }
+    try{window.updateLessonCenterButton?.();}catch(_){ }
+  };
+  const hideTouchControls=()=>{
+    if(!isTouchDevice())return;
+    clearAnyHide();
+    wrapper.classList.add('lesson-controls-hidden');
+    wrapper.classList.remove('lesson-touch-controls-visible');
+    try{window.updateLessonCenterButton?.();}catch(_){ }
+  };
+
+  let active=false,startedHidden=false,startX=0,startY=0;
+  document.addEventListener('pointerdown',e=>{
+    if(!isTouchDevice()||e.pointerType!=='touch'||!isLessonPage())return;
+    if(e.target.closest?.('#lessonVideoWrapper')!==wrapper)return;
+    const background=!e.target.closest?.('.lesson-platform-controls,.lesson-video-center-play,button,input,.settings-dropdown,.lesson-seek-feedback,.lesson-player-brand,.lesson-resume-indicator');
+    if(!background)return;
+    active=true;
+    startedHidden=wrapper.classList.contains('lesson-controls-hidden');
+    startX=Number(e.clientX)||0; startY=Number(e.clientY)||0;
+  },true);
+
+  document.addEventListener('pointerup',e=>{
+    if(!active||!isTouchDevice()||e.pointerType!=='touch'||!isLessonPage())return;
+    active=false;
+    if(e.target.closest?.('#lessonVideoWrapper')!==wrapper)return;
+    const dx=(Number(e.clientX)||0)-startX,dy=(Number(e.clientY)||0)-startY;
+    if(Math.hypot(dx,dy)>18)return;
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    wrapper.dataset.touchV14SuppressClick=String(Date.now()+700);
+    if(startedHidden)showTouchControls(true);
+    else hideTouchControls();
+  },true);
+
+  document.addEventListener('pointercancel',e=>{if(e.pointerType==='touch')active=false;},true);
+  document.addEventListener('click',e=>{
+    if(!isTouchDevice())return;
+    const until=Number(wrapper.dataset.touchV14SuppressClick||0);
+    if(!until || Date.now()>until)return;
+    if(e.target.closest?.('#lessonVideoWrapper')!==wrapper)return;
+    const background=!e.target.closest?.('.lesson-platform-controls,.lesson-video-center-play,button,input,.settings-dropdown,.lesson-seek-feedback,.lesson-player-brand,.lesson-resume-indicator');
+    if(!background)return;
+    delete wrapper.dataset.touchV14SuppressClick;
+    e.preventDefault(); e.stopImmediatePropagation();
+  },true);
+
+  /* Reliable auto-hide while playing. This deliberately ignores paused state. */
+  let lastPlaying=false;
+  const heartbeat=()=>{
+    if(!isTouchDevice()||!isLessonPage())return;
+    const playing=isPlayingNow();
+    if(playing!==lastPlaying){
+      lastPlaying=playing;
+      if(playing){
+        if(!wrapper.classList.contains('lesson-controls-hidden'))showTouchControls(true);
+      }else{
+        clearAnyHide();
+      }
+    }else if(playing && !wrapper.classList.contains('lesson-controls-hidden') && !wrapper.__touchV14Timer){
+      showTouchControls(true);
+    }
+  };
+  setInterval(heartbeat,250);
+  setTimeout(()=>{lastPlaying=isPlayingNow();},300);
+})();
+</script>
+
 </body>
 </html>
