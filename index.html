@@ -1865,7 +1865,7 @@ label[for*="En"], input[id*="En"], textarea[id*="En"] { display:none !important;
 
 /* Fine-pointer/desktop: exact RTL order: fullscreen, mute, volume, timer, seek-back, seek-forward, speed, play. */
 @media (hover:hover) and (pointer:fine){
-  #lessonVideoWrapper .lesson-platform-controls .controls-row{justify-content:flex-start!important;}
+  #lessonVideoWrapper .lesson-platform-controls .controls-row{justify-content:space-between!important;}
   #lessonVideoWrapper #lessonFullscreenBtn{display:inline-flex!important;order:1!important;}
   #lessonVideoWrapper #lessonMuteBtn{display:inline-flex!important;order:2!important;}
   #lessonVideoWrapper .lesson-volume-wrap{display:flex!important;order:3!important;}
@@ -3923,9 +3923,25 @@ label[for*="En"], input[id*="En"], textarea[id*="En"] { display:none !important;
             try { duration = Number(lessonPlayer.getDuration?.() || 0); } catch(e) {}
             position = Number.isFinite(position) ? Math.max(0, position) : 0;
             duration = Number.isFinite(duration) ? Math.max(0, duration) : 0;
-            window.__lessonResumeOnReturn = {courseId: activeCourseId, lessonId: activeLessonId, position, reason, savedAt: Date.now()};
+            /* Preserve whether playback was actually running before we left.
+               Manual pause must remain paused when the lesson is reopened; only a
+               lesson that was playing when navigation/backgrounding happened may
+               resume automatically. */
+            let wasPlaying = false;
+            try{
+                const state = typeof window.v12GetPlaybackState === 'function' ? Number(window.v12GetPlaybackState()) : null;
+                if(state === 1) wasPlaying = true;
+                else if(lessonPlayerType === 'html5' && lessonHtmlVideo) wasPlaying = !lessonHtmlVideo.paused;
+                else if(typeof lessonPlayer?.getPlayerState === 'function') wasPlaying = Number(lessonPlayer.getPlayerState()) === 1;
+            }catch(_){ }
+            /* pagehide/visibility-hidden can run after the lifecycle controller
+               has already paused the player. Preserve the earlier true state so
+               a lesson that was playing before leaving can still resume. */
+            const preservePreviousPlaying = reason==='pagehide' || reason==='visibility-hidden' || reason==='beforeunload';
+            if(!wasPlaying && preservePreviousPlaying && window.__lessonResumeOnReturn?.wasPlaying===true) wasPlaying=true;
+            window.__lessonResumeOnReturn = {courseId: activeCourseId, lessonId: activeLessonId, position, reason, wasPlaying, savedAt: Date.now()};
             window.__lessonResumePosition = position;
-            window.__lessonResumeAutoplay = true;
+            window.__lessonResumeAutoplay = wasPlaying;
             try {
                 const key = `ananas.lessonResume.${currentUser?.uid || 'guest'}.${activeCourseId}.${activeLessonId}`;
                 localStorage.setItem(key, JSON.stringify({position, duration, updatedAt: Date.now()}));
@@ -4930,7 +4946,7 @@ label[for*="En"], input[id*="En"], textarea[id*="En"] { display:none !important;
                 String(window.__lessonResumeOnReturn.lessonId||'')===String(lessonId);
             if(resumeOnReturn){
                 window.__lessonResumePosition=Math.max(Number(window.__lessonResumePosition||0),Number(window.__lessonResumeOnReturn.position||0));
-                window.__lessonResumeAutoplay=true;
+                window.__lessonResumeAutoplay=window.__lessonResumeOnReturn.wasPlaying===true;
                 delete window.__lessonResumeOnReturn;
             }
             if(window.prepareLessonResume) await window.prepareLessonResume(courseId,lessonId);
