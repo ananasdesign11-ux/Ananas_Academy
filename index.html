@@ -13736,7 +13736,7 @@ const s=document.createElement('style');s.textContent=`
          so older click listeners cannot toggle the player a second time. */
       playBtn.dataset.suppressClick='1';
       setTimeout(()=>{delete playBtn.dataset.suppressClick;},500);
-      try{window.v12TogglePlayback?.();}catch(_){ }
+      try{window.toggleLessonPlayback?.();}catch(_){ }
     };
     playBtn.addEventListener('pointerdown',e=>{
       if(e.pointerType==='touch' && !window.matchMedia?.('(hover:hover) and (pointer:fine)').matches)return;
@@ -14361,7 +14361,7 @@ const s=document.createElement('style');s.textContent=`
       const hasPlayer=!!lessonPlayer || (typeof lessonHtmlVideo!=='undefined' && !!lessonHtmlVideo);
       const playerPage=document.getElementById('courseLessonPlayerPage');
       const pageVisible=!!playerPage && (playerPage.classList.contains('active') || getComputedStyle(playerPage).display!=='none');
-      return !!wrapperNow && playerReady && hasPlayer && (currentCoursePage==='lessonPlayer' || pageVisible);
+      return !!wrapperNow && playerReady && hasPlayer && pageVisible;
     }catch(_){return false;}
   };
   const playing=()=>{
@@ -14468,7 +14468,16 @@ const s=document.createElement('style');s.textContent=`
     e.preventDefault();e.stopPropagation();e.stopImmediatePropagation();
     state.down=false;clearTimeout(state.timer);state.timer=null;
     if(state.holding){leaveHold2x().catch(()=>{});return;}
-    try{window.v12TogglePlayback?.();}catch(_){ }
+    try{
+      if(typeof lessonPlayerType!=='undefined' && lessonPlayerType==='html5' && lessonHtmlVideo){
+        if(lessonHtmlVideo.paused || lessonHtmlVideo.ended) lessonHtmlVideo.play().catch(()=>{}); else lessonHtmlVideo.pause();
+      }else if(lessonPlayer){
+        const s=lessonPlayer.getPlayerState?.();
+        const isPlaying=s===LESSON_MEDIA_STATE.PLAYING || (window.YT&&s===YT.PlayerState.PLAYING);
+        if(isPlaying){ lessonPlayer.pauseVideo?.(); lessonPlayer.pause?.(); }
+        else { const r=lessonPlayer.playVideo?.(); if(r?.catch)r.catch(()=>{}); else { const r2=lessonPlayer.play?.(); if(r2?.catch)r2.catch(()=>{}); } }
+      }
+    }catch(_){ }
   },true);
 
   window.addEventListener('blur',()=>{
@@ -14564,4 +14573,3 @@ const s=document.createElement('style');s.textContent=`
 
 </body>
 </html>
-
