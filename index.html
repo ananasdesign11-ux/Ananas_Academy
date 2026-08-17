@@ -2006,7 +2006,7 @@ label[for*="En"], input[id*="En"], textarea[id*="En"] { display:none !important;
                                         <div class="controls-right">
                                             <button class="controls-btn lesson-desktop-play-btn" id="lessonDesktopPlayBtn" title="تشغيل/إيقاف الفيديو" aria-label="تشغيل الفيديو"><i class="fas fa-play"></i></button>
                                             <button class="controls-btn" id="lessonSpeedBtn" title="سرعة التشغيل">1x <i class="fas fa-caret-down"></i></button>
-                                            <div class="settings-dropdown lesson-speed-slider-panel" id="lessonSpeedDropdown" aria-hidden="true"><input id="lessonSpeedSlider" type="range" min="0.5" max="2" step="0.05" value="1" aria-label="سرعة التشغيل"></div>
+                                            <div class="settings-dropdown" id="lessonSpeedDropdown"></div>
                                             <button class="controls-btn fs-btn" id="lessonFullscreenBtn" title="ملء الشاشة"><i class="fas fa-expand"></i></button>
                                         </div>
                                     </div>
@@ -4757,63 +4757,54 @@ label[for*="En"], input[id*="En"], textarea[id*="En"] { display:none !important;
         }
 
         async function openLessonPlayer(courseId, lessonId) {
-            const lesson = lessonListCache.find(l => String(l.id) === String(lessonId));
+            const lesson = lessonListCache.find(l => l.id === lessonId);
             if(!lesson) return;
 
-            /* Save previous lesson progress without blocking the new lesson UI. */
-            if (lessonPlayer && lessonPlayerReady && activeLessonId && String(activeLessonId) !== String(lessonId)) {
-                try {
-                    const p = window.saveLessonProgressNow?.();
-                    if(p?.catch) p.catch(()=>{});
-                } catch(e) {}
-                try {
-                    const p = window.persistCourseState?.();
-                    if(p?.catch) p.catch(()=>{});
-                } catch(e) {}
+            /* Save the lesson we are leaving BEFORE changing activeLessonId or
+               destroying its player. This fixes the case where clicking another
+               lesson caused the previous position to be lost. */
+            if (lessonPlayer && lessonPlayerReady && activeLessonId &&
+                String(activeLessonId) !== String(lessonId)) {
+                try { await window.saveLessonProgressNow?.(); } catch(e) {}
+                try { await window.persistCourseState?.(); } catch(e) {}
             }
 
-            activeCourseId = String(courseId);
-            activeLessonId = String(lessonId);
+            activeCourseId = courseId;
+            activeLessonId = lessonId;
             currentCoursePage = 'lessonPlayer';
             lessonCurrentData = lesson;
-
-            /* Show the player immediately; do not wait for secondary Firestore/UI queries. */
-            const lessonsPage = document.getElementById('courseLessonsPage');
-            const playerPage = document.getElementById('courseLessonPlayerPage');
-            const detailView = document.getElementById('courseDetailView');
-            const overview = document.getElementById('courseOverviewContainer');
-            const dashboard = document.getElementById('courseDashboard');
-            if(detailView){ detailView.style.display='flex'; detailView.style.visibility='visible'; }
-            if(overview) overview.style.display='none';
-            if(dashboard) dashboard.style.display='none';
-            if(lessonsPage){ lessonsPage.classList.remove('active'); lessonsPage.style.display='none'; }
-            if(playerPage){ playerPage.classList.add('active'); playerPage.style.display='block'; playerPage.style.visibility='visible'; playerPage.style.opacity='1'; }
-
+            document.getElementById('courseLessonsPage').classList.remove('active');
+            document.getElementById('courseLessonPlayerPage').classList.add('active');
             document.getElementById('lessonPlayerTitle').textContent = lesson.titleAr || 'حصة';
             document.getElementById('lessonPlayerMeta').textContent = `${lesson.duration || 0} دقيقة • ${lesson.xpReward || 0} XP`;
-            resetLessonWatchState(lessonId, lesson.duration);
-
-            /* Start the actual video immediately. */
-            try { loadLessonVideo(lesson); } catch(e) { console.error('lesson video open',e); }
-            try { persistCourseState(); } catch(e) {}
-            try { window.showLessonControls?.(); } catch(e) {}
-            setTimeout(()=>window.__ananasResumeCurrentLesson?.(),0);
-
-            /* Secondary UI/data work continues in the background. */
-            Promise.resolve(renderLessonPlayerList()).catch(()=>{});
-            Promise.resolve(renderLessonRelatedActions(courseId, lessonId)).catch(()=>{});
-            Promise.resolve(renderLessonCompletionStatus(courseId, lessonId)).catch(()=>{});
-            Promise.resolve((async()=>{
-                try{
-                    const alreadyDone = await db.collection('users').doc(currentUser.uid)
-                        .collection('completedLessons').doc(String(lessonId)).get();
-                    lessonWatchState.granted = alreadyDone.exists;
-                }catch(e){ lessonWatchState.granted = false; }
-            })()).catch(()=>{});
-
-            if(window.prepareLessonResume){
-                Promise.resolve(window.prepareLessonResume(courseId,lessonId)).catch(()=>{});
+            renderLessonPlayerList();
+            await renderLessonRelatedActions(courseId, lessonId);
+            await renderLessonCompletionStatus(courseId, lessonId);
+            try {
+                const alreadyDone = await db.collection('users').doc(currentUser.uid)
+                    .collection('completedLessons').doc(lessonId).get();
+                lessonWatchState.granted = alreadyDone.exists;
+            } catch(e) {
+                lessonWatchState.granted = false;
             }
+            resetLessonWatchState(lessonId, lesson.duration);
+            try {
+                const alreadyDoneAfterReset = await db.collection('users').doc(currentUser.uid)
+                    .collection('completedLessons').doc(lessonId).get();
+                lessonWatchState.granted = alreadyDoneAfterReset.exists;
+            } catch(e) {}
+            const resumeOnReturn=window.__lessonResumeOnReturn &&
+                String(window.__lessonResumeOnReturn.courseId||'')===String(courseId) &&
+                String(window.__lessonResumeOnReturn.lessonId||'')===String(lessonId);
+            if(resumeOnReturn){
+                window.__lessonResumePosition=Math.max(Number(window.__lessonResumePosition||0),Number(window.__lessonResumeOnReturn.position||0));
+                window.__lessonResumeAutoplay=window.__lessonResumeOnReturn.wasPlaying===true;
+                delete window.__lessonResumeOnReturn;
+            }
+            if(window.prepareLessonResume) await window.prepareLessonResume(courseId,lessonId);
+            loadLessonVideo(lesson);
+            persistCourseState();
+            setTimeout(()=>window.__ananasResumeCurrentLesson?.(),150);
         }
 
         function resetLessonWatchState(lessonId, durationMinutes) {
@@ -5696,28 +5687,48 @@ label[for*="En"], input[id*="En"], textarea[id*="En"] { display:none !important;
             window.addEventListener('orientationchange',()=>{setTimeout(()=>{if(dragging)positionPreview(pendingRatio);},60);},{passive:true});
             window.__lessonSeekScrubber={isDragging:()=>dragging};
         })();
-        function syncLessonSpeedSlider(rate){
-            const n=Math.max(0.5,Math.min(2,Number(rate)||1));
-            const slider=document.getElementById('lessonSpeedSlider');
+        function positionLessonSpeedDropdown(){
             const btn=document.getElementById('lessonSpeedBtn');
-            if(slider)slider.value=String(n);
-            if(btn)btn.innerHTML=`${n % 1 === 0 ? n.toFixed(0) : n.toFixed(2).replace(/0+$/,'').replace(/\.$/,'')}x <i class="fas fa-caret-down"></i>`;
+            const menu=document.getElementById('lessonSpeedDropdown');
+            if(!btn||!menu||!isLessonTouchDevice()||!menu.classList.contains('show'))return;
+            const br=btn.getBoundingClientRect();
+            menu.style.position='fixed';
+            menu.style.visibility='hidden';
+            menu.style.left='0px';
+            menu.style.right='auto';
+            menu.style.top='0px';
+            menu.style.bottom='auto';
+            const mr=menu.getBoundingClientRect();
+            const gap=8;
+            const maxLeft=Math.max(gap,window.innerWidth-mr.width-gap);
+            const left=Math.min(Math.max(gap,br.right-mr.width),maxLeft);
+            let top=br.top-mr.height-gap;
+            if(top<gap) top=Math.min(window.innerHeight-mr.height-gap,br.bottom+gap);
+            top=Math.max(gap,top);
+            menu.style.left=`${left}px`;
+            menu.style.top=`${top}px`;
+            menu.style.visibility='visible';
         }
-        function setLessonSpeedFromSlider(value){
-            if(!lessonPlayerReady||!lessonPlayer)return;
-            const n=Math.max(0.5,Math.min(2,Number(value)||1));
-            try{
-                if(typeof lessonPlayerType!=='undefined'&&lessonPlayerType==='html5'&&lessonHtmlVideo)lessonHtmlVideo.playbackRate=n;
-                else lessonPlayer.setPlaybackRate?.(n);
-                syncLessonSpeedSlider(n);
-            }catch(e){console.warn('speed slider failed',e);}
-        }
-        document.getElementById('lessonSpeedSlider')?.addEventListener('input',(e)=>{
-            e.stopPropagation();
-            setLessonSpeedFromSlider(e.target.value);
+        document.getElementById('lessonSpeedBtn')?.addEventListener('click',()=>{
+            const menu=document.getElementById('lessonSpeedDropdown');
+            if(!menu)return;
+            const opening=!menu.classList.contains('show');
+            menu.classList.toggle('show');
+            if(opening)requestAnimationFrame(positionLessonSpeedDropdown);
         });
-        document.getElementById('lessonSpeedDropdown')?.addEventListener('click',(e)=>{e.stopPropagation();},true);
-        syncLessonSpeedSlider(1);
+        document.getElementById('lessonSpeedDropdown')?.addEventListener('click',(e)=>{
+            const btn=e.target.closest('[data-speed]');
+            if(!btn || !lessonPlayerReady) return;
+            lessonPlayer.setPlaybackRate(Number(btn.dataset.speed));
+            document.getElementById('lessonSpeedBtn').innerHTML=`${btn.dataset.speed}x <i class="fas fa-caret-down"></i>`;
+            document.getElementById('lessonSpeedDropdown').classList.remove('show');
+        });
+        ['0.5','0.75','1','1.25','1.5','1.75','2'].forEach(speed=>{
+            const b=document.createElement('button'); b.className='option-btn'; b.dataset.speed=speed; b.textContent=speed+'x';
+            document.getElementById('lessonSpeedDropdown')?.appendChild(b);
+        });
+        window.addEventListener('resize',()=>{positionLessonSpeedDropdown();},{passive:true});
+        window.addEventListener('orientationchange',()=>{setTimeout(positionLessonSpeedDropdown,80);},{passive:true});
         function isLessonTouchDevice(){
             return (navigator.maxTouchPoints||0)>0 || 'ontouchstart' in window;
         }
@@ -12801,121 +12812,6 @@ const s=document.createElement('style');s.textContent=`
 })();
 </script>
 
-<!-- ===== FINAL LESSON OPEN SAFETY PATCH ===== -->
-<script id="final-lesson-open-safety-patch">
-(function(){
-  'use strict';
-  if(window.__aaLessonOpenSafetyPatch)return;
-  window.__aaLessonOpenSafetyPatch=true;
-
-  const get=id=>document.getElementById(id);
-  let baseOpen=null;
-  const waitForBase=()=>{
-    if(typeof window.openLessonPlayer==='function' && !window.openLessonPlayer.__aaSafeOpenBase){
-      baseOpen=window.openLessonPlayer;
-    }
-  };
-  waitForBase();
-
-  async function ensureLessonInCache(courseId,lessonId){
-    const wanted=String(lessonId||'');
-    const cached=Array.isArray(window.lessonListCache)?window.lessonListCache.find(x=>String(x?.id)===wanted):null;
-    if(cached)return cached;
-    if(!courseId||!lessonId||typeof db==='undefined')return null;
-    try{
-      const snap=await db.collection('courses').doc(String(courseId)).collection('lessons').doc(String(lessonId)).get();
-      if(!snap.exists || snap.data()?.deleted===true)return null;
-      const lesson={id:snap.id,...(snap.data()||{})};
-      if(Array.isArray(window.lessonListCache)){
-        if(!window.lessonListCache.some(x=>String(x?.id)===String(lesson.id)))window.lessonListCache.push(lesson);
-      }
-      return lesson;
-    }catch(e){
-      console.error('lesson safe open fetch',e);
-      return null;
-    }
-  }
-
-  async function safeOpenLesson(courseId,lessonId){
-    const lesson=await ensureLessonInCache(courseId,lessonId);
-    if(!lesson){
-      showCustomAlert?.('تعذر فتح الحصة','تعذر العثور على بيانات الحصة الحالية. حاول فتحها مرة أخرى.');
-      return false;
-    }
-
-    waitForBase();
-    const fn=baseOpen||window.openLessonPlayer;
-    if(typeof fn!=='function'){
-      showCustomAlert?.('تعذر فتح الحصة','مشغل الحصة لم يجهز بعد. حاول مرة أخرى.');
-      return false;
-    }
-
-    try{
-      const result=await fn.call(window,String(courseId),String(lessonId));
-      const detail=get('courseDetailView');
-      const page=get('courseLessonPlayerPage');
-      const lessons=get('courseLessonsPage');
-      const overview=get('courseOverviewContainer');
-      const dash=get('courseDashboard');
-      if(detail){detail.style.display='flex';detail.style.visibility='visible';}
-      if(overview)overview.style.display='none';
-      if(dash)dash.style.display='none';
-      if(lessons){lessons.classList.remove('active');lessons.style.display='none';}
-      if(page){page.classList.add('active');page.style.display='block';page.style.visibility='visible';page.style.opacity='1';}
-      try{window.currentCoursePage='lessonPlayer';}catch(_){ }
-      return result!==false;
-    }catch(err){
-      console.error('lesson safe open',err);
-      /* Keep the player page visible even if a secondary post-open task failed. */
-      try{
-        if(typeof activeCourseId!=='undefined')activeCourseId=String(courseId);
-        if(typeof activeLessonId!=='undefined')activeLessonId=String(lessonId);
-        if(typeof currentCoursePage!=='undefined')currentCoursePage='lessonPlayer';
-      }catch(_){ }
-      const detail=get('courseDetailView');
-      const lessons=get('courseLessonsPage');
-      const page=get('courseLessonPlayerPage');
-      if(detail){detail.style.display='flex';detail.style.visibility='visible';}
-      if(lessons){lessons.classList.remove('active');lessons.style.display='none';}
-      if(page){page.classList.add('active');page.style.display='block';page.style.visibility='visible';page.style.opacity='1';}
-      try{window.loadLessonVideo?.(lesson);}catch(videoErr){console.error('lesson safe video fallback',videoErr);}
-      try{window.showLessonControls?.();}catch(_){ }
-      return true;
-    }
-  }
-
-  window.__aaSafeOpenLesson=safeOpenLesson;
-  window.openLessonPlayerSafe=safeOpenLesson;
-
-  /* Intercept lesson-card clicks before the legacy inline handlers. */
-  document.addEventListener('click',function(e){
-    const card=e.target?.closest?.('#lessonsCardsContainer .lesson-card');
-    if(!card)return;
-    const action=e.target?.closest?.('.admin-actions,button.lesson-manual-complete-btn');
-    if(action)return;
-    const courseId=window.activeCourseId||((typeof activeCourseId!=='undefined')?activeCourseId:'');
-    const lessonId=card.dataset.id||'';
-    if(!courseId||!lessonId)return;
-    e.preventDefault();
-    e.stopImmediatePropagation();
-    safeOpenLesson(courseId,lessonId).catch(err=>console.error('lesson card safe open',err));
-  },true);
-
-  /* Intercept the dedicated "مشاهدة الحصة" button as well. */
-  document.addEventListener('click',function(e){
-    const btn=e.target?.closest?.('#lessonsCardsContainer .card-actions button');
-    if(!btn || btn.classList.contains('lesson-manual-complete-btn'))return;
-    const card=btn.closest('.lesson-card');
-    if(!card)return;
-    const courseId=window.activeCourseId||((typeof activeCourseId!=='undefined')?activeCourseId:'');
-    const lessonId=card.dataset.id||'';
-    if(!courseId||!lessonId)return;
-    e.preventDefault();
-    e.stopImmediatePropagation();
-    safeOpenLesson(courseId,lessonId).catch(err=>console.error('lesson button safe open',err));
-  },true);
-})();
-</script>
 
 <!-- FINAL TOUCH CONTROL VISIBILITY V12: authoritative touch-only behavior -->
 <style id="lesson-touch-control-visibility-v12-style">
@@ -13135,6 +13031,14 @@ const s=document.createElement('style');s.textContent=`
     margin:0!important;
     flex:0 0 auto!important;
     min-width:36px!important;
+  }
+  #lessonVideoWrapper #lessonSpeedDropdown{
+    position:absolute!important;
+    bottom:46px!important;
+    left:0!important;
+    right:auto!important;
+    inset-inline-start:0!important;
+    z-index:100!important;
   }
 }
 
@@ -13430,19 +13334,19 @@ const s=document.createElement('style');s.textContent=`
 </script>
 
 
-
 <!-- FINAL DESKTOP LESSON CONTROLS: direct commands + speed menu anchored to button -->
 <style id="aa-final-desktop-controls-v15-style">
-#lessonVideoWrapper #lessonSpeedDropdown #lessonSpeedSlider{
-  display:block!important;
-  width:100%!important;
-  height:24px!important;
-  margin:0!important;
-  padding:0!important;
-  accent-color:var(--accent1)!important;
-  cursor:pointer!important;
+@media (min-width:769px) and (hover:hover) and (pointer:fine){
+  #lessonVideoWrapper .lesson-platform-controls #lessonSpeedDropdown{
+    position:fixed!important;
+    z-index:200000!important;
+    min-width:120px!important;
+    max-width:min(220px,40vw)!important;
+    max-height:46vh!important;
+    overflow:auto!important;
+    transform:none!important;
+  }
 }
-
 </style>
 <script id="aa-final-desktop-controls-v15-script">
 (function(){
@@ -13488,29 +13392,52 @@ const s=document.createElement('style');s.textContent=`
   };
   const setRate=rate=>{
     if(!isReady())return;
-    const n=Math.max(0.5,Math.min(2,Number(rate)||1));
+    const n=Number(rate)||1;
     try{
       if(typeof lessonPlayerType!=='undefined'&&lessonPlayerType==='html5'&&lessonHtmlVideo)lessonHtmlVideo.playbackRate=n;
       else lessonPlayer.setPlaybackRate?.(n);
-      const slider=get('lessonSpeedSlider');if(slider)slider.value=String(n);
-      const b=get('lessonSpeedBtn');if(b)b.innerHTML=`${n % 1 === 0 ? n.toFixed(0) : n.toFixed(2).replace(/0+$/,'').replace(/\.$/,'')}x <i class="fas fa-caret-down"></i>`;
+      const b=get('lessonSpeedBtn');if(b)b.innerHTML=`${n}x <i class="fas fa-caret-down"></i>`;
+      const menu=get('lessonSpeedDropdown');if(menu)menu.classList.remove('show');
     }catch(e){console.warn('desktop speed failed',e);}
+  };
+  const positionSpeedMenu=()=>{
+    const btn=get('lessonSpeedBtn'),menu=get('lessonSpeedDropdown');
+    if(!desktop()||!btn||!menu||!menu.classList.contains('show'))return;
+    menu.style.position='fixed';
+    menu.style.visibility='hidden';
+    menu.style.left='0px';menu.style.right='auto';menu.style.top='0px';menu.style.bottom='auto';
+    const br=btn.getBoundingClientRect();
+    const mr=menu.getBoundingClientRect();
+    const gap=8;
+    const left=Math.max(gap,Math.min(window.innerWidth-mr.width-gap,br.left+(br.width-mr.width)/2));
+    const top=Math.max(gap,br.top-mr.height-gap);
+    menu.style.left=`${left}px`;
+    menu.style.top=`${top}px`;
+    menu.style.visibility='visible';
+  };
+  const toggleSpeed=()=>{
+    const menu=get('lessonSpeedDropdown');if(!desktop()||!menu)return;
+    const opening=!menu.classList.contains('show');
+    menu.classList.toggle('show',opening);
+    if(opening)requestAnimationFrame(positionSpeedMenu);
   };
 
   document.addEventListener('pointerdown',e=>{
     if(!desktop())return;
-    const t=e.target?.closest?.('#lessonMuteBtn,#lessonVolumeSlider,#lessonSeekBackBtn,#lessonSeekForwardBtn');
+    const t=e.target?.closest?.('#lessonMuteBtn,#lessonVolumeSlider,#lessonSeekBackBtn,#lessonSeekForwardBtn,#lessonSpeedBtn,#lessonSpeedDropdown [data-speed]');
     if(!t)return;
     if(t.id==='lessonVolumeSlider')return;
     e.preventDefault();e.stopImmediatePropagation();
     if(t.id==='lessonMuteBtn')return muteNow();
     if(t.id==='lessonSeekBackBtn')return seek(-10);
     if(t.id==='lessonSeekForwardBtn')return seek(10);
+    if(t.id==='lessonSpeedBtn')return toggleSpeed();
+    if(t.matches?.('#lessonSpeedDropdown [data-speed]'))return setRate(t.dataset.speed);
   },true);
 
   document.addEventListener('click',e=>{
     if(!desktop())return;
-    const t=e.target?.closest?.('#lessonMuteBtn,#lessonSeekBackBtn,#lessonSeekForwardBtn');
+    const t=e.target?.closest?.('#lessonMuteBtn,#lessonSeekBackBtn,#lessonSeekForwardBtn,#lessonSpeedBtn,#lessonSpeedDropdown [data-speed]');
     if(t){e.preventDefault();e.stopImmediatePropagation();return;}
   },true);
 
@@ -13519,6 +13446,8 @@ const s=document.createElement('style');s.textContent=`
     e.stopImmediatePropagation();setVolumeNow(e.target.value);
   },true);
 
+  window.addEventListener('resize',()=>{if(desktop())positionSpeedMenu();},{passive:true});
+  window.addEventListener('scroll',()=>{if(desktop())positionSpeedMenu();},{passive:true});
 })();
 </script>
 
@@ -14288,17 +14217,14 @@ const s=document.createElement('style');s.textContent=`
 })();
 </script>
 
-<script id="final-lessons-back-direct-v2">
+
+<script id="final-direct-lessons-navigation-v16">
 (function(){
   'use strict';
-  if(window.__ananasLessonsBackDirectV2)return;
-  window.__ananasLessonsBackDirectV2=true;
-  document.addEventListener('click',function(e){
-    const btn=e.target?.closest?.('#courseLessonsPage .course-page-back-btn');
-    if(!btn)return;
-    e.preventDefault();
-    e.stopPropagation();
-    e.stopImmediatePropagation?.();
+  if(window.__ananasDirectLessonsNavigationV16)return;
+  window.__ananasDirectLessonsNavigationV16=true;
+
+  function showDashboardDirect(){
     const detail=document.getElementById('courseDetailView');
     const overview=document.getElementById('courseOverviewContainer');
     const dashboard=document.getElementById('courseDashboard');
@@ -14308,136 +14234,70 @@ const s=document.createElement('style');s.textContent=`
     const quizzes=document.getElementById('courseQuizzesPage');
     const assignments=document.getElementById('courseAssignmentsPage');
     const chat=document.getElementById('courseChatPage');
+    if(!dashboard)return;
+
     try{window.__lessonResumeAutoplay=false;}catch(_){ }
-    try{pauseLessonForInternalNavigation?.('lessons-back-to-dashboard');}catch(_){ }
+    try{window.__lesson2xHoldActive=false;}catch(_){ }
+    try{if(typeof lessonPlayer?.pauseVideo==='function')lessonPlayer.pauseVideo();else lessonPlayer?.pause?.();}catch(_){ }
     try{destroyLessonVideo?.();}catch(_){ }
-    try{window.activeLessonId=null;}catch(_){ }
-    if(detail){detail.style.display='flex';detail.style.visibility='visible';}
-    if(overview)overview.style.display='none';
-    if(dashboard){dashboard.style.display='flex';dashboard.classList.add('active');}
+
+    if(detail){detail.style.display='block';detail.style.visibility='visible';}
+    if(overview){overview.style.display='none';overview.classList.remove('active');}
     if(lessons){lessons.classList.remove('active');lessons.style.display='none';}
     if(player){player.classList.remove('active');player.style.display='none';}
     if(learning)learning.classList.remove('active');
     if(quizzes)quizzes.style.display='none';
     if(assignments)assignments.style.display='none';
     if(chat)chat.style.display='none';
-    try{currentCoursePage='dashboard';}catch(_){ }
-    try{setMobileNavActive?.('dashboard');}catch(_){ }
+    dashboard.classList.add('active');
+    dashboard.style.display='flex';
+    dashboard.style.visibility='visible';
+    dashboard.style.opacity='1';
+    try{dashboard.scrollTop=0;}catch(_){ }
+    try{currentCoursePage='dashboard';activeLessonId=null;}catch(_){ }
+    try{setMobileNavActive('dashboard');}catch(_){ }
     try{persistCourseState?.();}catch(_){ }
-  },true);
-})();
-</script>
+    try{requestAnimationFrame(()=>{try{dashboard.scrollTop=0;}catch(_){}});}catch(_){ }
+  }
 
-<style id="aa-final-speed-panel-and-video-size-v2">
-/* Final lesson player geometry: responsive 1920x1080 (16:9). */
-#lessonVideoWrapper{
-  width:100% !important;
-  max-width:1920px !important;
-  aspect-ratio:1920 / 1080 !important;
-  height:auto !important;
-  max-height:none !important;
-}
-#lessonVideoWrapper video,
-#lessonVideoWrapper iframe,
-#lessonVideoWrapper .yt-player-container{
-  width:100% !important;
-  height:100% !important;
-}
-#lessonVideoWrapper:fullscreen,
-#lessonVideoWrapper:-webkit-full-screen{
-  width:100vw !important;
-  max-width:none !important;
-  height:100vh !important;
-  max-height:none !important;
-  aspect-ratio:auto !important;
-}
-#lessonVideoWrapper #lessonSpeedDropdown{
-  position:fixed !important;
-  z-index:100000 !important;
-  width:150px !important;
-  min-width:150px !important;
-  max-width:150px !important;
-  height:42px !important;
-  min-height:42px !important;
-  max-height:42px !important;
-  padding:8px 10px !important;
-  box-sizing:border-box !important;
-  overflow:hidden !important;
-  border-radius:12px !important;
-  visibility:hidden !important;
-}
-#lessonVideoWrapper #lessonSpeedDropdown.show{
-  visibility:visible !important;
-  opacity:1 !important;
-  pointer-events:auto !important;
-}
-#lessonVideoWrapper #lessonSpeedDropdown #lessonSpeedSlider{
-  display:block !important;
-  width:100% !important;
-  height:24px !important;
-  margin:0 !important;
-  padding:0 !important;
-  cursor:pointer !important;
-  accent-color:var(--accent1) !important;
-}
-</style>
-<script id="aa-final-speed-panel-and-video-size-v2-script">
-(function(){
-  'use strict';
-  const $=id=>document.getElementById(id);
-  const btn=$('lessonSpeedBtn'), panel=$('lessonSpeedDropdown');
-  if(!btn||!panel)return;
-  function isOpen(){return panel.classList.contains('show');}
-  function positionPanel(){
-    if(!isOpen())return;
-    const bb=btn.getBoundingClientRect();
-    panel.style.visibility='hidden';
-    panel.style.left='0px';
-    panel.style.top='0px';
-    panel.style.right='auto';
-    panel.style.bottom='auto';
-    const pw=panel.offsetWidth||150;
-    const ph=panel.offsetHeight||42;
-    const gap=8;
-    let left=bb.left+(bb.width-pw)/2;
-    let top=bb.top-ph-gap;
-    const maxLeft=Math.max(8,window.innerWidth-pw-8);
-    left=Math.max(8,Math.min(maxLeft,left));
-    if(top<8)top=bb.bottom+gap;
-    panel.style.setProperty('left',`${Math.round(left)}px`,'important');
-    panel.style.setProperty('top',`${Math.round(top)}px`,'important');
-    panel.style.setProperty('right','auto','important');
-    panel.style.setProperty('bottom','auto','important');
-    panel.style.visibility='visible';
-  }
-  function openCloseSpeed(e){
-    e?.preventDefault?.();
-    e?.stopImmediatePropagation?.();
-    const opening=!isOpen();
-    panel.classList.toggle('show',opening);
-    panel.setAttribute('aria-hidden',opening?'false':'true');
-    if(opening)requestAnimationFrame(positionPanel);
-  }
-  if(btn.dataset.speedPanelV2!=='1'){
-    const fresh=btn.cloneNode(true);
-    btn.replaceWith(fresh);
-    fresh.dataset.speedPanelV2='1';
-    fresh.addEventListener('click',openCloseSpeed,true);
-  }
-  if(panel.dataset.speedPanelV2!=='1'){
-    panel.dataset.speedPanelV2='1';
-    panel.addEventListener('click',e=>e.stopImmediatePropagation(),true);
-  }
-  window.addEventListener('resize',()=>{if(isOpen())positionPanel();},{passive:true});
-  window.addEventListener('orientationchange',()=>{setTimeout(()=>{if(isOpen())positionPanel();},80);},{passive:true});
-  window.addEventListener('scroll',()=>{if(isOpen())positionPanel();},{passive:true});
-  document.addEventListener('pointerdown',e=>{
-    if(!isOpen())return;
-    if(e.target.closest?.('#lessonSpeedDropdown,#lessonSpeedBtn'))return;
-    panel.classList.remove('show');
-    panel.setAttribute('aria-hidden','true');
+  // Lessons page -> course section selector. This bypasses every old switch wrapper.
+  document.addEventListener('click',function(e){
+    const btn=e.target?.closest?.('#courseLessonsPage .course-page-back-btn');
+    if(!btn)return;
+    e.preventDefault();
+    e.stopPropagation();
+    e.stopImmediatePropagation?.();
+    showDashboardDirect();
   },true);
-  window.__aaPositionLessonSpeedPanelV2=positionPanel;
+
+  // Lesson card / "watch lesson" -> open immediately; no preliminary Firestore fetch.
+  document.addEventListener('click',function(e){
+    const card=e.target?.closest?.('#lessonsCardsContainer .lesson-card');
+    if(!card)return;
+    const adminAction=e.target?.closest?.('.admin-actions,button.lesson-manual-complete-btn');
+    if(adminAction)return;
+    const courseId=window.activeCourseId||((typeof activeCourseId!=='undefined')?activeCourseId:'');
+    const lessonId=card.dataset.id||'';
+    if(!courseId||!lessonId)return;
+    e.preventDefault();
+    e.stopPropagation();
+    e.stopImmediatePropagation?.();
+    try{window.openLessonPlayer?.(courseId,lessonId);}catch(err){console.error('direct lesson open',err);}
+  },true);
+
+  document.addEventListener('click',function(e){
+    const btn=e.target?.closest?.('#lessonsCardsContainer .card-actions button');
+    if(!btn||btn.classList.contains('lesson-manual-complete-btn'))return;
+    const card=btn.closest('.lesson-card');
+    if(!card)return;
+    const courseId=window.activeCourseId||((typeof activeCourseId!=='undefined')?activeCourseId:'');
+    const lessonId=card.dataset.id||'';
+    if(!courseId||!lessonId)return;
+    e.preventDefault();
+    e.stopPropagation();
+    e.stopImmediatePropagation?.();
+    try{window.openLessonPlayer?.(courseId,lessonId);}catch(err){console.error('direct lesson button open',err);}
+  },true);
 })();
 </script>
 </body>
