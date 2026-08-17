@@ -12774,5 +12774,66 @@ const s=document.createElement('style');s.textContent=`
 })();
 </script>
 
+<script id="final-lessons-page-visibility-repair">
+(function(){
+  'use strict';
+  if(window.__ananasLessonsVisibilityRepair)return;
+  window.__ananasLessonsVisibilityRepair=true;
+  const $=id=>document.getElementById(id);
+
+  function forceLessonsVisible(){
+    const detail=$('courseDetailView'), overview=$('courseOverviewContainer'), dash=$('courseDashboard');
+    const lessons=$('courseLessonsPage'), learning=$('courseLearningView');
+    if(!detail||!lessons)return;
+    if(!window.activeCourseId && typeof activeCourseId!=='undefined' && activeCourseId) window.activeCourseId=activeCourseId;
+    detail.style.display='flex';
+    if(overview) overview.style.display='none';
+    if(dash) dash.style.display='none';
+    if(learning) learning.classList.remove('active');
+    lessons.classList.add('active');
+    lessons.style.display='block';
+    lessons.style.visibility='visible';
+    lessons.style.opacity='1';
+    lessons.style.zIndex='30';
+    try{lessons.scrollTop=0;}catch(_){ }
+  }
+
+  const original=window.switchCoursePage;
+  if(typeof original==='function'&&!original.__ananasLessonsRepairWrapped){
+    const wrapped=function(page){
+      const result=original.apply(this,arguments);
+      if(page==='learning'){
+        forceLessonsVisible();
+        setTimeout(forceLessonsVisible,0);
+        setTimeout(forceLessonsVisible,40);
+        setTimeout(forceLessonsVisible,140);
+        try{
+          const cid=window.activeCourseId||activeCourseId;
+          if(cid&&typeof window.loadLessonsForCourse==='function'){
+            const r=window.loadLessonsForCourse(cid);
+            if(r&&typeof r.finally==='function')r.finally(()=>{
+              forceLessonsVisible();
+              setTimeout(forceLessonsVisible,0);
+            });
+          }
+        }catch(_){ }
+      }
+      return result;
+    };
+    wrapped.__ananasLessonsRepairWrapped=true;
+    wrapped.__original=original;
+    window.switchCoursePage=wrapped;
+  }
+
+  document.addEventListener('click',e=>{
+    const btn=e.target?.closest?.('.dashboard-btn');
+    if(!btn)return;
+    const handler=btn.getAttribute('onclick')||'';
+    if(!/switchCoursePage\(['"]learning['"]\)/.test(handler))return;
+    setTimeout(forceLessonsVisible,0);
+    setTimeout(forceLessonsVisible,80);
+  },true);
+})();
+</script>
 </body>
 </html>
