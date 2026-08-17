@@ -4001,9 +4001,9 @@ label[for*="En"], input[id*="En"], textarea[id*="En"] { display:none !important;
                 container.innerHTML = `<div class="page-inline-loader" style="display:flex;justify-content:center;align-items:center;gap:10px;padding:45px;color:var(--text-muted);"><span class="mini-spin" style="display:inline-block;width:22px;height:22px;border-radius:50%;border:3px solid var(--border);border-top-color:var(--accent1);animation:spin 1s linear infinite;"></span><span>جاري تحميل الواجبات...</span></div>`;
             }
             try {
-                const snap = await db.collection('courses').doc(courseId).collection('assignments').orderBy('createdAt','desc').get();
+                const snap = await db.collection('courses').doc(courseId).collection('assignments').get();
                 const previousGrid = container.querySelector('.assignment-page-grid');
-                const liveAssignmentDocs=snap.docs.filter(d=>d.data()?.deleted!==true);
+                const liveAssignmentDocs=snap.docs.filter(d=>d.data()?.deleted!==true).sort((a,b)=>{const av=a.data()?.createdAt;const bv=b.data()?.createdAt;const am=typeof av?.toMillis==='function'?av.toMillis():(av?Date.parse(av):0);const bm=typeof bv?.toMillis==='function'?bv.toMillis():(bv?Date.parse(bv):0);return bm-am;});
                 if(!liveAssignmentDocs.length){
                     container.innerHTML = `<p style="color:var(--text-muted);text-align:center;padding:60px 20px;">لا توجد واجبات مضافة بعد.</p>`;
                     container.dataset.loaded='1';
@@ -6416,8 +6416,8 @@ label[for*="En"], input[id*="En"], textarea[id*="En"] { display:none !important;
             const t = translations[currentLang] || translations['ar'] || {};
             container.innerHTML = `<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;"><h4 style="font-weight:700; margin:0;">الواجبات والتصاميم</h4></div>`;
             try {
-                const snap = await db.collection('courses').doc(courseId).collection('assignments').orderBy('createdAt', 'desc').get();
-                const liveAssignmentDocs=snap.docs.filter(d=>d.data()?.deleted!==true);
+                const snap = await db.collection('courses').doc(courseId).collection('assignments').get();
+                const liveAssignmentDocs=snap.docs.filter(d=>d.data()?.deleted!==true).sort((a,b)=>{const av=a.data()?.createdAt;const bv=b.data()?.createdAt;const am=typeof av?.toMillis==='function'?av.toMillis():(av?Date.parse(av):0);const bm=typeof bv?.toMillis==='function'?bv.toMillis():(bv?Date.parse(bv):0);return bm-am;});
                 if(!liveAssignmentDocs.length) {
                     container.innerHTML += `<p style="color:var(--text-muted);">لا توجد واجبات مضافة بعد.</p>`;
                     return;
@@ -14497,5 +14497,45 @@ body.light-mode #lessonVideoWrapper .aa-speed-value{color:#172033!important;}
   syncRatioFromMedia();
 })();
 </script>
+
+<style id="aa-mobile-lesson-layout-v17">
+@media (max-width: 768px){
+  #courseDetailView #courseLessonPlayerPage .lesson-player-layout{
+    display:flex !important;
+    flex-direction:column !important;
+    overflow:visible !important;
+  }
+  #courseDetailView #courseLessonPlayerPage .lesson-player-main{
+    display:flex !important;
+    flex-direction:column !important;
+    order:1 !important;
+    width:100% !important;
+  }
+  /* Required mobile order: video -> quick actions -> completion card -> lesson info. */
+  #courseDetailView #courseLessonPlayerPage #lessonVideoWrapper{order:1 !important;}
+  #courseDetailView #courseLessonPlayerPage #lessonRelatedActions{order:2 !important;}
+  #courseDetailView #courseLessonPlayerPage #lessonCompletionStatus{order:3 !important;}
+  #courseDetailView #courseLessonPlayerPage #lessonPlayerTitleBlock{order:4 !important;}
+  /* The standalone note duplicates the first-view/completed status card; keep the card as the single source on touch screens. */
+  #courseDetailView #courseLessonPlayerPage .lesson-player-note{display:none !important;}
+  #courseDetailView #courseLessonPlayerPage .lesson-player-sidebar{
+    order:2 !important;
+    width:100% !important;
+    flex:0 0 auto !important;
+    max-height:none !important;
+    overflow:hidden !important;
+    border-top:1px solid var(--border) !important;
+    border-inline:0 !important;
+    border-radius:22px 22px 0 0 !important;
+    background:var(--bg-secondary) !important;
+  }
+  #courseDetailView #courseLessonPlayerPage .lesson-player-list{
+    max-height:42vh !important;
+    overflow-y:auto !important;
+    overflow-x:hidden !important;
+    -webkit-overflow-scrolling:touch !important;
+  }
+}
+</style>
 </body>
 </html>
