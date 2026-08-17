@@ -5714,48 +5714,126 @@ label[for*="En"], input[id*="En"], textarea[id*="En"] { display:none !important;
             window.addEventListener('orientationchange',()=>{setTimeout(()=>{if(dragging)positionPreview(pendingRatio);},60);},{passive:true});
             window.__lessonSeekScrubber={isDragging:()=>dragging};
         })();
-        function positionLessonSpeedDropdown(){
-            const btn=document.getElementById('lessonSpeedBtn');
-            const menu=document.getElementById('lessonSpeedDropdown');
-            if(!btn||!menu||!isLessonTouchDevice()||!menu.classList.contains('show'))return;
-            const br=btn.getBoundingClientRect();
-            menu.style.position='fixed';
-            menu.style.visibility='hidden';
-            menu.style.left='0px';
-            menu.style.right='auto';
-            menu.style.top='0px';
-            menu.style.bottom='auto';
-            const mr=menu.getBoundingClientRect();
-            const gap=8;
-            const maxLeft=Math.max(gap,window.innerWidth-mr.width-gap);
-            const left=Math.min(Math.max(gap,br.right-mr.width),maxLeft);
-            let top=br.top-mr.height-gap;
-            if(top<gap) top=Math.min(window.innerHeight-mr.height-gap,br.bottom+gap);
-            top=Math.max(gap,top);
-            menu.style.left=`${left}px`;
-            menu.style.top=`${top}px`;
-            menu.style.visibility='visible';
-        }
-        document.getElementById('lessonSpeedBtn')?.addEventListener('click',()=>{
-            const menu=document.getElementById('lessonSpeedDropdown');
-            if(!menu)return;
-            const opening=!menu.classList.contains('show');
-            menu.classList.toggle('show');
-            if(opening)requestAnimationFrame(positionLessonSpeedDropdown);
-        });
-        document.getElementById('lessonSpeedDropdown')?.addEventListener('click',(e)=>{
-            const btn=e.target.closest('[data-speed]');
-            if(!btn || !lessonPlayerReady) return;
-            lessonPlayer.setPlaybackRate(Number(btn.dataset.speed));
-            document.getElementById('lessonSpeedBtn').innerHTML=`${btn.dataset.speed}x <i class="fas fa-caret-down"></i>`;
-            document.getElementById('lessonSpeedDropdown').classList.remove('show');
-        });
-        ['0.5','0.75','1','1.25','1.5','1.75','2'].forEach(speed=>{
-            const b=document.createElement('button'); b.className='option-btn'; b.dataset.speed=speed; b.textContent=speed+'x';
-            document.getElementById('lessonSpeedDropdown')?.appendChild(b);
-        });
-        window.addEventListener('resize',()=>{positionLessonSpeedDropdown();},{passive:true});
-        window.addEventListener('orientationchange',()=>{setTimeout(positionLessonSpeedDropdown,80);},{passive:true});
+        /* ===== UNIFIED SPEED SLIDER: compact, anchored above the speed button ===== */
+        (function(){
+            const oldBtn=document.getElementById('lessonSpeedBtn');
+            const oldMenu=document.getElementById('lessonSpeedDropdown');
+            if(!oldBtn||!oldMenu||window.__aaSpeedSliderInstalled)return;
+            window.__aaSpeedSliderInstalled=true;
+
+            /* Remove every listener attached directly to the legacy speed controls. */
+            const btn=oldBtn.cloneNode(true);
+            const menu=oldMenu.cloneNode(false);
+            btn.id='lessonSpeedBtn';
+            menu.id='lessonSpeedDropdown';
+            menu.className='settings-dropdown aa-speed-slider-menu';
+            oldBtn.replaceWith(btn);
+            oldMenu.replaceWith(menu);
+
+            menu.innerHTML=`
+              <div class="aa-speed-reset-row">
+                <button type="button" class="aa-speed-reset" aria-label="إعادة السرعة إلى 1" title="إعادة السرعة إلى 1">1x</button>
+              </div>
+              <div class="aa-speed-adjust-row">
+                <button type="button" class="aa-speed-step aa-speed-plus" aria-label="زيادة السرعة" title="زيادة السرعة">+</button>
+                <input id="aaSpeedRange" class="aa-speed-range" type="range" min="0.5" max="2" step="0.1" value="1" aria-label="سرعة التشغيل">
+                <button type="button" class="aa-speed-step aa-speed-minus" aria-label="إنقاص السرعة" title="إنقاص السرعة">−</button>
+              </div>
+              <div class="aa-speed-value" id="aaSpeedValue">1.0x</div>
+            `;
+
+            const range=menu.querySelector('#aaSpeedRange');
+            const valueEl=menu.querySelector('#aaSpeedValue');
+            const reset=menu.querySelector('.aa-speed-reset');
+            const plus=menu.querySelector('.aa-speed-plus');
+            const minus=menu.querySelector('.aa-speed-minus');
+            const sliderStep=0.1;
+
+            const isTouch=()=>{
+                try{return window.matchMedia('(max-width:768px), (hover:none), (pointer:coarse)').matches || (navigator.maxTouchPoints||0)>0;}
+                catch(_){return (navigator.maxTouchPoints||0)>0;}
+            };
+            const getPlayer=()=>{try{return lessonPlayerReady&&lessonPlayer?lessonPlayer:null;}catch(_){return null;}};
+            const clampRate=r=>Math.max(0.5,Math.min(2,Math.round((Number(r)||1)*10)/10));
+            const setRate=rate=>{
+                const player=getPlayer();
+                const n=clampRate(rate);
+                if(!player)return;
+                try{
+                    if(typeof lessonPlayerType!=='undefined'&&lessonPlayerType==='html5'&&lessonHtmlVideo) lessonHtmlVideo.playbackRate=n;
+                    else player.setPlaybackRate?.(n);
+                }catch(e){console.warn('speed slider failed',e);return;}
+                range.value=String(n);
+                valueEl.textContent=`${n.toFixed(1)}x`;
+                btn.innerHTML=`${Number.isInteger(n)?n.toFixed(0):n.toFixed(1)}x <i class="fas fa-caret-down"></i>`;
+            };
+
+            const readRate=()=>{
+                try{
+                    if(typeof lessonPlayerType!=='undefined'&&lessonPlayerType==='html5'&&lessonHtmlVideo) return clampRate(lessonHtmlVideo.playbackRate||1);
+                    const v=Number(window.__lessonPlaybackRate||1);
+                    return clampRate(v);
+                }catch(_){return 1;}
+            };
+
+            const positionMenu=()=>{
+                if(!menu.classList.contains('show'))return;
+                menu.style.position='fixed';
+                menu.style.visibility='hidden';
+                menu.style.left='0px';menu.style.top='0px';menu.style.right='auto';menu.style.bottom='auto';
+                const br=btn.getBoundingClientRect();
+                const mr=menu.getBoundingClientRect();
+                const gap=6;
+                let left=br.left+(br.width-mr.width)/2;
+                let top=br.top-mr.height;
+                const pad=8;
+                left=Math.max(pad,Math.min(window.innerWidth-mr.width-pad,left));
+                if(top<pad) top=Math.min(window.innerHeight-mr.height-pad,br.bottom+gap);
+                top=Math.max(pad,top);
+                menu.style.left=`${Math.round(left)}px`;
+                menu.style.top=`${Math.round(top)}px`;
+                menu.style.visibility='visible';
+                menu.style.setProperty('--aa-speed-origin-x',`${Math.round(Math.max(8,Math.min(mr.width-8,br.left+br.width/2-left)))}px`);
+            };
+
+            const openMenu=()=>{
+                if(!getPlayer())return;
+                const current=readRate();
+                range.value=String(current);
+                valueEl.textContent=`${current.toFixed(1)}x`;
+                menu.classList.add('show');
+                requestAnimationFrame(positionMenu);
+            };
+            const closeMenu=()=>menu.classList.remove('show');
+
+            btn.addEventListener('click',e=>{
+                e.preventDefault();e.stopPropagation();
+                if(menu.classList.contains('show'))closeMenu(); else openMenu();
+            });
+            range.addEventListener('input',e=>{e.stopPropagation();setRate(e.target.value);});
+            plus.addEventListener('click',e=>{e.preventDefault();e.stopPropagation();setRate((Number(range.value)||1)+sliderStep);});
+            minus.addEventListener('click',e=>{e.preventDefault();e.stopPropagation();setRate((Number(range.value)||1)-sliderStep);});
+            reset.addEventListener('click',e=>{e.preventDefault();e.stopPropagation();setRate(1);});
+            menu.addEventListener('click',e=>e.stopPropagation());
+            document.addEventListener('click',e=>{
+                if(!menu.classList.contains('show'))return;
+                if(e.target.closest?.('#lessonSpeedBtn,#lessonSpeedDropdown'))return;
+                closeMenu();
+            },true);
+            window.addEventListener('resize',positionMenu,{passive:true});
+            window.addEventListener('scroll',positionMenu,{passive:true});
+            window.addEventListener('orientationchange',()=>setTimeout(positionMenu,80),{passive:true});
+
+            /* Keep the display synchronized if the actual player rate changes elsewhere (for example hold-to-2x). */
+            const syncRate=()=>{
+                const n=readRate();
+                range.value=String(n);
+                valueEl.textContent=`${n.toFixed(1)}x`;
+                btn.innerHTML=`${Number.isInteger(n)?n.toFixed(0):n.toFixed(1)}x <i class="fas fa-caret-down"></i>`;
+            };
+            setTimeout(syncRate,0);
+            window.__aaSpeedSlider={setRate,syncRate,open:openMenu,close:closeMenu,isTouch};
+        })();
         function isLessonTouchDevice(){
             return (navigator.maxTouchPoints||0)>0 || 'ontouchstart' in window;
         }
@@ -13088,14 +13166,6 @@ const s=document.createElement('style');s.textContent=`
     flex:0 0 auto!important;
     min-width:36px!important;
   }
-  #lessonVideoWrapper #lessonSpeedDropdown{
-    position:absolute!important;
-    bottom:46px!important;
-    left:0!important;
-    right:auto!important;
-    inset-inline-start:0!important;
-    z-index:100!important;
-  }
 }
 
 @media (max-width:768px), (hover:none), (pointer:coarse){
@@ -13390,18 +13460,63 @@ const s=document.createElement('style');s.textContent=`
 </script>
 
 
+<style id="aa-speed-slider-final-style">
+/* Compact speed panel shared by desktop and touch layouts. */
+#lessonVideoWrapper #lessonSpeedDropdown.aa-speed-slider-menu{
+  position:fixed!important;
+  width:184px!important;
+  min-width:184px!important;
+  max-width:184px!important;
+  height:auto!important;
+  max-height:none!important;
+  overflow:visible!important;
+  display:none!important;
+  flex-direction:column!important;
+  gap:7px!important;
+  padding:8px!important;
+  border-radius:12px!important;
+  background:rgba(9,12,20,.96)!important;
+  border:1px solid rgba(255,255,255,.1)!important;
+  box-shadow:0 14px 38px rgba(0,0,0,.32)!important;
+  backdrop-filter:blur(14px);
+  transform-origin:var(--aa-speed-origin-x,50%) 100%;
+  transform:translateY(6px) scale(.96)!important;
+  opacity:0!important;
+  pointer-events:none!important;
+  transition:opacity .16s ease,transform .16s ease!important;
+  z-index:250000!important;
+}
+#lessonVideoWrapper #lessonSpeedDropdown.aa-speed-slider-menu.show{
+  display:flex!important;
+  transform:translateY(0) scale(1)!important;
+  opacity:1!important;
+  pointer-events:auto!important;
+}
+#lessonVideoWrapper .aa-speed-reset-row{display:flex;justify-content:center;width:100%;}
+#lessonVideoWrapper .aa-speed-reset{
+  width:52px;height:28px;border-radius:8px;border:1px solid rgba(255,255,255,.12);
+  background:rgba(255,255,255,.06);color:#fff;font-weight:800;cursor:pointer;
+}
+#lessonVideoWrapper .aa-speed-adjust-row{display:grid;grid-template-columns:32px minmax(0,1fr) 32px;align-items:center;gap:7px;width:100%;direction:ltr;}
+#lessonVideoWrapper .aa-speed-step{
+  width:32px;height:32px;border-radius:9px;border:1px solid rgba(255,255,255,.1);
+  background:rgba(255,255,255,.05);color:#fff;font-size:1.1rem;font-weight:900;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;
+}
+#lessonVideoWrapper .aa-speed-plus{grid-column:1;}
+#lessonVideoWrapper .aa-speed-range{grid-column:2;width:100%;accent-color:#6c5ce7;cursor:pointer;}
+#lessonVideoWrapper .aa-speed-minus{grid-column:3;}
+#lessonVideoWrapper .aa-speed-value{text-align:center;color:#fff;font-weight:800;font-size:.76rem;line-height:1.1;}
+body.light-mode #lessonVideoWrapper #lessonSpeedDropdown.aa-speed-slider-menu{background:rgba(255,255,255,.98)!important;border-color:#dfe5ef!important;box-shadow:0 14px 38px rgba(15,23,42,.16)!important;}
+body.light-mode #lessonVideoWrapper .aa-speed-reset,body.light-mode #lessonVideoWrapper .aa-speed-step{background:#f6f7fb!important;border-color:#dfe5ef!important;color:#172033!important;}
+body.light-mode #lessonVideoWrapper .aa-speed-value{color:#172033!important;}
+@media(max-width:768px),(hover:none),(pointer:coarse){
+  #lessonVideoWrapper #lessonSpeedDropdown.aa-speed-slider-menu{width:176px!important;min-width:176px!important;max-width:176px!important;}
+}
+</style>
 <!-- FINAL DESKTOP LESSON CONTROLS: direct commands + speed menu anchored to button -->
 <style id="aa-final-desktop-controls-v15-style">
 @media (min-width:769px) and (hover:hover) and (pointer:fine){
-  #lessonVideoWrapper .lesson-platform-controls #lessonSpeedDropdown{
-    position:fixed!important;
-    z-index:200000!important;
-    min-width:120px!important;
-    max-width:min(220px,40vw)!important;
-    max-height:46vh!important;
-    overflow:auto!important;
-    transform:none!important;
-  }
 }
 </style>
 <script id="aa-final-desktop-controls-v15-script">
@@ -13446,54 +13561,20 @@ const s=document.createElement('style');s.textContent=`
     if(!isReady())return;
     try{window.__allowedLessonSeekUntil=Date.now()+1200;window.seekLessonBy?.(Number(seconds)||0);window.showLessonControls?.(2200);}catch(e){console.warn('desktop seek failed',e);}
   };
-  const setRate=rate=>{
-    if(!isReady())return;
-    const n=Number(rate)||1;
-    try{
-      if(typeof lessonPlayerType!=='undefined'&&lessonPlayerType==='html5'&&lessonHtmlVideo)lessonHtmlVideo.playbackRate=n;
-      else lessonPlayer.setPlaybackRate?.(n);
-      const b=get('lessonSpeedBtn');if(b)b.innerHTML=`${n}x <i class="fas fa-caret-down"></i>`;
-      const menu=get('lessonSpeedDropdown');if(menu)menu.classList.remove('show');
-    }catch(e){console.warn('desktop speed failed',e);}
-  };
-  const positionSpeedMenu=()=>{
-    const btn=get('lessonSpeedBtn'),menu=get('lessonSpeedDropdown');
-    if(!desktop()||!btn||!menu||!menu.classList.contains('show'))return;
-    menu.style.position='fixed';
-    menu.style.visibility='hidden';
-    menu.style.left='0px';menu.style.right='auto';menu.style.top='0px';menu.style.bottom='auto';
-    const br=btn.getBoundingClientRect();
-    const mr=menu.getBoundingClientRect();
-    const gap=8;
-    const left=Math.max(gap,Math.min(window.innerWidth-mr.width-gap,br.left+(br.width-mr.width)/2));
-    const top=Math.max(gap,br.top-mr.height-gap);
-    menu.style.left=`${left}px`;
-    menu.style.top=`${top}px`;
-    menu.style.visibility='visible';
-  };
-  const toggleSpeed=()=>{
-    const menu=get('lessonSpeedDropdown');if(!desktop()||!menu)return;
-    const opening=!menu.classList.contains('show');
-    menu.classList.toggle('show',opening);
-    if(opening)requestAnimationFrame(positionSpeedMenu);
-  };
-
   document.addEventListener('pointerdown',e=>{
     if(!desktop())return;
-    const t=e.target?.closest?.('#lessonMuteBtn,#lessonVolumeSlider,#lessonSeekBackBtn,#lessonSeekForwardBtn,#lessonSpeedBtn,#lessonSpeedDropdown [data-speed]');
+    const t=e.target?.closest?.('#lessonMuteBtn,#lessonVolumeSlider,#lessonSeekBackBtn,#lessonSeekForwardBtn');
     if(!t)return;
     if(t.id==='lessonVolumeSlider')return;
     e.preventDefault();e.stopImmediatePropagation();
     if(t.id==='lessonMuteBtn')return muteNow();
     if(t.id==='lessonSeekBackBtn')return seek(-10);
     if(t.id==='lessonSeekForwardBtn')return seek(10);
-    if(t.id==='lessonSpeedBtn')return toggleSpeed();
-    if(t.matches?.('#lessonSpeedDropdown [data-speed]'))return setRate(t.dataset.speed);
   },true);
 
   document.addEventListener('click',e=>{
     if(!desktop())return;
-    const t=e.target?.closest?.('#lessonMuteBtn,#lessonSeekBackBtn,#lessonSeekForwardBtn,#lessonSpeedBtn,#lessonSpeedDropdown [data-speed]');
+    const t=e.target?.closest?.('#lessonMuteBtn,#lessonSeekBackBtn,#lessonSeekForwardBtn');
     if(t){e.preventDefault();e.stopImmediatePropagation();return;}
   },true);
 
@@ -13502,8 +13583,6 @@ const s=document.createElement('style');s.textContent=`
     e.stopImmediatePropagation();setVolumeNow(e.target.value);
   },true);
 
-  window.addEventListener('resize',()=>{if(desktop())positionSpeedMenu();},{passive:true});
-  window.addEventListener('scroll',()=>{if(desktop())positionSpeedMenu();},{passive:true});
 })();
 </script>
 
