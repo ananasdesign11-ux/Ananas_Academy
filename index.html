@@ -13189,6 +13189,177 @@ const s=document.createElement('style');s.textContent=`
 })();
 </script>
 
+
+<!-- ===== FINAL LESSON PLAYER UX V9: stable desktop/mobile controls + manual pause resume state ===== -->
+<style id="lesson-player-final-ux-v9">
+/* One deterministic layout: controls are exposed from nested groups, then placed explicitly. */
+#lessonCustomControls .controls-row{
+  display:grid !important;
+  grid-template-columns:auto auto auto minmax(0,1fr) minmax(0,1fr) auto auto auto !important;
+  grid-template-areas:"play speed seekBack seekForward timer volume mute fullscreen" !important;
+  align-items:center !important;
+  gap:8px !important;
+  direction:ltr !important;
+  width:100% !important;
+  min-width:0 !important;
+  position:relative !important;
+}
+#lessonCustomControls .controls-left,
+#lessonCustomControls .controls-right{display:contents !important;}
+#lessonCustomControls #lessonDesktopPlayBtn{grid-area:play !important;}
+#lessonCustomControls #lessonSpeedBtn{grid-area:speed !important;}
+#lessonCustomControls #lessonSeekBackBtn{grid-area:seekBack !important;}
+#lessonCustomControls #lessonSeekForwardBtn{grid-area:seekForward !important;}
+#lessonCustomControls #lessonTimerDisplay{grid-area:timer !important;justify-self:center !important;min-width:0 !important;width:100% !important;text-align:center !important;white-space:nowrap !important;}
+#lessonCustomControls #lessonMuteBtn{grid-area:mute !important;}
+#lessonCustomControls .lesson-volume-wrap{grid-area:volume !important;display:flex !important;align-items:center !important;gap:6px !important;min-width:78px !important;max-width:130px !important;}
+#lessonCustomControls #lessonFullscreenBtn{grid-area:fullscreen !important;}
+#lessonCustomControls .settings-dropdown{position:absolute !important;grid-area:auto !important;}
+
+/* Desktop only: give the center timer real breathing room while keeping play at far left and fullscreen at far right. */
+@media (hover:hover) and (pointer:fine){
+  #lessonCustomControls .controls-row{grid-template-columns:auto auto auto minmax(120px,1fr) minmax(120px,1fr) auto auto auto !important;}
+  #lessonCustomControls #lessonTimerDisplay{justify-self:stretch !important;}
+}
+
+/* Touch screens: only fullscreen, centered timer, and speed remain. */
+@media (pointer:coarse), (hover:none){
+  #lessonCustomControls .controls-row{
+    display:grid !important;
+    grid-template-columns:auto minmax(0,1fr) auto !important;
+    grid-template-areas:"speed timer fullscreen" !important;
+    gap:8px !important;
+    direction:ltr !important;
+  }
+  #lessonCustomControls #lessonDesktopPlayBtn,
+  #lessonCustomControls #lessonSeekBackBtn,
+  #lessonCustomControls #lessonSeekForwardBtn,
+  #lessonCustomControls #lessonMuteBtn,
+  #lessonCustomControls .lesson-volume-wrap{display:none !important;}
+  #lessonCustomControls #lessonSpeedBtn{grid-area:speed !important;justify-self:start !important;}
+  #lessonCustomControls #lessonTimerDisplay{grid-area:timer !important;justify-self:center !important;text-align:center !important;width:100% !important;}
+  #lessonCustomControls #lessonFullscreenBtn{grid-area:fullscreen !important;justify-self:end !important;}
+  #lessonCustomControls .settings-dropdown{position:absolute !important;left:auto !important;right:0 !important;bottom:46px !important;}
+}
+
+/* Keep the final controls from colliding when width is tight. */
+#lessonCustomControls .controls-btn{flex:0 0 auto !important;}
+#lessonCustomControls .lesson-volume-wrap input{min-width:0 !important;flex:1 1 auto !important;}
+</style>
+<script id="lesson-player-final-ux-v9-script">
+(function(){
+  'use strict';
+  if(window.__aaLessonPlayerUxV9)return;
+  window.__aaLessonPlayerUxV9=true;
+
+  function isTouchSurface(){
+    try{return window.matchMedia('(pointer:coarse),(hover:none)').matches;}catch(_){return (navigator.maxTouchPoints||0)>0;}
+  }
+
+  /* Manual play/pause is the authoritative source for whether a lesson may autoplay after navigation/tab switching. */
+  const originalToggle=window.v12TogglePlayback;
+  if(typeof originalToggle==='function' && !originalToggle.__aaManualResumeWrapped){
+    const wrapped=async function(){
+      const before=(()=>{
+        try{return Number(window.v12GetPlaybackState?.())===1;}catch(_){return false;}
+      })();
+      const result=await originalToggle.apply(this,arguments);
+      try{
+        const after=Number(window.v12GetPlaybackState?.())===1;
+        /* Explicit user pause/play wins over any stale navigation snapshot. */
+        window.__lessonManualPlaybackOverride=after?'play':'pause';
+        window.__lessonResumeAutoplay=after;
+        if(window.__lessonResumeOnReturn){
+          window.__lessonResumeOnReturn.wasPlaying=after;
+          window.__lessonResumeOnReturn.manualOverride=after?'play':'pause';
+        }
+        if(!after){
+          window.__lessonResumeOnReturn=window.__lessonResumeOnReturn||null;
+          if(window.__lessonResumeOnReturn){
+            window.__lessonResumeOnReturn.wasPlaying=false;
+            window.__lessonResumeOnReturn.manualOverride='pause';
+          }
+        }
+      }catch(_){ }
+      return result;
+    };
+    wrapped.__aaManualResumeWrapped=true;
+    wrapped.__original=originalToggle;
+    window.v12TogglePlayback=wrapped;
+  }
+
+  /* Patch the authoritative capture function so a manual pause can never be revived by
+     the pagehide/visibility preservation fallback, while natural navigation from a playing
+     lesson continues to resume automatically. */
+  const originalCapture=window.captureLessonResumePosition;
+  if(typeof originalCapture==='function' && !originalCapture.__aaManualResumeCaptureWrapped){
+    const wrapped=function(reason='navigation'){
+      const override=window.__lessonManualPlaybackOverride;
+      const result=originalCapture.apply(this,arguments);
+      try{
+        if(result && (override==='pause'||override==='play')){
+          result.wasPlaying=(override==='play');
+          if(window.__lessonResumeOnReturn){
+            window.__lessonResumeOnReturn.wasPlaying=(override==='play');
+            window.__lessonResumeOnReturn.manualOverride=override;
+          }
+          window.__lessonResumeAutoplay=(override==='play');
+        }
+        /* A capture caused by explicit navigation while the user did not manually pause
+           uses the real playback state captured by the original function. */
+        if(reason!=='visibility-hidden' && reason!=='pagehide' && reason!=='beforeunload'){
+          window.__lessonManualPlaybackOverride=null;
+        }
+      }catch(_){ }
+      return result;
+    };
+    wrapped.__aaManualResumeCaptureWrapped=true;
+    wrapped.__original=originalCapture;
+    window.captureLessonResumePosition=wrapped;
+  }
+
+  /* When reopening the same lesson, respect an explicit pause override. */
+  const originalOpen=window.openLessonPlayer;
+  if(typeof originalOpen==='function' && !originalOpen.__aaManualResumeOpenWrapped){
+    const wrapped=async function(courseId,lessonId){
+      const result=await originalOpen.apply(this,arguments);
+      try{
+        if(window.__lessonResumeOnReturn?.manualOverride==='pause'){
+          window.__lessonResumeAutoplay=false;
+          if(window.lessonPlayer?.pauseVideo) window.lessonPlayer.pauseVideo();
+          else if(window.lessonPlayer?.pause) window.lessonPlayer.pause();
+        }
+      }catch(_){ }
+      return result;
+    };
+    wrapped.__aaManualResumeOpenWrapped=true;
+    wrapped.__original=originalOpen;
+    window.openLessonPlayer=wrapped;
+  }
+
+  /* Final touch behavior: when paused, controls stay visible until the user explicitly taps
+     the video background; when playing, they may still be manually toggled and auto-hide. */
+  const touchWrapper=document.getElementById('lessonVideoWrapper');
+  if(touchWrapper && !touchWrapper.dataset.uxV9TouchBound){
+    touchWrapper.dataset.uxV9TouchBound='1';
+    document.addEventListener('pointerup',function(e){
+      if(!isTouchSurface() || e.pointerType!=='touch')return;
+      const w=e.target.closest?.('#lessonVideoWrapper');
+      if(w!==touchWrapper)return;
+      if(e.target.closest('.lesson-platform-controls,.lesson-video-center-play,button,input,.settings-dropdown'))return;
+      /* The existing final touch controller performs the actual toggle. This only ensures
+         a paused video never gets an accidental auto-hide timer reapplied. */
+      try{
+        const state=Number(window.v12GetPlaybackState?.());
+        if(state!==1 && typeof lessonControlsHideTimer!=='undefined' && lessonControlsHideTimer){
+          clearTimeout(lessonControlsHideTimer);lessonControlsHideTimer=null;
+        }
+      }catch(_){ }
+    },true);
+  }
+})();
+</script>
+
 </body>
 </html>
 
