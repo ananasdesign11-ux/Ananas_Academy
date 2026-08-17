@@ -12842,3 +12842,111 @@ const s=document.createElement('style');s.textContent=`
 </script>
 </body>
 </html>
+
+<!-- ===== FINAL LESSON OPEN SAFETY PATCH ===== -->
+<script id="final-lesson-open-safety-patch">
+(function(){
+  'use strict';
+  if(window.__aaLessonOpenSafetyPatch)return;
+  window.__aaLessonOpenSafetyPatch=true;
+
+  const get=id=>document.getElementById(id);
+  let baseOpen=null;
+  const waitForBase=()=>{
+    if(typeof window.openLessonPlayer==='function' && !window.openLessonPlayer.__aaSafeOpenBase){
+      baseOpen=window.openLessonPlayer;
+    }
+  };
+  waitForBase();
+
+  async function ensureLessonInCache(courseId,lessonId){
+    const wanted=String(lessonId||'');
+    const cached=Array.isArray(window.lessonListCache)?window.lessonListCache.find(x=>String(x?.id)===wanted):null;
+    if(cached)return cached;
+    if(!courseId||!lessonId||typeof db==='undefined')return null;
+    try{
+      const snap=await db.collection('courses').doc(String(courseId)).collection('lessons').doc(String(lessonId)).get();
+      if(!snap.exists || snap.data()?.deleted===true)return null;
+      const lesson={id:snap.id,...(snap.data()||{})};
+      if(Array.isArray(window.lessonListCache)){
+        if(!window.lessonListCache.some(x=>String(x?.id)===String(lesson.id)))window.lessonListCache.push(lesson);
+      }
+      return lesson;
+    }catch(e){
+      console.error('lesson safe open fetch',e);
+      return null;
+    }
+  }
+
+  async function safeOpenLesson(courseId,lessonId){
+    const lesson=await ensureLessonInCache(courseId,lessonId);
+    if(!lesson){
+      showCustomAlert?.('تعذر فتح الحصة','تعذر العثور على بيانات الحصة الحالية. حاول فتحها مرة أخرى.');
+      return false;
+    }
+
+    waitForBase();
+    const fn=baseOpen||window.openLessonPlayer;
+    if(typeof fn!=='function'){
+      showCustomAlert?.('تعذر فتح الحصة','مشغل الحصة لم يجهز بعد. حاول مرة أخرى.');
+      return false;
+    }
+
+    try{
+      const result=await fn.call(window,String(courseId),String(lessonId));
+      const page=get('courseLessonPlayerPage');
+      const lessons=get('courseLessonsPage');
+      page?.classList.add('active');
+      lessons?.classList.remove('active');
+      try{window.currentCoursePage='lessonPlayer';}catch(_){ }
+      return result!==false;
+    }catch(err){
+      console.error('lesson safe open',err);
+      /* Keep the player page visible even if a secondary post-open task failed. */
+      try{
+        if(typeof activeCourseId!=='undefined')activeCourseId=String(courseId);
+        if(typeof activeLessonId!=='undefined')activeLessonId=String(lessonId);
+        if(typeof currentCoursePage!=='undefined')currentCoursePage='lessonPlayer';
+      }catch(_){ }
+      get('courseLessonsPage')?.classList.remove('active');
+      get('courseLessonPlayerPage')?.classList.add('active');
+      try{window.loadLessonVideo?.(lesson);}catch(videoErr){console.error('lesson safe video fallback',videoErr);}
+      try{window.showLessonControls?.();}catch(_){ }
+      return true;
+    }
+  }
+
+  window.__aaSafeOpenLesson=safeOpenLesson;
+  window.openLessonPlayerSafe=safeOpenLesson;
+
+  /* Intercept lesson-card clicks before the legacy inline handlers. */
+  document.addEventListener('click',function(e){
+    const card=e.target?.closest?.('#lessonsCardsContainer .lesson-card');
+    if(!card)return;
+    const action=e.target?.closest?.('.admin-actions,button.lesson-manual-complete-btn');
+    if(action)return;
+    const courseId=window.activeCourseId||((typeof activeCourseId!=='undefined')?activeCourseId:'');
+    const lessonId=card.dataset.id||'';
+    if(!courseId||!lessonId)return;
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    safeOpenLesson(courseId,lessonId).catch(err=>console.error('lesson card safe open',err));
+  },true);
+
+  /* Intercept the dedicated "مشاهدة الحصة" button as well. */
+  document.addEventListener('click',function(e){
+    const btn=e.target?.closest?.('#lessonsCardsContainer .card-actions button');
+    if(!btn || btn.classList.contains('lesson-manual-complete-btn'))return;
+    const card=btn.closest('.lesson-card');
+    if(!card)return;
+    const courseId=window.activeCourseId||((typeof activeCourseId!=='undefined')?activeCourseId:'');
+    const lessonId=card.dataset.id||'';
+    if(!courseId||!lessonId)return;
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    safeOpenLesson(courseId,lessonId).catch(err=>console.error('lesson button safe open',err));
+  },true);
+})();
+</script>
+</body>
+</html>
