@@ -1779,7 +1779,19 @@ label[for*="En"], input[id*="En"], textarea[id*="En"] { display:none !important;
     pointer-events:none !important;
 }
 @media(max-width:768px){
-    #lessonVideoWrapper.lesson-controls-hidden .lesson-platform-controls{
+    #lessonVideoWrapper.lesson-center-flash .lesson-video-center-play{
+    opacity:1!important;
+    pointer-events:none!important;
+    transform:translate(-50%,-50%) scale(1)!important;
+    transition:opacity .28s ease,transform .28s ease,background .28s ease!important;
+}
+@media(max-width:768px){
+    #lessonVideoWrapper.lesson-center-flash .lesson-video-center-play{
+        opacity:1!important;
+        pointer-events:auto!important;
+    }
+}
+#lessonVideoWrapper.lesson-controls-hidden .lesson-platform-controls{
         opacity:0 !important;
         pointer-events:none !important;
     }
@@ -5006,7 +5018,11 @@ label[for*="En"], input[id*="En"], textarea[id*="En"] { display:none !important;
 
         function handleLessonPlaybackPlaying(){
             lessonWatchState.lastTick=Date.now();
-            document.getElementById('lessonVideoWrapper')?.classList.remove('show-center-play');
+            const wrapper=document.getElementById('lessonVideoWrapper');
+            if(wrapper){
+                wrapper.classList.remove('show-center-play');
+                if(window.innerWidth>768)flashLessonCenterButton();
+            }
             updateLessonCenterButton();
             showLessonControls();
             updateLessonControls();
@@ -5014,7 +5030,14 @@ label[for*="En"], input[id*="En"], textarea[id*="En"] { display:none !important;
         function handleLessonPlaybackStopped(state){
             lessonWatchState.lastTick=null;window.saveLessonProgressNow?.();window.persistCourseState?.();
             updateLessonCenterButton();
-            if(state!==LESSON_MEDIA_STATE.PLAYING)document.getElementById('lessonVideoWrapper')?.classList.add('show-center-play');
+            const wrapper=document.getElementById('lessonVideoWrapper');
+            if(wrapper){
+                wrapper.classList.remove('lesson-center-flash');
+                if(state!==LESSON_MEDIA_STATE.PLAYING){
+                    wrapper.classList.add('show-center-play');
+                    if(window.innerWidth>768)flashLessonCenterButton();
+                }
+            }
             showLessonControls();
             updateLessonControls();
             if(state===LESSON_MEDIA_STATE.ENDED){ lessonWatchState.naturallyEnded=true; checkLessonAutoCompletion(true); }
@@ -9463,8 +9486,51 @@ function v12VideoCommand(action,arg){
     if(action==='rate')return Promise.resolve(lessonPlayer.setPlaybackRate?.(arg));
   }catch(e){console.warn('Video command failed:',e);return false}
 }
-function v12TogglePlayback(){if(!lessonPlayerReady||!lessonPlayer)return;const s=lessonPlayer.getPlayerState?.();const playing=s===LESSON_MEDIA_STATE.PLAYING||(window.YT&&s===YT.PlayerState.PLAYING);playing?v12VideoCommand('pause'):v12VideoCommand('play');}
+let lessonCenterFlashTimer=null;
+function flashLessonCenterButton(){
+  const wrapper=document.getElementById('lessonVideoWrapper');
+  if(!wrapper || window.innerWidth<=768)return;
+  wrapper.classList.add('lesson-center-flash');
+  clearTimeout(lessonCenterFlashTimer);
+  lessonCenterFlashTimer=setTimeout(()=>wrapper.classList.remove('lesson-center-flash'),720);
+}
+function v12GetPlaybackState(){
+  if(!lessonPlayerReady||!lessonPlayer)return LESSON_MEDIA_STATE.PAUSED;
+  try{
+    if(lessonPlayerType==='html5' && lessonHtmlVideo){
+      if(lessonHtmlVideo.ended)return LESSON_MEDIA_STATE.ENDED;
+      return lessonHtmlVideo.paused?LESSON_MEDIA_STATE.PAUSED:LESSON_MEDIA_STATE.PLAYING;
+    }
+    const s=lessonPlayer.getPlayerState?.();
+    if(Number.isFinite(s))return s;
+  }catch(e){}
+  return LESSON_MEDIA_STATE.PAUSED;
+}
+async function v12TogglePlayback(){
+  if(!lessonPlayerReady||!lessonPlayer)return;
+  const state=v12GetPlaybackState();
+  const shouldPlay=state!==LESSON_MEDIA_STATE.PLAYING;
+  try{
+    if(lessonPlayerType==='html5' && lessonHtmlVideo){
+      if(shouldPlay){
+        const r=lessonHtmlVideo.play();
+        if(r?.catch)await r.catch(()=>{});
+      }else lessonHtmlVideo.pause();
+    }else if(shouldPlay){
+      await Promise.resolve(lessonPlayer.playVideo?.());
+    }else{
+      await Promise.resolve(lessonPlayer.pauseVideo?.());
+    }
+    updateLessonCenterButton();
+    showLessonControls(2800);
+    flashLessonCenterButton();
+  }catch(e){
+    console.warn('Unified lesson play/pause failed:',e);
+    updateLessonCenterButton();
+  }
+}
 document.getElementById('lessonCenterPlayBtn')?.addEventListener('click',e=>{e.preventDefault();e.stopPropagation();v12TogglePlayback()},true);
+document.getElementById('lessonCenterPlayBtn')?.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();e.stopPropagation();v12TogglePlayback()}},true);
 document.getElementById('lessonDesktopPlayBtn')?.addEventListener('click',e=>{e.preventDefault();e.stopPropagation();v12TogglePlayback()},true);
 
 /* Leaving the lesson player through any related action must stop the media first. */
