@@ -9692,18 +9692,6 @@ document.addEventListener('keydown',e=>{
   }else if(code==='ArrowLeft'||code==='ArrowRight'){e.preventDefault();e.stopPropagation();window.__allowedLessonSeekUntil=Date.now()+1200;seekLessonBy(code==='ArrowLeft'?-10:10);}
 },true);
 
-document.addEventListener('keyup',e=>{
-  if(e.code!=='Space')return;
-  const state=window.__aaSpaceHoldState;
-  if(!state?.down)return;
-  e.preventDefault();e.stopPropagation();state.down=false;
-  if(state.timer){clearTimeout(state.timer);state.timer=null;}
-  if(state.long){
-    try{if(lessonPlayerType==='html5'&&lessonHtmlVideo)lessonHtmlVideo.playbackRate=state.restore||1;else lessonPlayer?.setPlaybackRate?.(state.restore||1);}catch(err){console.warn('Space restore rate failed:',err);}
-    return;
-  }
-  try{v12TogglePlayback();}catch(_){}
-},true);
 
 /* 5) Personal portfolio work: replace the old assignment-linked uploader with a true personal portfolio item. */
 function ensurePortfolioWorkV12(){
@@ -13894,42 +13882,6 @@ const s=document.createElement('style');s.textContent=`
     }
   },true);
 
-  /* Space: short press/release toggles once; long hold = 2x only while held. */
-  if(!window.__aaFinalHold2xSpaceBound){
-    window.__aaFinalHold2xSpaceBound=true;
-    let spaceDown=false,spaceTimer=null,spaceHolding=false,spaceRestore=1;
-    const clearSpace=()=>{if(spaceTimer){clearTimeout(spaceTimer);spaceTimer=null;}};
-    document.addEventListener('keydown',e=>{
-      if(e.code!=='Space'||!isReady()||currentCoursePage!=='lessonPlayer')return;
-      if(e.ctrlKey||e.altKey||e.metaKey)return;
-      if(spaceDown){e.preventDefault();e.stopImmediatePropagation();return;}
-      spaceDown=true;spaceHolding=false;spaceRestore=getRate();clearSpace();
-      e.preventDefault();e.stopImmediatePropagation();
-      spaceTimer=setTimeout(async()=>{
-        spaceTimer=null;
-        if(!spaceDown||!isReady())return;
-        spaceHolding=true;
-        if(isPlaying())await setRate(2);
-      },450);
-    },true);
-    document.addEventListener('keyup',async e=>{
-      if(e.code!=='Space'||!spaceDown)return;
-      e.preventDefault();e.stopImmediatePropagation();
-      clearSpace();spaceDown=false;
-      if(spaceHolding){
-        spaceHolding=false;
-        await setRate(spaceRestore||1);
-        return;
-      }
-      try{window.v12TogglePlayback?.();}catch(_){ }
-    },true);
-    window.addEventListener('blur',async()=>{
-      if(!spaceDown)return;
-      clearSpace();spaceDown=false;
-      if(spaceHolding){spaceHolding=false;await setRate(spaceRestore||1);}
-    },{passive:true});
-  }
-
   /* Best-effort media action protection: no native menu/download/PiP affordances. */
   const protect=()=>{
     const v=wrapper.querySelector('video');
@@ -14110,33 +14062,6 @@ const s=document.createElement('style');s.textContent=`
   wrapper.addEventListener('pointerup',release,true);
   wrapper.addEventListener('pointercancel',release,true);
   wrapper.addEventListener('lostpointercapture',e=>{if(pointerId!==null)release(e);},true);
-
-  if(!window.__aaHold2xSpaceOverlayBound){
-    window.__aaHold2xSpaceOverlayBound=true;
-    let down=false,timer2=null,holding2=false,restore2=1;
-    const clear2=()=>{if(timer2){clearTimeout(timer2);timer2=null;}};
-    document.addEventListener('keydown',e=>{
-      if(e.code!=='Space'||!ready()||currentCoursePage!=='lessonPlayer')return;
-      if(e.ctrlKey||e.altKey||e.metaKey)return;
-      if(down){e.preventDefault();e.stopImmediatePropagation();return;}
-      down=true;holding2=false;restore2=getRate();clear2();
-      e.preventDefault();e.stopImmediatePropagation();
-      timer2=setTimeout(async()=>{
-        timer2=null;if(!down||!ready()||!playing())return;
-        holding2=true;wrapper.classList.add('aa-hold2x-space-active');ensureIndicator();await setRate(2);
-      },450);
-    },true);
-    document.addEventListener('keyup',async e=>{
-      if(e.code!=='Space'||!down)return;
-      e.preventDefault();e.stopImmediatePropagation();clear2();down=false;
-      if(holding2){holding2=false;await setRate(restore2||1);wrapper.classList.remove('aa-hold2x-space-active');return;}
-      try{window.v12TogglePlayback?.();}catch(_){ }
-    },true);
-    window.addEventListener('blur',async()=>{
-      if(!down)return;clear2();down=false;
-      if(holding2){holding2=false;await setRate(restore2||1);wrapper.classList.remove('aa-hold2x-space-active');}
-    },{passive:true});
-  }
 
   wrapper.addEventListener('click',e=>{
     if(wrapper.dataset.suppressNextTapClick==='1'){delete wrapper.dataset.suppressNextTapClick;e.preventDefault();e.stopImmediatePropagation();}
@@ -14416,5 +14341,132 @@ const s=document.createElement('style');s.textContent=`
   new MutationObserver(bind).observe(document.body,{subtree:true,childList:true});
 })();
 </script>
+
+<!-- FINAL AUTHORITATIVE KEYBOARD SHORTCUTS: Space / F / M -->
+<script id="aa-final-keyboard-fmx-authoritative">
+(function(){
+  'use strict';
+  if(window.__aaFinalKeyboardFMX)return;
+  window.__aaFinalKeyboardFMX=true;
+
+  const wrapper=document.getElementById('lessonVideoWrapper');
+  const ready=()=>{
+    try{return typeof lessonPlayerReady!=='undefined' && lessonPlayerReady && !!lessonPlayer && currentCoursePage==='lessonPlayer';}
+    catch(_){return false;}
+  };
+  const playing=()=>{
+    try{
+      const s=lessonPlayer?.getPlayerState?.();
+      return s===LESSON_MEDIA_STATE.PLAYING || (window.YT&&s===YT.PlayerState.PLAYING);
+    }catch(_){return false;}
+  };
+  const getRate=()=>{
+    try{
+      if(typeof lessonPlayerType!=='undefined' && lessonPlayerType==='html5' && lessonHtmlVideo)
+        return Number(lessonHtmlVideo.playbackRate)||1;
+      const r=Number(lessonPlayer?.getPlaybackRate?.());
+      return Number.isFinite(r)&&r>0?r:1;
+    }catch(_){return 1;}
+  };
+  const setRate=async(rate)=>{
+    try{
+      const n=Number(rate)||1;
+      if(typeof lessonPlayerType!=='undefined' && lessonPlayerType==='html5' && lessonHtmlVideo){
+        lessonHtmlVideo.playbackRate=n; return;
+      }
+      if(typeof lessonPlayer?.setPlaybackRate==='function') await lessonPlayer.setPlaybackRate(n);
+    }catch(_){ }
+  };
+  const ensureIndicator=()=>{
+    if(!wrapper)return null;
+    let el=wrapper.querySelector('.aa-hold2x-indicator');
+    if(!el){
+      el=document.createElement('div');
+      el.className='aa-hold2x-indicator';
+      el.setAttribute('aria-hidden','true');
+      el.innerHTML='<i class="fas fa-forward"></i><span>الفيديو مسرّع ×2</span>';
+      wrapper.appendChild(el);
+    }
+    return el;
+  };
+  const enterHold2x=async()=>{
+    if(!ready()||!playing()||state.holding)return false;
+    state.holding=true;
+    state.restore=getRate();
+    try{wrapper?.classList.add('aa-hold2x-space-active','aa-hold2x-active');}catch(_){ }
+    ensureIndicator();
+    try{window.showLessonControls?.(0);}catch(_){ }
+    await setRate(2);
+    return true;
+  };
+  const leaveHold2x=async()=>{
+    if(!state.holding)return;
+    const restore=state.restore||1;
+    state.holding=false;
+    clearTimeout(state.timer);state.timer=null;
+    await setRate(restore);
+    try{wrapper?.classList.remove('aa-hold2x-space-active','aa-hold2x-active');}catch(_){ }
+  };
+  const state={down:false,holding:false,timer:null,restore:1};
+
+  const isEditable=(el)=>{
+    if(!el)return false;
+    const tag=String(el.tagName||'').toUpperCase();
+    return tag==='INPUT'||tag==='TEXTAREA'||tag==='SELECT'||el.isContentEditable;
+  };
+
+  const mute=()=>{
+    if(!ready())return;
+    try{
+      const b=document.getElementById('lessonMuteBtn');
+      if(typeof lessonPlayerType!=='undefined' && lessonPlayerType==='html5' && lessonHtmlVideo){
+        lessonHtmlVideo.muted=!lessonHtmlVideo.muted;
+        if(b)b.innerHTML=lessonHtmlVideo.muted?'<i class="fas fa-volume-mute"></i>':'<i class="fas fa-volume-up"></i>';
+      }else{
+        const muted=!!lessonPlayer.isMuted?.();
+        if(muted)lessonPlayer.unMute?.(); else lessonPlayer.mute?.();
+        if(b)b.innerHTML=muted?'<i class="fas fa-volume-up"></i>':'<i class="fas fa-volume-mute"></i>';
+      }
+    }catch(_){ }
+  };
+
+  document.addEventListener('keydown',e=>{
+    if(!ready()||isEditable(document.activeElement))return;
+    const code=e.code||'';
+    if(code==='F'){
+      e.preventDefault();e.stopPropagation();e.stopImmediatePropagation();
+      const btn=document.getElementById('lessonFullscreenBtn');
+      if(btn)btn.click();
+      return;
+    }
+    if(code==='KeyM'){
+      e.preventDefault();e.stopPropagation();e.stopImmediatePropagation();
+      mute();
+      return;
+    }
+    if(code!=='Space')return;
+    e.preventDefault();e.stopPropagation();e.stopImmediatePropagation();
+    if(state.down)return;
+    state.down=true;state.holding=false;state.restore=getRate();
+    clearTimeout(state.timer);
+    state.timer=setTimeout(()=>{enterHold2x().catch(()=>{});},450);
+  },true);
+
+  document.addEventListener('keyup',e=>{
+    if(e.code!=='Space'||!state.down)return;
+    e.preventDefault();e.stopPropagation();e.stopImmediatePropagation();
+    state.down=false;clearTimeout(state.timer);state.timer=null;
+    if(state.holding){leaveHold2x().catch(()=>{});return;}
+    try{window.v12TogglePlayback?.();}catch(_){ }
+  },true);
+
+  window.addEventListener('blur',()=>{
+    if(!state.down)return;
+    state.down=false;clearTimeout(state.timer);state.timer=null;
+    if(state.holding)leaveHold2x().catch(()=>{});
+  },{passive:true});
+})();
+</script>
+
 </body>
 </html>
