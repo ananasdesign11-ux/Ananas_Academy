@@ -562,9 +562,19 @@
         .lesson-player-brand i{color:#8b7cff;}
         .lesson-resume-indicator{position:absolute;top:14px;right:16px;z-index:18;display:none;align-items:center;gap:7px;padding:7px 11px;border-radius:999px;background:rgba(10,10,10,.58);backdrop-filter:blur(10px);color:#fff;font-size:.72rem;font-weight:800;border:1px solid rgba(255,255,255,.1);}
         .lesson-resume-indicator.show{display:inline-flex;}
-        .lesson-video-center-play{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%) scale(.96);width:72px;height:72px;border-radius:50%;z-index:16;display:flex;align-items:center;justify-content:center;background:rgba(108,92,231,.95);color:#fff;box-shadow:0 16px 40px rgba(0,0,0,.35);opacity:0;pointer-events:none;transition:.2s ease;cursor:pointer;font-size:1.35rem;}
+        .lesson-video-center-play{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%) scale(.94);width:62px;height:62px;border-radius:50%;z-index:16;display:flex;align-items:center;justify-content:center;background:rgba(108,92,231,.48);color:#fff;box-shadow:0 10px 28px rgba(0,0,0,.20),inset 0 0 0 1px rgba(255,255,255,.16);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);opacity:0;pointer-events:none;transition:opacity .22s ease,transform .22s ease,background .22s ease;cursor:pointer;font-size:1.1rem;}
         #lessonVideoWrapper.show-center-play .lesson-video-center-play{opacity:1;pointer-events:auto;transform:translate(-50%,-50%) scale(1);}
-        .lesson-video-center-play:hover{transform:translate(-50%,-50%) scale(1.06)!important;}
+        .lesson-video-center-play:hover{background:rgba(108,92,231,.58);transform:translate(-50%,-50%) scale(1.04)!important;}
+        .lesson-video-corner-play{display:none;position:absolute;right:14px;bottom:14px;width:42px;height:42px;border-radius:50%;z-index:18;align-items:center;justify-content:center;border:1px solid rgba(255,255,255,.14);background:rgba(5,7,11,.38);color:#fff;box-shadow:0 8px 22px rgba(0,0,0,.22);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);opacity:0;pointer-events:none;transition:opacity .22s ease,transform .22s ease,background .22s ease;cursor:pointer;font-size:.9rem;}
+        #lessonVideoWrapper:not(.lesson-controls-hidden) .lesson-video-corner-play{opacity:.72;pointer-events:auto;}
+        .lesson-video-corner-play:hover{opacity:1;transform:translateY(-1px);background:rgba(5,7,11,.5);}
+        @media(min-width:769px){
+            #lessonVideoWrapper.lesson-controls-hidden .lesson-video-corner-play{opacity:0;pointer-events:none;}
+        }
+        @media(max-width:768px){
+            #lessonVideoWrapper:not(.lesson-controls-hidden) .lesson-video-center-play{opacity:.82;pointer-events:auto;transform:translate(-50%,-50%) scale(1);}
+            #lessonVideoWrapper.lesson-controls-hidden .lesson-video-center-play{opacity:0;pointer-events:none;}
+        }
         .lesson-platform-controls .progress-bar-wrap{height:6px!important;border-radius:999px;background:rgba(255,255,255,.22);box-shadow:inset 0 0 0 1px rgba(255,255,255,.04);}
         .lesson-platform-controls .progress-bar-fill{background:linear-gradient(90deg,#6c5ce7,#22c55e)!important;border-radius:999px;}
         .lesson-platform-controls .progress-bar-thumb{position:absolute;top:50%;transform:translate(-50%,-50%);width:13px;height:13px;border-radius:50%;background:#fff;box-shadow:0 2px 10px rgba(0,0,0,.3);left:0;transition:left .05s linear;}
@@ -1953,6 +1963,9 @@ label[for*="En"], input[id*="En"], textarea[id*="En"] { display:none !important;
                                 <div class="lesson-video-center-play" id="lessonCenterPlayBtn" role="button" aria-label="تشغيل الفيديو" tabindex="0">
                                     <i class="fas fa-play"></i>
                                 </div>
+                                <button type="button" class="lesson-video-corner-play" id="lessonCornerPlayBtn" aria-label="تشغيل الفيديو" title="تشغيل الفيديو">
+                                    <i class="fas fa-play"></i>
+                                </button>
                             </div>
 
                             <div id="lessonPlayerTitleBlock" style="padding:0 0 8px;">
@@ -4962,19 +4975,23 @@ label[for*="En"], input[id*="En"], textarea[id*="En"] { display:none !important;
             btn.innerHTML=isPlaying?'<i class="fas fa-pause"></i>':'<i class="fas fa-play"></i>';
             btn.setAttribute('aria-label',isPlaying?'إيقاف الفيديو':'تشغيل الفيديو');
             btn.setAttribute('title',isPlaying?'إيقاف الفيديو':'تشغيل الفيديو');
+            if(typeof updateLessonCornerPlayButton==='function')updateLessonCornerPlayButton();
         }
 
         function handleLessonPlaybackPlaying(){
             lessonWatchState.lastTick=Date.now();
-            document.getElementById('lessonVideoWrapper')?.classList.remove('show-center-play');
+            const wrapper=document.getElementById('lessonVideoWrapper');
+            wrapper?.classList.remove('show-center-play');
+            if(wrapper?.dataset.touchInteraction==='1' || ('ontouchstart' in window && window.innerWidth<=768)) wrapper?.classList.add('mobile-center-play-active');
             updateLessonCenterButton();
             showLessonControls();
             updateLessonControls();
         }
         function handleLessonPlaybackStopped(state){
             lessonWatchState.lastTick=null;window.saveLessonProgressNow?.();window.persistCourseState?.();
+            const wrapper=document.getElementById('lessonVideoWrapper');
             updateLessonCenterButton();
-            if(state!==LESSON_MEDIA_STATE.PLAYING)document.getElementById('lessonVideoWrapper')?.classList.add('show-center-play');
+            if(state!==LESSON_MEDIA_STATE.PLAYING)wrapper?.classList.add('show-center-play');
             showLessonControls();
             updateLessonControls();
             if(state===LESSON_MEDIA_STATE.ENDED){ lessonWatchState.naturallyEnded=true; checkLessonAutoCompletion(true); }
@@ -9424,7 +9441,18 @@ function v12VideoCommand(action,arg){
   }catch(e){console.warn('Video command failed:',e);return false}
 }
 function v12TogglePlayback(){if(!lessonPlayerReady||!lessonPlayer)return;const s=lessonPlayer.getPlayerState?.();const playing=s===LESSON_MEDIA_STATE.PLAYING||(window.YT&&s===YT.PlayerState.PLAYING);playing?v12VideoCommand('pause'):v12VideoCommand('play');}
+function updateLessonCornerPlayButton(){
+  const btn=document.getElementById('lessonCornerPlayBtn');
+  if(!btn)return;
+  let playing=false;
+  try{const s=lessonPlayer?.getPlayerState?.();playing=s===LESSON_MEDIA_STATE.PLAYING||(window.YT&&s===YT.PlayerState.PLAYING);}catch(_){}
+  btn.innerHTML=playing?'<i class="fas fa-pause"></i>':'<i class="fas fa-play"></i>';
+  btn.setAttribute('aria-label',playing?'إيقاف الفيديو':'تشغيل الفيديو');
+  btn.setAttribute('title',playing?'إيقاف الفيديو':'تشغيل الفيديو');
+}
+
 document.getElementById('lessonCenterPlayBtn')?.addEventListener('click',e=>{e.preventDefault();e.stopPropagation();v12TogglePlayback()},true);
+document.getElementById('lessonCornerPlayBtn')?.addEventListener('click',e=>{e.preventDefault();e.stopPropagation();v12TogglePlayback();requestAnimationFrame(updateLessonCornerPlayButton);},true);
 
 /* Leaving the lesson player through any related action must stop the media first. */
 const lessonRelatedStopHandler=document.getElementById('lessonRelatedActions');
