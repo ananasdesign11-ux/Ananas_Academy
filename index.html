@@ -1964,7 +1964,7 @@ label[for*="En"], input[id*="En"], textarea[id*="En"] { display:none !important;
                             <div class="admin-controls admin-only">
                                 <button class="btn" id="fullPageAddLessonBtn" style="background:var(--accent-gradient); color:#fff; border:none; padding:8px 16px; border-radius:var(--btn-radius);"><i class="fas fa-plus"></i> حصة جديدة</button>
                             </div>
-                            <button class="btn btn-outline course-page-back-btn" style="padding:8px 16px; border-radius:var(--btn-radius); border:1px solid var(--border); background:transparent; color:var(--text-muted); cursor:pointer;"><i class="fas fa-arrow-right"></i> العودة</button>
+                            <button class="btn btn-outline course-page-back-btn" id="backToCourseDashboardFromLessonsBtn" style="padding:8px 16px; border-radius:var(--btn-radius); border:1px solid var(--border); background:transparent; color:var(--text-muted); cursor:pointer;"><i class="fas fa-arrow-right"></i> العودة</button>
                         </div>
                     </div>
                     <div id="lessonsCardsContainer" class="lessons-cards-grid">
@@ -4778,21 +4778,14 @@ label[for*="En"], input[id*="En"], textarea[id*="En"] { display:none !important;
             document.getElementById('lessonPlayerTitle').textContent = lesson.titleAr || 'حصة';
             document.getElementById('lessonPlayerMeta').textContent = `${lesson.duration || 0} دقيقة • ${lesson.xpReward || 0} XP`;
             renderLessonPlayerList();
-            await renderLessonRelatedActions(courseId, lessonId);
-            await renderLessonCompletionStatus(courseId, lessonId);
-            try {
-                const alreadyDone = await db.collection('users').doc(currentUser.uid)
-                    .collection('completedLessons').doc(lessonId).get();
-                lessonWatchState.granted = alreadyDone.exists;
-            } catch(e) {
-                lessonWatchState.granted = false;
-            }
+            /* Open the actual player first. Secondary UI/status work must not block video start. */
             resetLessonWatchState(lessonId, lesson.duration);
-            try {
-                const alreadyDoneAfterReset = await db.collection('users').doc(currentUser.uid)
-                    .collection('completedLessons').doc(lessonId).get();
-                lessonWatchState.granted = alreadyDoneAfterReset.exists;
-            } catch(e) {}
+            Promise.resolve(window.renderLessonRelatedActions?.(courseId, lessonId)).catch(()=>{});
+            Promise.resolve(window.renderLessonCompletionStatus?.(courseId, lessonId)).catch(()=>{});
+            Promise.resolve(db.collection('users').doc(currentUser.uid)
+                .collection('completedLessons').doc(lessonId).get())
+                .then(s=>{ lessonWatchState.granted=!!s?.exists; })
+                .catch(()=>{ lessonWatchState.granted=false; });
             const resumeOnReturn=window.__lessonResumeOnReturn &&
                 String(window.__lessonResumeOnReturn.courseId||'')===String(courseId) &&
                 String(window.__lessonResumeOnReturn.lessonId||'')===String(lessonId);
@@ -12812,6 +12805,35 @@ const s=document.createElement('style');s.textContent=`
 })();
 </script>
 
+<script id="final-lessons-page-back-direct">
+(function(){
+  'use strict';
+  function goToDashboard(){
+    const detail=document.getElementById('courseDetailView');
+    const lessons=document.getElementById('courseLessonsPage');
+    const dashboard=document.getElementById('courseDashboard');
+    const player=document.getElementById('courseLessonPlayerPage');
+    try{ window.__lessonResumeAutoplay=false; }catch(_){}
+    try{ if(typeof lessonPlayer!=='undefined' && lessonPlayer){ if(typeof lessonPlayer.pauseVideo==='function') lessonPlayer.pauseVideo(); else if(typeof lessonPlayer.pause==='function') lessonPlayer.pause(); } }catch(_){}
+    try{ window.captureLessonResumePosition?.('lessons-back'); }catch(_){}
+    try{ window.saveLessonProgressNow?.(); }catch(_){}
+    try{ window.persistCourseState?.(); }catch(_){}
+    if(player){player.classList.remove('active');player.style.display='none';}
+    if(lessons){lessons.classList.remove('active');lessons.style.display='none';}
+    if(dashboard){dashboard.style.display='flex';}
+    if(detail){detail.style.display='block';detail.style.visibility='visible';}
+    try{ currentCoursePage='dashboard'; }catch(_){}
+    try{ window.setMobileNavActive?.('dashboard'); }catch(_){}
+    try{ window.persistCourseState?.(); }catch(_){}
+  }
+  document.addEventListener('click',function(e){
+    const btn=e.target?.closest?.('#backToCourseDashboardFromLessonsBtn');
+    if(!btn)return;
+    e.preventDefault(); e.stopPropagation(); e.stopImmediatePropagation?.();
+    goToDashboard();
+  },true);
+})();
+</script>
 
 <!-- FINAL TOUCH CONTROL VISIBILITY V12: authoritative touch-only behavior -->
 <style id="lesson-touch-control-visibility-v12-style">
@@ -14214,90 +14236,6 @@ const s=document.createElement('style');s.textContent=`
   window.__aaDesktopCenterIconCleanCleanup=()=>{clearInterval(observer);clearTimeout(flashTimer);};
   bindVideo();
   sync(true);
-})();
-</script>
-
-
-<script id="final-direct-lessons-navigation-v16">
-(function(){
-  'use strict';
-  if(window.__ananasDirectLessonsNavigationV16)return;
-  window.__ananasDirectLessonsNavigationV16=true;
-
-  function showDashboardDirect(){
-    const detail=document.getElementById('courseDetailView');
-    const overview=document.getElementById('courseOverviewContainer');
-    const dashboard=document.getElementById('courseDashboard');
-    const lessons=document.getElementById('courseLessonsPage');
-    const player=document.getElementById('courseLessonPlayerPage');
-    const learning=document.getElementById('courseLearningView');
-    const quizzes=document.getElementById('courseQuizzesPage');
-    const assignments=document.getElementById('courseAssignmentsPage');
-    const chat=document.getElementById('courseChatPage');
-    if(!dashboard)return;
-
-    try{window.__lessonResumeAutoplay=false;}catch(_){ }
-    try{window.__lesson2xHoldActive=false;}catch(_){ }
-    try{if(typeof lessonPlayer?.pauseVideo==='function')lessonPlayer.pauseVideo();else lessonPlayer?.pause?.();}catch(_){ }
-    try{destroyLessonVideo?.();}catch(_){ }
-
-    if(detail){detail.style.display='block';detail.style.visibility='visible';}
-    if(overview){overview.style.display='none';overview.classList.remove('active');}
-    if(lessons){lessons.classList.remove('active');lessons.style.display='none';}
-    if(player){player.classList.remove('active');player.style.display='none';}
-    if(learning)learning.classList.remove('active');
-    if(quizzes)quizzes.style.display='none';
-    if(assignments)assignments.style.display='none';
-    if(chat)chat.style.display='none';
-    dashboard.classList.add('active');
-    dashboard.style.display='flex';
-    dashboard.style.visibility='visible';
-    dashboard.style.opacity='1';
-    try{dashboard.scrollTop=0;}catch(_){ }
-    try{currentCoursePage='dashboard';activeLessonId=null;}catch(_){ }
-    try{setMobileNavActive('dashboard');}catch(_){ }
-    try{persistCourseState?.();}catch(_){ }
-    try{requestAnimationFrame(()=>{try{dashboard.scrollTop=0;}catch(_){}});}catch(_){ }
-  }
-
-  // Lessons page -> course section selector. This bypasses every old switch wrapper.
-  document.addEventListener('click',function(e){
-    const btn=e.target?.closest?.('#courseLessonsPage .course-page-back-btn');
-    if(!btn)return;
-    e.preventDefault();
-    e.stopPropagation();
-    e.stopImmediatePropagation?.();
-    showDashboardDirect();
-  },true);
-
-  // Lesson card / "watch lesson" -> open immediately; no preliminary Firestore fetch.
-  document.addEventListener('click',function(e){
-    const card=e.target?.closest?.('#lessonsCardsContainer .lesson-card');
-    if(!card)return;
-    const adminAction=e.target?.closest?.('.admin-actions,button.lesson-manual-complete-btn');
-    if(adminAction)return;
-    const courseId=window.activeCourseId||((typeof activeCourseId!=='undefined')?activeCourseId:'');
-    const lessonId=card.dataset.id||'';
-    if(!courseId||!lessonId)return;
-    e.preventDefault();
-    e.stopPropagation();
-    e.stopImmediatePropagation?.();
-    try{window.openLessonPlayer?.(courseId,lessonId);}catch(err){console.error('direct lesson open',err);}
-  },true);
-
-  document.addEventListener('click',function(e){
-    const btn=e.target?.closest?.('#lessonsCardsContainer .card-actions button');
-    if(!btn||btn.classList.contains('lesson-manual-complete-btn'))return;
-    const card=btn.closest('.lesson-card');
-    if(!card)return;
-    const courseId=window.activeCourseId||((typeof activeCourseId!=='undefined')?activeCourseId:'');
-    const lessonId=card.dataset.id||'';
-    if(!courseId||!lessonId)return;
-    e.preventDefault();
-    e.stopPropagation();
-    e.stopImmediatePropagation?.();
-    try{window.openLessonPlayer?.(courseId,lessonId);}catch(err){console.error('direct lesson button open',err);}
-  },true);
 })();
 </script>
 </body>
