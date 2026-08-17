@@ -14259,5 +14259,127 @@ const s=document.createElement('style');s.textContent=`
 })();
 </script>
 
+<!-- FINAL PLAY/PAUSE + CENTER PLAY FLASH PATCH -->
+<style id="aa-final-play-pause-center-flash-v1-style">
+@media (min-width:769px) and (hover:hover) and (pointer:fine){
+  /* The final flash wins even when the controls container is hidden. */
+  #lessonVideoWrapper.lesson-center-flash .lesson-video-center-play{
+    opacity:.52!important;
+    visibility:visible!important;
+    pointer-events:none!important;
+    transform:translate(-50%,-50%) scale(1)!important;
+  }
+  #lessonVideoWrapper.lesson-center-flash .lesson-video-center-play i{
+    opacity:1!important;
+  }
+}
+</style>
+<script id="aa-final-play-pause-center-flash-v1-script">
+(function(){
+  'use strict';
+  const wrapper=document.getElementById('lessonVideoWrapper');
+  if(!wrapper || window.__aaFinalPlayPauseCenterFlashV1)return;
+  window.__aaFinalPlayPauseCenterFlashV1=true;
+
+  const mouseMode=()=>{
+    try{return window.matchMedia('(hover:hover) and (pointer:fine)').matches;}
+    catch(_){return false;}
+  };
+  const ready=()=>{
+    try{return currentCoursePage==='lessonPlayer' && !!lessonPlayerReady && !!lessonPlayer;}
+    catch(_){return false;}
+  };
+  const state=()=>{try{return window.v12GetPlaybackState?.();}catch(_){return null;}};
+  const toggle=()=>{
+    try{
+      const fn=window.v12TogglePlayback;
+      if(typeof fn==='function') return fn();
+      if(typeof lessonPlayerType!=='undefined'&&lessonPlayerType==='html5'&&window.lessonHtmlVideo){
+        return window.lessonHtmlVideo.paused?window.lessonHtmlVideo.play():window.lessonHtmlVideo.pause();
+      }
+    }catch(err){console.warn('final play/pause toggle failed',err);}
+  };
+  const flash=()=>{
+    if(!mouseMode())return;
+    wrapper.classList.remove('lesson-center-flash');
+    void wrapper.offsetWidth;
+    wrapper.classList.add('lesson-center-flash');
+    clearTimeout(wrapper.__finalCenterFlashTimer);
+    wrapper.__finalCenterFlashTimer=setTimeout(()=>wrapper.classList.remove('lesson-center-flash'),520);
+  };
+  const refreshIcon=()=>{try{window.updateLessonCenterButton?.();}catch(_){}};
+
+  const btn=document.getElementById('lessonDesktopPlayBtn');
+  if(btn && btn.dataset.finalDirectPlayBound!=='1'){
+    btn.dataset.finalDirectPlayBound='1';
+    let down=false,timer=null,held=false,restore=1;
+    const clear=()=>{if(timer){clearTimeout(timer);timer=null;}};
+    const finish=(e)=>{
+      if(!down)return;
+      down=false;clear();
+      if(held){
+        held=false;
+        try{
+          const set=window.lessonPlayer?.setPlaybackRate;
+          if(typeof set==='function'){
+            const r=set(restore||1); if(r?.catch)r.catch(()=>{});
+          }else if(typeof lessonPlayerType!=='undefined'&&lessonPlayerType==='html5'&&window.lessonHtmlVideo){
+            window.lessonHtmlVideo.playbackRate=restore||1;
+          }
+        }catch(_){ }
+        refreshIcon();
+        e?.preventDefault?.();e?.stopImmediatePropagation?.();
+        return;
+      }
+      e?.preventDefault?.();e?.stopImmediatePropagation?.();
+      toggle();
+    };
+    btn.addEventListener('pointerdown',e=>{
+      if(!mouseMode()||!ready()||e.button!==0)return;
+      e.preventDefault();e.stopImmediatePropagation();
+      down=true;held=false;restore=Number(window.lessonPlayer?.getPlaybackRate?.()||1)||1;clear();
+      try{btn.setPointerCapture?.(e.pointerId);}catch(_){ }
+      timer=setTimeout(()=>{
+        timer=null;
+        if(!down||!ready())return;
+        held=true;
+        try{
+          if(typeof lessonPlayerType!=='undefined'&&lessonPlayerType==='html5'&&window.lessonHtmlVideo)window.lessonHtmlVideo.playbackRate=2;
+          else window.lessonPlayer?.setPlaybackRate?.(2);
+        }catch(_){ }
+        flash();
+      },450);
+    },true);
+    btn.addEventListener('pointerup',finish,true);
+    btn.addEventListener('pointercancel',finish,true);
+    btn.addEventListener('lostpointercapture',e=>finish(e),true);
+    btn.addEventListener('click',e=>{e.preventDefault();e.stopImmediatePropagation();},true);
+  }
+
+  /* Ensure the center icon flashes when playback actually starts. */
+  if(!window.__aaFinalPlayStartFlashBound){
+    window.__aaFinalPlayStartFlashBound=true;
+    const flashOnState=()=>{
+      if(!mouseMode()||!ready())return;
+      if(state()===window.LESSON_MEDIA_STATE?.PLAYING || state()===1){
+        refreshIcon();
+        flash();
+      }
+    };
+    ['play','playing'].forEach(type=>wrapper.addEventListener(type,flashOnState,true));
+    document.addEventListener('aa:lesson-playing',flashOnState,true);
+    setInterval(()=>{
+      if(!mouseMode()||!ready())return;
+      const s=state();
+      if(s===1 && wrapper.__aaLastObservedPlaying!==1){
+        wrapper.__aaLastObservedPlaying=1;refreshIcon();flash();
+      }else if(s!==1){
+        wrapper.__aaLastObservedPlaying=s;
+      }
+    },120);
+  }
+})();
+</script>
+
 </body>
 </html>
