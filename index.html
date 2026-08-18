@@ -12003,15 +12003,15 @@ const s=document.createElement('style');s.textContent=`
 .code-card-v12-main{min-width:0;display:grid;gap:3px;}
 .code-card-v12-main strong{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 .code-card-v12-main small{color:var(--text-muted);font-size:.72rem;direction:ltr;text-align:right;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
-.code-card-v12-status{font-size:.7rem;font-weight:900;padding:4px 8px;border-radius:999px;background:rgba(108,92,231,.08);white-space:nowrap;}
-.code-card-v12.used .code-card-v12-status{color:#16a085;background:rgba(22,160,133,.10);}
-.code-card-v12.unused .code-card-v12-status{color:#6c5ce7;background:rgba(108,92,231,.10);}
-.code-card-v12.expired .code-card-v12-status{color:#e67e22;background:rgba(230,126,34,.10);}
-.code-card-v12.suspended .code-card-v12-status{color:#e74c3c;background:rgba(231,76,60,.10);}
 .code-card-v12-wrap{display:grid;gap:7px;}
-.code-card-v12-actions{display:flex;gap:6px;flex-wrap:wrap;}
-.code-card-v12-actions .code-action-btn{min-height:36px;}
 #codeDetailModalV12{width:min(720px,95vw);max-height:90vh;overflow-y:auto;}
+.code-detail-actions-v12{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 12px;}
+.code-detail-end-editor-v12{padding:12px;border:1px solid var(--border);border-radius:16px;background:var(--bg-secondary);margin-bottom:12px;}
+.code-detail-end-head-v12{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px;}
+.code-detail-end-head-v12 span{font-size:.72rem;color:var(--text-muted);background:rgba(108,92,231,.08);padding:4px 8px;border-radius:999px;}
+.code-detail-end-row-v12{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:8px;align-items:center;}
+.code-detail-end-row-v12 input{width:100%;min-width:0;padding:10px 12px;border:1px solid var(--border);border-radius:12px;background:var(--bg-card);color:var(--text-primary);font-family:inherit;}
+@media(max-width:600px){.code-detail-end-row-v12{grid-template-columns:1fr 1fr;}.code-detail-end-row-v12 input{grid-column:1/-1;}}
 .code-detail-grid-v12{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;}
 .code-detail-item-v12{padding:12px;border:1px solid var(--border);border-radius:14px;background:var(--bg-secondary);min-width:0;}
 .code-detail-item-v12 strong{display:block;color:var(--text-muted);font-size:.75rem;margin-bottom:5px;}
@@ -12090,77 +12090,81 @@ const s=document.createElement('style');s.textContent=`
       const name=live.displayName||live.name||account.name||'غير مستخدم';
       const email=live.email||account.email||'—';
       const phone=live.phone||account.phone||'—';
-      const photo=live.photoURL||live.photoUrl||live.photo||'';
+      const gender=live.gender||account.gender||'—';
+      const photo=live.photoURL||live.photoUrl||live.photo||account.photoURL||account.photoUrl||account.photo||'';
       const subscribedAt=asDateV12(enrolled?.enrolledAt)||asDateV12(account.usedAt)||asDateV12(account.subscriptionDate)||asDateV12(account.registeredAt)||asDateV12(c.usedAt);
+      const createdAt=asDateV12(c.createdAt);
+      const updatedAt=asDateV12(c.updatedAt)||asDateV12(c.suspensionUpdatedAt);
       const end=asDateV12(c.endTime);
-      const endStatus=expiredV12(c)?'منتهي':legacySuspendedV12(c)?suspensionLabelV12(c):'نشط فعال';
+      const isExpired=expiredV12(c);
+      const isSuspended=legacySuspendedV12(c);
+      const endStatus=isExpired?'منتهي':isSuspended?suspensionLabelV12(c):'نشط فعال';
+      const canSuspend=!isExpired;
       const avatar=photo?`<img src="${escV12(photo)}" alt="">`:escV12(name.slice(0,1)||'م');
-      const endLocal=end ? new Date(end.getTime()-end.getTimezoneOffset()*60000).toISOString().slice(0,16) : '';
-      const suspended=legacySuspendedV12(c);
-      const actions=`
-        <div class="code-detail-actions-v12" style="display:flex;flex-wrap:wrap;gap:8px;margin-top:16px;">
-          <button type="button" class="code-action-btn" onclick="editEnrollmentCodeEnd('${escV12(courseId)}','${escV12(codeId)}','${escV12(endLocal)}')"><i class="fas fa-calendar-pen"></i> تعديل نهاية الكود</button>
-          ${expiredV12(c) ? '<button type="button" class="code-action-btn" disabled style="opacity:.55">منتهي</button>' : `<button type="button" class="code-action-btn ${suspended?'success':'danger'}" onclick="toggleEnrollmentCode('${escV12(codeId)}',${suspended});event.stopPropagation()">${suspended?'إلغاء الإيقاف':'إيقاف الكود'}</button>`}
-          <button type="button" class="code-action-btn danger" onclick="deleteEnrollmentCode('${escV12(codeId)}');event.stopPropagation()"><i class="fas fa-trash"></i> حذف الكود</button>
-        </div>`;
+      const endValue=end?`${end.getFullYear()}-${String(end.getMonth()+1).padStart(2,'0')}-${String(end.getDate()).padStart(2,'0')}T${String(end.getHours()).padStart(2,'0')}:${String(end.getMinutes()).padStart(2,'0')}`:'';
       body.innerHTML=`
         <div class="code-detail-account-v12"><div class="code-detail-avatar-v12">${avatar}</div><div style="min-width:0"><strong style="display:block;font-size:1rem">${escV12(name)}</strong><small style="color:var(--text-muted)">${escV12(email)}</small></div></div>
+        <div class="code-detail-actions-v12">
+          ${canSuspend ? `<button type="button" class="code-action-btn ${isSuspended?'success':'danger'}" id="codeDetailSuspendBtnV12">${isSuspended?'إلغاء الإيقاف':'إيقاف الكود'}</button>` : '<button type="button" class="code-action-btn" disabled style="opacity:.55">الكود منتهي</button>'}
+          <button type="button" class="code-action-btn danger" id="codeDetailDeleteBtnV12">حذف الكود</button>
+        </div>
+        <div class="code-detail-end-editor-v12">
+          <div class="code-detail-end-head-v12"><strong>نهاية الكود</strong><span>اختياري</span></div>
+          <div class="code-detail-end-row-v12"><input type="datetime-local" id="codeDetailEndInputV12" value="${escV12(endValue)}"><button type="button" class="code-action-btn" id="codeDetailSaveEndBtnV12">حفظ</button><button type="button" class="code-action-btn" id="codeDetailClearEndBtnV12">بدون نهاية</button></div>
+        </div>
         <div class="code-detail-grid-v12">
           <div class="code-detail-item-v12"><strong>اسم الحساب</strong><span>${escV12(name)}</span></div>
-          <div class="code-detail-item-v12"><strong>الكود</strong><span dir="ltr">${escV12(c.code||codeId)}</span></div>
+          <div class="code-detail-item-v12"><strong>معرّف الحساب</strong><span dir="ltr">${escV12(account.uid||'—')}</span></div>
           <div class="code-detail-item-v12"><strong>البريد الإلكتروني</strong><span dir="ltr">${escV12(email)}</span></div>
           <div class="code-detail-item-v12"><strong>رقم الهاتف</strong><span dir="ltr">${escV12(phone)}</span></div>
+          <div class="code-detail-item-v12"><strong>الجنس</strong><span>${escV12(gender)}</span></div>
+          <div class="code-detail-item-v12"><strong>الكود</strong><span dir="ltr">${escV12(c.code||codeId)}</span></div>
+          <div class="code-detail-item-v12"><strong>تاريخ إنشاء الكود</strong><span>${escV12(dateTextV12(createdAt))}</span></div>
           <div class="code-detail-item-v12"><strong>تاريخ الاشتراك</strong><span>${escV12(dateTextV12(subscribedAt))}</span></div>
           <div class="code-detail-item-v12"><strong>تاريخ نهاية الاشتراك</strong><span>${escV12(dateTextV12(end,'لا يوجد تاريخ نهاية'))}</span></div>
           <div class="code-detail-item-v12"><strong>حالة الكود</strong><span>${escV12(endStatus)}</span></div>
-          <div class="code-detail-item-v12"><strong>معرّف الحساب</strong><span dir="ltr">${escV12(account.uid||'—')}</span></div>
-        </div>${actions}`;
-    }catch(e){console.error(e);body.innerHTML='<div style="padding:20px;color:#e74c3c;text-align:center">تعذر تحميل تفاصيل الكود.</div>';}
-  };
+          <div class="code-detail-item-v12"><strong>الاستخدامات</strong><span>${escV12(`${usedCountV12(c)}/${maxUsesV12(c)}`)}</span></div>
+          <div class="code-detail-item-v12"><strong>آخر تحديث</strong><span>${escV12(dateTextV12(updatedAt))}</span></div>
+        </div>`;
 
-  window.editEnrollmentCodeEnd=async function(courseId,codeId,currentValue=''){
-    if(!isAdmin||!courseId||!codeId)return;
-    let modal=document.getElementById('codeEndEditModalV12');
-    if(!modal){
-      modal=document.createElement('div');
-      modal.id='codeEndEditModalV12';
-      modal.className='edit-modal';
-      document.body.appendChild(modal);
+      const suspendBtn=$v12('codeDetailSuspendBtnV12');
+      suspendBtn?.addEventListener('click',()=>{
+        m.classList.remove('active');
+        toggleEnrollmentCode(courseId===activeCourseId?codeId:codeId,isSuspended);
+      });
+      $v12('codeDetailDeleteBtnV12')?.addEventListener('click',async()=>{
+        m.classList.remove('active');
+        await deleteEnrollmentCode(codeId);
+      });
+      $v12('codeDetailSaveEndBtnV12')?.addEventListener('click',async()=>{
+        const input=$v12('codeDetailEndInputV12');
+        const raw=input?.value||'';
+        let endDate=null;
+        if(raw){
+          endDate=new Date(raw);
+          if(isNaN(endDate.getTime())||endDate.getTime()<=Date.now())return showCustomAlert?.('تنبيه','وقت النهاية يجب أن يكون في المستقبل.');
+        }
+        const btn=$v12('codeDetailSaveEndBtnV12');
+        try{
+          btn.disabled=true;
+          await codeRefV12(courseId,codeId).update({endTime:endDate?firebase.firestore.Timestamp.fromDate(endDate):null,updatedAt:firebase.firestore.FieldValue.serverTimestamp(),updatedBy:currentUser?.uid||null});
+          await window.loadCodesForCourse(courseId);
+          await window.__codeDetail(courseId,codeId);
+          showCustomAlert?.('تم الحفظ',endDate?'تم تحديث نهاية الكود.':'تم جعل الكود بدون تاريخ نهاية.');
+        }catch(e){showCustomAlert?.('خطأ','تعذر تعديل نهاية الكود: '+e.message);}finally{btn.disabled=false;}
+      });
+      $v12('codeDetailClearEndBtnV12')?.addEventListener('click',async()=>{
+        const btn=$v12('codeDetailClearEndBtnV12');
+        try{
+          btn.disabled=true;
+          await codeRefV12(courseId,codeId).update({endTime:null,updatedAt:firebase.firestore.FieldValue.serverTimestamp(),updatedBy:currentUser?.uid||null});
+          await window.loadCodesForCourse(courseId);
+          await window.__codeDetail(courseId,codeId);
+          showCustomAlert?.('تم الحفظ','تمت إزالة تاريخ نهاية الكود.');
+        }catch(e){showCustomAlert?.('خطأ','تعذر إزالة نهاية الكود: '+e.message);}finally{btn.disabled=false;}
+      });
+    }catch(e){console.error(e);body.innerHTML='<div style="padding:20px;color:#e74c3c;text-align:center">تعذر تحميل تفاصيل الكود.</div>';
     }
-    modal.innerHTML=`
-      <button type="button" class="modal-close" onclick="this.parentElement.classList.remove('active')">×</button>
-      <h3 style="margin-top:0">تعديل نهاية الكود</h3>
-      <p style="color:var(--text-muted);margin:0 0 12px">اترك الخانة فارغة لإزالة تاريخ النهاية وجعل الكود بدون انتهاء.</p>
-      <label style="display:block;margin-bottom:6px">تاريخ ووقت النهاية (اختياري)</label>
-      <input id="codeEndEditInputV12" type="datetime-local" value="${escV12(currentValue)}" style="width:100%;box-sizing:border-box;margin-bottom:12px">
-      <div style="display:flex;gap:8px;justify-content:flex-end">
-        <button type="button" class="code-action-btn" onclick="this.parentElement.parentElement.classList.remove('active')">إلغاء</button>
-        <button type="button" class="code-action-btn success" id="saveCodeEndBtnV12">حفظ</button>
-      </div>`;
-    modal.classList.add('active');
-    const input=modal.querySelector('#codeEndEditInputV12'),save=modal.querySelector('#saveCodeEndBtnV12');
-    save.onclick=async()=>{
-      if(save.disabled)return;
-      const raw=input.value.trim();
-      let end=null;
-      if(raw){
-        const m=raw.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/);
-        if(!m)return showCustomAlert?.('تنبيه','أدخل تاريخًا ووقتًا صحيحين.');
-        end=new Date(`${m[1]}-${m[2]}-${m[3]}T${m[4]}:${m[5]}:00+03:00`);
-        if(isNaN(end.getTime())||end.getTime()<=Date.now())return showCustomAlert?.('تنبيه','وقت النهاية يجب أن يكون في المستقبل.');
-      }
-      try{
-        save.disabled=true;save.textContent='جاري الحفظ...';
-        await codeRefV12(courseId,codeId).update({endTime:end?firebase.firestore.Timestamp.fromDate(end):null});
-        modal.classList.remove('active');
-        await window.loadCodesForCourse(courseId);
-        await window.__codeDetail(courseId,codeId);
-        showCustomAlert?.('تم الحفظ','تم تحديث نهاية الكود.');
-      }catch(e){
-        save.disabled=false;save.textContent='حفظ';
-        showCustomAlert?.('خطأ','تعذر تعديل نهاية الكود: '+(e?.message||e));
-      }
-    };
   };
 
   async function clearLegacyAccessBlockV12(courseId,codeId,users){
@@ -12230,8 +12234,7 @@ const s=document.createElement('style');s.textContent=`
       }
       const panel=(key,title)=>{const items=groups[key];return `<section class="code-lifecycle-panel"><h4><span>${title}</span><small>${items.length} كود</small></h4><div class="code-lifecycle-list">${items.length?items.map(({id,c})=>{
         const info=usedInfoV12(c),u=info[0]||{},name=u.name||'مستخدم',label=key==='used'?name:(c.code||id),state=expiredV12(c)?'منتهي':legacySuspendedV12(c)?'موقوف':key==='used'?'مستخدم':'غير مستخدم';
-        const toggle=expiredV12(c)?'<button class="code-action-btn" disabled style="opacity:.55">منتهي</button>':legacySuspendedV12(c)?`<button class="code-action-btn success" onclick="toggleEnrollmentCode('${escV12(id)}',true);event.stopPropagation()">إلغاء الإيقاف</button>`:`<button class="code-action-btn danger" onclick="toggleEnrollmentCode('${escV12(id)}',false);event.stopPropagation()">إيقاف الكود</button>`;
-        return `<div class="code-card-v12-wrap"><button type="button" class="code-card-v12 ${key}${legacySuspendedV12(c)?' suspended':''}" onclick="__codeDetail('${escV12(courseId)}','${escV12(id)}')"><span class="code-card-v12-main"><strong>${escV12(label)}</strong><small>${escV12(c.code||id)}</small></span><span class="code-card-v12-status">${escV12(state)}</span></button><div class="code-card-v12-actions">${toggle}<button class="code-action-btn danger" onclick="deleteEnrollmentCode('${escV12(id)}');event.stopPropagation()">حذف</button></div></div>`;}).join(''):'<div class="code-lifecycle-empty">لا توجد أكواد في هذه الفئة.</div>'}</div></section>`};
+        return `<div class="code-card-v12-wrap"><button type="button" class="code-card-v12 ${key}${legacySuspendedV12(c)?' suspended':''}" onclick="__codeDetail('${escV12(courseId)}','${escV12(id)}')"><span class="code-card-v12-main"><strong>${escV12(label)}</strong></span></button></div>`;}).join(''):'<div class="code-lifecycle-empty">لا توجد أكواد في هذه الفئة.</div>'}</div></section>`};
       board.innerHTML=panel('unused','غير مستخدمة')+panel('used','مستخدمة')+panel('expired','منتهية');
       if(oldTable)oldTable.style.display='none';
     }catch(e){console.error('code lifecycle v12',e);board.innerHTML='<div style="grid-column:1/-1;padding:22px;text-align:center;color:#e74c3c">تعذر تحميل الأكواد.</div>';}
