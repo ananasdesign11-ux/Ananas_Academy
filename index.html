@@ -10196,7 +10196,7 @@ hideLegacy();
     if(!currentUser)return;const btn=$p('aaProfileEditSave');const status=$p('aaProfileEditStatus');const name=$p('aaProfileEditName').value.trim(),phone=$p('aaProfileEditPhone').value.trim();if(!name){status.textContent='اكتب الاسم أولًا.';return;}btn.disabled=true;status.textContent='جاري حفظ التعديلات...';
     try{let photo=currentUser.photoURL||currentUserProfile?.photoURL||currentUserProfile?.photoUrl||currentUserProfile?.photo||'';if(workEdit.photoFile){photo=await uploadImage(workEdit.photoFile);if(!photo)throw Error('upload');}const profilePublic=!$p('aaProfileEditPrivate').checked;await currentUser.updateProfile({displayName:name,photoURL:photo||null});await db.collection('users').doc(currentUser.uid).set({uid:currentUser.uid,email:currentUser.email||'',displayName:name,phone,photoURL:photo||'',photoUrl:photo||'',profilePublic,updatedAt:firebase.firestore.FieldValue.serverTimestamp()},{merge:true});currentUserProfile={...(currentUserProfile||{}),displayName:name,phone,photoURL:photo||'',photoUrl:photo||'',profilePublic};
       const avatar=$p('authToggleBtn')?.querySelector('.auth-user-avatar img');if(avatar&&photo)avatar.src=photo;const label=$p('authLabel');if(label)label.textContent=name;const nameNode=$p('aaProfileName');if(nameNode)nameNode.textContent=name;const emailNode=$p('aaProfileEmail');if(emailNode)emailNode.textContent=currentUser.email||'—';
-      $p('aaProfileSelfEditModal').classList.remove('active');status.textContent='';if(window.openUserProfilePage)await window.openUserProfilePage();showCustomAlert?.('تم الحفظ',profilePublic?'تم تحديث بياناتك وتفعيل خصوصية الحساب.':'تم تحديث بياناتك وإظهار الحساب للعامة.');
+      $p('aaProfileSelfEditModal').classList.remove('active');status.textContent='';if(window.openUserProfilePage)await window.openUserProfilePage();showCustomAlert?.('تم الحفظ',profilePublic?'تم تحديث بياناتك وإظهار الحساب للعامة.':'تم تحديث بياناتك وتفعيل خصوصية الحساب.');
     }catch(e){console.error('save profile self',e);status.textContent='تعذر حفظ التعديلات.';showCustomAlert?.('خطأ','تعذر حفظ تعديلات الملف الشخصي.')}finally{btn.disabled=false;}
   }
   function openSelfWork(){if(!currentUser)return triggerAuth?.();ensureSelfModals();['aaProfileWorkName','aaProfileWorkType','aaProfileWorkDesc'].forEach(id=>$p(id).value='');$p('aaProfileWorkFiles').value='';$p('aaProfileWorkFilesName').textContent='لم يتم اختيار صور بعد';$p('aaProfileWorkStatus').textContent='';$p('aaProfileWorkSave').disabled=false;$p('aaProfileSelfWorkModal').classList.add('active');}
@@ -12029,6 +12029,17 @@ const s=document.createElement('style');s.textContent=`
 .code-detail-end-edit-btn-v14:hover{border-color:var(--accent1) !important;box-shadow:0 8px 18px rgba(108,92,231,.12) !important;transform:translateY(-1px) !important;}
 .code-detail-end-edit-btn-v14:active{transform:scale(.97) !important;}
 .code-detail-end-edit-btn-v14 i{font-size:.9em;opacity:.9;}
+.code-end-edit-modal-v15{position:fixed!important;inset:0!important;display:none;align-items:center;justify-content:center;padding:18px;background:rgba(0,0,0,.42);backdrop-filter:blur(6px);z-index:320000!important;pointer-events:auto!important;box-sizing:border-box;}
+.code-end-edit-modal-v15.active{display:flex!important;visibility:visible!important;opacity:1!important;}
+.code-end-edit-shell-v15{width:min(520px,94vw);max-height:min(680px,calc(100dvh - 36px));overflow:auto;background:var(--bg-card);border:1px solid var(--border);border-radius:20px;padding:22px;box-sizing:border-box;box-shadow:0 30px 90px rgba(0,0,0,.45);position:relative;pointer-events:auto;}
+.code-end-edit-shell-v15 h3{margin:0 0 10px;text-align:center;color:var(--accent1);font-weight:900;}
+.code-end-edit-close-v15{position:absolute;top:10px;left:10px;width:36px;height:36px;border:0;border-radius:10px;background:transparent;color:var(--text-muted);font-size:25px;cursor:pointer;}
+.code-end-edit-note-v15{margin:0 0 16px;color:var(--text-muted);font-size:.9rem;line-height:1.6;text-align:center;}
+.code-end-edit-shell-v15 label{display:block;margin-bottom:7px;font-weight:800;color:var(--text-primary);}
+.code-end-edit-shell-v15 label span{font-size:.78em;color:var(--text-muted);font-weight:700;margin-inline-start:5px;}
+.code-end-edit-input-v15{width:100%;min-height:46px;padding:10px 12px;border:1px solid var(--border);border-radius:12px;background:var(--bg-secondary);color:var(--text-primary);font-family:inherit;box-sizing:border-box;}
+.code-end-edit-actions-v15{display:flex;gap:8px;flex-wrap:wrap;margin-top:16px;}
+.code-end-edit-actions-v15 .code-action-btn{flex:1 1 140px;min-height:42px;}
 #codeEndEditModalV14{width:min(520px,94vw);max-width:520px;}
 #codeEndEditModalV14{position:fixed!important;pointer-events:auto!important;z-index:300000!important;}
 #codeEndEditModalV14.active{display:block!important;visibility:visible!important;opacity:1!important;pointer-events:auto!important;}
@@ -12156,29 +12167,46 @@ const s=document.createElement('style');s.textContent=`
   function dateTextV12(d,empty='—'){return d?d.toLocaleString('ar-SA',{timeZone:'Asia/Riyadh'}):empty;}
   function ensureCodeEndEditModalV14(){
     let m=$v12('codeEndEditModalV14');
-    if(m)return m;
-    m=document.createElement('div');m.id='codeEndEditModalV14';m.className='edit-modal';
-    m.innerHTML='<button type="button" class="modal-close" id="codeEndEditCloseV14" style="position:static;float:left;font-size:1.5rem;background:none;border:none;color:var(--text-muted);cursor:pointer;">&times;</button><h3>تعديل نهاية الكود</h3><div class="code-end-edit-head-v14"><strong>تاريخ ووقت النهاية</strong><span>اختياري</span></div><input id="codeEndEditInputV14" class="code-end-edit-input-v14" type="datetime-local"><div class="code-end-edit-actions-v14"><button type="button" class="code-action-btn" id="codeEndEditSaveV14">حفظ</button><button type="button" class="code-action-btn" id="codeEndEditClearV14">بدون نهاية</button></div>';
+    if(m) return m;
+    m=document.createElement('div');
+    m.id='codeEndEditModalV14';
+    m.className='ananas-modal code-end-edit-modal-v15';
+    m.setAttribute('role','dialog');
+    m.setAttribute('aria-modal','true');
+    m.innerHTML=`<div class="code-end-edit-shell-v15">
+      <button type="button" class="code-end-edit-close-v15" id="codeEndEditCloseV14" aria-label="إغلاق">×</button>
+      <h3>تعديل نهاية الكود</h3>
+      <p class="code-end-edit-note-v15">يمكنك تحديد تاريخ ووقت انتهاء للكود، أو إزالة النهاية ليصبح الكود مفتوحًا.</p>
+      <label for="codeEndEditInputV14">تاريخ ووقت النهاية <span>اختياري</span></label>
+      <input id="codeEndEditInputV14" class="code-end-edit-input-v15" type="datetime-local">
+      <div class="code-end-edit-actions-v15">
+        <button type="button" class="code-action-btn" id="codeEndEditSaveV14">حفظ</button>
+        <button type="button" class="code-action-btn secondary" id="codeEndEditClearV14">بدون نهاية</button>
+        <button type="button" class="code-action-btn secondary" id="codeEndEditCancelV15">إلغاء</button>
+      </div>
+    </div>`;
     document.body.appendChild(m);
-    $v12('codeEndEditCloseV14')?.addEventListener('click',()=>m.classList.remove('active'));
+    const close=()=>{m.classList.remove('active');m.style.display='none';};
+    $v12('codeEndEditCloseV14')?.addEventListener('click',close);
+    $v12('codeEndEditCancelV15')?.addEventListener('click',close);
     $v12('codeEndEditSaveV14')?.addEventListener('click',async()=>{
       const courseId=m.dataset.courseId,codeId=m.dataset.codeId,input=$v12('codeEndEditInputV14'),btn=$v12('codeEndEditSaveV14');
       if(!courseId||!codeId||!input)return;
-      const raw=input.value||'';let endDate=null;
+      const raw=input.value||''; let endDate=null;
       if(raw){endDate=new Date(raw);if(isNaN(endDate.getTime())||endDate.getTime()<=Date.now())return showCustomAlert?.('تنبيه','وقت النهاية يجب أن يكون في المستقبل.');}
-      try{btn.disabled=true;await codeRefV12(courseId,codeId).update({endTime:endDate?firebase.firestore.Timestamp.fromDate(endDate):null,updatedAt:firebase.firestore.FieldValue.serverTimestamp(),updatedBy:currentUser?.uid||null});m.classList.remove('active');await window.loadCodesForCourse(courseId);await window.__codeDetail(courseId,codeId);showCustomAlert?.('تم الحفظ',endDate?'تم تحديث نهاية الكود.':'تم جعل الكود بدون تاريخ نهاية.');}
+      try{btn.disabled=true;await codeRefV12(courseId,codeId).update({endTime:endDate?firebase.firestore.Timestamp.fromDate(endDate):null,updatedAt:firebase.firestore.FieldValue.serverTimestamp(),updatedBy:currentUser?.uid||null});close();await window.loadCodesForCourse(courseId);await window.__codeDetail(courseId,codeId);showCustomAlert?.('تم الحفظ',endDate?'تم تحديث نهاية الكود.':'تم جعل الكود بدون تاريخ نهاية.');}
       catch(e){showCustomAlert?.('خطأ','تعذر تعديل نهاية الكود: '+e.message);}finally{btn.disabled=false;}
     });
     $v12('codeEndEditClearV14')?.addEventListener('click',async()=>{
       const courseId=m.dataset.courseId,codeId=m.dataset.codeId,btn=$v12('codeEndEditClearV14');
       if(!courseId||!codeId)return;
-      try{btn.disabled=true;await codeRefV12(courseId,codeId).update({endTime:null,updatedAt:firebase.firestore.FieldValue.serverTimestamp(),updatedBy:currentUser?.uid||null});m.classList.remove('active');await window.loadCodesForCourse(courseId);await window.__codeDetail(courseId,codeId);showCustomAlert?.('تم الحفظ','تمت إزالة تاريخ نهاية الكود.');}
+      try{btn.disabled=true;await codeRefV12(courseId,codeId).update({endTime:null,updatedAt:firebase.firestore.FieldValue.serverTimestamp(),updatedBy:currentUser?.uid||null});close();await window.loadCodesForCourse(courseId);await window.__codeDetail(courseId,codeId);showCustomAlert?.('تم الحفظ','تمت إزالة تاريخ نهاية الكود.');}
       catch(e){showCustomAlert?.('خطأ','تعذر إزالة نهاية الكود: '+e.message);}finally{btn.disabled=false;}
     });
     return m;
   }
   function openCodeEndEditV14(courseId,codeId,endValue){
-    const m=ensureCodeEndEditModalV14();m.dataset.courseId=courseId;m.dataset.codeId=codeId;const input=$v12('codeEndEditInputV14');if(input)input.value=endValue||'';m.classList.add('active');window.__aaRaiseModalV14?.(m);setTimeout(()=>input?.focus(),30);
+    const m=ensureCodeEndEditModalV14();m.dataset.courseId=courseId;m.dataset.codeId=codeId;const input=$v12('codeEndEditInputV14');if(input)input.value=endValue||'';m.style.display='flex';m.classList.add('active');m.style.zIndex=String(Math.max(320000,(window.__aaModalStackV14||0)+1));window.__aaModalStackV14=(Number(window.__aaModalStackV14)||320000)+1;setTimeout(()=>input?.focus(),30);
   }
 
   // One delegated handler only: the details card is rebuilt dynamically, so the button itself must not own a fragile listener.
