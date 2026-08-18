@@ -3235,7 +3235,7 @@ label[for*="En"], input[id*="En"], textarea[id*="En"] { display:none !important;
 
         async function recalculateCourseDuration(courseId, options = {}) {
             if (!courseId) return { lessons: 0, totalMinutes: 0, hours: 0 };
-            const snap = await db.collection('courses').doc(courseId).collection('lessons').get();
+            const snap = await window.__aaGetCourseCollectionSnapshot(courseId,'lessons');
             let totalMinutes = 0;
             let lessonCount = 0;
             snap.forEach(d => {
@@ -3715,7 +3715,7 @@ label[for*="En"], input[id*="En"], textarea[id*="En"] { display:none !important;
                 try { sessionStorage.setItem('ananas_courses_cache', JSON.stringify({at:Date.now(),data:coursesData})); } catch(e) {}
             }).catch(e => console.warn('تعذر تحديث مدة الدورة مباشرة:', courseId, e));
             try {
-                const quizCountSnap = await db.collection('courses').doc(courseId).collection('quizzes').get();
+                const quizCountSnap = await window.__aaGetCourseCollectionSnapshot(courseId,'quizzes');
                 const liveQuizCount = quizCountSnap.docs.filter(d => d.data()?.deleted !== true).length;
                 document.getElementById('ovQuizzes').textContent = liveQuizCount;
                 if (Number(course.quizzes) !== liveQuizCount) {
@@ -3942,7 +3942,7 @@ label[for*="En"], input[id*="En"], textarea[id*="En"] { display:none !important;
             }
             try {
                 const results = await Promise.allSettled([
-                    db.collection('courses').doc(courseId).collection('quizzes').get(),
+                    window.__aaGetCourseCollectionSnapshot(courseId,'quizzes'),
                     currentUser ? db.collection('userStats').doc(currentUser.uid).collection('completedQuizzes').get() : Promise.resolve(null)
                 ]);
                 if(results[0].status!=='fulfilled') throw results[0].reason;
@@ -4004,8 +4004,7 @@ label[for*="En"], input[id*="En"], textarea[id*="En"] { display:none !important;
             }
 
             try {
-                const ref = db.collection('courses').doc(String(courseId)).collection('assignments');
-                const snap = await ref.get();
+                const snap = await window.__aaGetCourseCollectionSnapshot(courseId,'assignments');
 
                 /* Read every assignment document. Only an explicit boolean deleted=true removes it. */
                 const docs = snap.docs
@@ -4469,6 +4468,8 @@ label[for*="En"], input[id*="En"], textarea[id*="En"] { display:none !important;
                     await recalculateCourseDuration(activeCourseId, { render: false });
                     
                     document.getElementById('addLessonModal').classList.remove('active');
+                    window.__aaInvalidateCourseReadCache?.(activeCourseId,'lessons');
+                    window.__aaInvalidateCourseReadCache?.(activeCourseId,'assignments');
                     loadLessonsForCourse(activeCourseId);
                     loadCourses(true); // Update list stats
                     window.saveLesson = originalSave;
@@ -4562,6 +4563,8 @@ label[for*="En"], input[id*="En"], textarea[id*="En"] { display:none !important;
 
                 await recalculateCourseDuration(courseId, { render: false });
                 document.getElementById('addLessonModal').classList.remove('active');
+                window.__aaInvalidateCourseReadCache?.(courseId,'lessons');
+                window.__aaInvalidateCourseReadCache?.(courseId,'assignments');
                 loadLessonsForCourse(courseId);
                 window.saveLesson = originalSave;
                 showCustomAlert('تم التعديل', 'تم تعديل الحصة بنجاح!');
@@ -4581,6 +4584,8 @@ label[for*="En"], input[id*="En"], textarea[id*="En"] { display:none !important;
                 await recalculateCourseDuration(courseId, { render: false });
                 document.querySelector(`#lessonsCardsContainer .lesson-card[data-id="${lessonId}"]`)?.remove();
                 if(!document.querySelector('#lessonsCardsContainer .lesson-card')) document.getElementById('lessonsCardsContainer').innerHTML='<p style="color:var(--text-muted);text-align:center;grid-column:1/-1;padding:50px;">لا توجد حصص مضافة بعد.</p>';
+                window.__aaInvalidateCourseReadCache?.(courseId,'lessons');
+                window.__aaInvalidateCourseReadCache?.(courseId,'assignments');
                 loadLessonsForCourse(courseId);
                 loadCourses();
                 showCustomAlert('تم الحذف', 'تم حذف الحصة.');
@@ -4707,13 +4712,7 @@ label[for*="En"], input[id*="En"], textarea[id*="En"] { display:none !important;
             const container=document.getElementById('lessonsCardsContainer'),sidebar=document.getElementById('lessonPlayerList'); if(!container||!courseId)return;
             if(!container.querySelector('.lesson-card')&&!container.dataset.loaded){container.innerHTML='<div style="display:flex;justify-content:center;align-items:center;gap:10px;padding:45px;color:var(--text-muted);grid-column:1/-1;"><span class="mini-spin" style="display:inline-block;width:22px;height:22px;border-radius:50%;border:3px solid var(--border);border-top-color:var(--accent1);animation:spin 1s linear infinite;"></span><span>جاري تحميل الحصص...</span></div>';}
             try{
-                let snap;
-                try {
-                    snap=await db.collection('courses').doc(courseId).collection('lessons').orderBy('order','asc').get();
-                } catch(orderErr) {
-                    console.warn('Lessons order query failed, using fallback:', orderErr);
-                    snap=await db.collection('courses').doc(courseId).collection('lessons').get();
-                }
+                const snap=await window.__aaGetCourseCollectionSnapshot(courseId,'lessons');
                 const docs=snap.docs.filter(d=>d.data()?.deleted!==true).slice().sort((a,b)=>{
                     const ao=Number(a.data()?.order); const bo=Number(b.data()?.order);
                     if(Number.isFinite(ao)&&Number.isFinite(bo)&&ao!==bo)return ao-bo;
@@ -4724,17 +4723,19 @@ label[for*="En"], input[id*="En"], textarea[id*="En"] { display:none !important;
                 lessonListCache=newCache;document.getElementById('lessonSidebarCount').textContent=`${Math.max(0,newCache.length)} حصة`;
                 const completedMap={};
                 if(currentUser){
-                    const completedSnap=await db.collection('users').doc(currentUser.uid).collection('completedLessons').get();
-                    completedSnap.forEach(d=>completedMap[d.id]=true);
-                    try{
-                        const progressSnap=await db.collection('users').doc(currentUser.uid).collection('courseProgress').doc(courseId).collection('lessons').get();
+                    const [completedSnap,progressSnap]=await Promise.all([
+                        db.collection('users').doc(currentUser.uid).collection('completedLessons').get().catch(()=>null),
+                        db.collection('users').doc(currentUser.uid).collection('courseProgress').doc(courseId).collection('lessons').get().catch(()=>null)
+                    ]);
+                    completedSnap?.forEach(d=>completedMap[d.id]=true);
+                    if(progressSnap){
                         window.lessonProgressCache = window.lessonProgressCache || {};
                         progressSnap.forEach(d=>{
                             const pd=d.data()||{};
                             const pct=Number(pd.percent||pd.progress||0);
                             window.lessonProgressCache[d.id]={percent:pct,position:Number(pd.lastPosition||0),duration:Number(pd.duration||0)};
                         });
-                    }catch(progressErr){console.warn('تعذر قراءة تقدم الحصص:',progressErr);}
+                    }
                 }
                 if(!newCache.length){container.innerHTML='<p style="color:var(--text-muted);text-align:center;grid-column:1/-1;padding:50px;">لا توجد حصص مضافة بعد.</p>';if(sidebar)sidebar.innerHTML='';container.dataset.loaded='1';return;}
                 const fragment=document.createDocumentFragment();
@@ -5921,7 +5922,7 @@ label[for*="En"], input[id*="En"], textarea[id*="En"] { display:none !important;
             const t = translations[currentLang] || translations['ar'] || {};
             container.innerHTML = `<h4 style="margin-bottom:15px; font-weight:700;">${t.quizzesTitle || 'Course Quizzes'}</h4>`;
             try {
-                const snap = await db.collection('courses').doc(courseId).collection('quizzes').get();
+                const snap = await window.__aaGetCourseCollectionSnapshot(courseId,'quizzes');
                 if(snap.empty) {
                     container.innerHTML += `<div style="color:var(--text-muted);">لا توجد اختبارات مضافة بعد.</div>`;
                     return;
@@ -6220,6 +6221,7 @@ label[for*="En"], input[id*="En"], textarea[id*="En"] { display:none !important;
                     titleAr, titleEn: titleAr, lessonId, questions: finalQuestions
                 });
                 document.getElementById('addQuizModal').classList.remove('active');
+                window.__aaInvalidateCourseReadCache?.(courseId,'quizzes');
                 loadQuizzesForCourse(courseId);
                 loadQuizzesPage(courseId);
                 window.saveQuiz = originalSave;
@@ -6235,6 +6237,7 @@ label[for*="En"], input[id*="En"], textarea[id*="En"] { display:none !important;
                 document.querySelector(`#fullPageQuizzesContainer .quiz-full-card[data-id="${quizId}"]`)?.remove();
                 if(!document.querySelector('#fullPageQuizzesContainer .quiz-full-card')) document.getElementById('fullPageQuizzesContainer').innerHTML='<div style="color:var(--text-muted);text-align:center;padding:60px 20px;">لا توجد اختبارات مضافة بعد.</div>';
                 await db.collection('courses').doc(courseId).update({quizzes: firebase.firestore.FieldValue.increment(-1)});
+                window.__aaInvalidateCourseReadCache?.(courseId,'quizzes');
                 loadQuizzesForCourse(courseId);
                 if(activeLessonId) loadQuizzesForLesson(courseId, activeLessonId);
                 loadCourses();
@@ -6252,7 +6255,9 @@ label[for*="En"], input[id*="En"], textarea[id*="En"] { display:none !important;
             listContainer.className = 'lesson-quizzes-list';
             listContainer.innerHTML = '<h4 style="margin-bottom:10px;">الاختبارات المرتبطة بهذه الحصة</h4>';
             try {
-                const snap = await db.collection('courses').doc(courseId).collection('quizzes').where('lessonId', '==', lessonId).get();
+                const allQuizSnap = await window.__aaGetCourseCollectionSnapshot(courseId,'quizzes');
+                const matchedDocs = allQuizSnap.docs.filter(d=>(d.data()||{}).deleted!==true && String(d.data()?.lessonId||'')===String(lessonId));
+                const snap = {empty:matchedDocs.length===0,docs:matchedDocs};
                 if(snap.empty) { 
                     listContainer.innerHTML += `<p style="color:var(--text-muted);">لا توجد اختبارات مرتبطة.</p>`; 
                     container.appendChild(listContainer);
@@ -6276,7 +6281,7 @@ label[for*="En"], input[id*="En"], textarea[id*="En"] { display:none !important;
             const select=document.getElementById('addQuizLessonId'); if(!select)return;
             select.innerHTML='<option value="">بدون حصة</option>';
             try{
-                const snap=await db.collection('courses').doc(courseId).collection('lessons').orderBy('order','asc').get();
+                const snap=await window.__aaGetCourseCollectionSnapshot(courseId,'lessons');
                 snap.forEach(d=>{const l=d.data()||{};const opt=document.createElement('option');opt.value=d.id;opt.textContent=l.titleAr || 'حصة';if(String(d.id)===String(selectedId))opt.selected=true;select.appendChild(opt);});
             }catch(e){console.error('populate quiz lessons',e);}
         }
@@ -6364,6 +6369,7 @@ label[for*="En"], input[id*="En"], textarea[id*="En"] { display:none !important;
                     });
                     
                     document.getElementById('addQuizModal').classList.remove('active');
+                    window.__aaInvalidateCourseReadCache?.(activeCourseId,'quizzes');
                     loadQuizzesForCourse(activeCourseId);
                     loadQuizzesPage(activeCourseId);
                     if(activeLessonId) loadQuizzesForLesson(activeCourseId, activeLessonId);
@@ -6441,7 +6447,7 @@ label[for*="En"], input[id*="En"], textarea[id*="En"] { display:none !important;
             const t = translations[currentLang] || translations['ar'] || {};
             container.innerHTML = `<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;"><h4 style="font-weight:700; margin:0;">الواجبات والتصاميم</h4></div>`;
             try {
-                const snap = await db.collection('courses').doc(courseId).collection('assignments').get();
+                const snap = await window.__aaGetCourseCollectionSnapshot(courseId,'assignments');
                 const liveAssignmentDocs=snap.docs.filter(d=>d.data()?.deleted!==true).sort((a,b)=>{const av=a.data()?.createdAt;const bv=b.data()?.createdAt;const am=typeof av?.toMillis==='function'?av.toMillis():(av?Date.parse(av):0);const bm=typeof bv?.toMillis==='function'?bv.toMillis():(bv?Date.parse(bv):0);return bm-am;});
                 if(!liveAssignmentDocs.length) {
                     container.innerHTML += `<p style="color:var(--text-muted);">لا توجد واجبات مضافة بعد.</p>`;
@@ -6529,6 +6535,7 @@ label[for*="En"], input[id*="En"], textarea[id*="En"] { display:none !important;
                                     })
                                 });
                                 statusEl.textContent = 'تم الرفع بنجاح!';
+                                window.__aaInvalidateCourseReadCache?.(courseId,'assignments');
                                 loadAssignmentsForCourse(courseId);
                                 loadAssignmentsPage(courseId);
                             } else {
@@ -6546,6 +6553,7 @@ label[for*="En"], input[id*="En"], textarea[id*="En"] { display:none !important;
                 await db.collection('courses').doc(courseId).collection('assignments').doc(assignId).delete();
                 document.querySelector(`#fullPageAssignmentsContainer .assignment-full-card[data-id="${assignId}"]`)?.remove();
                 if(!document.querySelector('#fullPageAssignmentsContainer .assignment-full-card')) document.getElementById('fullPageAssignmentsContainer').innerHTML='<p style="color:var(--text-muted);text-align:center;padding:60px 20px;">لا توجد واجبات مضافة بعد.</p>';
+                window.__aaInvalidateCourseReadCache?.(courseId,'assignments');
                 loadAssignmentsForCourse(courseId);
             });
         };
@@ -6598,6 +6606,7 @@ label[for*="En"], input[id*="En"], textarea[id*="En"] { display:none !important;
                     };
                     await db.collection('courses').doc(activeCourseId).collection('assignments').add(assignData);
                     document.getElementById('addAssignmentModal').classList.remove('active');
+                    window.__aaInvalidateCourseReadCache?.(activeCourseId,'assignments');
                     loadAssignmentsForCourse(activeCourseId);
                     loadAssignmentsPage(activeCourseId);
                     window.saveAssignment = originalSave;
@@ -6863,7 +6872,7 @@ label[for*="En"], input[id*="En"], textarea[id*="En"] { display:none !important;
             if (!isAdmin || !activeCourseId) return showCustomAlert('غير مسموح','هذه العملية للمشرف فقط.');
             try {
                 const ref = db.collection('courses').doc(activeCourseId).collection('codes').doc(codeId);
-                const snap = await ref.get();
+                const snap = await window.__aaGetCourseCollectionSnapshot(courseId,'assignments');
                 if (!snap.exists) return showCustomAlert('خطأ','الكود غير موجود.');
                 const data = snap.data() || {};
                 const blocked = Array.isArray(data.blockedUsers) ? data.blockedUsers : [];
@@ -7987,7 +7996,6 @@ label[for*="En"], input[id*="En"], textarea[id*="En"] { display:none !important;
   const repairCourseLessonCount = async (courseId) => {
     if(!courseId) return;
     try {
-      const snap = await db.collection('courses').doc(courseId).collection('lessons').get();
       const result = await recalculateCourseDuration(courseId, { render: false });
       const course = coursesData?.find(c=>c.id===courseId);
       if(course){ course.lessons=result.lessons; course.totalMinutes=result.totalMinutes; course.hours=result.hours; }
@@ -10450,6 +10458,8 @@ async function authoritativeLiveProfile(uid){
   const emptySnap={docs:[],empty:true};
   const num=v=>{const n=Number(v);return Number.isFinite(n)?n:0;};
   const isLiveDoc=d=>d && d.data?.().deleted!==true;
+
+  /* Initial top-level reads stay parallel. */
   const [coursesSnap,completedLessons,completedQuizzes,completedAssignments,enrolled,portfolioSnap]=await Promise.all([
     db.collection('courses').get().catch(()=>emptySnap),
     db.collection('users').doc(uid).collection('completedLessons').get().catch(()=>emptySnap),
@@ -10458,21 +10468,28 @@ async function authoritativeLiveProfile(uid){
     db.collection('users').doc(uid).collection('enrolledCourses').get().catch(()=>emptySnap),
     db.collection('users').doc(uid).collection('portfolioWorks').get().catch(()=>emptySnap)
   ]);
+
   const liveCourseDocs=coursesSnap.docs.filter(isLiveDoc);
   const courseMap=new Map(liveCourseDocs.map(d=>[d.id,d]));
   const completedLessonMap=new Map(completedLessons.docs.map(d=>[d.id,{id:d.id,...(d.data()||{})}]));
   const completedQuizMap=new Map(completedQuizzes.docs.map(d=>[d.id,{id:d.id,...(d.data()||{})}]));
   const completedAssignmentMap=new Map(completedAssignments.docs.map(d=>[d.id,{id:d.id,...(d.data()||{})}]));
 
-  /* Current courses only. Progress history is preserved in user ledgers, but it is displayed only while its course/item still exists. */
-  for(const courseDoc of liveCourseDocs){
+  /* Fan out every course's lessons/quizzes/assignments in parallel instead of waiting
+     for each course before starting the next one. This removes the N-course waterfall. */
+  const coursePayloads=await Promise.all(liveCourseDocs.map(async courseDoc=>{
+    const [lessonSnap,quizSnap,assignmentSnap]=await Promise.all([
+      window.__aaGetCourseCollectionSnapshot?.(courseDoc.id,'lessons') || courseDoc.ref.collection('lessons').get().catch(()=>emptySnap),
+      window.__aaGetCourseCollectionSnapshot?.(courseDoc.id,'quizzes') || courseDoc.ref.collection('quizzes').get().catch(()=>emptySnap),
+      window.__aaGetCourseCollectionSnapshot?.(courseDoc.id,'assignments') || courseDoc.ref.collection('assignments').get().catch(()=>emptySnap)
+    ]);
+    return {courseDoc,lessonSnap:lessonSnap||emptySnap,quizSnap:quizSnap||emptySnap,assignmentSnap:assignmentSnap||emptySnap};
+  }));
+
+  for(const payload of coursePayloads){
+    const {courseDoc,lessonSnap,quizSnap,assignmentSnap}=payload;
     const course={id:courseDoc.id,...(courseDoc.data()||{})};
     const courseTitle=course.titleAr||course.title||'دورة';
-    const [lessonSnap,quizSnap,assignmentSnap]=await Promise.all([
-      courseDoc.ref.collection('lessons').get().catch(()=>emptySnap),
-      courseDoc.ref.collection('quizzes').get().catch(()=>emptySnap),
-      courseDoc.ref.collection('assignments').get().catch(()=>emptySnap)
-    ]);
     const liveLessonDocs=lessonSnap.docs.filter(isLiveDoc);
     const liveQuizDocs=quizSnap.docs.filter(isLiveDoc);
     const liveAssignmentDocs=assignmentSnap.docs.filter(isLiveDoc);
@@ -10491,7 +10508,7 @@ async function authoritativeLiveProfile(uid){
     for(const [quizId,completion] of completedQuizMap){
       const doc=quizMap.get(quizId); if(!doc)continue;
       const quiz={id:doc.id,...(doc.data()||{})};
-      const calculated=Array.isArray(quiz.questions)?quiz.questions.reduce((s,q)=>s+num(q?.xpReward),0):num(quiz.xpReward);
+      const calculated=Array.isArray(quiz.questions)?quiz.questions.reduce((sum,q)=>sum+num(q?.xpReward),0):num(quiz.xpReward);
       const earned=completion.xpEarned!==undefined?num(completion.xpEarned):calculated;
       out.quizzes.push({id:quizId,courseId:course.id,courseTitle,title:quiz.titleAr||quiz.title||'اختبار',passedAt:completion.passedAt||completion.completedAt||completion.completed_at,score:num(completion.score),xpEarned:earned});
       out.xp+=earned;
@@ -10499,79 +10516,64 @@ async function authoritativeLiveProfile(uid){
 
     for(const assignmentDoc of liveAssignmentDocs){
       const a=assignmentDoc.data()||{};
-      const submissions=(Array.isArray(a.submissions)?a.submissions:[]).filter(s=>s && s.deleted!==true && s.userId===uid);
+      const submissions=(Array.isArray(a.submissions)?a.submissions:[]).filter(s=>s&&s.deleted!==true&&s.userId===uid);
       let awarded=false;
       for(let i=0;i<submissions.length;i++){
-        const s=submissions[i];
-        const images=Array.isArray(s.images)&&s.images.length?s.images.filter(Boolean):(s.imageUrl?[s.imageUrl]:Array.isArray(s.imageUrls)?s.imageUrls.filter(Boolean):[]);
-        const workId=String(s.workId||s.id||`legacy_${assignmentDoc.id}_${i}`);
-        out.assignmentWorks.push({id:workId,workId,assignmentId:assignmentDoc.id,courseId:course.id,title:a.titleAr||a.title||'واجب',assignmentTitle:a.titleAr||a.title||'واجب',courseTitle,approved:!!s.approved,xpGranted:!!s.xpGranted,images,uploadedAt:s.uploadedAt,userId:uid,userName:s.userName||'',userPhoto:s.userPhoto||''});
-        if(!awarded && s.approved && s.xpGranted){
-          /* Only use submission XP as fallback when no authoritative completion ledger exists. */
-          if(!completedAssignmentMap.has(assignmentDoc.id)) out.xp+=num(a.xpReward);
+        const sub=submissions[i];
+        const images=Array.isArray(sub.images)&&sub.images.length?sub.images.filter(Boolean):(sub.imageUrl?[sub.imageUrl]:Array.isArray(sub.imageUrls)?sub.imageUrls.filter(Boolean):[]);
+        const workId=String(sub.workId||sub.id||`legacy_${assignmentDoc.id}_${i}`);
+        out.assignmentWorks.push({id:workId,workId,assignmentId:assignmentDoc.id,courseId:course.id,title:a.titleAr||a.title||'واجب',assignmentTitle:a.titleAr||a.title||'واجب',courseTitle,approved:!!sub.approved,xpGranted:!!sub.xpGranted,images,uploadedAt:sub.uploadedAt,userId:uid,userName:sub.userName||'',userPhoto:sub.userPhoto||''});
+        if(!awarded&&sub.approved&&sub.xpGranted){
+          if(!completedAssignmentMap.has(assignmentDoc.id))out.xp+=num(a.xpReward);
           awarded=true;
         }
       }
       const ledger=completedAssignmentMap.get(assignmentDoc.id);
       if(ledger){
         const ledgerXp=ledger.xpEarned!==undefined?num(ledger.xpEarned):num(a.xpReward);
-        /* The ledger is authoritative and replaces the submission fallback. */
-        if(ledgerXp>0){
-          const fallbackSubmission=submissions.some(s=>s.approved&&s.xpGranted);
-          if(fallbackSubmission){ /* fallback was intentionally skipped above */ }
-          out.xp+=ledgerXp;
-        }
+        if(ledgerXp>0)out.xp+=ledgerXp;
       }
     }
   }
 
   out.portfolio=portfolioSnap.docs.map(d=>({id:d.id,...(d.data()||{})})).filter(x=>x.deleted!==true);
 
-  /* Current active subscriptions only. Students also receive the linked code end date for profile display. */
+  /* Active subscriptions: perform code checks in parallel per enrollment. */
   const activeCourseRows=[];
-  const isAdminSelf=!!(isAdmin && currentUser?.uid && String(currentUser.uid)===String(uid));
+  const isAdminSelf=!!(isAdmin&&currentUser?.uid&&String(currentUser.uid)===String(uid));
   if(isAdminSelf){
-    /* The admin is automatically available in every live course, with no subscription start/end dates. */
     for(const courseDoc of liveCourseDocs){
       const c=courseDoc.data()||{};
-      activeCourseRows.push({
-        id:courseDoc.id,
-        titleAr:c.titleAr||c.title||'دورة',
-        title:c.titleAr||c.title||'دورة',
-        isAdminEnrollment:true,
-        enrolledAt:null,
-        codeEndAt:null
-      });
+      activeCourseRows.push({id:courseDoc.id,titleAr:c.titleAr||c.title||'دورة',title:c.titleAr||c.title||'دورة',isAdminEnrollment:true,enrolledAt:null,codeEndAt:null});
     }
   }else{
-    for(const d of enrolled.docs){
+    const enrollmentResults=await Promise.all(enrolled.docs.map(async d=>{
       const e=d.data()||{};
-      if(e.enrollmentActive===false || e.active===false)continue;
-      const courseDoc=courseMap.get(d.id); if(!courseDoc)continue;
-      let active=true;
+      if(e.enrollmentActive===false||e.active===false)return null;
+      const courseDoc=courseMap.get(d.id); if(!courseDoc)return null;
       let codeId=String(e.codeId||'');
-      let codeEndAt=null;
-      if(!codeId && e.codeUsed){
+      if(!codeId&&e.codeUsed){
         const legacy=await courseDoc.ref.collection('codes').where('code','==',String(e.codeUsed)).limit(1).get().catch(()=>null);
-        if(legacy && !legacy.empty)codeId=legacy.docs[0].id; else if(legacy && legacy.empty)active=false;
+        if(legacy&&!legacy.empty)codeId=legacy.docs[0].id; else return null;
       }
-      if(codeId && active){
+      let codeEndAt=null;
+      if(codeId){
         const codeSnap=await courseDoc.ref.collection('codes').doc(codeId).get().catch(()=>null);
-        if(!codeSnap?.exists)active=false;
-        else{
-          const c=codeSnap.data()||{};
-          const now=Date.now();
-          const endDate=c.endTime?.toDate?c.endTime.toDate():(c.endTime?new Date(c.endTime):null);
-          const end=Number.isFinite(endDate?.getTime?.())?endDate.getTime():0;
-          const until=c.suspendedUntil?.toDate?c.suspendedUntil.toDate().getTime():new Date(c.suspendedUntil||0).getTime();
-          if(end>0)codeEndAt=endDate;
-          if(end>0&&end<=now)active=false;
-          if(c.disabled===true && (!Number.isFinite(until)||until<=now))active=false;
-          if(c.disabled===true && Number.isFinite(until)&&until>now)active=false;
-        }
+        if(!codeSnap?.exists)return null;
+        const c=codeSnap.data()||{},now=Date.now();
+        const endDate=c.endTime?.toDate?c.endTime.toDate():(c.endTime?new Date(c.endTime):null);
+        const end=Number.isFinite(endDate?.getTime?.())?endDate.getTime():0;
+        const until=c.suspendedUntil?.toDate?c.suspendedUntil.toDate().getTime():new Date(c.suspendedUntil||0).getTime();
+        if(end>0)codeEndAt=endDate;
+        if(end>0&&end<=now)return null;
+        if(c.disabled===true)return null;
+        if(c.suspendedUntil && Number.isFinite(until) && until>now)return null;
+        if(c.suspendedUntil && Number.isFinite(until) && until<=now){}
       }
-      if(active){const courseData=courseDoc.data()||{};activeCourseRows.push({id:d.id,...e,titleAr:courseData.titleAr||courseData.title||'دورة',title:courseData.titleAr||courseData.title||'دورة',codeEndAt});}
-    }
+      const courseData=courseDoc.data()||{};
+      return {id:d.id,...e,titleAr:courseData.titleAr||courseData.title||'دورة',title:courseData.titleAr||courseData.title||'دورة',codeEndAt};
+    }));
+    enrollmentResults.filter(Boolean).forEach(row=>activeCourseRows.push(row));
   }
   out.courses=activeCourseRows;
   return out;
@@ -14523,7 +14525,7 @@ body.light-mode #lessonVideoWrapper .aa-speed-value{color:#172033!important;}
 })();
 </script>
 
-<style id="aa-mobile-lesson-layout-v18">
+<style id="aa-mobile-lesson-layout-v17">
 @media (max-width: 768px){
   #courseDetailView #courseLessonPlayerPage .lesson-player-layout{
     display:flex !important;
@@ -14535,38 +14537,19 @@ body.light-mode #lessonVideoWrapper .aa-speed-value{color:#172033!important;}
     flex-direction:column !important;
     order:1 !important;
     width:100% !important;
-    overflow:visible !important;
   }
-
-  /* Final mobile order: video -> lesson info -> quick actions -> completion card. */
+  /* Required mobile order: video -> quick actions -> completion card -> lesson info. */
   #courseDetailView #courseLessonPlayerPage #lessonVideoWrapper{order:1 !important;}
-  #courseDetailView #courseLessonPlayerPage #lessonPlayerTitleBlock{order:2 !important;}
-  #courseDetailView #courseLessonPlayerPage #lessonRelatedActions{
-    order:3 !important;
-    width:100% !important;
-  }
-  #courseDetailView #courseLessonPlayerPage #lessonCompletionStatus{
-    order:4 !important;
-    display:block !important;
-    position:static !important;
-    float:none !important;
-    width:100% !important;
-    max-width:none !important;
-    margin:8px 0 14px !important;
-    box-sizing:border-box !important;
-    flex:0 0 auto !important;
-  }
-
-  /* The standalone note is redundant; the status card is the single source on touch screens. */
+  #courseDetailView #courseLessonPlayerPage #lessonRelatedActions{order:2 !important;}
+  #courseDetailView #courseLessonPlayerPage #lessonCompletionStatus{order:3 !important;}
+  #courseDetailView #courseLessonPlayerPage #lessonPlayerTitleBlock{order:4 !important;}
+  /* The standalone note duplicates the first-view/completed status card; keep the card as the single source on touch screens. */
   #courseDetailView #courseLessonPlayerPage .lesson-player-note{display:none !important;}
-
-  /* The lesson list remains a fixed panel; only its contents scroll. */
   #courseDetailView #courseLessonPlayerPage .lesson-player-sidebar{
-    order:5 !important;
+    order:2 !important;
     width:100% !important;
     flex:0 0 auto !important;
     max-height:none !important;
-    height:auto !important;
     overflow:hidden !important;
     border-top:1px solid var(--border) !important;
     border-inline:0 !important;
@@ -14641,6 +14624,40 @@ body.light-mode #lessonVideoWrapper .aa-speed-value{color:#172033!important;}
     forceAssignmentsShell(cid);
     window.loadAssignmentsPage?.(cid);
   },true);
+})();
+</script>
+
+<script id="aa-performance-final-v1">
+(function(){
+  'use strict';
+  /* Lightweight course-subcollection cache.
+     - Deduplicates concurrent reads (the main cause of repeated page-open latency).
+     - Keeps a very short 2.5s freshness window so repeated navigation feels instant
+       without turning the UI into a stale cache.
+  */
+  const TTL=2500;
+  const store=window.__aaCourseReadCache=window.__aaCourseReadCache||new Map();
+  function key(courseId,collection){return `${String(courseId)}::${collection}`;}
+  window.__aaInvalidateCourseReadCache=function(courseId,collection){
+    if(courseId==null)return;
+    if(collection)store.delete(key(courseId,collection));
+    else ['lessons','quizzes','assignments'].forEach(c=>store.delete(key(courseId,c)));
+  };
+  window.__aaGetCourseCollectionSnapshot=function(courseId,collection,force=false){
+    const k=key(courseId,collection), now=Date.now(), hit=store.get(k);
+    if(!force && hit){
+      if(hit.promise)return hit.promise;
+      if(hit.snap && now-hit.time<TTL)return Promise.resolve(hit.snap);
+    }
+    const ref=db.collection('courses').doc(String(courseId)).collection(collection);
+    const promise=ref.get().then(snap=>{
+      store.set(k,{snap,time:Date.now()});
+      return snap;
+    }).catch(err=>{store.delete(k);throw err;});
+    store.set(k,{promise,time:now});
+    return promise;
+  };
+
 })();
 </script>
 </body>
