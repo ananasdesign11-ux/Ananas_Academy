@@ -12006,12 +12006,14 @@ const s=document.createElement('style');s.textContent=`
 .code-card-v12-wrap{display:grid;gap:7px;}
 #codeDetailModalV12{width:min(720px,95vw);max-height:90vh;overflow-y:auto;}
 .code-detail-actions-v12{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 12px;}
-.code-detail-end-editor-v12{padding:12px;border:1px solid var(--border);border-radius:16px;background:var(--bg-secondary);margin-bottom:12px;}
-.code-detail-end-head-v12{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px;}
-.code-detail-end-head-v12 span{font-size:.72rem;color:var(--text-muted);background:rgba(108,92,231,.08);padding:4px 8px;border-radius:999px;}
-.code-detail-end-row-v12{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:8px;align-items:center;}
-.code-detail-end-row-v12 input{width:100%;min-width:0;padding:10px 12px;border:1px solid var(--border);border-radius:12px;background:var(--bg-card);color:var(--text-primary);font-family:inherit;}
-@media(max-width:600px){.code-detail-end-row-v12{grid-template-columns:1fr 1fr;}.code-detail-end-row-v12 input{grid-column:1/-1;}}
+.code-detail-end-edit-btn-v14{min-width:0;}
+#codeEndEditModalV14{width:min(520px,94vw);max-width:520px;}
+#codeEndEditModalV14 .code-end-edit-head-v14{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px;}
+#codeEndEditModalV14 .code-end-edit-head-v14 strong{font-size:1.05rem;}
+#codeEndEditModalV14 .code-end-edit-head-v14 span{font-size:.72rem;color:var(--text-muted);background:rgba(108,92,231,.08);padding:4px 8px;border-radius:999px;}
+#codeEndEditModalV14 .code-end-edit-input-v14{width:100%;padding:11px 12px;border:1px solid var(--border);border-radius:12px;background:var(--bg-card);color:var(--text-primary);font-family:inherit;box-sizing:border-box;}
+#codeEndEditModalV14 .code-end-edit-actions-v14{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;}
+#codeEndEditModalV14 .code-end-edit-actions-v14 .code-action-btn{flex:1;min-width:120px;}
 .code-detail-grid-v12{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;}
 .code-detail-item-v12{padding:12px;border:1px solid var(--border);border-radius:14px;background:var(--bg-secondary);min-width:0;}
 .code-detail-item-v12 strong{display:block;color:var(--text-muted);font-size:.75rem;margin-bottom:5px;}
@@ -12116,6 +12118,32 @@ const s=document.createElement('style');s.textContent=`
     document.body.appendChild(m);return m;
   }
   function dateTextV12(d,empty='—'){return d?d.toLocaleString('ar-SA',{timeZone:'Asia/Riyadh'}):empty;}
+  function ensureCodeEndEditModalV14(){
+    let m=$v12('codeEndEditModalV14');
+    if(m)return m;
+    m=document.createElement('div');m.id='codeEndEditModalV14';m.className='edit-modal';
+    m.innerHTML='<button type="button" class="modal-close" id="codeEndEditCloseV14" style="position:static;float:left;font-size:1.5rem;background:none;border:none;color:var(--text-muted);cursor:pointer;">&times;</button><h3>تعديل نهاية الكود</h3><div class="code-end-edit-head-v14"><strong>تاريخ ووقت النهاية</strong><span>اختياري</span></div><input id="codeEndEditInputV14" class="code-end-edit-input-v14" type="datetime-local"><div class="code-end-edit-actions-v14"><button type="button" class="code-action-btn" id="codeEndEditSaveV14">حفظ</button><button type="button" class="code-action-btn" id="codeEndEditClearV14">بدون نهاية</button></div>';
+    document.body.appendChild(m);
+    $v12('codeEndEditCloseV14')?.addEventListener('click',()=>m.classList.remove('active'));
+    $v12('codeEndEditSaveV14')?.addEventListener('click',async()=>{
+      const courseId=m.dataset.courseId,codeId=m.dataset.codeId,input=$v12('codeEndEditInputV14'),btn=$v12('codeEndEditSaveV14');
+      if(!courseId||!codeId||!input)return;
+      const raw=input.value||'';let endDate=null;
+      if(raw){endDate=new Date(raw);if(isNaN(endDate.getTime())||endDate.getTime()<=Date.now())return showCustomAlert?.('تنبيه','وقت النهاية يجب أن يكون في المستقبل.');}
+      try{btn.disabled=true;await codeRefV12(courseId,codeId).update({endTime:endDate?firebase.firestore.Timestamp.fromDate(endDate):null,updatedAt:firebase.firestore.FieldValue.serverTimestamp(),updatedBy:currentUser?.uid||null});m.classList.remove('active');await window.loadCodesForCourse(courseId);await window.__codeDetail(courseId,codeId);showCustomAlert?.('تم الحفظ',endDate?'تم تحديث نهاية الكود.':'تم جعل الكود بدون تاريخ نهاية.');}
+      catch(e){showCustomAlert?.('خطأ','تعذر تعديل نهاية الكود: '+e.message);}finally{btn.disabled=false;}
+    });
+    $v12('codeEndEditClearV14')?.addEventListener('click',async()=>{
+      const courseId=m.dataset.courseId,codeId=m.dataset.codeId,btn=$v12('codeEndEditClearV14');
+      if(!courseId||!codeId)return;
+      try{btn.disabled=true;await codeRefV12(courseId,codeId).update({endTime:null,updatedAt:firebase.firestore.FieldValue.serverTimestamp(),updatedBy:currentUser?.uid||null});m.classList.remove('active');await window.loadCodesForCourse(courseId);await window.__codeDetail(courseId,codeId);showCustomAlert?.('تم الحفظ','تمت إزالة تاريخ نهاية الكود.');}
+      catch(e){showCustomAlert?.('خطأ','تعذر إزالة نهاية الكود: '+e.message);}finally{btn.disabled=false;}
+    });
+    return m;
+  }
+  function openCodeEndEditV14(courseId,codeId,endValue){
+    const m=ensureCodeEndEditModalV14();m.dataset.courseId=courseId;m.dataset.codeId=codeId;const input=$v12('codeEndEditInputV14');if(input)input.value=endValue||'';m.classList.add('active');setTimeout(()=>input?.focus(),30);
+  }
 
   window.__codeDetail=async function(courseId,codeId){
     if(!isAdmin||!courseId||!codeId)return;
@@ -12153,10 +12181,7 @@ const s=document.createElement('style');s.textContent=`
         <div class="code-detail-actions-v12">
           ${canSuspend ? `<button type="button" class="code-action-btn ${isSuspended?'success':'danger'}" id="codeDetailSuspendBtnV12">${isSuspended?'إلغاء الإيقاف':'إيقاف الكود'}</button>` : '<button type="button" class="code-action-btn" disabled style="opacity:.55">الكود منتهي</button>'}
           <button type="button" class="code-action-btn danger" id="codeDetailDeleteBtnV12">حذف الكود</button>
-        </div>
-        <div class="code-detail-end-editor-v12">
-          <div class="code-detail-end-head-v12"><strong>نهاية الكود</strong><span>اختياري</span></div>
-          <div class="code-detail-end-row-v12"><input type="datetime-local" id="codeDetailEndInputV12" value="${escV12(endValue)}"><button type="button" class="code-action-btn" id="codeDetailSaveEndBtnV12">حفظ</button><button type="button" class="code-action-btn" id="codeDetailClearEndBtnV12">بدون نهاية</button></div>
+          <button type="button" class="code-action-btn code-detail-end-edit-btn-v14" id="codeDetailEditEndBtnV14"><i class="fas fa-calendar-pen"></i> تعديل نهاية الكود</button>
         </div>
         <div class="code-detail-grid-v12">
           <div class="code-detail-item-v12"><strong>اسم الحساب</strong><span>${escV12(name)}</span></div>
@@ -12182,33 +12207,7 @@ const s=document.createElement('style');s.textContent=`
         m.classList.remove('active');
         await deleteEnrollmentCode(codeId);
       });
-      $v12('codeDetailSaveEndBtnV12')?.addEventListener('click',async()=>{
-        const input=$v12('codeDetailEndInputV12');
-        const raw=input?.value||'';
-        let endDate=null;
-        if(raw){
-          endDate=new Date(raw);
-          if(isNaN(endDate.getTime())||endDate.getTime()<=Date.now())return showCustomAlert?.('تنبيه','وقت النهاية يجب أن يكون في المستقبل.');
-        }
-        const btn=$v12('codeDetailSaveEndBtnV12');
-        try{
-          btn.disabled=true;
-          await codeRefV12(courseId,codeId).update({endTime:endDate?firebase.firestore.Timestamp.fromDate(endDate):null,updatedAt:firebase.firestore.FieldValue.serverTimestamp(),updatedBy:currentUser?.uid||null});
-          await window.loadCodesForCourse(courseId);
-          await window.__codeDetail(courseId,codeId);
-          showCustomAlert?.('تم الحفظ',endDate?'تم تحديث نهاية الكود.':'تم جعل الكود بدون تاريخ نهاية.');
-        }catch(e){showCustomAlert?.('خطأ','تعذر تعديل نهاية الكود: '+e.message);}finally{btn.disabled=false;}
-      });
-      $v12('codeDetailClearEndBtnV12')?.addEventListener('click',async()=>{
-        const btn=$v12('codeDetailClearEndBtnV12');
-        try{
-          btn.disabled=true;
-          await codeRefV12(courseId,codeId).update({endTime:null,updatedAt:firebase.firestore.FieldValue.serverTimestamp(),updatedBy:currentUser?.uid||null});
-          await window.loadCodesForCourse(courseId);
-          await window.__codeDetail(courseId,codeId);
-          showCustomAlert?.('تم الحفظ','تمت إزالة تاريخ نهاية الكود.');
-        }catch(e){showCustomAlert?.('خطأ','تعذر إزالة نهاية الكود: '+e.message);}finally{btn.disabled=false;}
-      });
+      $v12('codeDetailEditEndBtnV14')?.addEventListener('click',()=>openCodeEndEditV14(courseId,codeId,endValue));
     }catch(e){console.error(e);body.innerHTML='<div style="padding:20px;color:#e74c3c;text-align:center">تعذر تحميل تفاصيل الكود.</div>';
     }
   };
@@ -12293,6 +12292,37 @@ const s=document.createElement('style');s.textContent=`
 })();
 </script>
 
+
+<!-- ===== FINAL MODAL STACK ORDER V14 ===== -->
+<style id="aa-modal-stack-v14">
+.edit-modal.active,.auth-popup.active,.custom-alert-modal.active,.gallery-viewer.active,.platform-image-viewer.active,.file-viewer-overlay.active,.profile-self-modal.active,.ananas-modal-overlay.active,.quiz-overlay.active,#quizOverlay.active{z-index:200000!important;}
+</style>
+<script id="aa-modal-stack-v14-script">
+(function(){
+  'use strict';
+  if(window.__aaModalStackV14)return;
+  window.__aaModalStackV14=true;
+  let seq=0;
+  const tracked=new WeakMap();
+  const selectors='.edit-modal,.auth-popup,.custom-alert-modal,.gallery-viewer,.platform-image-viewer,.file-viewer-overlay,.profile-self-modal,.ananas-modal-overlay,#quizOverlay';
+  function raise(el){
+    if(!el)return;
+    seq=Math.max(seq+1,200001);
+    el.style.setProperty('z-index',String(seq),'important');
+    tracked.set(el,seq);
+  }
+  function sync(el){
+    if(!el||!el.matches?.(selectors))return;
+    const active=el.classList.contains('active') || (el.id==='quizOverlay'&&el.classList.contains('active'));
+    if(active && !el.dataset.__aaStackActive){el.dataset.__aaStackActive='1';raise(el);}
+    else if(!active && el.dataset.__aaStackActive){delete el.dataset.__aaStackActive;}
+  }
+  document.querySelectorAll(selectors).forEach(sync);
+  const obs=new MutationObserver(list=>{for(const m of list){if(m.type==='attributes'&&m.attributeName==='class')sync(m.target);}});
+  obs.observe(document.body,{subtree:true,attributes:true,attributeFilter:['class']});
+  window.__aaRaiseModalV14=raise;
+})();
+</script>
 
 <!-- ===== FINAL MOBILE SIDE SCROLLBAR / SAFE CONTENT PATCH ===== -->
 <style id="aa-final-mobile-side-scrollbar">
