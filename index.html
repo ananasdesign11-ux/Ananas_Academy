@@ -2708,6 +2708,7 @@ label[for*="En"], input[id*="En"], textarea[id*="En"] { display:none !important;
             document.getElementById('customAlertTitle').textContent = title;
             document.getElementById('customAlertMessage').textContent = message;
             document.getElementById('customAlertModal').classList.add('active');
+            window.__aaRaiseModalV14?.(document.getElementById('customAlertModal'));
             const okBtn = document.getElementById('customAlertOkBtn');
             const handler = () => {
                 document.getElementById('customAlertModal').classList.remove('active');
@@ -2721,6 +2722,7 @@ label[for*="En"], input[id*="En"], textarea[id*="En"] { display:none !important;
             document.getElementById('customConfirmTitle').textContent = title;
             document.getElementById('customConfirmMessage').textContent = message;
             document.getElementById('customConfirmModal').classList.add('active');
+            window.__aaRaiseModalV14?.(document.getElementById('customConfirmModal'));
             
             const yesBtn = document.getElementById('customConfirmYesBtn');
             const noBtn = document.getElementById('customConfirmNoBtn');
@@ -12173,7 +12175,7 @@ const s=document.createElement('style');s.textContent=`
     return m;
   }
   function openCodeEndEditV14(courseId,codeId,endValue){
-    const m=ensureCodeEndEditModalV14();m.dataset.courseId=courseId;m.dataset.codeId=codeId;const input=$v12('codeEndEditInputV14');if(input)input.value=endValue||'';m.classList.add('active');setTimeout(()=>input?.focus(),30);
+    const m=ensureCodeEndEditModalV14();m.dataset.courseId=courseId;m.dataset.codeId=codeId;const input=$v12('codeEndEditInputV14');if(input)input.value=endValue||'';m.classList.add('active');window.__aaRaiseModalV14?.(m);setTimeout(()=>input?.focus(),30);
   }
 
   window.__codeDetail=async function(courseId,codeId){
@@ -12231,14 +12233,13 @@ const s=document.createElement('style');s.textContent=`
 
       const suspendBtn=$v12('codeDetailSuspendBtnV12');
       suspendBtn?.addEventListener('click',()=>{
-        m.classList.remove('active');
         toggleEnrollmentCode(courseId===activeCourseId?codeId:codeId,isSuspended);
       });
       $v12('codeDetailDeleteBtnV12')?.addEventListener('click',async()=>{
-        m.classList.remove('active');
         await deleteEnrollmentCode(codeId);
       });
-      $v12('codeDetailEditEndBtnV14')?.addEventListener('click',()=>openCodeEndEditV14(courseId,codeId,endValue));
+      const editEndBtn=$v12('codeDetailEditEndBtnV14');
+      if(editEndBtn) editEndBtn.onclick=()=>openCodeEndEditV14(courseId,codeId,endValue);
     }catch(e){console.error(e);body.innerHTML='<div style="padding:20px;color:#e74c3c;text-align:center">تعذر تحميل تفاصيل الكود.</div>';
     }
   };
@@ -12270,6 +12271,7 @@ const s=document.createElement('style');s.textContent=`
         await ref.update({disabled:false,isSuspended:false,status:'active',state:'active',suspensionStatus:'active',suspendedUntil:null,suspensionReason:null,suspensionMode:null,suspensionUpdatedAt:firebase.firestore.FieldValue.serverTimestamp()});
         await clearLegacyAccessBlockV12(activeCourseId,codeId,c.usedBy||[]);
         await window.loadCodesForCourse(activeCourseId);
+        await window.__codeDetail?.(activeCourseId,codeId);
         showCustomAlert?.('تم إلغاء الإيقاف','تم إلغاء إيقاف الكود وأصبح نشطًا من جديد.');
       }catch(e){showCustomAlert?.('خطأ','تعذر إلغاء إيقاف الكود: '+e.message);}return;
     }
@@ -12277,7 +12279,7 @@ const s=document.createElement('style');s.textContent=`
     $v12('suspendCodeLabel').textContent=`الكود: ${c.code||codeId}`;
     $v12('courseSuspendDuration').value='1d';
     document.querySelectorAll('.suspend-duration-choice').forEach(b=>b.classList.toggle('active',b.dataset.duration==='1d'));
-    $v12('courseSuspendUntil').value='';$v12('courseSuspendReason').value='';$v12('courseSuspendCustomWrap').style.display='none';$v12('courseAccessSuspendModal').classList.add('active');
+    $v12('courseSuspendUntil').value='';$v12('courseSuspendReason').value='';$v12('courseSuspendCustomWrap').style.display='none';$v12('courseAccessSuspendModal').classList.add('active');window.__aaRaiseModalV14?.($v12('courseAccessSuspendModal'));
   };
 
   const oldConfirm=$v12('confirmCourseSuspendBtn');
@@ -12295,7 +12297,7 @@ const s=document.createElement('style');s.textContent=`
       const uids=(c.usedBy||[]).map(x=>String(x)).filter(Boolean);const batch=db.batch();
       for(const uid of uids){const er=db.collection('users').doc(uid).collection('enrolledCourses').doc(activeCourseId);batch.set(er,{accessBlocked:true,blockedUntil:until?firebase.firestore.Timestamp.fromDate(until):null,blockReason:reason||'تم إيقاف كود الاشتراك.',accessBlockReason:reason||'تم إيقاف كود الاشتراك.',accessUpdatedAt:firebase.firestore.FieldValue.serverTimestamp()},{merge:true});}
       if(uids.length)await batch.commit();
-      $v12('courseAccessSuspendModal').classList.remove('active');await window.loadCodesForCourse(activeCourseId);showCustomAlert?.('تم الإيقاف',until?`تم إيقاف الكود حتى ${until.toLocaleString('ar-SA',{timeZone:'Asia/Riyadh'})}.`:'تم إيقاف الكود حتى تلغي الإيقاف يدويًا.');
+      $v12('courseAccessSuspendModal').classList.remove('active');await window.loadCodesForCourse(activeCourseId);await window.__codeDetail?.(activeCourseId,id);showCustomAlert?.('تم الإيقاف',until?`تم إيقاف الكود حتى ${until.toLocaleString('ar-SA',{timeZone:'Asia/Riyadh'})}.`:'تم إيقاف الكود حتى تلغي الإيقاف يدويًا.');
     }catch(e){console.error(e);showCustomAlert?.('خطأ','تعذر إيقاف الكود: '+e.message);}finally{this.disabled=false;this.textContent='إيقاف الكود';}
   };}
 
@@ -12725,7 +12727,7 @@ const s=document.createElement('style');s.textContent=`
         if(String(window.activeCourseId||'')===String(courseId) && !isAdmin) window.aaEjectFromCourse?.('تم حذف كود الاشتراك.');
         await refreshMainCourseButtons();
         await window.loadCodesForCourse?.(courseId);
-        showCustomAlert?.('تم الحذف','تم حذف الكود وإخراج الحسابات المرتبطة به من الدورة. أصبحت الدورة تتطلب اشتراكًا جديدًا.');
+        showCustomAlert?.('تم الحذف','تم حذف الكود وإخراج الحسابات المرتبطة به من الدورة. أصبحت الدورة تتطلب اشتراكًا جديدًا.',()=>document.getElementById('codeDetailModalV12')?.classList.remove('active'));
       }catch(e){console.error('delete code lifecycle',e);showCustomAlert?.('خطأ','تعذر حذف الكود: '+e.message)}
     });
   };
