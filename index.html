@@ -12148,12 +12148,6 @@ const s=document.createElement('style');s.textContent=`
   }
   window.editCodeEndDateV12=async function(courseId,codeId){
     if(!isAdmin||!courseId||!codeId)return;
-    const ref=codeRefV12(courseId,codeId);
-    let snap;
-    try{snap=await ref.get();}catch(e){return showCustomAlert?.('خطأ','تعذر تحميل الكود: '+e.message);}
-    if(!snap.exists)return showCustomAlert?.('خطأ','الكود غير موجود.');
-    const c=await normalizeLegacyCodeV12(courseId,codeId,snap.data()||{});
-    const oldEnd=asDateV12(c.endTime);
     let modal=document.getElementById('editCodeEndDateModalV12');
     if(!modal){
       modal=document.createElement('div');
@@ -12179,6 +12173,9 @@ const s=document.createElement('style');s.textContent=`
         const input=modal.querySelector('#editCodeEndDateInputV12');
         const btn=modal.querySelector('#saveCodeEndDateV12');
         const raw=input?.value||'';
+        const targetCourseId=modal.dataset.courseId||'';
+        const targetCodeId=modal.dataset.codeId||'';
+        if(!targetCourseId||!targetCodeId)return showCustomAlert?.('خطأ','تعذر تحديد الكود المطلوب تعديله.');
         let endTime=null;
         if(raw){
           const d=new Date(raw);
@@ -12188,18 +12185,35 @@ const s=document.createElement('style');s.textContent=`
         }
         btn.disabled=true;const original=btn.textContent;btn.textContent='جاري الحفظ...';
         try{
-          await codeRefV12(courseId,codeId).update({endTime,updatedAt:firebase.firestore.FieldValue.serverTimestamp()});
+          await codeRefV12(targetCourseId,targetCodeId).update({endTime,updatedAt:firebase.firestore.FieldValue.serverTimestamp()});
           modal.classList.remove('active');
-          await window.__codeDetail(courseId,codeId);
+          await window.__codeDetail(targetCourseId,targetCodeId);
           showCustomAlert?.('تم الحفظ',endTime?'تم تحديث تاريخ انتهاء الكود.':'تمت إزالة تاريخ انتهاء الكود.');
         }catch(e){showCustomAlert?.('خطأ','تعذر تحديث تاريخ انتهاء الكود: '+e.message);}
         finally{btn.disabled=false;btn.textContent=original;}
       });
     }
-    const input=modal.querySelector('#editCodeEndDateInputV12');
-    if(input)input.value=localDateTimeValueV12(oldEnd);
+
+    modal.dataset.courseId=courseId;
+    modal.dataset.codeId=codeId;
     modal.classList.add('active');
     ensurePopupLayerV12(modal);
+
+    const input=modal.querySelector('#editCodeEndDateInputV12');
+    if(input)input.value='';
+
+    try{
+      const snap=await codeRefV12(courseId,codeId).get();
+      if(!snap.exists){
+        modal.classList.remove('active');
+        return showCustomAlert?.('خطأ','الكود غير موجود.');
+      }
+      const c=await normalizeLegacyCodeV12(courseId,codeId,snap.data()||{});
+      if(input)input.value=localDateTimeValueV12(asDateV12(c.endTime));
+    }catch(e){
+      modal.classList.remove('active');
+      return showCustomAlert?.('خطأ','تعذر تحميل الكود: '+e.message);
+    }
   };
 
   function observePopupLayersV12(){
