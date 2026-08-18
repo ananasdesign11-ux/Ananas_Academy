@@ -12022,6 +12022,24 @@ const s=document.createElement('style');s.textContent=`
 @media(max-width:900px){#codeLifecycleBoardV12{grid-template-columns:1fr;}.code-detail-grid-v12{grid-template-columns:1fr;}}
 @media(max-width:768px){#codeLifecycleBoardV12{gap:10px}.code-lifecycle-panel{padding:11px}#codeDetailModalV12{width:calc(100vw - 20px);max-width:none;max-height:calc(100dvh - 90px);padding:16px;}}
 </style>
+<style id="code-search-status-v13">
+#codeSearchToolsV13{display:flex;align-items:center;gap:10px;margin:10px 0 14px;flex-wrap:wrap;}
+.code-search-toggle-v13,.code-search-clear-v13{border:1px solid var(--border);background:var(--bg-secondary);color:var(--text-primary);border-radius:12px;padding:9px 13px;font-family:inherit;font-weight:800;cursor:pointer;transition:.18s ease;display:inline-flex;align-items:center;gap:8px;}
+.code-search-toggle-v13:hover,.code-search-clear-v13:hover{border-color:var(--accent1);transform:translateY(-1px);box-shadow:0 8px 18px rgba(108,92,231,.10);}
+.code-search-box-v13{display:flex;align-items:center;gap:8px;min-width:min(360px,100%);padding:7px 9px;border:1px solid var(--border);background:var(--bg-secondary);border-radius:14px;box-shadow:0 10px 22px rgba(0,0,0,.08);animation:codeSearchOpenV13 .18s ease;}
+.code-search-box-v13[hidden]{display:none!important;}
+.code-search-box-v13>i{color:var(--accent1);font-size:.95rem;}
+.code-search-box-v13 input{flex:1;min-width:160px;border:0;outline:0;background:transparent;color:var(--text-primary);font-family:inherit;font-size:.9rem;}
+.code-search-clear-v13{padding:4px 8px;border-radius:9px;font-size:1.05rem;line-height:1;}
+@keyframes codeSearchOpenV13{from{opacity:0;transform:translateY(-4px) scale(.98)}to{opacity:1;transform:translateY(0) scale(1)}}
+.code-card-v12.active{border-color:rgba(46,204,113,.65)!important;background:rgba(46,204,113,.10)!important;box-shadow:inset 4px 0 0 #2ecc71,0 8px 20px rgba(46,204,113,.08);}
+.code-card-v12.suspended{border-color:rgba(230,126,34,.70)!important;background:rgba(230,126,34,.11)!important;box-shadow:inset 4px 0 0 #e67e22,0 8px 20px rgba(230,126,34,.08);}
+.code-card-v12.expired{border-color:rgba(231,76,60,.70)!important;background:rgba(231,76,60,.11)!important;box-shadow:inset 4px 0 0 #e74c3c,0 8px 20px rgba(231,76,60,.08);}
+.code-card-v12.unused{border-color:rgba(108,92,231,.70)!important;background:rgba(108,92,231,.11)!important;box-shadow:inset 4px 0 0 #6c5ce7,0 8px 20px rgba(108,92,231,.08);}
+.code-card-v12.active:hover{border-color:#2ecc71!important}.code-card-v12.suspended:hover{border-color:#e67e22!important}.code-card-v12.expired:hover{border-color:#e74c3c!important}.code-card-v12.unused:hover{border-color:#6c5ce7!important}
+.code-search-empty-v13{padding:12px;text-align:center;color:var(--text-muted);font-size:.85rem;border:1px dashed var(--border);border-radius:12px;margin-top:6px;}
+@media(max-width:768px){#codeSearchToolsV13{align-items:stretch}.code-search-toggle-v13,.code-search-box-v13{width:100%;justify-content:center}.code-search-box-v13 input{min-width:0}}
+</style>
 <script>
 (function(){
   'use strict';
@@ -12058,10 +12076,38 @@ const s=document.createElement('style');s.textContent=`
     if(b)return b;
     const table=$v12('codesTable');
     if(!table)return null;
+    const host=table.parentElement;
+    const searchHost=document.createElement('div');
+    searchHost.id='codeSearchToolsV13';
+    searchHost.innerHTML=`<button type="button" id="codeSearchToggleV13" class="code-search-toggle-v13" aria-expanded="false"><i class="fas fa-search"></i><span>بحث عن حساب</span></button><div id="codeSearchBoxV13" class="code-search-box-v13" hidden><i class="fas fa-search"></i><input id="codeAccountSearchV13" type="search" autocomplete="off" placeholder="اكتب اسم الحساب..."><button type="button" id="codeSearchClearV13" class="code-search-clear-v13" aria-label="مسح البحث">×</button></div>`;
+    host?.insertBefore(searchHost,table);
     b=document.createElement('div');b.id='codeLifecycleBoardV12';
-    table.parentElement?.insertBefore(b,table);
+    host?.insertBefore(b,table);
     table.style.display='none';
+    const toggle=$v12('codeSearchToggleV13'), box=$v12('codeSearchBoxV13'), input=$v12('codeAccountSearchV13'), clear=$v12('codeSearchClearV13');
+    toggle?.addEventListener('click',()=>{
+      const open=!box?.hasAttribute('hidden');
+      if(open){box?.setAttribute('hidden','');toggle.setAttribute('aria-expanded','false');if(input)input.value='';applyCodeSearchV13('');}
+      else{box?.removeAttribute('hidden');toggle.setAttribute('aria-expanded','true');setTimeout(()=>input?.focus(),40);}
+    });
+    input?.addEventListener('input',()=>applyCodeSearchV13(input.value));
+    clear?.addEventListener('click',()=>{if(input){input.value='';applyCodeSearchV13('');input.focus();}});
     return b;
+  }
+  function applyCodeSearchV13(term){
+    const q=String(term||'').trim().toLocaleLowerCase('ar');
+    document.querySelectorAll('#codeLifecycleBoardV12 .code-card-v12[data-account-name]').forEach(card=>{
+      const name=String(card.dataset.accountName||'').toLocaleLowerCase('ar');
+      const wrap=card.closest('.code-card-v12-wrap');
+      if(wrap)wrap.style.display=(!q||name.includes(q))?'':'none';
+    });
+    document.querySelectorAll('#codeLifecycleBoardV12 .code-lifecycle-panel').forEach(panel=>{
+      const visible=[...panel.querySelectorAll('.code-card-v12-wrap')].some(w=>w.style.display!=='none');
+      const empty=panel.querySelector('.code-search-empty-v13');
+      if(q&&!visible){
+        if(!empty){const e=document.createElement('div');e.className='code-search-empty-v13';e.textContent='لا يوجد حساب بهذا الاسم في هذه الفئة.';panel.querySelector('.code-lifecycle-list')?.appendChild(e);}
+      }else empty?.remove();
+    });
   }
   function ensureDetailModalV12(){
     let m=$v12('codeDetailModalV12');if(m)return m;
@@ -12234,8 +12280,12 @@ const s=document.createElement('style');s.textContent=`
       }
       const panel=(key,title)=>{const items=groups[key];return `<section class="code-lifecycle-panel"><h4><span>${title}</span><small>${items.length} كود</small></h4><div class="code-lifecycle-list">${items.length?items.map(({id,c})=>{
         const info=usedInfoV12(c),u=info[0]||{},name=u.name||'مستخدم',label=key==='used'?name:(c.code||id),state=expiredV12(c)?'منتهي':legacySuspendedV12(c)?'موقوف':key==='used'?'مستخدم':'غير مستخدم';
-        return `<div class="code-card-v12-wrap"><button type="button" class="code-card-v12 ${key}${legacySuspendedV12(c)?' suspended':''}" onclick="__codeDetail('${escV12(courseId)}','${escV12(id)}')"><span class="code-card-v12-main"><strong>${escV12(label)}</strong></span></button></div>`;}).join(''):'<div class="code-lifecycle-empty">لا توجد أكواد في هذه الفئة.</div>'}</div></section>`};
+        const accountNames=info.map(x=>x?.name||'').filter(Boolean).join(' ');
+        const visualClass=state==='منتهي'?'expired':state==='موقوف'?'suspended':state==='مستخدم'?'active':'unused';
+        return `<div class="code-card-v12-wrap"><button type="button" class="code-card-v12 ${visualClass}" data-account-name="${escV12(accountNames)}" data-code-state="${escV12(state)}" onclick="__codeDetail('${escV12(courseId)}','${escV12(id)}')"><span class="code-card-v12-main"><strong>${escV12(label)}</strong></span></button></div>`;}).join(''):'<div class="code-lifecycle-empty">لا توجد أكواد في هذه الفئة.</div>'}</div></section>`};
       board.innerHTML=panel('unused','غير مستخدمة')+panel('used','مستخدمة')+panel('expired','منتهية');
+      const activeSearch=$v12('codeAccountSearchV13');
+      if(activeSearch?.value)applyCodeSearchV13(activeSearch.value);
       if(oldTable)oldTable.style.display='none';
     }catch(e){console.error('code lifecycle v12',e);board.innerHTML='<div style="grid-column:1/-1;padding:22px;text-align:center;color:#e74c3c">تعذر تحميل الأكواد.</div>';}
   };
