@@ -12165,79 +12165,87 @@ const s=document.createElement('style');s.textContent=`
     document.body.appendChild(m);return m;
   }
   function dateTextV12(d,empty='—'){return d?d.toLocaleString('ar-SA',{timeZone:'Asia/Riyadh'}):empty;}
-  // FINAL code-end editor: one self-contained modal with no dependency on the legacy modal stack.
+  // Single authoritative code-end editor.
+  function codeEndEditorValueToInput(value){
+    const d=value ? new Date(value) : null;
+    if(!d || Number.isNaN(d.getTime())) return '';
+    const pad=n=>String(n).padStart(2,'0');
+    return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  }
   function openCodeEndEditModalFinal(courseId, codeId, endValue){
-    const existing=document.getElementById('aaFinalCodeEndEditor');
-    if(existing) existing.remove();
-    const safeEnd=String(endValue||'').replace(/"/g,'&quot;');
+    document.getElementById('aaCodeEndEditorModal')?.remove();
     const overlay=document.createElement('div');
-    overlay.id='aaFinalCodeEndEditor';
+    overlay.id='aaCodeEndEditorModal';
     overlay.setAttribute('role','dialog');
     overlay.setAttribute('aria-modal','true');
-    Object.assign(overlay.style,{
-      position:'fixed', inset:'0', zIndex:'999999', display:'flex',
-      alignItems:'center', justifyContent:'center', padding:'20px',
-      background:'rgba(0,0,0,.55)', backdropFilter:'blur(8px)',
-      boxSizing:'border-box', pointerEvents:'auto'
-    });
+    overlay.style.cssText='position:fixed;inset:0;display:flex;align-items:center;justify-content:center;padding:20px;background:rgba(0,0,0,.58);backdrop-filter:blur(5px);z-index:2147483000;box-sizing:border-box;pointer-events:auto;';
+    const current=codeEndEditorValueToInput(endValue);
     overlay.innerHTML=`
-      <div style="width:min(520px,94vw);max-height:min(90vh,720px);overflow:auto;background:var(--bg-card);color:var(--text-primary);border:1px solid var(--border);border-radius:22px;box-shadow:0 30px 100px rgba(0,0,0,.45);padding:24px;position:relative;box-sizing:border-box;pointer-events:auto;">
-        <button type="button" id="aaFinalCodeEndClose" aria-label="إغلاق" style="position:absolute;top:12px;left:12px;width:38px;height:38px;border:1px solid var(--border);border-radius:11px;background:var(--bg-secondary);color:var(--text-primary);font-size:24px;line-height:1;cursor:pointer;">×</button>
-        <h3 style="margin:0 0 20px;text-align:center;color:var(--accent1);font-weight:900;font-size:1.25rem;">تعديل نهاية الكود</h3>
-        <div style="display:flex;flex-direction:column;gap:9px;">
-          <label for="aaFinalCodeEndInput" style="font-weight:800;color:var(--text-primary);">تاريخ ووقت النهاية <span style="color:var(--text-muted);font-size:.85em;font-weight:700;">(اختياري)</span></label>
-          <input id="aaFinalCodeEndInput" type="datetime-local" value="${safeEnd}" style="width:100%;min-height:48px;padding:11px 12px;border:1px solid var(--border);border-radius:12px;background:var(--bg-secondary);color:var(--text-primary);font-family:inherit;box-sizing:border-box;outline:none;">
-          <small style="color:var(--text-muted);line-height:1.6;">اترك الخانة فارغة أو استخدم زر «إزالة تاريخ النهاية» لجعل الكود بدون تاريخ انتهاء.</small>
+      <div class="edit-modal aa-code-end-editor" style="display:block!important;visibility:visible!important;opacity:1!important;position:relative!important;width:min(520px,94vw);max-width:520px;margin:0!important;transform:none!important;z-index:2147483001;box-sizing:border-box;pointer-events:auto;">
+        <button type="button" class="close-lightbox aa-code-end-close" aria-label="إغلاق" style="position:absolute;top:12px;left:12px;width:38px;height:38px;border-radius:10px;border:1px solid var(--border);background:var(--bg-secondary);color:var(--text-primary);font-size:24px;line-height:1;cursor:pointer;">×</button>
+        <h3 style="margin:0 0 22px;text-align:center;color:var(--accent1);">تعديل نهاية الكود</h3>
+        <div style="display:flex;flex-direction:column;gap:10px;">
+          <label for="aaCodeEndEditorInput" style="font-weight:800;color:var(--text-primary);">تاريخ ووقت انتهاء الكود</label>
+          <input id="aaCodeEndEditorInput" type="datetime-local" value="${current}" style="width:100%;min-height:46px;padding:11px 12px;border:1px solid var(--border);border-radius:12px;background:var(--bg-secondary);color:var(--text-primary);font-family:inherit;box-sizing:border-box;">
+          <small style="color:var(--text-muted);line-height:1.6;">يمكنك تغيير التاريخ أو ترك الحقل فارغًا لإزالة تاريخ الانتهاء.</small>
         </div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:20px;">
-          <button type="button" id="aaFinalCodeEndSave" class="code-action-btn" style="flex:1 1 150px;min-height:44px;">تحديث</button>
-          <button type="button" id="aaFinalCodeEndClear" class="code-action-btn secondary" style="flex:1 1 150px;min-height:44px;">إزالة تاريخ النهاية</button>
-          <button type="button" id="aaFinalCodeEndCancel" class="code-action-btn secondary" style="flex:1 1 120px;min-height:44px;">إلغاء</button>
+          <button type="button" id="aaCodeEndEditorUpdate" class="code-action-btn" style="flex:1 1 140px;min-height:44px;">تحديث</button>
+          <button type="button" id="aaCodeEndEditorClear" class="code-action-btn secondary" style="flex:1 1 170px;min-height:44px;">إزالة تاريخ النهاية</button>
+          <button type="button" id="aaCodeEndEditorCancel" class="code-action-btn secondary" style="flex:1 1 110px;min-height:44px;">إلغاء</button>
         </div>
       </div>`;
     document.body.appendChild(overlay);
     const close=()=>overlay.remove();
-    overlay.querySelector('#aaFinalCodeEndClose').addEventListener('click',close);
-    overlay.querySelector('#aaFinalCodeEndCancel').addEventListener('click',close);
-    overlay.addEventListener('click',e=>{if(e.target===overlay) close();});
-    const save=async(clear=false)=>{
-      const btn=clear?overlay.querySelector('#aaFinalCodeEndClear'):overlay.querySelector('#aaFinalCodeEndSave');
-      const input=overlay.querySelector('#aaFinalCodeEndInput');
+    overlay.querySelector('.aa-code-end-close')?.addEventListener('click',close);
+    overlay.querySelector('#aaCodeEndEditorCancel')?.addEventListener('click',close);
+    overlay.addEventListener('click',e=>{if(e.target===overlay)close();});
+    const apply=async(clear)=>{
+      const input=overlay.querySelector('#aaCodeEndEditorInput');
+      const updateBtn=overlay.querySelector('#aaCodeEndEditorUpdate');
+      const clearBtn=overlay.querySelector('#aaCodeEndEditorClear');
+      const activeBtn=clear?clearBtn:updateBtn;
+      if(!activeBtn)return;
       let endDate=null;
       if(!clear){
-        const raw=input.value||'';
-        if(raw){ endDate=new Date(raw); if(isNaN(endDate.getTime())||endDate.getTime()<=Date.now()){ showCustomAlert?.('تنبيه','وقت النهاية يجب أن يكون في المستقبل.'); return; } }
+        const raw=String(input?.value||'').trim();
+        if(!raw){ endDate=null; }
+        else {
+          endDate=new Date(raw);
+          if(Number.isNaN(endDate.getTime())){showCustomAlert?.('تنبيه','أدخل تاريخًا ووقتًا صحيحين.');return;}
+          if(endDate.getTime()<=Date.now()){showCustomAlert?.('تنبيه','وقت النهاية يجب أن يكون في المستقبل.');return;}
+        }
       }
       try{
-        btn.disabled=true;
+        activeBtn.disabled=true;
         await codeRefV12(courseId,codeId).update({
           endTime:endDate?firebase.firestore.Timestamp.fromDate(endDate):null,
           updatedAt:firebase.firestore.FieldValue.serverTimestamp(),
           updatedBy:currentUser?.uid||null
         });
         close();
-        await window.loadCodesForCourse?.(courseId);
-        await window.__codeDetail?.(courseId,codeId);
-        showCustomAlert?.('تم التحديث', endDate ? 'تم تحديث تاريخ نهاية الكود.' : 'تمت إزالة تاريخ نهاية الكود، وأصبح الكود بدون انتهاء.');
-      }catch(e){ showCustomAlert?.('خطأ','تعذر تحديث نهاية الكود: '+e.message); }
-      finally{ btn.disabled=false; }
+        try{await window.loadCodesForCourse?.(courseId);}catch(_e){}
+        try{await window.__codeDetail?.(courseId,codeId);}catch(_e){}
+        showCustomAlert?.('تم التحديث',endDate?'تم تحديث تاريخ نهاية الكود.':'تمت إزالة تاريخ نهاية الكود، وأصبح الكود بدون انتهاء.');
+      }catch(e){showCustomAlert?.('خطأ','تعذر تحديث نهاية الكود: '+e.message);}
+      finally{activeBtn.disabled=false;}
     };
-    overlay.querySelector('#aaFinalCodeEndSave').addEventListener('click',()=>save(false));
-    overlay.querySelector('#aaFinalCodeEndClear').addEventListener('click',()=>save(true));
-    setTimeout(()=>overlay.querySelector('#aaFinalCodeEndInput')?.focus(),30);
+    overlay.querySelector('#aaCodeEndEditorUpdate')?.addEventListener('click',()=>apply(false));
+    overlay.querySelector('#aaCodeEndEditorClear')?.addEventListener('click',()=>apply(true));
+    requestAnimationFrame(()=>overlay.querySelector('#aaCodeEndEditorInput')?.focus());
   }
 
   // One delegated handler for the dynamically rebuilt details button.
-  if(!window.__aaFinalCodeEndEditorBound){
-    window.__aaFinalCodeEndEditorBound=true;
+  if(!window.__aaFinalCodeEndEditorBoundV2){
+    window.__aaFinalCodeEndEditorBoundV2=true;
     document.addEventListener('click',function(e){
       const btn=e.target?.closest?.('#codeDetailEditEndBtnV14');
       if(!btn)return;
-      e.preventDefault(); e.stopPropagation();
-      const courseId=String(btn.dataset.codeCourseId||'');
+      e.preventDefault();e.stopPropagation();
+      const courseId=String(btn.dataset.codeCourseId||activeCourseId||'');
       const codeId=String(btn.dataset.codeId||'');
-      const endValue=String(btn.dataset.codeEndValue||'');
-      if(courseId&&codeId) openCodeEndEditModalFinal(courseId,codeId,endValue);
+      if(!courseId||!codeId)return;
+      openCodeEndEditModalFinal(courseId,codeId,String(btn.dataset.codeEndValue||''));
     },true);
   }
 
