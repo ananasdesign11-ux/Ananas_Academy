@@ -12172,7 +12172,7 @@ const s=document.createElement('style');s.textContent=`
     const pad=n=>String(n).padStart(2,'0');
     return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
   }
-  function openCodeEndEditModalFinal(courseId, codeId, endValue){
+  window.__openCodeEndEditor = function(courseId, codeId, endValue){
     document.getElementById('aaCodeEndEditorModal')?.remove();
     const overlay=document.createElement('div');
     overlay.id='aaCodeEndEditorModal';
@@ -12181,13 +12181,13 @@ const s=document.createElement('style');s.textContent=`
     overlay.style.cssText='position:fixed;inset:0;display:flex;align-items:center;justify-content:center;padding:20px;background:rgba(0,0,0,.58);backdrop-filter:blur(5px);z-index:2147483000;box-sizing:border-box;pointer-events:auto;';
     const current=codeEndEditorValueToInput(endValue);
     overlay.innerHTML=`
-      <div class="edit-modal aa-code-end-editor" style="display:block!important;visibility:visible!important;opacity:1!important;position:relative!important;width:min(520px,94vw);max-width:520px;margin:0!important;transform:none!important;z-index:2147483001;box-sizing:border-box;pointer-events:auto;">
-        <button type="button" class="close-lightbox aa-code-end-close" aria-label="إغلاق" style="position:absolute;top:12px;left:12px;width:38px;height:38px;border-radius:10px;border:1px solid var(--border);background:var(--bg-secondary);color:var(--text-primary);font-size:24px;line-height:1;cursor:pointer;">×</button>
-        <h3 style="margin:0 0 22px;text-align:center;color:var(--accent1);">تعديل نهاية الكود</h3>
+      <div class="aa-code-end-editor-shell" style="display:block!important;visibility:visible!important;opacity:1!important;position:relative!important;width:min(520px,94vw);max-width:520px;margin:0!important;background:var(--bg-card);border:1px solid var(--border);border-radius:20px;padding:22px;box-sizing:border-box;box-shadow:0 30px 90px rgba(0,0,0,.45);pointer-events:auto;">
+        <button type="button" id="aaCodeEndEditorClose" aria-label="إغلاق" style="position:absolute;top:12px;left:12px;width:38px;height:38px;border-radius:10px;border:1px solid var(--border);background:var(--bg-secondary);color:var(--text-primary);font-size:24px;line-height:1;cursor:pointer;">×</button>
+        <h3 style="margin:0 0 22px;text-align:center;color:var(--accent1);font-weight:900;">تعديل نهاية الكود</h3>
         <div style="display:flex;flex-direction:column;gap:10px;">
           <label for="aaCodeEndEditorInput" style="font-weight:800;color:var(--text-primary);">تاريخ ووقت انتهاء الكود</label>
           <input id="aaCodeEndEditorInput" type="datetime-local" value="${current}" style="width:100%;min-height:46px;padding:11px 12px;border:1px solid var(--border);border-radius:12px;background:var(--bg-secondary);color:var(--text-primary);font-family:inherit;box-sizing:border-box;">
-          <small style="color:var(--text-muted);line-height:1.6;">يمكنك تغيير التاريخ أو ترك الحقل فارغًا لإزالة تاريخ الانتهاء.</small>
+          <small style="color:var(--text-muted);line-height:1.6;">اترك الحقل فارغًا لإزالة تاريخ الانتهاء وجعل الكود بدون نهاية.</small>
         </div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:20px;">
           <button type="button" id="aaCodeEndEditorUpdate" class="code-action-btn" style="flex:1 1 140px;min-height:44px;">تحديث</button>
@@ -12197,7 +12197,7 @@ const s=document.createElement('style');s.textContent=`
       </div>`;
     document.body.appendChild(overlay);
     const close=()=>overlay.remove();
-    overlay.querySelector('.aa-code-end-close')?.addEventListener('click',close);
+    overlay.querySelector('#aaCodeEndEditorClose')?.addEventListener('click',close);
     overlay.querySelector('#aaCodeEndEditorCancel')?.addEventListener('click',close);
     overlay.addEventListener('click',e=>{if(e.target===overlay)close();});
     const apply=async(clear)=>{
@@ -12209,8 +12209,7 @@ const s=document.createElement('style');s.textContent=`
       let endDate=null;
       if(!clear){
         const raw=String(input?.value||'').trim();
-        if(!raw){ endDate=null; }
-        else {
+        if(raw){
           endDate=new Date(raw);
           if(Number.isNaN(endDate.getTime())){showCustomAlert?.('تنبيه','أدخل تاريخًا ووقتًا صحيحين.');return;}
           if(endDate.getTime()<=Date.now()){showCustomAlert?.('تنبيه','وقت النهاية يجب أن يكون في المستقبل.');return;}
@@ -12233,21 +12232,7 @@ const s=document.createElement('style');s.textContent=`
     overlay.querySelector('#aaCodeEndEditorUpdate')?.addEventListener('click',()=>apply(false));
     overlay.querySelector('#aaCodeEndEditorClear')?.addEventListener('click',()=>apply(true));
     requestAnimationFrame(()=>overlay.querySelector('#aaCodeEndEditorInput')?.focus());
-  }
-
-  // One delegated handler for the dynamically rebuilt details button.
-  if(!window.__aaFinalCodeEndEditorBoundV2){
-    window.__aaFinalCodeEndEditorBoundV2=true;
-    document.addEventListener('click',function(e){
-      const btn=e.target?.closest?.('#codeDetailEditEndBtnV14');
-      if(!btn)return;
-      e.preventDefault();e.stopPropagation();
-      const courseId=String(btn.dataset.codeCourseId||activeCourseId||'');
-      const codeId=String(btn.dataset.codeId||'');
-      if(!courseId||!codeId)return;
-      openCodeEndEditModalFinal(courseId,codeId,String(btn.dataset.codeEndValue||''));
-    },true);
-  }
+  };
 
   window.__codeDetail=async function(courseId,codeId){
     if(!isAdmin||!courseId||!codeId)return;
@@ -12311,10 +12296,14 @@ const s=document.createElement('style');s.textContent=`
       });
       const editEndBtn=$v12('codeDetailEditEndBtnV14');
       if(editEndBtn){
-        editEndBtn.removeAttribute('onclick');
-        editEndBtn.dataset.codeCourseId=String(courseId);
-        editEndBtn.dataset.codeId=String(codeId);
-        editEndBtn.dataset.codeEndValue=endValue||'';
+        editEndBtn.type='button';
+        editEndBtn.onclick=null;
+        editEndBtn.addEventListener('click',function(e){
+          e.preventDefault();
+          e.stopPropagation();
+          e.stopImmediatePropagation?.();
+          window.__openCodeEndEditor?.(courseId,codeId,endValue||'');
+        },{once:true});
       }
     }catch(e){console.error(e);body.innerHTML='<div style="padding:20px;color:#e74c3c;text-align:center">تعذر تحميل تفاصيل الكود.</div>';
     }
