@@ -12014,7 +12014,8 @@ const s=document.createElement('style');s.textContent=`
 .code-detail-action-v12.delete{background:#e74c3c;border-color:#e74c3c;}
 .code-detail-action-v12.delete:hover{background:#c0392b;border-color:#c0392b;}
 .code-detail-action-v12[disabled]{opacity:.55;cursor:not-allowed;transform:none;box-shadow:none;}
-#codeEndDateEditModalV12{width:min(520px,95vw);max-height:90vh;overflow-y:auto;}
+#codeEndDateEditModalV12{width:min(520px,95vw);max-height:90vh;overflow-y:auto;z-index:200001!important;}
+#codeEndDateEditModalV12.active{display:block!important;visibility:visible!important;opacity:1!important;}
 .code-end-edit-v12{display:grid;gap:14px;}
 .code-end-edit-v12 .hint{color:var(--text-muted);font-size:.82rem;line-height:1.7;}
 .code-end-edit-v12 .field{display:grid;gap:7px;}
@@ -12122,7 +12123,7 @@ const s=document.createElement('style');s.textContent=`
         <div id="codeEndDateEditStatusV12" class="hint" style="min-height:1.2em;"></div>
       </div>`;
     document.body.appendChild(m);
-    const close=()=>m.classList.remove('active');
+    const close=()=>{m.classList.remove('active');m.style.display='none';};
     m.querySelector('[data-action="close"]')?.addEventListener('click',close);
     m.querySelector('[data-action="cancel"]')?.addEventListener('click',close);
     $v12('saveCodeEndDateV12')?.addEventListener('click',()=>{if(m.dataset.codeId)window.saveCodeEndDateV12(m.dataset.codeId);});
@@ -12147,6 +12148,9 @@ const s=document.createElement('style');s.textContent=`
       input.disabled=!end;
       status.textContent='';
       m.classList.add('active');
+      m.style.display='block';
+      m.style.visibility='visible';
+      m.style.opacity='1';
     }catch(e){showCustomAlert?.('خطأ','تعذر تحميل تاريخ انتهاء الكود: '+e.message);}
   };
   window.saveCodeEndDateV12=async function(codeId){
@@ -12163,7 +12167,8 @@ const s=document.createElement('style');s.textContent=`
     try{
       btn.disabled=true;status.textContent='جاري حفظ التعديل...';
       await codeRefV12(activeCourseId,codeId).update({endTime:end?firebase.firestore.Timestamp.fromDate(end):null,endTimeUpdatedAt:firebase.firestore.FieldValue.serverTimestamp(),endTimeUpdatedBy:currentUser?.uid||null});
-      $v12('codeEndDateEditModalV12')?.classList.remove('active');
+      const endModal=$v12('codeEndDateEditModalV12');
+      if(endModal){endModal.classList.remove('active');endModal.style.display='none';}
       await window.loadCodesForCourse(activeCourseId);
       await window.__codeDetail(activeCourseId,codeId);
       showCustomAlert?.('تم التعديل','تم تحديث تاريخ انتهاء الكود بنجاح.');
@@ -12238,7 +12243,7 @@ const s=document.createElement('style');s.textContent=`
           <button type="button" class="code-detail-action-v12 suspend" onclick="toggleEnrollmentCode('${escV12(codeId)}',${status.key==='suspended'});event.stopPropagation()"${suspendDisabled}>
             <i class="fas ${suspendIcon}"></i><span>${suspendLabel}</span>
           </button>
-          <button type="button" class="code-detail-action-v12 edit-end" onclick="openCodeEndDateEditorV12('${escV12(codeId)}');event.stopPropagation()">
+          <button type="button" class="code-detail-action-v12 edit-end" onclick="window.openCodeEndDateEditorV12('${escV12(codeId)}');event.stopPropagation()">
             <i class="fas fa-calendar-alt"></i><span>تعديل تاريخ النهاية</span>
           </button>
           <button type="button" class="code-detail-action-v12 delete" onclick="deleteEnrollmentCode('${escV12(codeId)}');event.stopPropagation()">
