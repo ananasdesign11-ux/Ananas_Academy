@@ -12019,7 +12019,7 @@ const s=document.createElement('style');s.textContent=`
 .code-detail-account-v12{display:flex;align-items:center;gap:10px;padding:12px;border:1px solid var(--border);border-radius:16px;background:var(--bg-card);margin-bottom:12px;}
 .code-detail-avatar-v12{width:46px;height:46px;border-radius:50%;display:grid;place-items:center;overflow:hidden;background:var(--accent-gradient);color:#fff;font-weight:900;flex:0 0 46px;}
 .code-detail-avatar-v12 img{width:100%;height:100%;object-fit:cover;display:block;}
-.code-detail-actions-v12{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px;position:relative;z-index:1;}.code-detail-actions-v12 .code-detail-action{min-height:42px;padding:10px 14px;border:1px solid var(--border);border-radius:12px;background:var(--bg-secondary);color:var(--text-primary);font:inherit;font-weight:800;cursor:pointer;}.code-detail-actions-v12 .code-detail-action:hover{border-color:var(--accent1);transform:translateY(-1px);}.code-detail-actions-v12 .code-detail-action.success{background:rgba(46,204,113,.1);border-color:rgba(46,204,113,.3);color:#2ecc71;}.code-detail-actions-v12 .code-detail-action.warning{background:rgba(230,126,34,.1);border-color:rgba(230,126,34,.3);color:#e67e22;}.code-detail-actions-v12 .code-detail-action.danger{background:rgba(231,76,60,.08);border-color:rgba(231,76,60,.28);color:#e74c3c;}#editCodeEndDateModalV12{width:min(460px,94vw);max-width:none;z-index:30000;}#editCodeEndDateModalV12 input{direction:ltr;text-align:center;}
+.code-detail-actions-v12{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px;}
 .code-detail-action{flex:1 1 180px;min-height:42px;border:1px solid var(--border);border-radius:12px;padding:10px 14px;font-family:inherit;font-weight:900;cursor:pointer;color:var(--text-primary);background:var(--bg-secondary);display:flex;align-items:center;justify-content:center;gap:7px;transition:.18s ease;}
 .code-detail-action:hover{transform:translateY(-1px);border-color:var(--accent1);}
 .code-detail-action.warning{color:#d68910;border-color:rgba(230,164,50,.35);background:rgba(230,164,50,.08);}
@@ -12111,7 +12111,7 @@ const s=document.createElement('style');s.textContent=`
           ? `<button type="button" class="code-detail-action success" onclick="toggleEnrollmentCode('${escV12(codeId)}',true)"><i class="fas fa-play"></i> إلغاء الإيقاف</button>`
           : `<button type="button" class="code-detail-action warning" onclick="toggleEnrollmentCode('${escV12(codeId)}',false)"><i class="fas fa-pause"></i> إيقاف الكود</button>`)
         : `<button type="button" class="code-detail-action disabled" disabled><i class="fas fa-clock"></i> الكود منتهي</button>`;
-      const actionHtml=`<div class="code-detail-actions-v12"><button type="button" class="code-detail-action" onclick="editCodeEndDateV12('${escV12(courseId)}','${escV12(codeId)}')"><i class="fas fa-calendar-alt"></i> تعديل تاريخ الانتهاء</button>${toggleButton}<button type="button" class="code-detail-action danger" onclick="deleteEnrollmentCode('${escV12(codeId)}')"><i class="fas fa-trash"></i> حذف الكود</button></div>`;
+      const actionHtml=`<div class="code-detail-actions-v12">${toggleButton}<button type="button" class="code-detail-action danger" onclick="deleteEnrollmentCode('${escV12(codeId)}')"><i class="fas fa-trash"></i> حذف الكود</button></div>`;
       body.innerHTML=`
         <div class="code-detail-account-v12"><div class="code-detail-avatar-v12">${avatar}</div><div style="min-width:0"><strong style="display:block;font-size:1.05rem">${escV12(name)}</strong><small style="color:var(--text-muted)">${escV12(email)}</small></div></div>
         <div class="code-detail-grid-v12">
@@ -12131,85 +12131,6 @@ const s=document.createElement('style');s.textContent=`
         ${actionHtml}`;
     }catch(e){console.error(e);body.innerHTML='<div style="padding:20px;color:#e74c3c;text-align:center">تعذر تحميل تفاصيل الكود.</div>';}
   };
-
-
-  function localDateTimeValueV12(d){
-    if(!d)return '';
-    const x=d instanceof Date?d:new Date(d);
-    if(isNaN(x.getTime()))return '';
-    const pad=n=>String(n).padStart(2,'0');
-    return `${x.getFullYear()}-${pad(x.getMonth()+1)}-${pad(x.getDate())}T${pad(x.getHours())}:${pad(x.getMinutes())}`;
-  }
-  function ensurePopupLayerV12(el){
-    if(!el)return 0;
-    const next=(window.__aaPopupLayerV12=Number(window.__aaPopupLayerV12||20000)+1);
-    el.style.zIndex=String(next);
-    return next;
-  }
-  window.editCodeEndDateV12=async function(courseId,codeId){
-    if(!isAdmin||!courseId||!codeId)return;
-    const ref=codeRefV12(courseId,codeId);
-    let snap;
-    try{snap=await ref.get();}catch(e){return showCustomAlert?.('خطأ','تعذر تحميل الكود: '+e.message);}
-    if(!snap.exists)return showCustomAlert?.('خطأ','الكود غير موجود.');
-    const c=await normalizeLegacyCodeV12(courseId,codeId,snap.data()||{});
-    const oldEnd=asDateV12(c.endTime);
-    let modal=document.getElementById('editCodeEndDateModalV12');
-    if(!modal){
-      modal=document.createElement('div');
-      modal.id='editCodeEndDateModalV12';
-      modal.className='edit-modal';
-      modal.innerHTML=`<button type="button" class="modal-close" aria-label="إغلاق">&times;</button>
-        <h3>تعديل تاريخ انتهاء الكود</h3>
-        <label for="editCodeEndDateInputV12">تاريخ ووقت الانتهاء</label>
-        <input id="editCodeEndDateInputV12" type="datetime-local">
-        <div style="display:flex;gap:8px;align-items:center;justify-content:space-between;margin-top:8px;flex-wrap:wrap">
-          <small style="color:var(--text-muted)">اترك الخانة فارغة لجعل الكود بدون تاريخ انتهاء.</small>
-          <button type="button" id="clearCodeEndDateV12" class="code-detail-action">إزالة تاريخ الانتهاء</button>
-        </div>
-        <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px;flex-wrap:wrap">
-          <button type="button" id="cancelCodeEndDateV12" class="code-detail-action">إلغاء</button>
-          <button type="button" id="saveCodeEndDateV12" class="code-detail-action success">حفظ</button>
-        </div>`;
-      document.body.appendChild(modal);
-      modal.querySelector('.modal-close').addEventListener('click',()=>modal.classList.remove('active'));
-      modal.querySelector('#cancelCodeEndDateV12').addEventListener('click',()=>modal.classList.remove('active'));
-      modal.querySelector('#clearCodeEndDateV12').addEventListener('click',()=>{const i=modal.querySelector('#editCodeEndDateInputV12');if(i)i.value='';});
-      modal.querySelector('#saveCodeEndDateV12').addEventListener('click',async()=>{
-        const input=modal.querySelector('#editCodeEndDateInputV12');
-        const btn=modal.querySelector('#saveCodeEndDateV12');
-        const raw=input?.value||'';
-        let endTime=null;
-        if(raw){
-          const d=new Date(raw);
-          if(isNaN(d.getTime()))return showCustomAlert?.('تنبيه','أدخل تاريخًا ووقتًا صحيحين.');
-          if(d.getTime()<=Date.now())return showCustomAlert?.('تنبيه','تاريخ الانتهاء يجب أن يكون في المستقبل.');
-          endTime=firebase.firestore.Timestamp.fromDate(d);
-        }
-        btn.disabled=true;const original=btn.textContent;btn.textContent='جاري الحفظ...';
-        try{
-          await codeRefV12(courseId,codeId).update({endTime,updatedAt:firebase.firestore.FieldValue.serverTimestamp()});
-          modal.classList.remove('active');
-          await window.__codeDetail(courseId,codeId);
-          showCustomAlert?.('تم الحفظ',endTime?'تم تحديث تاريخ انتهاء الكود.':'تمت إزالة تاريخ انتهاء الكود.');
-        }catch(e){showCustomAlert?.('خطأ','تعذر تحديث تاريخ انتهاء الكود: '+e.message);}
-        finally{btn.disabled=false;btn.textContent=original;}
-      });
-    }
-    const input=modal.querySelector('#editCodeEndDateInputV12');
-    if(input)input.value=localDateTimeValueV12(oldEnd);
-    modal.classList.add('active');
-    ensurePopupLayerV12(modal);
-  };
-
-  function observePopupLayersV12(){
-    const selectors='.edit-modal.active,.auth-popup.active,.custom-alert-modal.active,#quizOverlay.active,.gallery-viewer.active,.platform-image-viewer.active,.file-viewer-overlay.active,.profile-self-modal.active';
-    const apply=el=>{if(el&&el.matches&&el.matches(selectors))ensurePopupLayerV12(el);};
-    document.querySelectorAll('.edit-modal,.auth-popup,.custom-alert-modal,#quizOverlay,.gallery-viewer,.platform-image-viewer,.file-viewer-overlay,.profile-self-modal').forEach(apply);
-    const obs=new MutationObserver(muts=>muts.forEach(m=>{if(m.type==='attributes'&&m.attributeName==='class')apply(m.target);}));
-    obs.observe(document.body,{subtree:true,attributes:true,attributeFilter:['class']});
-  }
-  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',observePopupLayersV12,{once:true});else observePopupLayersV12();
 
   async function clearLegacyAccessBlockV12(courseId,codeId,users){
     const uids=(users||[]).map(x=>String(typeof x==='string'?x:x?.uid||'')).filter(Boolean);
