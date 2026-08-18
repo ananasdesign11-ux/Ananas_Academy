@@ -12109,12 +12109,11 @@ const s=document.createElement('style');s.textContent=`
     m=document.createElement('div');m.id='codeEndDateEditModalV12';
     m.innerHTML=`<div class="code-end-edit-card" role="dialog" aria-modal="true" aria-labelledby="codeEndDateEditTitleV12">
       <button type="button" class="code-end-edit-close" data-action="close" aria-label="إغلاق"><i class="fas fa-xmark"></i></button>
-      <h3 id="codeEndDateEditTitleV12" class="code-end-edit-title">تعديل تاريخ انتهاء الكود</h3>
-      <p class="code-end-edit-desc">يمكنك تغيير تاريخ ووقت انتهاء هذا الكود، أو إزالة تاريخ الانتهاء ليصبح الكود غير منتهٍ.</p>
+      <h3 id="codeEndDateEditTitleV12" class="code-end-edit-title">تعديل تاريخ الانتهاء</h3>
       <div class="code-end-edit-v12">
         <div class="field">
           <label for="codeEndDateEditInputV12">تاريخ ووقت الانتهاء</label>
-          <input id="codeEndDateEditInputV12" type="datetime-local">
+          <input id="codeEndDateEditInputV12" type="datetime-local" autocomplete="off">
         </div>
         <label class="no-expiry" for="codeEndDateNoExpiryV12">
           <input id="codeEndDateNoExpiryV12" type="checkbox">
@@ -12122,7 +12121,7 @@ const s=document.createElement('style');s.textContent=`
         </label>
         <div class="actions">
           <button type="button" class="cancel" data-action="cancel">إلغاء</button>
-          <button type="button" class="save" id="saveCodeEndDateV12">حفظ التعديل</button>
+          <button type="button" class="save" id="saveCodeEndDateV12">حفظ</button>
         </div>
         <div id="codeEndDateEditStatusV12" style="min-height:1.2em;color:var(--text-muted);font-size:.82rem;text-align:center;"></div>
       </div>
@@ -12134,30 +12133,48 @@ const s=document.createElement('style');s.textContent=`
     $v12('saveCodeEndDateV12')?.addEventListener('click',()=>{if(m.dataset.codeId)window.saveCodeEndDateV12(m.dataset.codeId);});
     const input=$v12('codeEndDateEditInputV12'),noExpiry=$v12('codeEndDateNoExpiryV12');
     noExpiry?.addEventListener('change',()=>{input.disabled=noExpiry.checked;if(noExpiry.checked)input.value='';});
+    input?.addEventListener('click',function(){
+      if(this.disabled)return;
+      try{if(typeof this.showPicker==='function')this.showPicker();}catch(_){ }
+    });
+    input?.addEventListener('focus',function(){
+      if(this.disabled)return;
+      try{if(typeof this.showPicker==='function')this.showPicker();}catch(_){ }
+    });
     m.addEventListener('click',e=>{if(e.target===m)close();});
     return m;
   }
   window.openCodeEndDateEditorV12=async function(codeId){
     if(!isAdmin||!activeCourseId)return showCustomAlert?.('غير مسموح','هذه العملية للمشرف فقط.');
-    const ref=codeRefV12(activeCourseId,codeId);
+    const m=ensureCodeEndDateEditModalV12();
+    m.dataset.codeId=codeId;
+    const input=$v12('codeEndDateEditInputV12'),noExpiry=$v12('codeEndDateNoExpiryV12'),status=$v12('codeEndDateEditStatusV12'),btn=$v12('saveCodeEndDateV12');
+    status.textContent='';
+    btn.disabled=true;
+    input.disabled=true;
+    noExpiry.checked=false;
+    input.value='';
+    m.classList.add('active');
+    m.style.display='flex';
+    m.style.visibility='visible';
+    m.style.opacity='1';
     try{
-      const snap=await ref.get();
-      if(!snap.exists)return showCustomAlert?.('خطأ','الكود غير موجود.');
+      const snap=await codeRefV12(activeCourseId,codeId).get();
+      if(!snap.exists){closeCodeEndDateEditorV12();return showCustomAlert?.('خطأ','الكود غير موجود.');}
       const c=snap.data()||{};
-      const m=ensureCodeEndDateEditModalV12();
-      m.dataset.codeId=codeId;
-      const input=$v12('codeEndDateEditInputV12'),noExpiry=$v12('codeEndDateNoExpiryV12'),status=$v12('codeEndDateEditStatusV12');
       const end=asDateV12(c.endTime);
       input.value=toDateTimeLocalV12(end);
       noExpiry.checked=!end;
       input.disabled=!end;
-      status.textContent='';
-      m.classList.add('active');
-      m.style.display='block';
-      m.style.visibility='visible';
-      m.style.opacity='1';
-    }catch(e){showCustomAlert?.('خطأ','تعذر تحميل تاريخ انتهاء الكود: '+e.message);}
+    }catch(e){
+      closeCodeEndDateEditorV12();
+      showCustomAlert?.('خطأ','تعذر تحميل تاريخ انتهاء الكود: '+e.message);
+    }finally{btn.disabled=false;}
   };
+  function closeCodeEndDateEditorV12(){
+    const m=$v12('codeEndDateEditModalV12');
+    if(m){m.classList.remove('active');m.style.display='none';}
+  }
   window.saveCodeEndDateV12=async function(codeId){
     if(!isAdmin||!activeCourseId)return;
     const input=$v12('codeEndDateEditInputV12'),noExpiry=$v12('codeEndDateNoExpiryV12'),status=$v12('codeEndDateEditStatusV12'),btn=$v12('saveCodeEndDateV12');
@@ -12172,8 +12189,7 @@ const s=document.createElement('style');s.textContent=`
     try{
       btn.disabled=true;status.textContent='جاري حفظ التعديل...';
       await codeRefV12(activeCourseId,codeId).update({endTime:end?firebase.firestore.Timestamp.fromDate(end):null,endTimeUpdatedAt:firebase.firestore.FieldValue.serverTimestamp(),endTimeUpdatedBy:currentUser?.uid||null});
-      const endModal=$v12('codeEndDateEditModalV12');
-      if(endModal){endModal.classList.remove('active');endModal.style.display='none';}
+      closeCodeEndDateEditorV12();
       await window.loadCodesForCourse(activeCourseId);
       await window.__codeDetail(activeCourseId,codeId);
       showCustomAlert?.('تم التعديل','تم تحديث تاريخ انتهاء الكود بنجاح.');
