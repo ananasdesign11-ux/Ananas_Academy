@@ -12004,14 +12004,30 @@ const s=document.createElement('style');s.textContent=`
 .code-detail-account-v12{display:flex;align-items:center;gap:14px;padding:14px;border:1px solid var(--border);border-radius:18px;background:var(--bg-card);margin-bottom:12px;}
 .code-detail-avatar-v12{width:64px;height:64px;border-radius:50%;display:grid;place-items:center;overflow:hidden;background:var(--accent-gradient);color:#fff;font-weight:900;flex:0 0 64px;font-size:1.35rem;border:2px solid rgba(108,92,231,.2);}
 .code-detail-avatar-v12 img{width:100%;height:100%;object-fit:cover;display:block;}
-.code-detail-actions-v12{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:14px;}
+.code-detail-actions-v12{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-top:14px;}
 .code-detail-action-v12{min-height:48px;border-radius:14px;border:1px solid transparent;color:#fff;font-family:inherit;font-weight:900;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;transition:.2s ease;}
 .code-detail-action-v12:hover{transform:translateY(-2px);box-shadow:0 10px 22px rgba(0,0,0,.14);}
 .code-detail-action-v12.suspend{background:#f39c12;border-color:#f39c12;}
 .code-detail-action-v12.suspend:hover{background:#e67e22;border-color:#e67e22;}
+.code-detail-action-v12.edit-end{background:#0984e3;border-color:#0984e3;}
+.code-detail-action-v12.edit-end:hover{background:#076bb5;border-color:#076bb5;}
 .code-detail-action-v12.delete{background:#e74c3c;border-color:#e74c3c;}
 .code-detail-action-v12.delete:hover{background:#c0392b;border-color:#c0392b;}
 .code-detail-action-v12[disabled]{opacity:.55;cursor:not-allowed;transform:none;box-shadow:none;}
+#codeEndDateEditModalV12{width:min(520px,95vw);max-height:90vh;overflow-y:auto;}
+.code-end-edit-v12{display:grid;gap:14px;}
+.code-end-edit-v12 .hint{color:var(--text-muted);font-size:.82rem;line-height:1.7;}
+.code-end-edit-v12 .field{display:grid;gap:7px;}
+.code-end-edit-v12 label{font-weight:800;font-size:.9rem;}
+.code-end-edit-v12 input[type="datetime-local"]{width:100%;padding:12px 14px;border-radius:14px;border:1px solid var(--border);background:var(--bg-secondary);color:var(--text-primary);font-family:inherit;font-size:.95rem;outline:none;}
+.code-end-edit-v12 input[type="datetime-local"]:focus{border-color:#0984e3;box-shadow:0 0 0 3px rgba(9,132,227,.12);}
+.code-end-edit-v12 .no-expiry{display:flex;align-items:center;gap:10px;padding:12px 14px;border:1px solid var(--border);border-radius:14px;background:var(--bg-secondary);cursor:pointer;}
+.code-end-edit-v12 .no-expiry input{width:18px;height:18px;accent-color:#0984e3;flex:0 0 auto;}
+.code-end-edit-v12 .actions{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:4px;}
+.code-end-edit-v12 .save{background:#0984e3;color:#fff;border:1px solid #0984e3;border-radius:14px;min-height:46px;font-family:inherit;font-weight:900;cursor:pointer;}
+.code-end-edit-v12 .cancel{background:var(--bg-secondary);color:var(--text-primary);border:1px solid var(--border);border-radius:14px;min-height:46px;font-family:inherit;font-weight:800;cursor:pointer;}
+.code-end-edit-v12 button:hover{transform:translateY(-1px);}
+@media(max-width:768px){.code-detail-actions-v12{grid-template-columns:1fr;}.code-end-edit-v12 .actions{grid-template-columns:1fr;}}
 .code-detail-status-active{color:#16a085!important;}
 .code-detail-status-suspended{color:#f39c12!important;}
 .code-detail-status-expired{color:#e74c3c!important;}
@@ -12078,7 +12094,82 @@ const s=document.createElement('style');s.textContent=`
     if(legacySuspendedV12(c))return {key:'suspended',label:'موقوف'};
     return {key:'active',label:'نشط'};
   }
-
+  function toDateTimeLocalV12(d){
+    if(!d)return '';
+    const pad=n=>String(n).padStart(2,'0');
+    return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  }
+  function ensureCodeEndDateEditModalV12(){
+    let m=$v12('codeEndDateEditModalV12');if(m)return m;
+    m=document.createElement('div');m.id='codeEndDateEditModalV12';m.className='edit-modal';
+    m.innerHTML=`
+      <button type="button" data-action="close" style="position:static;float:left;font-size:1.5rem;background:none;border:none;color:var(--text-muted);cursor:pointer;">&times;</button>
+      <h3>تعديل تاريخ انتهاء الكود</h3>
+      <div class="code-end-edit-v12">
+        <div class="hint">يمكنك تغيير تاريخ ووقت انتهاء هذا الكود، أو إزالة تاريخ الانتهاء ليصبح الكود غير منتهٍ.</div>
+        <div class="field">
+          <label for="codeEndDateEditInputV12">تاريخ ووقت الانتهاء</label>
+          <input id="codeEndDateEditInputV12" type="datetime-local">
+        </div>
+        <label class="no-expiry" for="codeEndDateNoExpiryV12">
+          <input id="codeEndDateNoExpiryV12" type="checkbox">
+          <span>جعل الكود بدون تاريخ انتهاء</span>
+        </label>
+        <div class="actions">
+          <button type="button" class="cancel" data-action="cancel">إلغاء</button>
+          <button type="button" class="save" id="saveCodeEndDateV12">حفظ التعديل</button>
+        </div>
+        <div id="codeEndDateEditStatusV12" class="hint" style="min-height:1.2em;"></div>
+      </div>`;
+    document.body.appendChild(m);
+    const close=()=>m.classList.remove('active');
+    m.querySelector('[data-action="close"]')?.addEventListener('click',close);
+    m.querySelector('[data-action="cancel"]')?.addEventListener('click',close);
+    $v12('saveCodeEndDateV12')?.addEventListener('click',()=>{if(m.dataset.codeId)window.saveCodeEndDateV12(m.dataset.codeId);});
+    const input=$v12('codeEndDateEditInputV12'),noExpiry=$v12('codeEndDateNoExpiryV12');
+    noExpiry?.addEventListener('change',()=>{input.disabled=noExpiry.checked;if(noExpiry.checked)input.value='';});
+    m.addEventListener('click',e=>{if(e.target===m)close();});
+    return m;
+  }
+  window.openCodeEndDateEditorV12=async function(codeId){
+    if(!isAdmin||!activeCourseId)return showCustomAlert?.('غير مسموح','هذه العملية للمشرف فقط.');
+    const ref=codeRefV12(activeCourseId,codeId);
+    try{
+      const snap=await ref.get();
+      if(!snap.exists)return showCustomAlert?.('خطأ','الكود غير موجود.');
+      const c=snap.data()||{};
+      const m=ensureCodeEndDateEditModalV12();
+      m.dataset.codeId=codeId;
+      const input=$v12('codeEndDateEditInputV12'),noExpiry=$v12('codeEndDateNoExpiryV12'),status=$v12('codeEndDateEditStatusV12');
+      const end=asDateV12(c.endTime);
+      input.value=toDateTimeLocalV12(end);
+      noExpiry.checked=!end;
+      input.disabled=!end;
+      status.textContent='';
+      m.classList.add('active');
+    }catch(e){showCustomAlert?.('خطأ','تعذر تحميل تاريخ انتهاء الكود: '+e.message);}
+  };
+  window.saveCodeEndDateV12=async function(codeId){
+    if(!isAdmin||!activeCourseId)return;
+    const input=$v12('codeEndDateEditInputV12'),noExpiry=$v12('codeEndDateNoExpiryV12'),status=$v12('codeEndDateEditStatusV12'),btn=$v12('saveCodeEndDateV12');
+    if(!input||!noExpiry||!btn)return;
+    let end=null;
+    if(!noExpiry.checked){
+      if(!input.value)return showCustomAlert?.('تنبيه','حدد تاريخ ووقت انتهاء الكود، أو اختر بدون تاريخ انتهاء.');
+      end=new Date(input.value);
+      if(isNaN(end.getTime()))return showCustomAlert?.('تنبيه','تاريخ ووقت الانتهاء غير صحيحين.');
+      if(end.getTime()<=Date.now())return showCustomAlert?.('تنبيه','تاريخ الانتهاء يجب أن يكون في المستقبل.');
+    }
+    try{
+      btn.disabled=true;status.textContent='جاري حفظ التعديل...';
+      await codeRefV12(activeCourseId,codeId).update({endTime:end?firebase.firestore.Timestamp.fromDate(end):null,endTimeUpdatedAt:firebase.firestore.FieldValue.serverTimestamp(),endTimeUpdatedBy:currentUser?.uid||null});
+      $v12('codeEndDateEditModalV12')?.classList.remove('active');
+      await window.loadCodesForCourse(activeCourseId);
+      await window.__codeDetail(activeCourseId,codeId);
+      showCustomAlert?.('تم التعديل','تم تحديث تاريخ انتهاء الكود بنجاح.');
+    }catch(e){status.textContent='تعذر حفظ التعديل.';showCustomAlert?.('خطأ','تعذر تعديل تاريخ انتهاء الكود: '+e.message);}
+    finally{btn.disabled=false;status.textContent='';}
+  };
   window.__codeDetail=async function(courseId,codeId){
     if(!isAdmin||!courseId||!codeId)return;
     const m=ensureDetailModalV12(),body=$v12('codeDetailBodyV12');
@@ -12146,6 +12237,9 @@ const s=document.createElement('style');s.textContent=`
         <div class="code-detail-actions-v12">
           <button type="button" class="code-detail-action-v12 suspend" onclick="toggleEnrollmentCode('${escV12(codeId)}',${status.key==='suspended'});event.stopPropagation()"${suspendDisabled}>
             <i class="fas ${suspendIcon}"></i><span>${suspendLabel}</span>
+          </button>
+          <button type="button" class="code-detail-action-v12 edit-end" onclick="openCodeEndDateEditorV12('${escV12(codeId)}');event.stopPropagation()">
+            <i class="fas fa-calendar-alt"></i><span>تعديل تاريخ النهاية</span>
           </button>
           <button type="button" class="code-detail-action-v12 delete" onclick="deleteEnrollmentCode('${escV12(codeId)}');event.stopPropagation()">
             <i class="fas fa-trash"></i><span>حذف الكود</span>
