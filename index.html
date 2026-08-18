@@ -6616,10 +6616,43 @@ label[for*="En"], input[id*="En"], textarea[id*="En"] { display:none !important;
         });
 
         // === إدارة الأكواد ===
+        function ensureCodeEndFieldVisible(){
+            const modal=document.getElementById('manageCodesModal');
+            if(!modal) return;
+            let end=document.getElementById('codeEndDate');
+            const start=document.getElementById('codeStartDate');
+            const grid=start?.closest('div[style*="grid-template-columns"]');
+            if(!end && grid){
+                const cell=document.createElement('div');
+                cell.innerHTML='<label id="codeEndLabel">وقت النهاية (اختياري)</label><input type="datetime-local" id="codeEndDate">';
+                grid.appendChild(cell);
+                end=cell.querySelector('#codeEndDate');
+            }
+            if(end){
+                end.style.removeProperty('display');
+                end.style.visibility='visible';
+                end.style.opacity='1';
+                end.disabled=false;
+                const label=end.parentElement?.querySelector('#codeEndLabel');
+                if(label){
+                    label.style.removeProperty('display');
+                    label.style.visibility='visible';
+                    label.textContent=currentLang==='en'?'End Time (Optional)':'وقت النهاية (اختياري)';
+                }
+                const cell=end.parentElement;
+                if(cell){
+                    cell.style.removeProperty('display');
+                    cell.style.visibility='visible';
+                    cell.style.opacity='1';
+                }
+            }
+        }
         document.getElementById('manageCodesBtn').addEventListener('click', () => {
             if(!isAdmin) return showCustomAlert('غير مسموح', 'إدارة الأكواد متاحة للمشرف فقط.');
             if(!activeCourseId) return showCustomAlert('تنبيه', 'الرجاء فتح الدورة أولاً.');
+            ensureCodeEndFieldVisible();
             document.getElementById('manageCodesModal').classList.add('active');
+            requestAnimationFrame(ensureCodeEndFieldVisible);
             loadCodesForCourse(activeCourseId);
         });
 
@@ -14660,5 +14693,11 @@ body.light-mode #lessonVideoWrapper .aa-speed-value{color:#172033!important;}
 
 })();
 </script>
+
+<style id="aa-code-end-visible-final">
+#manageCodesModal #codeEndDate,#manageCodesModal #codeEndLabel{display:block!important;visibility:visible!important;opacity:1!important;}
+#manageCodesModal #codeEndDate{width:100%!important;box-sizing:border-box!important;min-height:44px!important;}
+#manageCodesModal #codeEndDate:disabled{opacity:1!important;}
+</style>
 </body>
 </html>
