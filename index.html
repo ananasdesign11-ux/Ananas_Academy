@@ -8356,37 +8356,6 @@ async function isCodePermanentlyArchived(courseId,rawCode){
   const snaps=await Promise.all(keys.map(k=>db.collection('courses').doc(courseId).collection('codeArchive').doc(k).get()));
   return snaps.some(s=>s.exists);
 }
-window.__codeDetail=function(courseId,codeId){
-  db.collection('courses').doc(courseId).collection('codes').doc(codeId).get().then(s=>{
-    if(!s.exists)return showCustomAlert('تنبيه','الكود غير موجود.');
-    const c=s.data()||{}, users=Array.isArray(c.usedByInfo)?c.usedByInfo:[], start=c.startTime?.toDate?c.startTime.toDate():c.startTime?new Date(c.startTime):null, end=c.endTime?.toDate?c.endTime.toDate():c.endTime?new Date(c.endTime):null;
-    const esc=x=>escapeHtml(String(x??''));
-    let html=`<div style="display:grid;gap:10px"><div><strong>الكود:</strong> ${esc(c.code)}</div><div><strong>الاستخدام:</strong> ${Number(c.usedCount||0)}/1</div><div><strong>البداية:</strong> ${start?start.toLocaleString('ar-SA'):'-'}</div><div><strong>النهاية:</strong> ${end?end.toLocaleString('ar-SA'):'لا ينتهي'}</div><div><strong>الحالة:</strong> ${c.disabled?'موقوف':'نشط'}</div><hr>`;
-    users.forEach(u=>{html+=`<div style="padding:10px;border:1px solid var(--border);border-radius:12px"><strong>${esc(u.name||'مستخدم')}</strong><br><small>${esc(u.email||'')}</small><br><small>الهاتف: ${esc(u.phone||'غير مسجل')} · الجنس: ${esc(u.gender||'غير مسجل')}</small></div>`;});
-    html+='</div>';
-    let m=document.getElementById('codeDetailModal');if(!m){m=document.createElement('div');m.id='codeDetailModal';m.className='edit-modal';m.innerHTML='<button class="modal-close" onclick="this.parentElement.classList.remove(\'active\')">×</button><h3>تفاصيل الكود</h3><div id="codeDetailBody"></div>';document.body.appendChild(m);}
-    document.getElementById('codeDetailBody').innerHTML=html;m.classList.add('active');
-  });
-};
-
-const oldLoadCodes=window.loadCodesForCourse;
-window.loadCodesForCourse=async function(courseId){
-  if(!isAdmin)return;
-  const tbody=document.getElementById('codesTableBody');if(!tbody)return;
-  try{
-    const snap=await db.collection('courses').doc(courseId).collection('codes').get();
-    let host=document.getElementById('codeLifecycleTabs');
-    if(!host){
-      host=document.createElement('div');host.id='codeLifecycleTabs';host.innerHTML='<button data-filter="unused">الأكواد غير المستخدمة</button><button data-filter="used">الأكواد المستخدمة</button><button data-filter="expired">الأكواد المنتهية</button>';tbody.closest('table')?.parentElement?.insertBefore(host,tbody.closest('table'));
-      host.querySelectorAll('button').forEach(b=>b.addEventListener('click',()=>{host.querySelectorAll('button').forEach(x=>x.classList.remove('active'));b.classList.add('active');window.__codeLifecycleFilter=b.dataset.filter;window.loadCodesForCourse(courseId);}));
-    }
-    if(!window.__codeLifecycleFilter)window.__codeLifecycleFilter='unused';
-    host.querySelectorAll('button').forEach(b=>b.classList.toggle('active',b.dataset.filter===window.__codeLifecycleFilter));
-    const rows=[];snap.forEach(doc=>{const c=doc.data()||{}, used=Number(c.usedCount||0)>0, end=c.endTime?.toDate?c.endTime.toDate():c.endTime?new Date(c.endTime):null, expired=!!end&&end.getTime()<Date.now();let category=expired?'expired':used?'used':'unused';if(category!==window.__codeLifecycleFilter)return;const info=Array.isArray(c.usedByInfo)?c.usedByInfo:[];const name=info[0]?.name||'كود غير مستخدم';const label=category==='used'?name:(c.code||'كود');rows.push(`<tr data-code-row="${doc.id}"><td colspan="6"><button class="code-card-button" onclick="__codeDetail('${courseId}','${doc.id}')"><span>${escapeHtml(label)}</span><small>${escapeHtml(c.code||'')}</small></button><div class="code-card-actions"><button class="code-action-btn danger" onclick="toggleEnrollmentCode('${doc.id}',${!!c.disabled})">${c.disabled?'إلغاء الإيقاف':'إيقاف'}</button><button class="code-action-btn danger" onclick="deleteEnrollmentCode('${doc.id}')">حذف</button></div></td></tr>`);});
-    tbody.innerHTML=rows.length?rows.join(''):'<tr><td colspan="6" style="text-align:center;color:var(--text-muted);padding:30px">لا توجد أكواد في هذه القائمة.</td></tr>';
-  }catch(e){console.error(e);showCustomAlert('خطأ','تعذر تحميل الأكواد.');}
-};
-
 /* Delete = archive forever + block the linked account immediately. */
 window.deleteEnrollmentCode=async function(codeId){
  if(!isAdmin||!activeCourseId)return showCustomAlert('غير مسموح','هذه العملية للمشرف فقط.');
@@ -12029,6 +11998,25 @@ const s=document.createElement('style');s.textContent=`
 @media(max-width:900px){#codeLifecycleBoardV12{grid-template-columns:1fr;}.code-detail-grid-v12{grid-template-columns:1fr;}}
 @media(max-width:768px){#codeLifecycleBoardV12{gap:10px}.code-lifecycle-panel{padding:11px}#codeDetailModalV12{width:calc(100vw - 20px);max-width:none;max-height:calc(100dvh - 90px);padding:16px;}}
 </style>
+<div id="codeDetailModalV12" class="edit-modal" aria-hidden="true">
+  <button type="button" id="codeDetailCloseV12" class="modal-close" aria-label="إغلاق">&times;</button>
+  <h3>تفاصيل الكود</h3>
+  <div id="codeDetailBodyV12"></div>
+</div>
+<div id="editCodeEndDateModalV12" class="edit-modal" aria-hidden="true" role="dialog" aria-labelledby="editCodeEndDateTitleV12">
+  <button type="button" id="editCodeEndDateCloseV12" class="modal-close" aria-label="إغلاق">&times;</button>
+  <h3 id="editCodeEndDateTitleV12">تعديل تاريخ انتهاء الكود</h3>
+  <label for="editCodeEndDateInputV12">تاريخ ووقت الانتهاء</label>
+  <input id="editCodeEndDateInputV12" type="datetime-local">
+  <div style="display:flex;gap:8px;align-items:center;justify-content:space-between;margin-top:8px;flex-wrap:wrap">
+    <small style="color:var(--text-muted)">اترك الخانة فارغة لجعل الكود بدون تاريخ انتهاء.</small>
+    <button type="button" id="clearCodeEndDateV12" class="code-detail-action">إزالة تاريخ الانتهاء</button>
+  </div>
+  <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px;flex-wrap:wrap">
+    <button type="button" id="cancelCodeEndDateV12" class="code-detail-action">إلغاء</button>
+    <button type="button" id="saveCodeEndDateV12" class="code-detail-action success">حفظ</button>
+  </div>
+</div>
 <script>
 (function(){
   'use strict';
@@ -12071,17 +12059,22 @@ const s=document.createElement('style');s.textContent=`
     return b;
   }
   function ensureDetailModalV12(){
-    let m=$v12('codeDetailModalV12');if(m)return m;
-    m=document.createElement('div');m.id='codeDetailModalV12';m.className='edit-modal';
-    m.innerHTML='<button type="button" onclick="this.parentElement.classList.remove(\'active\')" style="position:static;float:left;font-size:1.5rem;background:none;border:none;color:var(--text-muted);cursor:pointer;">&times;</button><h3>تفاصيل الكود</h3><div id="codeDetailBodyV12"></div>';
-    document.body.appendChild(m);return m;
+    const m=$v12('codeDetailModalV12');
+    return m||null;
+  }
+
+  function setModalOpenV12(el,open){
+    if(!el)return;
+    el.classList.toggle('active',open);
+    el.setAttribute('aria-hidden',open?'false':'true');
+    if(open)ensurePopupLayerV12?.(el);
   }
   function dateTextV12(d,empty='—'){return d?d.toLocaleString('ar-SA',{timeZone:'Asia/Riyadh'}):empty;}
 
   window.__codeDetail=async function(courseId,codeId){
     if(!isAdmin||!courseId||!codeId)return;
     const m=ensureDetailModalV12(),body=$v12('codeDetailBodyV12');
-    body.innerHTML='<div style="padding:24px;text-align:center;color:var(--text-muted)">جاري تحميل التفاصيل...</div>';m.classList.add('active');
+    body.innerHTML='<div style="padding:24px;text-align:center;color:var(--text-muted)">جاري تحميل التفاصيل...</div>';setModalOpenV12(m,true);
     try{
       const snap=await codeRefV12(courseId,codeId).get();
       if(!snap.exists){body.innerHTML='<div class="code-detail-empty">الكود غير موجود.</div>';return;}
@@ -12146,70 +12139,80 @@ const s=document.createElement('style');s.textContent=`
     el.style.zIndex=String(next);
     return next;
   }
-  document.addEventListener('click',function(e){
-    const btn=e.target.closest?.('.js-edit-code-end-date-v12');
-    if(!btn)return;
-    e.preventDefault();
-    e.stopPropagation();
-    window.editCodeEndDateV12?.(btn.dataset.courseId||'',btn.dataset.codeId||'');
-  });
-
   window.editCodeEndDateV12=async function(courseId,codeId){
-    if(!courseId||!codeId)return;
-    if(!isAdmin)return showCustomAlert?.('غير مسموح','هذه العملية للمشرف فقط.');
-    const ref=codeRefV12(courseId,codeId);
-    let snap;
-    try{snap=await ref.get();}catch(e){return showCustomAlert?.('خطأ','تعذر تحميل الكود: '+e.message);}
-    if(!snap.exists)return showCustomAlert?.('خطأ','الكود غير موجود.');
-    const c=await normalizeLegacyCodeV12(courseId,codeId,snap.data()||{});
-    const oldEnd=asDateV12(c.endTime);
-    let modal=document.getElementById('editCodeEndDateModalV12');
-    if(!modal){
-      modal=document.createElement('div');
-      modal.id='editCodeEndDateModalV12';
-      modal.className='edit-modal';
-      modal.innerHTML=`<button type="button" class="modal-close" aria-label="إغلاق">&times;</button>
-        <h3>تعديل تاريخ انتهاء الكود</h3>
-        <label for="editCodeEndDateInputV12">تاريخ ووقت الانتهاء</label>
-        <input id="editCodeEndDateInputV12" type="datetime-local">
-        <div style="display:flex;gap:8px;align-items:center;justify-content:space-between;margin-top:8px;flex-wrap:wrap">
-          <small style="color:var(--text-muted)">اترك الخانة فارغة لجعل الكود بدون تاريخ انتهاء.</small>
-          <button type="button" id="clearCodeEndDateV12" class="code-detail-action">إزالة تاريخ الانتهاء</button>
-        </div>
-        <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px;flex-wrap:wrap">
-          <button type="button" id="cancelCodeEndDateV12" class="code-detail-action">إلغاء</button>
-          <button type="button" id="saveCodeEndDateV12" class="code-detail-action success">حفظ</button>
-        </div>`;
-      document.body.appendChild(modal);
-      modal.querySelector('.modal-close').addEventListener('click',()=>modal.classList.remove('active'));
-      modal.querySelector('#cancelCodeEndDateV12').addEventListener('click',()=>modal.classList.remove('active'));
-      modal.querySelector('#clearCodeEndDateV12').addEventListener('click',()=>{const i=modal.querySelector('#editCodeEndDateInputV12');if(i)i.value='';});
-      modal.querySelector('#saveCodeEndDateV12').addEventListener('click',async()=>{
-        const input=modal.querySelector('#editCodeEndDateInputV12');
-        const btn=modal.querySelector('#saveCodeEndDateV12');
-        const raw=input?.value||'';
-        let endTime=null;
-        if(raw){
-          const d=new Date(raw);
-          if(isNaN(d.getTime()))return showCustomAlert?.('تنبيه','أدخل تاريخًا ووقتًا صحيحين.');
-          if(d.getTime()<=Date.now())return showCustomAlert?.('تنبيه','تاريخ الانتهاء يجب أن يكون في المستقبل.');
-          endTime=firebase.firestore.Timestamp.fromDate(d);
-        }
-        btn.disabled=true;const original=btn.textContent;btn.textContent='جاري الحفظ...';
-        try{
-          await codeRefV12(courseId,codeId).update({endTime,updatedAt:firebase.firestore.FieldValue.serverTimestamp()});
-          modal.classList.remove('active');
-          await window.__codeDetail(courseId,codeId);
-          showCustomAlert?.('تم الحفظ',endTime?'تم تحديث تاريخ انتهاء الكود.':'تمت إزالة تاريخ انتهاء الكود.');
-        }catch(e){showCustomAlert?.('خطأ','تعذر تحديث تاريخ انتهاء الكود: '+e.message);}
-        finally{btn.disabled=false;btn.textContent=original;}
-      });
+    if(!isAdmin||!courseId||!codeId)return;
+    const modal=$v12('editCodeEndDateModalV12');
+    const input=$v12('editCodeEndDateInputV12');
+    if(!modal||!input)return showCustomAlert?.('خطأ','تعذر فتح واجهة تعديل تاريخ الانتهاء.');
+
+    modal.dataset.courseId=String(courseId);
+    modal.dataset.codeId=String(codeId);
+    input.value='';
+    input.disabled=true;
+    setModalOpenV12(modal,true);
+
+    try{
+      const snap=await codeRefV12(courseId,codeId).get();
+      if(!snap.exists){
+        setModalOpenV12(modal,false);
+        return showCustomAlert?.('خطأ','الكود غير موجود.');
+      }
+      const c=await normalizeLegacyCodeV12(courseId,codeId,snap.data()||{});
+      input.value=localDateTimeValueV12(asDateV12(c.endTime));
+      input.disabled=false;
+      input.focus();
+    }catch(e){
+      setModalOpenV12(modal,false);
+      showCustomAlert?.('خطأ','تعذر تحميل الكود: '+e.message);
     }
-    const input=modal.querySelector('#editCodeEndDateInputV12');
-    if(input)input.value=localDateTimeValueV12(oldEnd);
-    modal.classList.add('active');
-    ensurePopupLayerV12(modal);
   };
+
+  function wireEditCodeEndDateModalV12(){
+    const detailModal=$v12('codeDetailModalV12');
+    const detailClose=$v12('codeDetailCloseV12');
+    if(detailModal&&detailClose&&detailClose.dataset.wired!=='1'){
+      detailClose.dataset.wired='1';
+      detailClose.addEventListener('click',()=>setModalOpenV12(detailModal,false));
+    }
+    const modal=$v12('editCodeEndDateModalV12');
+    const close=$v12('editCodeEndDateCloseV12');
+    const cancel=$v12('cancelCodeEndDateV12');
+    const clear=$v12('clearCodeEndDateV12');
+    const save=$v12('saveCodeEndDateV12');
+    const input=$v12('editCodeEndDateInputV12');
+    if(!modal||!close||!cancel||!clear||!save||!input||modal.dataset.wired==='1')return;
+    modal.dataset.wired='1';
+    const closeModal=()=>{input.disabled=false;setModalOpenV12(modal,false);};
+    close.addEventListener('click',closeModal);
+    cancel.addEventListener('click',closeModal);
+    clear.addEventListener('click',()=>{input.value='';input.focus();});
+    save.addEventListener('click',async()=>{
+      const courseId=modal.dataset.courseId||'',codeId=modal.dataset.codeId||'';
+      if(!courseId||!codeId)return showCustomAlert?.('خطأ','تعذر تحديد الكود المطلوب تعديله.');
+      const raw=input.value||'';
+      let endTime=null;
+      if(raw){
+        const d=new Date(raw);
+        if(isNaN(d.getTime()))return showCustomAlert?.('تنبيه','أدخل تاريخًا ووقتًا صحيحين.');
+        if(d.getTime()<=Date.now())return showCustomAlert?.('تنبيه','تاريخ الانتهاء يجب أن يكون في المستقبل.');
+        endTime=firebase.firestore.Timestamp.fromDate(d);
+      }
+      save.disabled=true;
+      const original=save.textContent;
+      save.textContent='جاري الحفظ...';
+      try{
+        await codeRefV12(courseId,codeId).update({endTime,updatedAt:firebase.firestore.FieldValue.serverTimestamp()});
+        closeModal();
+        await window.__codeDetail(courseId,codeId);
+        showCustomAlert?.('تم الحفظ',endTime?'تم تحديث تاريخ انتهاء الكود.':'تمت إزالة تاريخ انتهاء الكود.');
+      }catch(e){
+        showCustomAlert?.('خطأ','تعذر تحديث تاريخ انتهاء الكود: '+e.message);
+      }finally{
+        save.disabled=false;
+        save.textContent=original;
+      }
+    });
+  }
 
   function observePopupLayersV12(){
     const selectors='.edit-modal.active,.auth-popup.active,.custom-alert-modal.active,#quizOverlay.active,.gallery-viewer.active,.platform-image-viewer.active,.file-viewer-overlay.active,.profile-self-modal.active';
@@ -12218,7 +12221,7 @@ const s=document.createElement('style');s.textContent=`
     const obs=new MutationObserver(muts=>muts.forEach(m=>{if(m.type==='attributes'&&m.attributeName==='class')apply(m.target);}));
     obs.observe(document.body,{subtree:true,attributes:true,attributeFilter:['class']});
   }
-  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',observePopupLayersV12,{once:true});else observePopupLayersV12();
+  if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',()=>{wireEditCodeEndDateModalV12();observePopupLayersV12();},{once:true});}else{wireEditCodeEndDateModalV12();observePopupLayersV12();}
 
   async function clearLegacyAccessBlockV12(courseId,codeId,users){
     const uids=(users||[]).map(x=>String(typeof x==='string'?x:x?.uid||'')).filter(Boolean);
