@@ -12018,13 +12018,13 @@ const s=document.createElement('style');s.textContent=`
 #codeEndDateEditModalV12.active{display:flex!important;visibility:visible!important;opacity:1!important;}
 #codeEndDateEditModalV12 .code-end-edit-card{width:min(560px,calc(100vw - 28px));max-height:calc(100vh - 28px);overflow:auto;background:var(--bg-card);color:var(--text-primary);border:1px solid var(--border);border-radius:24px;padding:24px;box-shadow:0 25px 80px rgba(0,0,0,.28);position:relative;}
 #codeEndDateEditModalV12 .code-end-edit-close{position:absolute;top:14px;inset-inline-end:14px;width:38px;height:38px;border:0;border-radius:50%;background:transparent;color:var(--text-muted);font-size:1.35rem;cursor:pointer;display:grid;place-items:center;}
+#codeEndDateEditModalV12 .code-end-edit-close:focus-visible{outline:2px solid #0984e3;outline-offset:2px;}
 #codeEndDateEditModalV12 .code-end-edit-close:hover{background:var(--bg-secondary);color:#0984e3;}
 #codeEndDateEditModalV12 .code-end-edit-title{margin:4px 48px 8px;text-align:center;color:var(--accent1);font-size:1.35rem;font-weight:900;}
-#codeEndDateEditModalV12 .code-end-edit-desc{margin:0 0 18px;text-align:center;color:var(--text-muted);font-size:.86rem;line-height:1.8;}
 .code-end-edit-v12{display:grid;gap:14px;}
 .code-end-edit-v12 .field{display:grid;gap:7px;}
 .code-end-edit-v12 .field label{font-weight:800;font-size:.9rem;}
-.code-end-edit-v12 input[type="datetime-local"]{display:block!important;visibility:visible!important;opacity:1!important;width:100%!important;min-height:46px!important;padding:11px 13px!important;border-radius:14px!important;border:1px solid var(--border)!important;background:var(--bg-secondary)!important;color:var(--text-primary)!important;font-family:inherit!important;font-size:.95rem!important;outline:none!important;box-sizing:border-box!important;cursor:pointer!important;color-scheme:light dark!important;}
+.code-end-edit-v12 input[type="datetime-local"]{display:block!important;visibility:visible!important;opacity:1!important;position:relative!important;z-index:2!important;width:100%!important;min-height:50px!important;padding:11px 13px!important;border-radius:14px!important;border:1px solid var(--border)!important;background:var(--bg-secondary)!important;color:var(--text-primary)!important;font-family:inherit!important;font-size:16px!important;outline:none!important;box-sizing:border-box!important;cursor:pointer!important;appearance:auto!important;-webkit-appearance:auto!important;touch-action:manipulation!important;}
 .code-end-edit-v12 input[type="datetime-local"]:focus{border-color:#0984e3!important;box-shadow:0 0 0 3px rgba(9,132,227,.12)!important;}
 .code-end-edit-v12 .no-expiry{display:flex;align-items:center;gap:10px;padding:12px 14px;border:1px solid var(--border);border-radius:14px;background:var(--bg-secondary);cursor:pointer;}
 .code-end-edit-v12 .no-expiry input{display:block!important;visibility:visible!important;opacity:1!important;width:18px!important;height:18px!important;margin:0!important;accent-color:#0984e3;flex:0 0 auto;}
@@ -12113,7 +12113,7 @@ const s=document.createElement('style');s.textContent=`
       <div class="code-end-edit-v12">
         <div class="field">
           <label for="codeEndDateEditInputV12">تاريخ ووقت الانتهاء</label>
-          <input id="codeEndDateEditInputV12" type="datetime-local" autocomplete="off">
+          <input id="codeEndDateEditInputV12" type="datetime-local" autocomplete="off" inputmode="none">
         </div>
         <label class="no-expiry" for="codeEndDateNoExpiryV12">
           <input id="codeEndDateNoExpiryV12" type="checkbox">
@@ -12121,47 +12121,49 @@ const s=document.createElement('style');s.textContent=`
         </label>
         <div class="actions">
           <button type="button" class="cancel" data-action="cancel">إلغاء</button>
-          <button type="button" class="save" id="saveCodeEndDateV12">حفظ</button>
+          <button type="button" class="save" id="saveCodeEndDateV12"><i class="fas fa-check"></i> حفظ</button>
         </div>
         <div id="codeEndDateEditStatusV12" style="min-height:1.2em;color:var(--text-muted);font-size:.82rem;text-align:center;"></div>
       </div>
     </div>`;
     document.body.appendChild(m);
-    const close=()=>{m.classList.remove('active');m.style.display='none';};
+    const close=()=>{m.classList.remove('active');m.style.display='none';m.dataset.codeId='';};
     m.querySelector('[data-action="close"]')?.addEventListener('click',close);
     m.querySelector('[data-action="cancel"]')?.addEventListener('click',close);
     $v12('saveCodeEndDateV12')?.addEventListener('click',()=>{if(m.dataset.codeId)window.saveCodeEndDateV12(m.dataset.codeId);});
     const input=$v12('codeEndDateEditInputV12'),noExpiry=$v12('codeEndDateNoExpiryV12');
-    noExpiry?.addEventListener('change',()=>{input.disabled=noExpiry.checked;if(noExpiry.checked)input.value='';});
+    noExpiry?.addEventListener('change',()=>{
+      if(noExpiry.checked){input.value='';input.disabled=true;}
+      else{input.disabled=false;setTimeout(()=>{try{input.focus();if(typeof input.showPicker==='function')input.showPicker();}catch(_){ }},0);}
+    });
+    const openPicker=()=>{
+      if(input.disabled)return;
+      try{input.focus();if(typeof input.showPicker==='function')input.showPicker();}
+      catch(_){try{input.click();}catch(__){}}
+    };
+    input?.addEventListener('pointerdown',openPicker);
+    input?.addEventListener('click',openPicker);
+    input?.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();openPicker();}});
     m.addEventListener('click',e=>{if(e.target===m)close();});
     return m;
   }
-  window.openCodeEndDateEditorV12=async function(codeId){
+  window.openCodeEndDateEditorV12=function(codeId,currentEndISO){
     if(!isAdmin||!activeCourseId)return showCustomAlert?.('غير مسموح','هذه العملية للمشرف فقط.');
     const m=ensureCodeEndDateEditModalV12();
     m.dataset.codeId=codeId;
     const input=$v12('codeEndDateEditInputV12'),noExpiry=$v12('codeEndDateNoExpiryV12'),status=$v12('codeEndDateEditStatusV12'),btn=$v12('saveCodeEndDateV12');
     status.textContent='';
-    btn.disabled=true;
-    input.disabled=true;
-    noExpiry.checked=false;
-    input.value='';
+    btn.disabled=false;
+    noExpiry.checked=!currentEndISO;
+    input.disabled=!currentEndISO;
+    input.value=currentEndISO?toDateTimeLocalV12(new Date(currentEndISO)):'';
     m.classList.add('active');
     m.style.display='flex';
     m.style.visibility='visible';
     m.style.opacity='1';
-    try{
-      const snap=await codeRefV12(activeCourseId,codeId).get();
-      if(!snap.exists){closeCodeEndDateEditorV12();return showCustomAlert?.('خطأ','الكود غير موجود.');}
-      const c=snap.data()||{};
-      const end=asDateV12(c.endTime);
-      input.value=toDateTimeLocalV12(end);
-      noExpiry.checked=!end;
-      input.disabled=!end;
-    }catch(e){
-      closeCodeEndDateEditorV12();
-      showCustomAlert?.('خطأ','تعذر تحميل تاريخ انتهاء الكود: '+e.message);
-    }finally{btn.disabled=false;}
+    if(currentEndISO){
+      setTimeout(()=>{try{if(typeof input.showPicker==='function')input.showPicker();}catch(_){ }},0);
+    }
   };
   function closeCodeEndDateEditorV12(){
     const m=$v12('codeEndDateEditModalV12');
@@ -12256,7 +12258,7 @@ const s=document.createElement('style');s.textContent=`
           <button type="button" class="code-detail-action-v12 suspend" onclick="toggleEnrollmentCode('${escV12(codeId)}',${status.key==='suspended'});event.stopPropagation()"${suspendDisabled}>
             <i class="fas ${suspendIcon}"></i><span>${suspendLabel}</span>
           </button>
-          <button type="button" class="code-detail-action-v12 edit-end" onclick="window.openCodeEndDateEditorV12('${escV12(codeId)}');event.stopPropagation()">
+          <button type="button" class="code-detail-action-v12 edit-end" onclick="window.openCodeEndDateEditorV12('${escV12(codeId)}',${end?`'${end.toISOString()}'`:"''"});event.stopPropagation()">
             <i class="fas fa-calendar-alt"></i><span>تعديل تاريخ النهاية</span>
           </button>
           <button type="button" class="code-detail-action-v12 delete" onclick="deleteEnrollmentCode('${escV12(codeId)}');event.stopPropagation()">
