@@ -12030,6 +12030,9 @@ const s=document.createElement('style');s.textContent=`
 .code-detail-end-edit-btn-v14:active{transform:scale(.97) !important;}
 .code-detail-end-edit-btn-v14 i{font-size:.9em;opacity:.9;}
 #codeEndEditModalV14{width:min(520px,94vw);max-width:520px;}
+#codeEndEditModalV14{position:fixed!important;pointer-events:auto!important;z-index:300000!important;}
+#codeEndEditModalV14.active{display:block!important;visibility:visible!important;opacity:1!important;pointer-events:auto!important;}
+
 #codeEndEditModalV14 .code-end-edit-head-v14{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px;}
 #codeEndEditModalV14 .code-end-edit-head-v14 strong{font-size:1.05rem;}
 #codeEndEditModalV14 .code-end-edit-head-v14 span{font-size:.72rem;color:var(--text-muted);background:rgba(108,92,231,.08);padding:4px 8px;border-radius:999px;}
@@ -12178,6 +12181,22 @@ const s=document.createElement('style');s.textContent=`
     const m=ensureCodeEndEditModalV14();m.dataset.courseId=courseId;m.dataset.codeId=codeId;const input=$v12('codeEndEditInputV14');if(input)input.value=endValue||'';m.classList.add('active');window.__aaRaiseModalV14?.(m);setTimeout(()=>input?.focus(),30);
   }
 
+  // One delegated handler only: the details card is rebuilt dynamically, so the button itself must not own a fragile listener.
+  if(!window.__aaCodeEndEditDelegatedV15){
+    window.__aaCodeEndEditDelegatedV15=true;
+    document.addEventListener('click',function(e){
+      const btn=e.target?.closest?.('#codeDetailEditEndBtnV14');
+      if(!btn)return;
+      e.preventDefault();
+      e.stopPropagation();
+      const courseId=String(btn.dataset.codeCourseId||'');
+      const codeId=String(btn.dataset.codeId||'');
+      const endValue=String(btn.dataset.codeEndValue||'');
+      if(!courseId||!codeId)return;
+      openCodeEndEditV14(courseId,codeId,endValue);
+    },true);
+  }
+
   window.__codeDetail=async function(courseId,codeId){
     if(!isAdmin||!courseId||!codeId)return;
     const m=ensureDetailModalV12(),body=$v12('codeDetailBodyV12');
@@ -12239,7 +12258,12 @@ const s=document.createElement('style');s.textContent=`
         await deleteEnrollmentCode(codeId);
       });
       const editEndBtn=$v12('codeDetailEditEndBtnV14');
-      if(editEndBtn) editEndBtn.onclick=()=>openCodeEndEditV14(courseId,codeId,endValue);
+      if(editEndBtn){
+        editEndBtn.removeAttribute('onclick');
+        editEndBtn.dataset.codeCourseId=String(courseId);
+        editEndBtn.dataset.codeId=String(codeId);
+        editEndBtn.dataset.codeEndValue=endValue||'';
+      }
     }catch(e){console.error(e);body.innerHTML='<div style="padding:20px;color:#e74c3c;text-align:center">تعذر تحميل تفاصيل الكود.</div>';
     }
   };
