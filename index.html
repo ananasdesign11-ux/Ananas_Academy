@@ -1820,8 +1820,6 @@ label[for*="En"], input[id*="En"], textarea[id*="En"] { display:none !important;
     pointer-events:none !important;
 }
 </style>
-
-
 </head>
 <body class="light-mode">
     
@@ -2710,7 +2708,6 @@ label[for*="En"], input[id*="En"], textarea[id*="En"] { display:none !important;
             document.getElementById('customAlertTitle').textContent = title;
             document.getElementById('customAlertMessage').textContent = message;
             document.getElementById('customAlertModal').classList.add('active');
-            window.__aaRaiseModalV14?.(document.getElementById('customAlertModal'));
             const okBtn = document.getElementById('customAlertOkBtn');
             const handler = () => {
                 document.getElementById('customAlertModal').classList.remove('active');
@@ -2724,7 +2721,6 @@ label[for*="En"], input[id*="En"], textarea[id*="En"] { display:none !important;
             document.getElementById('customConfirmTitle').textContent = title;
             document.getElementById('customConfirmMessage').textContent = message;
             document.getElementById('customConfirmModal').classList.add('active');
-            window.__aaRaiseModalV14?.(document.getElementById('customConfirmModal'));
             
             const yesBtn = document.getElementById('customConfirmYesBtn');
             const noBtn = document.getElementById('customConfirmNoBtn');
@@ -10198,7 +10194,7 @@ hideLegacy();
     if(!currentUser)return;const btn=$p('aaProfileEditSave');const status=$p('aaProfileEditStatus');const name=$p('aaProfileEditName').value.trim(),phone=$p('aaProfileEditPhone').value.trim();if(!name){status.textContent='اكتب الاسم أولًا.';return;}btn.disabled=true;status.textContent='جاري حفظ التعديلات...';
     try{let photo=currentUser.photoURL||currentUserProfile?.photoURL||currentUserProfile?.photoUrl||currentUserProfile?.photo||'';if(workEdit.photoFile){photo=await uploadImage(workEdit.photoFile);if(!photo)throw Error('upload');}const profilePublic=!$p('aaProfileEditPrivate').checked;await currentUser.updateProfile({displayName:name,photoURL:photo||null});await db.collection('users').doc(currentUser.uid).set({uid:currentUser.uid,email:currentUser.email||'',displayName:name,phone,photoURL:photo||'',photoUrl:photo||'',profilePublic,updatedAt:firebase.firestore.FieldValue.serverTimestamp()},{merge:true});currentUserProfile={...(currentUserProfile||{}),displayName:name,phone,photoURL:photo||'',photoUrl:photo||'',profilePublic};
       const avatar=$p('authToggleBtn')?.querySelector('.auth-user-avatar img');if(avatar&&photo)avatar.src=photo;const label=$p('authLabel');if(label)label.textContent=name;const nameNode=$p('aaProfileName');if(nameNode)nameNode.textContent=name;const emailNode=$p('aaProfileEmail');if(emailNode)emailNode.textContent=currentUser.email||'—';
-      $p('aaProfileSelfEditModal').classList.remove('active');status.textContent='';if(window.openUserProfilePage)await window.openUserProfilePage();showCustomAlert?.('تم الحفظ',profilePublic?'تم تحديث بياناتك وإظهار الحساب للعامة.':'تم تحديث بياناتك وتفعيل خصوصية الحساب.');
+      $p('aaProfileSelfEditModal').classList.remove('active');status.textContent='';if(window.openUserProfilePage)await window.openUserProfilePage();showCustomAlert?.('تم الحفظ',profilePublic?'تم تحديث بياناتك وتفعيل خصوصية الحساب.':'تم تحديث بياناتك وإظهار الحساب للعامة.');
     }catch(e){console.error('save profile self',e);status.textContent='تعذر حفظ التعديلات.';showCustomAlert?.('خطأ','تعذر حفظ تعديلات الملف الشخصي.')}finally{btn.disabled=false;}
   }
   function openSelfWork(){if(!currentUser)return triggerAuth?.();ensureSelfModals();['aaProfileWorkName','aaProfileWorkType','aaProfileWorkDesc'].forEach(id=>$p(id).value='');$p('aaProfileWorkFiles').value='';$p('aaProfileWorkFilesName').textContent='لم يتم اختيار صور بعد';$p('aaProfileWorkStatus').textContent='';$p('aaProfileWorkSave').disabled=false;$p('aaProfileSelfWorkModal').classList.add('active');}
@@ -10974,7 +10970,7 @@ async function buildAdminDirectoryControls(){
       <div class="aa-dir-filter-row">
         <label class="aa-dir-field"><span>عرض الحسابات</span><select id="aaDirMembershipFilter"><option value="all">جميع الحسابات</option><option value="none">غير المشتركة في أي دورة</option><option value="enrolled">المشتركة في الدورات</option></select></label>
         <label class="aa-dir-field"><span>الدورة</span><select id="aaDirCourseFilter"><option value="all">جميع الدورات</option></select></label>
-        <label class="aa-dir-field aa-dir-search"><span>البحث بالاسم</span><input id="aaDirNameSearch" type="search" placeholder="ابحث باسم الحساب أو الكود..."></label>
+        <label class="aa-dir-field aa-dir-search"><span>البحث بالاسم</span><input id="aaDirNameSearch" type="search" placeholder="اكتب اسم الحساب..."></label>
       </div>`;
     head.insertAdjacentElement('afterend',controls);
   }
@@ -12009,28 +12005,42 @@ const s=document.createElement('style');s.textContent=`
 .code-card-v12-main small{color:var(--text-muted);font-size:.72rem;direction:ltr;text-align:right;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 .code-card-v12-wrap{display:grid;gap:7px;}
 #codeDetailModalV12{width:min(720px,95vw);max-height:90vh;overflow-y:auto;}
+#codeSearchWrapV12{display:flex;align-items:center;gap:8px;justify-content:flex-end;margin:0 0 12px;direction:rtl;}
+.code-search-btn-v12,.code-search-clear-v12{width:42px;height:42px;border:1px solid var(--border);border-radius:12px;background:var(--bg-secondary);color:var(--text-primary);cursor:pointer;font-size:1rem;display:flex;align-items:center;justify-content:center;}
+.code-search-input-v12{width:0;opacity:0;visibility:hidden;height:42px;border:1px solid var(--border);border-radius:12px;background:var(--bg-card);color:var(--text-primary);padding:0 12px;font-family:inherit;transition:width .24s ease,opacity .2s ease,visibility .2s ease;}
+.code-search-wrap-v12.open .code-search-input-v12{width:min(360px,70vw);opacity:1;visibility:visible;}
+.code-search-clear-v12{display:none;}
+.code-search-wrap-v12.open .code-search-clear-v12{display:flex;}
+.code-card-v12-wrap{transition:opacity .18s ease,transform .18s ease;}
+.code-card-v12{width:100%;min-height:62px;border:1px solid var(--border);border-radius:16px;padding:12px 14px;text-align:right;color:#fff;cursor:pointer;font-family:inherit;transition:transform .2s ease,box-shadow .2s ease,filter .2s ease;border-inline-start:5px solid transparent;}
+.code-card-v12:hover{transform:translateY(-2px);box-shadow:0 10px 26px rgba(0,0,0,.12);filter:saturate(1.05);}
+.code-card-v12.unused{background:linear-gradient(135deg,rgba(138,43,226,.88),rgba(118,55,190,.9));border-inline-start-color:#9b59ff;}
+.code-card-v12.used{background:linear-gradient(135deg,rgba(46,204,113,.9),rgba(24,158,83,.92));border-inline-start-color:#7dffae;}
+.code-card-v12.suspended{background:linear-gradient(135deg,rgba(230,126,34,.92),rgba(190,91,15,.94));border-inline-start-color:#ffd08a;}
+.code-card-v12.expired{background:linear-gradient(135deg,rgba(231,76,60,.92),rgba(174,48,35,.94));border-inline-start-color:#ff9c92;}
+.code-card-v12-main{display:flex;align-items:center;justify-content:space-between;gap:12px;}
+.code-card-v12-main strong{font-size:1rem;}
+.code-card-v12-main small{font-weight:800;opacity:.92;}
+.code-detail-actions-v12{display:flex;gap:8px;flex-wrap:wrap;margin:14px 0;}
+.code-detail-actions-v12 .code-action-btn{min-height:42px;padding:9px 14px;display:inline-flex;align-items:center;justify-content:center;}
+.code-detail-status-badge-v12{display:inline-flex;align-items:center;padding:6px 12px;border-radius:999px;font-weight:800;font-size:.85rem;margin-bottom:10px;}
+.code-detail-status-badge-v12.used{background:rgba(46,204,113,.14);color:#27ae60;border:1px solid rgba(46,204,113,.32);}
+.code-detail-status-badge-v12.suspended{background:rgba(230,126,34,.14);color:#d97706;border:1px solid rgba(230,126,34,.32);}
+.code-detail-status-badge-v12.expired{background:rgba(231,76,60,.14);color:#d64535;border:1px solid rgba(231,76,60,.32);}
+.code-detail-status-badge-v12.unused{background:rgba(138,43,226,.14);color:#8e44ad;border:1px solid rgba(138,43,226,.32);}
+.code-end-edit-form-v12{display:flex;flex-direction:column;gap:12px;}
+.code-end-edit-form-v12 label{font-weight:800;color:var(--text-primary);}
+.code-end-edit-form-v12 input{width:100%;box-sizing:border-box;padding:12px;border:1px solid var(--border);border-radius:12px;background:var(--bg-card);color:var(--text-primary);font-family:inherit;}
+.code-end-edit-actions-v12{display:flex;gap:8px;flex-wrap:wrap;}
+.code-lifecycle-panel.no-search-match{display:none;}
+
 .code-detail-actions-v12{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 12px;}
-.code-detail-end-edit-btn-final{
-  min-width:132px !important;
-  height:40px !important;
-  padding:0 14px !important;
-  display:inline-flex !important;
-  align-items:center !important;
-  justify-content:center !important;
-  gap:7px !important;
-  box-sizing:border-box !important;
-  border:1px solid var(--border) !important;
-  border-radius:10px !important;
-  background:var(--bg-secondary) !important;
-  color:var(--text-primary) !important;
-  font-family:inherit !important;
-  font-weight:800 !important;
-  cursor:pointer !important;
-  transition:transform .18s ease,box-shadow .18s ease,border-color .18s ease,background-color .18s ease !important;
-}
-.code-detail-end-edit-btn-final:hover{border-color:var(--accent1) !important;box-shadow:0 8px 18px rgba(108,92,231,.12) !important;transform:translateY(-1px) !important;}
-.code-detail-end-edit-btn-final:active{transform:scale(.97) !important;}
-.code-detail-end-edit-btn-final i{font-size:.9em;opacity:.9;}
+.code-detail-end-editor-v12{padding:12px;border:1px solid var(--border);border-radius:16px;background:var(--bg-secondary);margin-bottom:12px;}
+.code-detail-end-head-v12{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px;}
+.code-detail-end-head-v12 span{font-size:.72rem;color:var(--text-muted);background:rgba(108,92,231,.08);padding:4px 8px;border-radius:999px;}
+.code-detail-end-row-v12{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:8px;align-items:center;}
+.code-detail-end-row-v12 input{width:100%;min-width:0;padding:10px 12px;border:1px solid var(--border);border-radius:12px;background:var(--bg-card);color:var(--text-primary);font-family:inherit;}
+@media(max-width:600px){.code-detail-end-row-v12{grid-template-columns:1fr 1fr;}.code-detail-end-row-v12 input{grid-column:1/-1;}}
 .code-detail-grid-v12{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;}
 .code-detail-item-v12{padding:12px;border:1px solid var(--border);border-radius:14px;background:var(--bg-secondary);min-width:0;}
 .code-detail-item-v12 strong{display:block;color:var(--text-muted);font-size:.75rem;margin-bottom:5px;}
@@ -12040,33 +12050,6 @@ const s=document.createElement('style');s.textContent=`
 .code-detail-avatar-v12 img{width:100%;height:100%;object-fit:cover;display:block;}
 @media(max-width:900px){#codeLifecycleBoardV12{grid-template-columns:1fr;}.code-detail-grid-v12{grid-template-columns:1fr;}}
 @media(max-width:768px){#codeLifecycleBoardV12{gap:10px}.code-lifecycle-panel{padding:11px}#codeDetailModalV12{width:calc(100vw - 20px);max-width:none;max-height:calc(100dvh - 90px);padding:16px;}}
-</style>
-<style id="code-search-status-v13">
-#codeSearchToolsV13{display:flex;align-items:center;gap:10px;margin:10px 0 14px;flex-wrap:wrap;}
-.code-search-toggle-v13,.code-search-clear-v13{border:1px solid var(--border);background:var(--bg-secondary);color:var(--text-primary);border-radius:12px;padding:9px 13px;font-family:inherit;font-weight:800;cursor:pointer;transition:.18s ease;display:inline-flex;align-items:center;gap:8px;}
-.code-search-toggle-v13:hover,.code-search-clear-v13:hover{border-color:var(--accent1);transform:translateY(-1px);box-shadow:0 8px 18px rgba(108,92,231,.10);}
-.code-search-box-v13{display:flex;align-items:center;gap:8px;min-width:min(360px,100%);padding:7px 9px;border:1px solid var(--border);background:var(--bg-secondary);border-radius:14px;box-shadow:0 10px 22px rgba(0,0,0,.08);animation:codeSearchOpenV13 .18s ease;}
-.code-search-box-v13[hidden]{display:none!important;}
-.code-search-box-v13>i{color:var(--accent1);font-size:.95rem;}
-.code-search-box-v13 input{flex:1;min-width:160px;border:0;outline:0;background:transparent;color:var(--text-primary);font-family:inherit;font-size:.9rem;}
-.code-search-clear-v13{padding:4px 8px;border-radius:9px;font-size:1.05rem;line-height:1;}
-@keyframes codeSearchOpenV13{from{opacity:0;transform:translateY(-4px) scale(.98)}to{opacity:1;transform:translateY(0) scale(1)}}
-.code-card-v12.active{border-color:rgba(46,204,113,.65)!important;background:rgba(46,204,113,.10)!important;box-shadow:inset 4px 0 0 #2ecc71,0 8px 20px rgba(46,204,113,.08);}
-.code-card-v12.suspended{border-color:rgba(230,126,34,.70)!important;background:rgba(230,126,34,.11)!important;box-shadow:inset 4px 0 0 #e67e22,0 8px 20px rgba(230,126,34,.08);}
-.code-card-v12.expired{border-color:rgba(231,76,60,.70)!important;background:rgba(231,76,60,.11)!important;box-shadow:inset 4px 0 0 #e74c3c,0 8px 20px rgba(231,76,60,.08);}
-.code-card-v12.unused{border-color:rgba(108,92,231,.70)!important;background:rgba(108,92,231,.11)!important;box-shadow:inset 4px 0 0 #6c5ce7,0 8px 20px rgba(108,92,231,.08);}
-.code-card-v12.active:hover{border-color:#2ecc71!important}.code-card-v12.suspended:hover{border-color:#e67e22!important}.code-card-v12.expired:hover{border-color:#e74c3c!important}.code-card-v12.unused:hover{border-color:#6c5ce7!important}
-.code-card-v12.active .code-card-v12-main strong{color:#2ecc71;}
-.code-card-v12.suspended .code-card-v12-main strong{color:#e67e22;}
-.code-card-v12.expired .code-card-v12-main strong{color:#e74c3c;}
-.code-card-v12.unused .code-card-v12-main strong{color:#8b74f5;}
-.code-card-v12.active .code-card-v12-main::before,.code-card-v12.suspended .code-card-v12-main::before,.code-card-v12.expired .code-card-v12-main::before,.code-card-v12.unused .code-card-v12-main::before{content:'';display:block;width:7px;height:7px;border-radius:50%;margin-bottom:1px;}
-.code-card-v12.active .code-card-v12-main::before{background:#2ecc71;box-shadow:0 0 10px rgba(46,204,113,.55);}
-.code-card-v12.suspended .code-card-v12-main::before{background:#e67e22;box-shadow:0 0 10px rgba(230,126,34,.5);}
-.code-card-v12.expired .code-card-v12-main::before{background:#e74c3c;box-shadow:0 0 10px rgba(231,76,60,.5);}
-.code-card-v12.unused .code-card-v12-main::before{background:#8b74f5;box-shadow:0 0 10px rgba(139,116,245,.5);}
-.code-search-empty-v13{padding:12px;text-align:center;color:var(--text-muted);font-size:.85rem;border:1px dashed var(--border);border-radius:12px;margin-top:6px;}
-@media(max-width:768px){#codeSearchToolsV13{align-items:stretch}.code-search-toggle-v13,.code-search-box-v13{width:100%;justify-content:center}.code-search-box-v13 input{min-width:0}}
 </style>
 <script>
 (function(){
@@ -12084,7 +12067,9 @@ const s=document.createElement('style');s.textContent=`
     return c?.disabled===true || c?.isSuspended===true || c?.status==='suspended' || c?.state==='suspended' || c?.suspensionStatus==='suspended';
   }
   function expiredV12(c){const end=asDateV12(c?.endTime);return !!end&&end.getTime()<=Date.now();}
-  function categoryV12(c){return expiredV12(c)?'expired':usedCountV12(c)>0?'used':'unused';}
+  function categoryV12(c){return expiredV12(c)?'expired':legacySuspendedV12(c)?'suspended':usedCountV12(c)>0?'used':'unused';}
+  function statusLabelV12(c){return expiredV12(c)?'منتهي':legacySuspendedV12(c)?'موقوف':usedCountV12(c)>0?'نشط مستخدم':'غير مستخدم';}
+  function statusClassV12(c){return expiredV12(c)?'expired':legacySuspendedV12(c)?'suspended':usedCountV12(c)>0?'used':'unused';}
   function suspensionLabelV12(c){
     const until=asDateV12(c?.suspendedUntil);
     if(!legacySuspendedV12(c))return '';
@@ -12104,40 +12089,10 @@ const s=document.createElement('style');s.textContent=`
     if(b)return b;
     const table=$v12('codesTable');
     if(!table)return null;
-    const host=table.parentElement;
-    const searchHost=document.createElement('div');
-    searchHost.id='codeSearchToolsV13';
-    searchHost.innerHTML=`<button type="button" id="codeSearchToggleV13" class="code-search-toggle-v13" aria-expanded="false"><i class="fas fa-search"></i><span>بحث</span></button><div id="codeSearchBoxV13" class="code-search-box-v13" hidden><i class="fas fa-search"></i><input id="codeAccountSearchV13" type="search" autocomplete="off" placeholder="اكتب اسم الحساب..."><button type="button" id="codeSearchClearV13" class="code-search-clear-v13" aria-label="مسح البحث">×</button></div>`;
-    host?.insertBefore(searchHost,table);
     b=document.createElement('div');b.id='codeLifecycleBoardV12';
-    host?.insertBefore(b,table);
+    table.parentElement?.insertBefore(b,table);
     table.style.display='none';
-    const toggle=$v12('codeSearchToggleV13'), box=$v12('codeSearchBoxV13'), input=$v12('codeAccountSearchV13'), clear=$v12('codeSearchClearV13');
-    toggle?.addEventListener('click',()=>{
-      const open=!box?.hasAttribute('hidden');
-      if(open){box?.setAttribute('hidden','');toggle.setAttribute('aria-expanded','false');if(input)input.value='';applyCodeSearchV13('');}
-      else{box?.removeAttribute('hidden');toggle.setAttribute('aria-expanded','true');setTimeout(()=>input?.focus(),40);}
-    });
-    input?.addEventListener('input',()=>applyCodeSearchV13(input.value));
-    clear?.addEventListener('click',()=>{if(input){input.value='';applyCodeSearchV13('');input.focus();}});
     return b;
-  }
-  function applyCodeSearchV13(term){
-    const q=String(term||'').trim().toLocaleLowerCase('ar');
-    document.querySelectorAll('#codeLifecycleBoardV12 .code-card-v12[data-account-name]').forEach(card=>{
-      const name=String(card.dataset.accountName||'').toLocaleLowerCase('ar');
-      const code=String(card.dataset.codeValue||'').toLocaleLowerCase('ar');
-      const wrap=card.closest('.code-card-v12-wrap');
-      const matched=!q || name.includes(q) || code.includes(q);
-      if(wrap)wrap.style.display=matched?'':'none';
-    });
-    document.querySelectorAll('#codeLifecycleBoardV12 .code-lifecycle-panel').forEach(panel=>{
-      const visible=[...panel.querySelectorAll('.code-card-v12-wrap')].some(w=>w.style.display!=='none');
-      const empty=panel.querySelector('.code-search-empty-v13');
-      if(q&&!visible){
-        if(!empty){const e=document.createElement('div');e.className='code-search-empty-v13';e.textContent='لا يوجد حساب أو كود مطابق لبحثك في هذه الفئة.';panel.querySelector('.code-lifecycle-list')?.appendChild(e);}
-      }else empty?.remove();
-    });
   }
   function ensureDetailModalV12(){
     let m=$v12('codeDetailModalV12');if(m)return m;
@@ -12146,95 +12101,28 @@ const s=document.createElement('style');s.textContent=`
     document.body.appendChild(m);return m;
   }
   function dateTextV12(d,empty='—'){return d?d.toLocaleString('ar-SA',{timeZone:'Asia/Riyadh'}):empty;}
-  /* FINAL CODE-END EDITOR: one authoritative implementation. */
-  /* FINAL CODE END EDITOR: single implementation rebuilt for reliability. */
-  function closeAllCodeEndEditorLegacy(){
-    document.querySelectorAll('[id*="aaCodeEndEditor"],.code-end-edit-modal-v14,.code-end-edit-modal-v15,.code-end-edit-modal-v16,.code-end-edit-modal-v17,.code-end-edit-modal-v18').forEach(el=>{try{el.remove();}catch(_){}});
+  function ensureEndEditModalV12(){
+    let m=$v12('codeEndEditModalV12');if(m)return m;
+    m=document.createElement('div');m.id='codeEndEditModalV12';m.className='edit-modal';
+    m.innerHTML='<button type="button" class="modal-close" onclick="this.parentElement.classList.remove(\'active\')">&times;</button><h3>تعديل نهاية الكود</h3><div id="codeEndEditBodyV12"></div>';
+    document.body.appendChild(m);return m;
   }
-  function codeEndEditorLocalValue(v){
-    if(!v) return '';
-    const d=v instanceof Date?v:new Date(v);
-    if(Number.isNaN(d.getTime())) return '';
-    const p=n=>String(n).padStart(2,'0');
-    return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
+  function ensureCodeSearchV12(){
+    let wrap=$v12('codeSearchWrapV12');if(wrap)return wrap;
+    const modal=$v12('manageCodesModal');if(!modal)return null;
+    wrap=document.createElement('div');wrap.id='codeSearchWrapV12';wrap.className='code-search-wrap-v12';
+    wrap.innerHTML='<button type="button" id="codeSearchBtnV12" class="code-search-btn-v12" aria-label="بحث" title="بحث"><i class="fas fa-search"></i></button><input id="codeSearchInputV12" class="code-search-input-v12" type="search" placeholder="ابحث باسم الحساب أو الكود..." autocomplete="off"><button type="button" id="codeSearchClearV12" class="code-search-clear-v12" aria-label="إغلاق البحث">&times;</button>';
+    modal.querySelector('h3')?.insertAdjacentElement('afterend',wrap);
+    const btn=$v12('codeSearchBtnV12'),input=$v12('codeSearchInputV12'),clear=$v12('codeSearchClearV12');
+    btn?.addEventListener('click',()=>{wrap.classList.add('open');input?.focus();});
+    clear?.addEventListener('click',()=>{if(input)input.value='';window.__codeSearchV12='';wrap.classList.remove('open');filterCodeCardsV12('');});
+    input?.addEventListener('input',()=>{window.__codeSearchV12=String(input.value||'').trim().toLocaleLowerCase('ar');filterCodeCardsV12(window.__codeSearchV12);});
+    return wrap;
   }
-  function openCodeEndEditorFinal(courseId,codeId,endValue){
-    closeAllCodeEndEditorLegacy();
-    const overlay=document.createElement('div');
-    overlay.id='aaCodeEndEditorFINAL';
-    overlay.setAttribute('role','dialog');
-    overlay.setAttribute('aria-modal','true');
-    Object.assign(overlay.style,{position:'fixed',inset:'0',display:'flex',alignItems:'center',justifyContent:'center',padding:'18px',background:'rgba(0,0,0,.62)',backdropFilter:'blur(7px)',WebkitBackdropFilter:'blur(7px)',zIndex:'2147483647',pointerEvents:'auto',boxSizing:'border-box',direction:'rtl'});
-    const card=document.createElement('div');
-    Object.assign(card.style,{position:'relative',display:'block',width:'min(520px,94vw)',maxHeight:'calc(100dvh - 36px)',overflow:'auto',background:'var(--bg-card)',color:'var(--text-primary)',border:'1px solid var(--border)',borderRadius:'22px',padding:'24px',boxSizing:'border-box',boxShadow:'0 30px 100px rgba(0,0,0,.58)',pointerEvents:'auto',direction:'rtl'});
-    const close=document.createElement('button');
-    close.type='button';close.textContent='×';close.setAttribute('aria-label','إغلاق');
-    close.style.cssText='position:absolute!important;top:12px!important;inset-inline-start:12px!important;width:40px!important;height:40px!important;display:flex!important;align-items:center!important;justify-content:center!important;border:1px solid var(--border)!important;border-radius:12px!important;background:var(--bg-secondary)!important;color:var(--text-primary)!important;font-size:25px!important;line-height:1!important;cursor:pointer!important;z-index:5!important;';
-    const title=document.createElement('h3');
-    title.textContent='تعديل نهاية الكود';
-    title.style.cssText='display:block!important;margin:0 48px 8px 0!important;text-align:center!important;color:var(--accent1)!important;font-size:1.2rem!important;font-weight:900!important;';
-    const desc=document.createElement('p');
-    desc.textContent='حدد تاريخ ووقت انتهاء الكود أو أزل تاريخ الانتهاء ليصبح الكود بدون نهاية.';
-    desc.style.cssText='display:block!important;margin:0 0 18px!important;text-align:center!important;color:var(--text-muted)!important;font-size:.88rem!important;line-height:1.8!important;';
-    const label=document.createElement('label');
-    label.textContent='تاريخ ووقت النهاية (اختياري)';
-    label.style.cssText='display:block!important;margin:0 0 8px!important;font-weight:800!important;color:var(--text-primary)!important;';
-    const input=document.createElement('input');
-    input.type='datetime-local';
-    input.value=codeEndEditorLocalValue(endValue||'');
-    input.id='aaCodeEndDateInputFINAL';
-    input.style.cssText='display:block!important;visibility:visible!important;opacity:1!important;width:100%!important;min-height:50px!important;padding:11px 13px!important;border:1px solid var(--border)!important;border-radius:13px!important;background:var(--bg-secondary)!important;color:var(--text-primary)!important;font:inherit!important;box-sizing:border-box!important;outline:none!important;pointer-events:auto!important;';
-    const actions=document.createElement('div');
-    actions.style.cssText='display:grid!important;grid-template-columns:repeat(3,minmax(0,1fr))!important;gap:8px!important;margin-top:18px!important;';
-    const make=(text)=>{const b=document.createElement('button');b.type='button';b.textContent=text;b.style.cssText='display:block!important;width:100%!important;min-height:44px!important;padding:10px 12px!important;border:1px solid var(--border)!important;border-radius:12px!important;background:var(--accent1)!important;color:#fff!important;font:inherit!important;font-weight:800!important;cursor:pointer!important;';return b;};
-    const update=make('تحديث');
-    const remove=make('إزالة تاريخ النهاية');
-    remove.style.cssText+='background:transparent!important;color:var(--text-primary)!important;';
-    const cancel=make('إلغاء');
-    cancel.style.cssText+='background:var(--bg-secondary)!important;color:var(--text-primary)!important;';
-    actions.append(update,remove,cancel);
-    card.append(close,title,desc,label,input,actions);
-    overlay.appendChild(card);
-    document.body.appendChild(overlay);
-    const closeEditor=()=>{try{overlay.remove();}catch(_){};};
-    close.addEventListener('click',closeEditor);
-    cancel.addEventListener('click',closeEditor);
-    overlay.addEventListener('click',e=>{if(e.target===overlay)closeEditor();});
-    update.addEventListener('click',async()=>{
-      const raw=input.value.trim();
-      if(!raw){showCustomAlert?.('تنبيه','حدد تاريخ ووقت النهاية أو اختر إزالة تاريخ النهاية.');return;}
-      const endDate=new Date(raw);
-      if(Number.isNaN(endDate.getTime())||endDate.getTime()<=Date.now()){showCustomAlert?.('تنبيه','وقت النهاية يجب أن يكون في المستقبل.');return;}
-      try{
-        update.disabled=true;
-        await codeRefV12(courseId,codeId).update({endTime:firebase.firestore.Timestamp.fromDate(endDate),updatedAt:firebase.firestore.FieldValue.serverTimestamp(),updatedBy:currentUser?.uid||null});
-        closeEditor();
-        await window.loadCodesForCourse(courseId);
-        await window.__codeDetail(courseId,codeId);
-        showCustomAlert?.('تم الحفظ','تم تحديث نهاية الكود.');
-      }catch(e){showCustomAlert?.('خطأ','تعذر تعديل نهاية الكود: '+e.message);}finally{update.disabled=false;}
-    });
-    remove.addEventListener('click',async()=>{
-      try{
-        remove.disabled=true;
-        await codeRefV12(courseId,codeId).update({endTime:null,updatedAt:firebase.firestore.FieldValue.serverTimestamp(),updatedBy:currentUser?.uid||null});
-        closeEditor();
-        await window.loadCodesForCourse(courseId);
-        await window.__codeDetail(courseId,codeId);
-        showCustomAlert?.('تم الحفظ','تمت إزالة تاريخ نهاية الكود.');
-      }catch(e){showCustomAlert?.('خطأ','تعذر إزالة نهاية الكود: '+e.message);}finally{remove.disabled=false;}
-    });
-    setTimeout(()=>{try{input.focus();}catch(_){ }},0);
-  }
-  if(!window.__aaCodeEndEditDelegatedFINAL){
-    window.__aaCodeEndEditDelegatedFINAL=true;
-    document.addEventListener('click',e=>{
-      const btn=e.target?.closest?.('#codeDetailEditEndBtnFINAL');
-      if(!btn)return;
-      e.preventDefault();e.stopPropagation();e.stopImmediatePropagation();
-      const courseId=btn.dataset.codeCourseId,codeId=btn.dataset.codeId,endValue=btn.dataset.codeEndValue||'';
-      if(courseId&&codeId)openCodeEndEditorFinal(courseId,codeId,endValue);
-    },true);
+  function filterCodeCardsV12(term){
+    const q=String(term||'').trim().toLocaleLowerCase('ar');
+    document.querySelectorAll('#codeLifecycleBoardV12 .code-card-v12-wrap').forEach(w=>{const hay=String(w.dataset.searchText||'').toLocaleLowerCase('ar');w.style.display=!q||hay.includes(q)?'':'none';});
+    document.querySelectorAll('#codeLifecycleBoardV12 .code-lifecycle-panel').forEach(panel=>{const has=Array.from(panel.querySelectorAll('.code-card-v12-wrap')).some(w=>w.style.display!=='none');panel.classList.toggle('no-search-match',!!q&&!has);});
   }
 
   window.__codeDetail=async function(courseId,codeId){
@@ -12273,8 +12161,9 @@ const s=document.createElement('style');s.textContent=`
         <div class="code-detail-actions-v12">
           ${canSuspend ? `<button type="button" class="code-action-btn ${isSuspended?'success':'danger'}" id="codeDetailSuspendBtnV12">${isSuspended?'إلغاء الإيقاف':'إيقاف الكود'}</button>` : '<button type="button" class="code-action-btn" disabled style="opacity:.55">الكود منتهي</button>'}
           <button type="button" class="code-action-btn danger" id="codeDetailDeleteBtnV12">حذف الكود</button>
-          <button type="button" class="code-action-btn code-detail-end-edit-btn-final" id="codeDetailEditEndBtnFINAL"><i class="fas fa-calendar-pen"></i> تعديل نهاية الكود</button>
+          <button type="button" class="code-action-btn" id="codeDetailEditEndBtnV12">تعديل نهاية الكود</button>
         </div>
+        <div class="code-detail-status-badge-v12 ${statusClassV12(c)}"><span>${escV12(statusLabelV12(c))}</span></div>
         <div class="code-detail-grid-v12">
           <div class="code-detail-item-v12"><strong>اسم الحساب</strong><span>${escV12(name)}</span></div>
           <div class="code-detail-item-v12"><strong>معرّف الحساب</strong><span dir="ltr">${escV12(account.uid||'—')}</span></div>
@@ -12292,18 +12181,23 @@ const s=document.createElement('style');s.textContent=`
 
       const suspendBtn=$v12('codeDetailSuspendBtnV12');
       suspendBtn?.addEventListener('click',()=>{
+        m.classList.remove('active');
         toggleEnrollmentCode(courseId===activeCourseId?codeId:codeId,isSuspended);
       });
       $v12('codeDetailDeleteBtnV12')?.addEventListener('click',async()=>{
+        m.classList.remove('active');
         await deleteEnrollmentCode(codeId);
       });
-      const editEndBtn=$v12('codeDetailEditEndBtnFINAL');
-      if(editEndBtn){
-        editEndBtn.removeAttribute('onclick');
-        editEndBtn.dataset.codeCourseId=String(courseId);
-        editEndBtn.dataset.codeId=String(codeId);
-        editEndBtn.dataset.codeEndValue=endValue||'';
-      }
+      $v12('codeDetailEditEndBtnV12')?.addEventListener('click',()=>{
+        const em=ensureEndEditModalV12(),eb=$v12('codeEndEditBodyV12');
+        eb.innerHTML=`<div class="code-end-edit-form-v12"><label for="codeEndEditInputV12">تاريخ ووقت انتهاء الكود</label><input type="datetime-local" id="codeEndEditInputV12" value="${escV12(endValue)}"><div class="code-end-edit-actions-v12"><button type="button" class="code-action-btn" id="codeEndEditSaveV12">تحديث</button><button type="button" class="code-action-btn" id="codeEndEditClearV12">إزالة تاريخ الانتهاء</button></div><small>اترك الخانة فارغة لجعل الكود بلا تاريخ انتهاء.</small></div>`;
+        em.classList.add('active');
+        $v12('codeEndEditSaveV12')?.addEventListener('click',async()=>{
+          const input=$v12('codeEndEditInputV12'),raw=input?.value||'';let endDate=null;if(raw){endDate=new Date(raw);if(isNaN(endDate.getTime())||endDate.getTime()<=Date.now())return showCustomAlert?.('تنبيه','وقت النهاية يجب أن يكون في المستقبل.');}
+          const b=$v12('codeEndEditSaveV12');try{b.disabled=true;await codeRefV12(courseId,codeId).update({endTime:endDate?firebase.firestore.Timestamp.fromDate(endDate):null,updatedAt:firebase.firestore.FieldValue.serverTimestamp(),updatedBy:currentUser?.uid||null});em.classList.remove('active');await window.loadCodesForCourse(courseId);await window.__codeDetail(courseId,codeId);showCustomAlert?.('تم الحفظ',endDate?'تم تحديث نهاية الكود.':'تم جعل الكود بدون تاريخ نهاية.');}catch(e){showCustomAlert?.('خطأ','تعذر تعديل نهاية الكود: '+e.message);}finally{b.disabled=false;}});
+        $v12('codeEndEditClearV12')?.addEventListener('click',async()=>{
+          const b=$v12('codeEndEditClearV12');try{b.disabled=true;await codeRefV12(courseId,codeId).update({endTime:null,updatedAt:firebase.firestore.FieldValue.serverTimestamp(),updatedBy:currentUser?.uid||null});em.classList.remove('active');await window.loadCodesForCourse(courseId);await window.__codeDetail(courseId,codeId);showCustomAlert?.('تم الحفظ','تمت إزالة تاريخ نهاية الكود.');}catch(e){showCustomAlert?.('خطأ','تعذر إزالة نهاية الكود: '+e.message);}finally{b.disabled=false;}});
+      });
     }catch(e){console.error(e);body.innerHTML='<div style="padding:20px;color:#e74c3c;text-align:center">تعذر تحميل تفاصيل الكود.</div>';
     }
   };
@@ -12335,7 +12229,6 @@ const s=document.createElement('style');s.textContent=`
         await ref.update({disabled:false,isSuspended:false,status:'active',state:'active',suspensionStatus:'active',suspendedUntil:null,suspensionReason:null,suspensionMode:null,suspensionUpdatedAt:firebase.firestore.FieldValue.serverTimestamp()});
         await clearLegacyAccessBlockV12(activeCourseId,codeId,c.usedBy||[]);
         await window.loadCodesForCourse(activeCourseId);
-        await window.__codeDetail?.(activeCourseId,codeId);
         showCustomAlert?.('تم إلغاء الإيقاف','تم إلغاء إيقاف الكود وأصبح نشطًا من جديد.');
       }catch(e){showCustomAlert?.('خطأ','تعذر إلغاء إيقاف الكود: '+e.message);}return;
     }
@@ -12343,7 +12236,7 @@ const s=document.createElement('style');s.textContent=`
     $v12('suspendCodeLabel').textContent=`الكود: ${c.code||codeId}`;
     $v12('courseSuspendDuration').value='1d';
     document.querySelectorAll('.suspend-duration-choice').forEach(b=>b.classList.toggle('active',b.dataset.duration==='1d'));
-    $v12('courseSuspendUntil').value='';$v12('courseSuspendReason').value='';$v12('courseSuspendCustomWrap').style.display='none';$v12('courseAccessSuspendModal').classList.add('active');window.__aaRaiseModalV14?.($v12('courseAccessSuspendModal'));
+    $v12('courseSuspendUntil').value='';$v12('courseSuspendReason').value='';$v12('courseSuspendCustomWrap').style.display='none';$v12('courseAccessSuspendModal').classList.add('active');
   };
 
   const oldConfirm=$v12('confirmCourseSuspendBtn');
@@ -12361,66 +12254,27 @@ const s=document.createElement('style');s.textContent=`
       const uids=(c.usedBy||[]).map(x=>String(x)).filter(Boolean);const batch=db.batch();
       for(const uid of uids){const er=db.collection('users').doc(uid).collection('enrolledCourses').doc(activeCourseId);batch.set(er,{accessBlocked:true,blockedUntil:until?firebase.firestore.Timestamp.fromDate(until):null,blockReason:reason||'تم إيقاف كود الاشتراك.',accessBlockReason:reason||'تم إيقاف كود الاشتراك.',accessUpdatedAt:firebase.firestore.FieldValue.serverTimestamp()},{merge:true});}
       if(uids.length)await batch.commit();
-      $v12('courseAccessSuspendModal').classList.remove('active');await window.loadCodesForCourse(activeCourseId);await window.__codeDetail?.(activeCourseId,id);showCustomAlert?.('تم الإيقاف',until?`تم إيقاف الكود حتى ${until.toLocaleString('ar-SA',{timeZone:'Asia/Riyadh'})}.`:'تم إيقاف الكود حتى تلغي الإيقاف يدويًا.');
+      $v12('courseAccessSuspendModal').classList.remove('active');await window.loadCodesForCourse(activeCourseId);showCustomAlert?.('تم الإيقاف',until?`تم إيقاف الكود حتى ${until.toLocaleString('ar-SA',{timeZone:'Asia/Riyadh'})}.`:'تم إيقاف الكود حتى تلغي الإيقاف يدويًا.');
     }catch(e){console.error(e);showCustomAlert?.('خطأ','تعذر إيقاف الكود: '+e.message);}finally{this.disabled=false;this.textContent='إيقاف الكود';}
   };}
 
   window.loadCodesForCourse=async function(courseId){
     if(!isAdmin||!courseId)return;const oldTable=$v12('codesTable'),board=ensureLifecycleBoardV12();if(!board)return;
+    ensureCodeSearchV12();
     board.innerHTML='<div style="grid-column:1/-1;padding:22px;text-align:center;color:var(--text-muted)">جاري تحميل الأكواد...</div>';
     try{
       const snap=await db.collection('courses').doc(courseId).collection('codes').get();
-      const groups={unused:[],used:[],expired:[]};
-      for(const d of snap.docs){
-        const c=await normalizeLegacyCodeV12(courseId,d.id,d.data()||{});groups[categoryV12(c)].push({id:d.id,c});
-      }
-      const panel=(key,title)=>{const items=groups[key];return `<section class="code-lifecycle-panel"><h4><span>${title}</span><small>${items.length} كود</small></h4><div class="code-lifecycle-list">${items.length?items.map(({id,c})=>{
-        const info=usedInfoV12(c),u=info[0]||{},name=u.name||'مستخدم',label=key==='used'?name:(c.code||id),state=expiredV12(c)?'منتهي':legacySuspendedV12(c)?'موقوف':key==='used'?'مستخدم':'غير مستخدم';
-        const accountNames=info.map(x=>x?.name||'').filter(Boolean).join(' ');
-        const codeValue=String(c.code||id);
-        const visualClass=state==='منتهي'?'expired':state==='موقوف'?'suspended':state==='مستخدم'?'active':'unused';
-        return `<div class="code-card-v12-wrap"><button type="button" class="code-card-v12 ${visualClass}" data-account-name="${escV12(accountNames)}" data-code-value="${escV12(codeValue)}" data-code-state="${escV12(state)}" onclick="__codeDetail('${escV12(courseId)}','${escV12(id)}')"><span class="code-card-v12-main"><strong>${escV12(label)}</strong></span></button></div>`;}).join(''):'<div class="code-lifecycle-empty">لا توجد أكواد في هذه الفئة.</div>'}</div></section>`};
-      board.innerHTML=panel('unused','غير مستخدمة')+panel('used','مستخدمة')+panel('expired','منتهية');
-      const activeSearch=$v12('codeAccountSearchV13');
-      if(activeSearch?.value)applyCodeSearchV13(activeSearch.value);
-      if(oldTable)oldTable.style.display='none';
+      const groups={unused:[],used:[],expired:[],suspended:[]};
+      for(const d of snap.docs){const c=await normalizeLegacyCodeV12(courseId,d.id,d.data()||{});groups[statusClassV12(c)].push({id:d.id,c});}
+      const panel=(key,title)=>{const items=groups[key];return `<section class="code-lifecycle-panel status-panel-${key}"><h4><span>${title}</span><small>${items.length} كود</small></h4><div class="code-lifecycle-list">${items.length?items.map(({id,c})=>{const info=usedInfoV12(c),u=info[0]||{},name=u.name||'كود غير مستخدم',label=name||c.code||id,searchText=[name,c.code||'',u.email||'',u.phone||'',u.uid||''].join(' '),cls=statusClassV12(c);return `<div class="code-card-v12-wrap status-${cls}" data-search-text="${escV12(searchText)}"><button type="button" class="code-card-v12 ${cls}" onclick="__codeDetail('${escV12(courseId)}','${escV12(id)}')"><span class="code-card-v12-main"><strong>${escV12(label)}</strong><small>${escV12(statusLabelV12(c))}</small></span></button></div>`;}).join(''):'<div class="code-lifecycle-empty">لا توجد أكواد في هذه الفئة.</div>'}</div></section>`};
+      board.innerHTML=panel('unused','غير مستخدمة')+panel('used','نشطة مستخدمة')+panel('suspended','موقوفة')+panel('expired','منتهية');
+      if(oldTable)oldTable.style.display='none';filterCodeCardsV12(window.__codeSearchV12||'');
     }catch(e){console.error('code lifecycle v12',e);board.innerHTML='<div style="grid-column:1/-1;padding:22px;text-align:center;color:#e74c3c">تعذر تحميل الأكواد.</div>';}
   };
   window.manageCodeUsers=window.manageCodeUsers||function(){};
 })();
 </script>
 
-
-<!-- ===== FINAL MODAL STACK ORDER V14 ===== -->
-<style id="aa-modal-stack-v14">
-.edit-modal.active,.auth-popup.active,.custom-alert-modal.active,.gallery-viewer.active,.platform-image-viewer.active,.file-viewer-overlay.active,.profile-self-modal.active,.ananas-modal-overlay.active,.quiz-overlay.active,#quizOverlay.active{z-index:200000!important;}
-</style>
-<script id="aa-modal-stack-v14-script">
-(function(){
-  'use strict';
-  if(window.__aaModalStackV14)return;
-  window.__aaModalStackV14=true;
-  let seq=0;
-  const tracked=new WeakMap();
-  const selectors='.edit-modal,.auth-popup,.custom-alert-modal,.gallery-viewer,.platform-image-viewer,.file-viewer-overlay,.profile-self-modal,.ananas-modal-overlay,#quizOverlay';
-  function raise(el){
-    if(!el)return;
-    seq=Math.max(seq+1,200001);
-    el.style.setProperty('z-index',String(seq),'important');
-    tracked.set(el,seq);
-  }
-  function sync(el){
-    if(!el||!el.matches?.(selectors))return;
-    const active=el.classList.contains('active') || (el.id==='quizOverlay'&&el.classList.contains('active'));
-    if(active && !el.dataset.__aaStackActive){el.dataset.__aaStackActive='1';raise(el);}
-    else if(!active && el.dataset.__aaStackActive){delete el.dataset.__aaStackActive;}
-  }
-  document.querySelectorAll(selectors).forEach(sync);
-  const obs=new MutationObserver(list=>{for(const m of list){if(m.type==='attributes'&&m.attributeName==='class')sync(m.target);}});
-  obs.observe(document.body,{subtree:true,attributes:true,attributeFilter:['class']});
-  window.__aaRaiseModalV14=raise;
-})();
-</script>
 
 <!-- ===== FINAL MOBILE SIDE SCROLLBAR / SAFE CONTENT PATCH ===== -->
 <style id="aa-final-mobile-side-scrollbar">
@@ -12791,7 +12645,7 @@ const s=document.createElement('style');s.textContent=`
         if(String(window.activeCourseId||'')===String(courseId) && !isAdmin) window.aaEjectFromCourse?.('تم حذف كود الاشتراك.');
         await refreshMainCourseButtons();
         await window.loadCodesForCourse?.(courseId);
-        showCustomAlert?.('تم الحذف','تم حذف الكود وإخراج الحسابات المرتبطة به من الدورة. أصبحت الدورة تتطلب اشتراكًا جديدًا.',()=>document.getElementById('codeDetailModalV12')?.classList.remove('active'));
+        showCustomAlert?.('تم الحذف','تم حذف الكود وإخراج الحسابات المرتبطة به من الدورة. أصبحت الدورة تتطلب اشتراكًا جديدًا.');
       }catch(e){console.error('delete code lifecycle',e);showCustomAlert?.('خطأ','تعذر حذف الكود: '+e.message)}
     });
   };
