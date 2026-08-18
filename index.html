@@ -3532,6 +3532,11 @@ label[for*="En"], input[id*="En"], textarea[id*="En"] { display:none !important;
 
                         // Verify Code in Firestore
                         try {
+                            const archivedInputCode = await isCodePermanentlyArchived(courseId,enteredCode);
+                            if(archivedInputCode){
+                                showCustomAlert('خطأ','هذا الكود تم حذفه أو أرشفته سابقًا ولا يمكن استخدامه للاشتراك.');
+                                return;
+                            }
                             const codeSnapshot = await db.collection('courses').doc(courseId).collection('codes')
                                 .where('code', '==', enteredCode).get();
                             
@@ -8340,8 +8345,16 @@ setInterval(()=>{if(currentUser&&activeCourseId&&activeLessonId&&lessonPlayerRea
 /* ---------- B. One-time codes, lifetime uniqueness, details and tabs ---------- */
 function normCode(v){return String(v||'').toUpperCase().replace(/\s+/g,'').trim();}
 async function archiveCode(courseId,data,reason){
-  const n=normCode(data?.normalizedCode||data?.code);if(!n)return;
-  await db.collection('courses').doc(courseId).collection('codeArchive').doc(n).set({normalizedCode:n,code:data?.code||n,reason:reason||'deleted',archivedAt:firebase.firestore.FieldValue.serverTimestamp()},{merge:true});
+  const n=normCode(data?.normalizedCode||data?.code);if(!n)return false;
+  const payload={normalizedCode:n,code:data?.code||n,reason:reason||'deleted',archivedAt:firebase.firestore.FieldValue.serverTimestamp()};
+  await db.collection('courses').doc(courseId).collection('codeArchive').doc(n).set(payload,{merge:true});
+  return true;
+}
+async function isCodePermanentlyArchived(courseId,rawCode){
+  const n=normCode(rawCode);if(!n)return false;
+  const keys=[...new Set([n,n.toLowerCase()])];
+  const snaps=await Promise.all(keys.map(k=>db.collection('courses').doc(courseId).collection('codeArchive').doc(k).get()));
+  return snaps.some(s=>s.exists);
 }
 window.__codeDetail=function(courseId,codeId){
   db.collection('courses').doc(courseId).collection('codes').doc(codeId).get().then(s=>{
@@ -8386,7 +8399,17 @@ window.deleteEnrollmentCode=async function(codeId){
 window.createNewCode=async function(){
  if(!isAdmin||!activeCourseId)return;const codeVal=safeGetValue('newCodeInput').trim(),n=normCode(codeVal),startStr=safeGetValue('codeStartDate'),endStr=safeGetValue('codeEndDate');
  if(!codeVal||!startStr)return showCustomAlert('خطأ','أدخل الكود وتاريخ البدء.');
- try{const active=await db.collection('courses').doc(activeCourseId).collection('codes').get();if(active.docs.some(d=>normCode(d.data()?.normalizedCode||d.data()?.code)===n))return showCustomAlert('خطأ','هذا الكود موجود بالفعل.');const ar=await db.collection('courses').doc(activeCourseId).collection('codeArchive').doc(n).get();if(ar.exists)return showCustomAlert('خطأ','هذا الكود استُخدم أو حُذف/انتهى سابقًا ولا يمكن تكراره نهائيًا.');const start=new Date(startStr),end=endStr?new Date(endStr):null;await db.collection('courses').doc(activeCourseId).collection('codes').add({code:codeVal,normalizedCode:n,startTime:firebase.firestore.Timestamp.fromDate(start),endTime:end?firebase.firestore.Timestamp.fromDate(end):null,maxUses:1,usedCount:0,usedBy:[],usedByInfo:[],revokedUsers:[],blockedUsers:[],disabled:false,suspendedUntil:null,suspensionReason:null,createdAt:firebase.firestore.FieldValue.serverTimestamp()});document.getElementById('newCodeInput').value='';await window.loadCodesForCourse(activeCourseId);showCustomAlert('تم الإنشاء','تم إنشاء الكود.');}catch(e){showCustomAlert('خطأ','تعذر إنشاء الكود: '+e.message);}
+ try{
+   const archived=await isCodePermanentlyArchived(activeCourseId,n);
+   if(archived)return showCustomAlert('خطأ','هذا الكود تم حذفه أو أرشفته سابقًا ولا يمكن إنشاء كود مطابق له مرة أخرى.');
+   const active=await db.collection('courses').doc(activeCourseId).collection('codes').get();
+   if(active.docs.some(d=>normCode(d.data()?.normalizedCode||d.data()?.code)===n))return showCustomAlert('خطأ','هذا الكود موجود بالفعل.');
+   const start=new Date(startStr),end=endStr?new Date(endStr):null;
+   await db.collection('courses').doc(activeCourseId).collection('codes').add({code:codeVal,normalizedCode:n,startTime:firebase.firestore.Timestamp.fromDate(start),endTime:end?firebase.firestore.Timestamp.fromDate(end):null,maxUses:1,usedCount:0,usedBy:[],usedByInfo:[],revokedUsers:[],blockedUsers:[],disabled:false,suspendedUntil:null,suspensionReason:null,createdAt:firebase.firestore.FieldValue.serverTimestamp()});
+   document.getElementById('newCodeInput').value='';
+   await window.loadCodesForCourse(activeCourseId);
+   showCustomAlert('تم الإنشاء','تم إنشاء الكود.');
+ }catch(e){showCustomAlert('خطأ','تعذر إنشاء الكود: '+e.message);}
 };
 
 /* ---------- C. Separate Terms button ---------- */
@@ -12528,10 +12551,7 @@ const s=document.createElement('style');s.textContent=`
         const snap=await ref.get();
         if(!snap.exists)return showCustomAlert?.('خطأ','الكود غير موجود.');
         const codeData=snap.data()||{};
-        try{
-          await db.collection('courses').doc(courseId).collection('codeArchive').doc(String(codeData.normalizedCode||codeData.code||codeId).toLowerCase())
-            .set({normalizedCode:String(codeData.normalizedCode||codeData.code||codeId).toLowerCase(),code:codeData.code||codeId,reason:'deleted',archivedAt:fsField()},{merge:true});
-        }catch(_){ }
+        await archiveCode(courseId,codeData,'deleted');
         await deactivateEnrollmentsForCode(courseId,codeId,codeData,'deleted');
         await ref.delete();
         if(String(window.activeCourseId||'')===String(courseId) && !isAdmin) window.aaEjectFromCourse?.('تم حذف كود الاشتراك.');
