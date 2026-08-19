@@ -16404,9 +16404,7 @@ syncHeight();
 })();
 </script>
 
-\n#courseChatPage .chat-unread-count[hidden],
-.chat-dashboard-unread-badge[hidden]{display:none!important;}
-<style id="chat-stage23-unread-ui-css">
+\n<style id="chat-stage23-unread-ui-css">
 /* Stage 23: unread state UI. */
 #courseChatPage .chat-scroll-bottom{overflow:visible!important;}
 #courseChatPage .chat-unread-count{
@@ -16499,9 +16497,8 @@ syncHeight();
 
   function renderFloatingBadge(){
     if(!unreadBadge)return;
-    const hasUnread=unreadCount>0;
-    unreadBadge.hidden=!hasUnread;
-    unreadBadge.textContent=hasUnread?formatCount(unreadCount):'';
+    unreadBadge.hidden=unreadCount<=0;
+    unreadBadge.textContent=formatCount(unreadCount);
   }
 
   function setUnreadState(count,firstId){
@@ -16545,9 +16542,8 @@ syncHeight();
     if(!currentOpenChat()||!unreadFirstId||unreadCount<=0)return;
     const target=chatList.querySelector(`[data-message-id="${CSS.escape(unreadFirstId)}"]`);
     if(!target)return;
-    let marker=target.previousElementSibling;
-    if(!marker?.classList.contains('chat-unread-divider')){
-      marker=document.createElement('div');
+    if(!target.previousElementSibling?.classList.contains('chat-unread-divider')){
+      const marker=document.createElement('div');
       marker.className='chat-unread-divider';
       marker.setAttribute('role','separator');
       marker.innerHTML='<span>رسائل غير مقروءة</span>';
@@ -16555,12 +16551,12 @@ syncHeight();
     }
     clearTimeout(observerTimer);
     observerTimer=setTimeout(()=>{
-      if(!target.isConnected||!marker.isConnected)return;
-      // Open at the last read message: keep the unread divider immediately below the visible area.
-      const markerTop=marker.offsetTop;
-      const desiredTop=Math.max(0, markerTop-chatList.clientHeight+Math.min(18, marker.offsetHeight+8));
-      chatList.scrollTo({top:desiredTop,behavior:'auto'});
-      if(unreadCount>0)renderFloatingBadge();
+      if(!target.isConnected)return;
+      chatList.scrollTo({top:Math.max(0,target.offsetTop-12),behavior:'auto'});
+      const distance=chatList.scrollHeight-chatList.clientHeight-chatList.scrollTop;
+      if(distance>80){
+        try{window.__chatStage23ForceUnreadView?.();}catch(_){}
+      }
     },30);
   }
 
@@ -16658,5 +16654,15 @@ syncHeight();
   // When the dashboard is shown again, refresh its badge from current persisted state.
   renderDashboardBadge(unreadCount);
 })();
-</script>\n</body>
+</script>\n
+<style id="chat-stage24-zero-badge-fix">
+/* Never render the floating unread badge when its unread count is zero. */
+#courseChatPage #chatUnreadCount[hidden]{
+    display:none!important;
+    visibility:hidden!important;
+    opacity:0!important;
+    pointer-events:none!important;
+}
+</style>
+</body>
 </html>
