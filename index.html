@@ -16962,24 +16962,32 @@ body.chat-fullscreen-mode #courseChatPage .chat-rebuilt-shell{
 })();
 </script>
 
-<script id="chat-stage28-popups-above-chat-js">
+<style id="ananas-global-popup-layer-css">
+html.ananas-popup-open,body.ananas-popup-open{overflow:hidden!important;}
+:where(#userProfilePage,#ananasCanonicalProfilePage,#ananasV10ProfilePage,#aaRebuiltProfilePage,#chatLockModal,#quizOverlay,#platformImageViewer,#platformGalleryViewer,#customAlertModal,#customConfirmModal,#xpDeletionChoiceModal,#authPopup,.custom-alert-modal.active,.edit-modal.active,.auth-popup.active,.gallery-viewer.active,.platform-image-viewer.active,.platform-gallery-viewer.active,.file-viewer-overlay.active,.ananas-modal-overlay.active,.modal.active,.modal.show,[role="dialog"],[aria-modal="true"]){z-index:2147483647!important;}
+#chatEmojiPickerPage.chat-emoji-rebuilt{z-index:2147483646!important;}
+</style>
+<script id="ananas-global-popup-layer-js">
 (function(){
   'use strict';
-  if(window.__chatStage28PopupLayerFix) return;
-  window.__chatStage28PopupLayerFix=true;
-  const ROOT_SELECTOR='body.chat-fullscreen-mode';
-  const POPUP_SELECTOR='#userProfilePage,#ananasCanonicalProfilePage,#ananasV10ProfilePage,#aaRebuiltProfilePage,#chatLockModal,#quizOverlay,#platformImageViewer,#platformGalleryViewer,#customAlert,#customConfirm,#authPopup,.modal.active,.modal.show,[role="dialog"],[aria-modal="true"]';
+  if(window.__ananasGlobalPopupLayer)return;
+  window.__ananasGlobalPopupLayer=true;
+  const POPUP_SELECTOR='#userProfilePage,#ananasCanonicalProfilePage,#ananasV10ProfilePage,#aaRebuiltProfilePage,#chatLockModal,#quizOverlay,#platformImageViewer,#platformGalleryViewer,#customAlertModal,#customConfirmModal,#xpDeletionChoiceModal,#authPopup,.custom-alert-modal.active,.edit-modal.active,.auth-popup.active,.gallery-viewer.active,.platform-image-viewer.active,.platform-gallery-viewer.active,.file-viewer-overlay.active,.ananas-modal-overlay.active,.modal.active,.modal.show,[role="dialog"],[aria-modal="true"]';
+  const EMOJI_ID='chatEmojiPickerPage';
+  const isVisible=el=>{if(!el||el.id===EMOJI_ID)return false;const cs=getComputedStyle(el);if(cs.display==='none'||cs.visibility==='hidden'||parseFloat(cs.opacity||'1')===0)return false;return !!(el.offsetWidth||el.offsetHeight||el.getClientRects().length);};
   function lift(){
-    if(!document.body.matches(ROOT_SELECTOR)) return;
-    document.querySelectorAll(POPUP_SELECTOR).forEach(el=>{
-      if(el.id==='chatEmojiPickerPage') return;
-      el.style.setProperty('z-index','2147483647','important');
-    });
+    const popups=[...document.querySelectorAll(POPUP_SELECTOR)].filter(isVisible);
+    const has=popups.length>0;
+    document.documentElement.classList.toggle('ananas-popup-open',has);
+    document.body.classList.toggle('ananas-popup-open',has);
+    popups.forEach(el=>el.style.setProperty('z-index','2147483647','important'));
   }
-  const mo=new MutationObserver(m=>{ if(m.some(x=>x.addedNodes&&x.addedNodes.length)) lift(); });
-  mo.observe(document.body,{subtree:true,childList:true});
+  const mo=new MutationObserver(m=>{if(m.some(x=>x.type==='childList'||x.type==='attributes'))requestAnimationFrame(lift);});
+  mo.observe(document.body,{subtree:true,childList:true,attributes:true,attributeFilter:['class','style','aria-hidden','aria-modal','open']});
   document.addEventListener('click',()=>setTimeout(lift,0),true);
+  document.addEventListener('keydown',e=>{if(e.key==='Escape')setTimeout(lift,0)},true);
   window.addEventListener('resize',lift,{passive:true});
+  window.addEventListener('orientationchange',()=>setTimeout(lift,50),{passive:true});
   lift();
 })();
 </script>
