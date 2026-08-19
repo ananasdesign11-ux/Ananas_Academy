@@ -6796,45 +6796,7 @@ label[for*="En"], input[id*="En"], textarea[id*="En"] { display:none !important;
             document.getElementById('courseSuspendCustomWrap').style.display = this.value === 'custom' ? 'block' : 'none';
         });
 
-        document.getElementById('confirmCourseSuspendBtn').addEventListener('click', async function(){
-            if (!isAdmin || !activeCourseId || !courseSuspendTargetCodeId) return;
-            const btn=this, mode=document.getElementById('courseSuspendDuration').value, reason=document.getElementById('courseSuspendReason').value.trim();
-            let until=null;
-            if(mode==='custom'){
-                const raw=document.getElementById('courseSuspendUntil').value;
-                if(!raw) return showCustomAlert('تنبيه','حدد تاريخ ووقت انتهاء الإيقاف.');
-                const m=raw.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/);
-                if(!m) return showCustomAlert('تنبيه','أدخل تاريخًا ووقتًا صحيحين.');
-                until=new Date(`${m[1]}-${m[2]}-${m[3]}T${m[4]}:${m[5]}:00+03:00`);
-                if(isNaN(until.getTime())||until.getTime()<=Date.now()) return showCustomAlert('تنبيه','وقت الانتهاء يجب أن يكون في المستقبل.');
-            } else if(mode!=='permanent') {
-                const days=({'1d':1,'3d':3,'7d':7,'30d':30})[mode]||1;
-                until=new Date(Date.now()+days*86400000);
-            }
-            try{
-                btn.disabled=true; btn.dataset.originalText=btn.textContent; btn.textContent='جاري حفظ الإيقاف...';
-                const selectedUids=[...document.querySelectorAll('#codeSuspendUsersList .suspend-user-check:checked')].map(x=>x.value);
-                if(!selectedUids.length) return showCustomAlert('تنبيه','اختر حسابًا واحدًا على الأقل لإيقافه.');
-                const selectedBlockedUsers=selectedUids.map(uid=>{
-                    const info=courseSuspendUsersCache.find(x=>String(x.uid)===String(uid))||{};
-                    return {uid:String(uid),name:info.name||'مستخدم',email:info.email||'',suspendedUntil:until?until.toISOString():null,reason:reason||null};
-                });
-                const codeRef=db.collection('courses').doc(activeCourseId).collection('codes').doc(courseSuspendTargetCodeId);
-                const latestCodeSnap=await codeRef.get();
-                const latestBlocked=latestCodeSnap.exists&&Array.isArray(latestCodeSnap.data()?.blockedUsers)?latestCodeSnap.data().blockedUsers:[];
-                const keep=latestBlocked.filter(x=>!selectedUids.includes(String(typeof x==='string'?x:x?.uid)));
-                const blockedUsers=keep.concat(selectedBlockedUsers);
-                await codeRef.update({
-                    blockedUsers,
-                    userSuspensionUpdatedAt:firebase.firestore.FieldValue.serverTimestamp(),
-                    userSuspensionUpdatedBy:currentUser?.uid||null
-                });
-                document.getElementById('courseAccessSuspendModal').classList.remove('active');
-                await loadCodesForCourse(activeCourseId);
-                showCustomAlert('تم الإيقاف','تم إيقاف الحسابات المحددة بالمدة التي اخترتها.');
-            }catch(e){showCustomAlert('خطأ','تعذر إيقاف الكود: '+e.message);}
-            finally{btn.disabled=false;btn.textContent=btn.dataset.originalText||'إيقاف الكود';}
-        });
+        /* V12 owns the global suspension save handler. The legacy click handler was removed to prevent duplicate saves and conflicting state. */
 
         window.removeCodeUserEnrollment = async function(codeId, uid) {
             if (!isAdmin || !activeCourseId) return showCustomAlert('غير مسموح','هذه العملية للمشرف فقط.');
@@ -12144,6 +12106,11 @@ const s=document.createElement('style');s.textContent=`
       const safeName=escV12(accountName),safeEmail=escV12(accountEmail);
       suspendAccountBox.innerHTML=`<span style="width:52px;height:52px;flex:0 0 52px;border-radius:50%;overflow:hidden;display:grid;place-items:center;background:var(--accent-gradient);color:#fff;font-weight:900;font-size:1rem;">${accountPhoto?`<img src="${escV12(accountPhoto)}" alt="${safeName}" style="width:100%;height:100%;object-fit:cover;display:block;">`:escV12(accountName.slice(0,1)||'م')}</span><span style="min-width:0;display:flex;flex-direction:column;gap:3px;"><strong style="font-size:.92rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${safeName}</strong><small style="color:var(--text-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"><i class="fas fa-envelope"></i> ${safeEmail}</small></span>`;
     };
+    if(!accountUid){
+      accountName='لا يوجد حساب مرتبط بهذا الكود';
+      accountEmail='سيتم إيقاف الكود نفسه حسب المدة المحددة.';
+      accountPhoto='';
+    }
     renderSuspendAccount();
     $v12('courseSuspendDuration').value='1d';
     document.querySelectorAll('.suspend-duration-choice').forEach(b=>b.classList.toggle('active',b.dataset.duration==='1d'));
@@ -12157,7 +12124,13 @@ const s=document.createElement('style');s.textContent=`
     $v12('courseAccessSuspendModal').classList.add('active');
 
     if(accountUid){
-      Promise.resolve(window.__aaGetUserProfileFast?.(accountUid)).then(profile=>{
+      const profilePromise=typeof window.__aaGetUserProfileFast==='function'
+        ? window.__aaGetUserProfileFast(accountUid)
+        : db.collection('users').doc(accountUid).get().then(s=>s.exists?(s.data()||{}):null);
+      Promise.race([
+        Promise.resolve(profilePromise),
+        new Promise(resolve=>setTimeout(()=>resolve(null),2500))
+      ]).then(profile=>{
         if(!profile)return;
         accountName=profile.displayName||profile.name||accountName;
         accountEmail=profile.email||accountEmail;
@@ -14744,7 +14717,7 @@ body.light-mode #lessonVideoWrapper .aa-speed-value{color:#172033!important;}
   'use strict';
 
   const userStore=window.__aaUserProfileCache=window.__aaUserProfileCache||new Map();
-  const USER_TTL=5000;
+  const USER_TTL=60000;
   window.__aaGetUserProfileFast=function(uid){
     uid=String(uid||'').trim();
     if(!uid)return Promise.resolve(null);
