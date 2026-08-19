@@ -16337,5 +16337,200 @@ body.light-mode #courseChatPage .chat-custom-scrollbar-thumb{
 })();
 </script>
 
+
+
+<!-- ===== CHAT STAGE 5: HARD VIEWPORT SAFE-EDGES + EDGE scrollbar ===== -->
+<style id="chat-stage5-safe-edges-css">
+/* Establish one predictable coordinate system for the rebuilt chat. */
+#courseDetailView > #courseChatPage{
+    box-sizing:border-box!important;
+    width:100%!important;
+    max-width:100%!important;
+    min-width:0!important;
+    overflow:hidden!important;
+}
+#courseDetailView > #courseChatPage .chat-rebuilt-shell{
+    box-sizing:border-box!important;
+    width:100%!important;
+    max-width:100%!important;
+    min-width:0!important;
+    overflow:hidden!important;
+}
+
+/* Physical left/right safe zones. Do not use logical inline-start/end here because the site is RTL. */
+#courseDetailView > #courseChatPage .chat-topbar{
+    box-sizing:border-box!important;
+    width:100%!important;
+    max-width:100%!important;
+    min-width:0!important;
+    padding-left:max(14px, env(safe-area-inset-left) + 10px)!important;
+    padding-right:max(14px, env(safe-area-inset-right) + 10px)!important;
+}
+#courseChatPage .chat-topbar > #chatBackBtn,
+#courseChatPage .chat-topbar > #chatAdminRoot,
+#courseChatPage .chat-topbar > .chat-topbar-title{
+    box-sizing:border-box!important;
+    min-width:0!important;
+}
+#courseChatPage .chat-admin-root{
+    flex:0 0 40px!important;
+    width:40px!important;
+    max-width:40px!important;
+    min-width:40px!important;
+}
+#courseChatPage .chat-topbar-btn,
+#courseChatPage .chat-admin-menu-btn{
+    box-sizing:border-box!important;
+    max-width:100%!important;
+}
+
+/* Composer: never allow the row to calculate wider than the actual viewport. */
+#courseChatPage .chat-composer-shell{
+    box-sizing:border-box!important;
+    width:100%!important;
+    max-width:100%!important;
+    min-width:0!important;
+    padding-left:max(12px, env(safe-area-inset-left) + 8px)!important;
+    padding-right:max(12px, env(safe-area-inset-right) + 8px)!important;
+}
+#courseChatPage .chat-input-group{
+    box-sizing:border-box!important;
+    width:100%!important;
+    max-width:100%!important;
+    min-width:0!important;
+    overflow:visible!important;
+}
+#courseChatPage .chat-input-wrap,
+#courseChatPage #fullChatPageInput{
+    min-width:0!important;
+    max-width:100%!important;
+    box-sizing:border-box!important;
+}
+#courseChatPage #chatEmojiBtnPage,
+#courseChatPage #chatImageBtnPage,
+#courseChatPage #fullChatPageSendBtn{
+    flex:0 0 auto!important;
+    box-sizing:border-box!important;
+}
+
+/* Message area: keep content away from the edge, without moving the custom scrollbar. */
+#courseChatPage .chat-messages-rebuilt{
+    box-sizing:border-box!important;
+    width:100%!important;
+    max-width:100%!important;
+    min-width:0!important;
+    padding-left:max(18px, env(safe-area-inset-left) + 14px)!important;
+    padding-right:max(18px, env(safe-area-inset-right) + 14px)!important;
+}
+
+/* The scrollbar itself is outside the message padding and touches the viewport edge exactly. */
+#courseChatPage .chat-custom-scrollbar{
+    position:fixed!important;
+    left:0!important;
+    width:4px!important;
+    top:0!important;
+    bottom:auto!important;
+    margin:0!important;
+    padding:0!important;
+    z-index:1500!important;
+    pointer-events:none!important;
+    box-sizing:border-box!important;
+    overflow:visible!important;
+    transform:none!important;
+}
+#courseChatPage .chat-custom-scrollbar-thumb{
+    left:0!important;
+    right:auto!important;
+    width:100%!important;
+    max-width:100%!important;
+    box-sizing:border-box!important;
+}
+@media(max-width:768px){
+    #courseDetailView > #courseChatPage .chat-topbar{
+        padding-left:max(16px, env(safe-area-inset-left) + 8px)!important;
+        padding-right:max(16px, env(safe-area-inset-right) + 8px)!important;
+    }
+    #courseChatPage .chat-composer-shell{
+        padding-left:max(10px, env(safe-area-inset-left) + 6px)!important;
+        padding-right:max(10px, env(safe-area-inset-right) + 6px)!important;
+    }
+    #courseChatPage .chat-messages-rebuilt{
+        padding-left:max(16px, env(safe-area-inset-left) + 12px)!important;
+        padding-right:max(16px, env(safe-area-inset-right) + 12px)!important;
+    }
+    #courseChatPage .chat-custom-scrollbar{width:3px!important;}
+}
+@media(max-width:380px){
+    #courseChatPage .chat-topbar{
+        padding-left:max(12px, env(safe-area-inset-left) + 6px)!important;
+        padding-right:max(12px, env(safe-area-inset-right) + 6px)!important;
+    }
+    #courseChatPage .chat-composer-shell{
+        padding-left:max(8px, env(safe-area-inset-left) + 4px)!important;
+        padding-right:max(8px, env(safe-area-inset-right) + 4px)!important;
+    }
+}
+</style>
+
+<script id="chat-stage5-safe-edges-js">
+(function(){
+    'use strict';
+    const page=document.getElementById('courseChatPage');
+    const list=document.getElementById('chatPageMessagesList');
+    if(!page||!list)return;
+    if(window.__chatStage5SafeEdgesInstalled)return;
+    window.__chatStage5SafeEdgesInstalled=true;
+
+    const bar=page.querySelector('.chat-custom-scrollbar');
+    const thumb=page.querySelector('.chat-custom-scrollbar-thumb');
+    if(!bar||!thumb)return;
+
+    let raf=0;
+    function syncBarGeometry(show){
+        if(raf)return;
+        raf=requestAnimationFrame(()=>{
+            raf=0;
+            const pageRect=page.getBoundingClientRect();
+            const listRect=list.getBoundingClientRect();
+            const viewport=list.clientHeight;
+            const content=list.scrollHeight;
+            if(!viewport||!content||content<=viewport+1){
+                bar.classList.remove('visible');
+                thumb.style.height='100%';
+                thumb.style.transform='translateY(0)';
+                bar.style.top=Math.max(0,listRect.top)+'px';
+                bar.style.height=Math.max(0,listRect.height)+'px';
+                return;
+            }
+            const top=Math.max(0,listRect.top);
+            const bottom=Math.max(0,window.innerHeight-listRect.bottom);
+            const track=Math.max(1,window.innerHeight-top-bottom);
+            const ratio=viewport/content;
+            const thumbHeight=Math.max(28,Math.min(track,track*ratio));
+            const maxTravel=Math.max(0,track-thumbHeight);
+            const maxScroll=Math.max(1,content-viewport);
+            const progress=Math.min(1,Math.max(0,list.scrollTop/maxScroll));
+
+            bar.style.top=top+'px';
+            bar.style.height=track+'px';
+            thumb.style.height=thumbHeight+'px';
+            thumb.style.transform='translateY('+(maxTravel*progress)+'px)';
+            if(show)bar.classList.add('visible');
+        });
+    }
+
+    list.addEventListener('scroll',()=>syncBarGeometry(true),{passive:true});
+    list.addEventListener('wheel',()=>syncBarGeometry(true),{passive:true});
+    list.addEventListener('touchstart',()=>syncBarGeometry(true),{passive:true});
+    window.addEventListener('resize',()=>syncBarGeometry(false),{passive:true});
+    window.addEventListener('orientationchange',()=>setTimeout(()=>syncBarGeometry(false),50),{passive:true});
+
+    const ro=new ResizeObserver(()=>syncBarGeometry(false));
+    ro.observe(list);
+    ro.observe(page);
+    syncBarGeometry(false);
+})();
+</script>
+
 </body>
 </html>
