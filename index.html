@@ -11772,14 +11772,7 @@ const nowMs=()=>Date.now();
     const title=form.querySelector('h3'); if(title) title.textContent='إيقاف كود الاشتراك';
     const label=$('suspendCodeLabel'); if(label) label.style.cssText='font-weight:800;margin-bottom:10px;';
     const users=$('courseAccessSuspendModal')?.querySelector('.code-suspend-users');
-    if(users){
-      users.style.display='none';
-      const note=document.createElement('div');
-      note.id='globalCodeSuspendNote';
-      note.style.cssText='display:flex;align-items:center;gap:12px;padding:11px 13px;border:1px solid var(--border);border-radius:14px;background:var(--bg-secondary);color:var(--text-primary);margin:0 0 12px;min-height:72px;';
-      note.innerHTML='<span style="width:52px;height:52px;flex:0 0 52px;border-radius:50%;overflow:hidden;display:grid;place-items:center;background:var(--accent-gradient);color:#fff;font-weight:900;font-size:1rem;"><i class="fas fa-user"></i></span><span style="min-width:0;display:flex;flex-direction:column;gap:3px;"><strong style="font-size:.92rem;">جاري تحميل بيانات الحساب...</strong><small style="color:var(--text-muted);">جاري تحميل البريد الإلكتروني</small></span>';
-      users.parentNode.insertBefore(note,users);
-    }
+    if(users)users.style.display='none';
     const btn=$('confirmCourseSuspendBtn'); if(btn) btn.textContent='إيقاف الكود';
   }
   // Rebind only once for our new option buttons.
@@ -11870,32 +11863,11 @@ window.toggleEnrollmentCode=async function(codeId,currentlySuspended){
   }
   window.__aaCodeSuspendTarget=codeId;
   $('suspendCodeLabel').textContent=`الكود: ${c.code||codeId}`;
-  const suspendAccountBox=$('globalCodeSuspendNote');
-  if(suspendAccountBox){
-    const cached=Array.isArray(c.usedByInfo)?c.usedByInfo.find(x=>x&&x.uid):null;
-    let accountName=cached?.name||'مستخدم';
-    let accountEmail=cached?.email||'لا يوجد بريد إلكتروني';
-    let accountPhoto='';
-    if(cached?.uid){
-      try{
-        const userSnap=await db.collection('users').doc(String(cached.uid)).get();
-        if(userSnap.exists){
-          const profile=userSnap.data()||{};
-          accountName=profile.displayName||profile.name||accountName;
-          accountEmail=profile.email||accountEmail;
-          accountPhoto=profile.photoURL||profile.photoUrl||profile.photo||'';
-        }
-      }catch(_){}
-    }
-    const safeName=esc(accountName),safeEmail=esc(accountEmail);
-    suspendAccountBox.innerHTML=`<span style="width:52px;height:52px;flex:0 0 52px;border-radius:50%;overflow:hidden;display:grid;place-items:center;background:var(--accent-gradient);color:#fff;font-weight:900;font-size:1rem;">${accountPhoto?`<img src="${esc(accountPhoto)}" alt="${safeName}" style="width:100%;height:100%;object-fit:cover;display:block;">`:`${esc(accountName.slice(0,1)||'م')}`}</span><span style="min-width:0;display:flex;flex-direction:column;gap:3px;"><strong style="font-size:.92rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${safeName}</strong><small style="color:var(--text-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"><i class="fas fa-envelope"></i> ${safeEmail}</small></span>`;
-  }
   $('courseSuspendDuration').value='1d';
   document.querySelectorAll('.suspend-duration-choice').forEach(b=>b.classList.toggle('active',b.dataset.duration==='1d'));
   $('courseSuspendUntil').value='';
   $('courseSuspendReason').value='';
   $('courseSuspendCustomWrap').style.display='none';
-  const note=$('globalCodeSuspendNote');if(note&&!note.querySelector('strong'))note.innerHTML='<span style="width:52px;height:52px;flex:0 0 52px;border-radius:50%;overflow:hidden;display:grid;place-items:center;background:var(--accent-gradient);color:#fff;font-weight:900;font-size:1rem;"><i class="fas fa-user"></i></span><span style="min-width:0;display:flex;flex-direction:column;gap:3px;"><strong style="font-size:.92rem;">لا يوجد حساب مرتبط بهذا الكود</strong><small style="color:var(--text-muted);">سيتم إيقاف الكود نفسه حسب المدة المحددة.</small></span>';
   $('courseAccessSuspendModal').classList.add('active');
 };
 
@@ -11990,7 +11962,13 @@ const s=document.createElement('style');s.textContent=`
 #courseAccessSuspendModal .code-suspend-users{display:none!important}
 #courseAccessSuspendModal .suspend-duration-choices{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
 #courseAccessSuspendModal .suspend-duration-choice{min-height:52px}
-@media(max-width:600px){#courseAccessSuspendModal .suspend-duration-choices{grid-template-columns:1fr!important}}
+#courseAccessSuspendModal .aa-suspend-account-card{display:flex;align-items:center;gap:12px;margin:0 0 14px;padding:12px 14px;border:1px solid var(--border);border-radius:16px;background:var(--bg-secondary);min-width:0}
+#courseAccessSuspendModal .aa-suspend-account-avatar{width:54px;height:54px;flex:0 0 54px;border-radius:50%;overflow:hidden;display:grid;place-items:center;background:var(--accent-gradient);color:#fff;font-weight:900;font-size:1.15rem}
+#courseAccessSuspendModal .aa-suspend-account-avatar img{width:100%;height:100%;object-fit:cover;display:block}
+#courseAccessSuspendModal .aa-suspend-account-meta{min-width:0;display:flex;flex-direction:column;gap:3px}
+#courseAccessSuspendModal .aa-suspend-account-name{font-weight:900;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#courseAccessSuspendModal .aa-suspend-account-email{color:var(--text-muted);font-size:.82rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;direction:ltr;text-align:right}
+@media(max-width:600px){#courseAccessSuspendModal .suspend-duration-choices{grid-template-columns:1fr!important}#courseAccessSuspendModal .aa-suspend-account-card{padding:11px 12px}#courseAccessSuspendModal .aa-suspend-account-avatar{width:48px;height:48px;flex-basis:48px}}
 `;document.head.appendChild(s);
 
 })();
@@ -12302,6 +12280,25 @@ const s=document.createElement('style');s.textContent=`
     if(count)await batch.commit().catch(()=>{});
   }
 
+  async function renderCodeSuspendAccountV12(code){
+    const modal=$v12('courseAccessSuspendModal');if(!modal)return;
+    let card=$v12('aaSuspendAccountCard');
+    if(!card){
+      card=document.createElement('div');card.id='aaSuspendAccountCard';card.className='aa-suspend-account-card';
+      const anchor=$v12('suspendCodeLabel');
+      anchor?.parentNode?.insertBefore(card,anchor.nextSibling);
+    }
+    const info=usedInfoV12(code)[0]||{};
+    const uid=String((code.usedBy||[])[0]||info.uid||'');
+    let profile={};
+    if(uid){try{const us=await db.collection('users').doc(uid).get();if(us.exists)profile=us.data()||{};}catch(_){}}
+    const name=profile.displayName||profile.name||info.name||'الحساب المستخدم للكود';
+    const email=profile.email||info.email||'لا يوجد بريد إلكتروني';
+    const photo=profile.photoURL||profile.photoUrl||profile.photo||'';
+    const avatar=photo?`<img src="${escV12(photo)}" alt="${escV12(name)}">`:escV12((name||'م').slice(0,1));
+    card.innerHTML=`<div class="aa-suspend-account-avatar">${avatar}</div><div class="aa-suspend-account-meta"><div class="aa-suspend-account-name">${escV12(name)}</div><div class="aa-suspend-account-email">${escV12(email)}</div></div>`;
+  }
+
   window.toggleEnrollmentCode=async function(codeId,currentlySuspended){
     if(!isAdmin||!activeCourseId)return showCustomAlert?.('غير مسموح','هذه العملية للمشرف فقط.');
     const ref=codeRefV12(activeCourseId,codeId);let snap=await ref.get();if(!snap.exists)return showCustomAlert?.('خطأ','الكود غير موجود.');
@@ -12319,33 +12316,7 @@ const s=document.createElement('style');s.textContent=`
     }
     window.__aaCodeSuspendTarget=codeId;
     $v12('suspendCodeLabel').textContent=`الكود: ${c.code||codeId}`;
-
-    // اعرض بيانات الحساب المخزنة مع الكود فورًا، ثم حدّث الصورة/البيانات من ملف الحساب إن وُجد.
-    const suspendAccountBox=$('globalCodeSuspendNote');
-    if(suspendAccountBox){
-      const info=Array.isArray(c.usedByInfo)?c.usedByInfo.find(x=>x&&x.uid):null;
-      const fallbackUid=Array.isArray(c.usedBy)?c.usedBy.find(Boolean):'';
-      let accountUid=String(info?.uid||fallbackUid||'');
-      let accountName=info?.name||'مستخدم';
-      let accountEmail=info?.email||'لا يوجد بريد إلكتروني';
-      let accountPhoto='';
-      const renderSuspendAccount=()=>{
-        const safeName=esc(accountName),safeEmail=esc(accountEmail);
-        suspendAccountBox.innerHTML=`<span style="width:52px;height:52px;flex:0 0 52px;border-radius:50%;overflow:hidden;display:grid;place-items:center;background:var(--accent-gradient);color:#fff;font-weight:900;font-size:1rem;">${accountPhoto?`<img src="${esc(accountPhoto)}" alt="${safeName}" style="width:100%;height:100%;object-fit:cover;display:block;">`:`${esc(accountName.slice(0,1)||'م')}`}</span><span style="min-width:0;display:flex;flex-direction:column;gap:3px;"><strong style="font-size:.92rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${safeName}</strong><small style="color:var(--text-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"><i class="fas fa-envelope"></i> ${safeEmail}</small></span>`;
-      };
-      renderSuspendAccount();
-      if(accountUid){
-        db.collection('users').doc(accountUid).get().then(userSnap=>{
-          if(!userSnap.exists)return;
-          const profile=userSnap.data()||{};
-          accountName=profile.displayName||profile.name||accountName;
-          accountEmail=profile.email||accountEmail;
-          accountPhoto=profile.photoURL||profile.photoUrl||profile.photo||'';
-          renderSuspendAccount();
-        }).catch(()=>{});
-      }
-    }
-
+    await renderCodeSuspendAccountV12(c);
     $v12('courseSuspendDuration').value='1d';
     document.querySelectorAll('.suspend-duration-choice').forEach(b=>b.classList.toggle('active',b.dataset.duration==='1d'));
     $v12('courseSuspendUntil').value='';$v12('courseSuspendReason').value='';$v12('courseSuspendCustomWrap').style.display='none';$v12('courseAccessSuspendModal').classList.add('active');
