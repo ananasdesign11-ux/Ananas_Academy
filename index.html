@@ -1923,42 +1923,42 @@ html.chat-fullscreen-mode #courseChatPage{
 }
 </style>
 
-
-
-<style id="chat-stage29-popup-layer-final">
-/* Stage 29: chat popups live above the fullscreen chat without runtime observers. */
+<style id="chat-stage28-popups-above-chat-css">
+/* Stage 28: every popup/dialog opened while chat fullscreen is active must sit above the chat layer. */
 body.chat-fullscreen-mode :where(
-  #chatLockModal,
-  #customAlertModal,
-  #customConfirmModal,
-  #xpDeletionChoiceModal,
-  #userProfilePage,
-  #ananasCanonicalProfilePage,
-  #ananasV10ProfilePage,
-  #aaRebuiltProfilePage,
-  #ananasPrivateProfileOverlay,
-  #quizOverlay,
-  #platformImageViewer,
-  #platformGalleryViewer,
-  #authPopup,
-  [role="dialog"],
-  [aria-modal="true"]
+    #userProfilePage,
+    #ananasCanonicalProfilePage,
+    #ananasV10ProfilePage,
+    #aaRebuiltProfilePage,
+    #chatLockModal,
+    #quizOverlay,
+    #platformImageViewer,
+    #platformGalleryViewer,
+    #customAlert,
+    #customConfirm,
+    #authPopup,
+    .modal.active,
+    .modal.show,
+    [role="dialog"],
+    [aria-modal="true"]
 ){
-  z-index:2147483647 !important;
+    z-index:2147483647 !important;
 }
-/* Keep the chat page itself below every popup. */
-body.chat-fullscreen-mode #courseChatPage{z-index:2147483001 !important;}
-/* The actual confirm/alert overlays must stay fixed to the viewport. */
-body.chat-fullscreen-mode #customAlertModal,
-body.chat-fullscreen-mode #customConfirmModal,
-body.chat-fullscreen-mode #chatLockModal{
-  position:fixed !important;
-  inset:0 !important;
-  width:100vw !important;
-  height:100dvh !important;
-  max-width:none !important;
-  max-height:none !important;
-  margin:0 !important;
+/* Popups whose own z-index is already controlled by their script keep their position and geometry. */
+body.chat-fullscreen-mode :where(
+    #userProfilePage,
+    #ananasCanonicalProfilePage,
+    #ananasV10ProfilePage,
+    #aaRebuiltProfilePage,
+    #chatLockModal,
+    #quizOverlay,
+    #platformImageViewer,
+    #platformGalleryViewer,
+    #customAlert,
+    #customConfirm,
+    #authPopup
+){
+    pointer-events:auto;
 }
 </style>
 </head>
@@ -16962,6 +16962,98 @@ body.chat-fullscreen-mode #courseChatPage .chat-rebuilt-shell{
 })();
 </script>
 
+<script id="chat-stage28-popups-above-chat-js">
+(function(){
+  'use strict';
+  if(window.__chatStage28PopupLayerFix) return;
+  window.__chatStage28PopupLayerFix=true;
+  const ROOT_SELECTOR='body.chat-fullscreen-mode';
+  const POPUP_SELECTOR='#userProfilePage,#ananasCanonicalProfilePage,#ananasV10ProfilePage,#aaRebuiltProfilePage,#chatLockModal,#quizOverlay,#platformImageViewer,#platformGalleryViewer,#customAlert,#customConfirm,#authPopup,.modal.active,.modal.show,[role="dialog"],[aria-modal="true"]';
+  function lift(){
+    if(!document.body.matches(ROOT_SELECTOR)) return;
+    document.querySelectorAll(POPUP_SELECTOR).forEach(el=>{
+      if(el.id==='chatEmojiPickerPage') return;
+      el.style.setProperty('z-index','2147483647','important');
+    });
+  }
+  const mo=new MutationObserver(m=>{ if(m.some(x=>x.addedNodes&&x.addedNodes.length)) lift(); });
+  mo.observe(document.body,{subtree:true,childList:true});
+  document.addEventListener('click',()=>setTimeout(lift,0),true);
+  window.addEventListener('resize',lift,{passive:true});
+  lift();
+})();
+</script>
+
+
+<style id="chat-stage29-lock-confirm-over-chat-css">
+/* Only these two chat actions must always sit above the fullscreen chat layer. */
+body.chat-fullscreen-mode #chatLockModal,
+body.chat-fullscreen-mode #customConfirmModal{
+    position:fixed !important;
+    z-index:2147483647 !important;
+}
+body.chat-fullscreen-mode #chatLockModal.active,
+body.chat-fullscreen-mode #customConfirmModal.active{
+    display:flex !important;
+}
+body.chat-fullscreen-mode #chatLockModal{
+    inset:0 !important;
+    align-items:center !important;
+    justify-content:center !important;
+    width:100vw !important;
+    height:100dvh !important;
+    max-width:none !important;
+    max-height:none !important;
+}
+body.chat-fullscreen-mode #customConfirmModal{
+    inset:0 !important;
+    width:100vw !important;
+    height:100dvh !important;
+    max-width:none !important;
+    max-height:none !important;
+    align-items:center !important;
+    justify-content:center !important;
+}
+</style>
+<script id="chat-stage29-lock-confirm-over-chat-js">
+(function(){
+    'use strict';
+    const chat=document.getElementById('courseChatPage');
+    if(!chat) return;
+
+    const ids=['chatLockModal','customConfirmModal'];
+    function isChatOpen(){
+        return chat.classList.contains('active') ||
+            (getComputedStyle(chat).display!=='none' && chat.offsetParent!==null);
+    }
+    function promote(){
+        if(!isChatOpen()) return;
+        ids.forEach(id=>{
+            const el=document.getElementById(id);
+            if(!el) return;
+            /* Keep the existing element, handlers, content and IDs; only move it
+               to the document root when needed so no ancestor stacking context can trap it. */
+            if(el.parentElement!==document.body) document.body.appendChild(el);
+            el.style.setProperty('z-index','2147483647','important');
+        });
+    }
+
+    const bodyObserver=new MutationObserver(mutations=>{
+        for(const m of mutations){
+            if(m.type==='childList' || (m.type==='attributes' && m.attributeName==='class')){
+                promote();
+                break;
+            }
+        }
+    });
+    bodyObserver.observe(document.body,{childList:true,subtree:true,attributes:true,attributeFilter:['class']});
+    new MutationObserver(promote).observe(chat,{attributes:true,attributeFilter:['class','style']});
+    document.addEventListener('click',()=>setTimeout(promote,0),true);
+    window.addEventListener('resize',promote,{passive:true});
+    window.addEventListener('orientationchange',()=>setTimeout(promote,50),{passive:true});
+    promote();
+})();
+</script>
 
 </body>
 </html>
