@@ -16664,5 +16664,170 @@ syncHeight();
     pointer-events:none!important;
 }
 </style>
+
+<style id="internal-course-pages-navigation-v1">
+/* Hide the global navigation only while a course sub-page is open. */
+html.internal-course-page-active,
+body.internal-course-page-active{overflow-x:hidden!important;}
+body.internal-course-page-active .navbar,
+body.internal-course-page-active #mobileBottomNav{display:none!important;}
+body.internal-course-page-active{padding-top:0!important;padding-bottom:0!important;}
+body.internal-course-page-active #courseDetailView{
+  top:0!important;bottom:0!important;left:0!important;right:0!important;
+  width:100vw!important;height:100dvh!important;max-height:none!important;
+}
+.internal-page-utilities{
+  display:inline-flex!important;align-items:center!important;gap:7px!important;
+  flex:0 0 auto!important;margin-inline-start:8px!important;
+}
+.internal-page-utility-btn{
+  width:40px!important;height:40px!important;min-width:40px!important;
+  border-radius:12px!important;border:1px solid var(--border)!important;
+  background:color-mix(in srgb,var(--bg-card) 92%,var(--accent1) 8%)!important;
+  color:var(--text-primary)!important;display:inline-flex!important;
+  align-items:center!important;justify-content:center!important;
+  cursor:pointer!important;font-family:inherit!important;
+  transition:transform .18s ease,border-color .18s ease,background .18s ease,color .18s ease,box-shadow .18s ease!important;
+  box-shadow:0 5px 16px rgba(0,0,0,.08)!important;
+}
+.internal-page-utility-btn:hover{
+  color:#fff!important;border-color:transparent!important;
+  background:linear-gradient(145deg,#765ff0,#5c4bd2)!important;
+  transform:translateY(-2px);box-shadow:0 9px 22px rgba(108,92,231,.24)!important;
+}
+.internal-page-utility-btn:active{transform:translateY(0) scale(.97)!important;}
+.internal-page-utilities .internal-profile-btn .internal-profile-avatar{
+  width:24px;height:24px;border-radius:50%;overflow:hidden;display:inline-flex;
+  align-items:center;justify-content:center;background:rgba(108,92,231,.16);
+}
+.internal-page-utilities .internal-profile-btn .internal-profile-avatar img{width:100%;height:100%;object-fit:cover;}
+/* Existing page topbars become the local navigation rows. */
+#courseLessonsPage .page-title > div:first-child,
+#courseQuizzesPage .page-title > div:first-child,
+#courseAssignmentsPage .page-title > div:first-child,
+#courseFilesPage .page-title > div:first-child,
+#courseAssignmentDetailPage .page-title > div:first-child{min-width:0;}
+#courseLessonsPage .page-title,
+#courseQuizzesPage .page-title,
+#courseAssignmentsPage .page-title,
+#courseFilesPage .page-title,
+#courseAssignmentDetailPage .page-title{box-sizing:border-box!important;}
+#courseLessonPlayerPage .lesson-player-topbar{align-items:center!important;gap:8px!important;flex-wrap:wrap!important;}
+#courseChatPage .chat-topbar{display:flex!important;align-items:center!important;gap:8px!important;}
+#quizOverlay .quiz-header{display:flex!important;align-items:center!important;gap:8px!important;}
+#quizOverlay .quiz-header h2{min-width:0;flex:1 1 auto;}
+#quizOverlay .quiz-header .close-btn{flex:0 0 auto;}
+#quizOverlay .internal-page-utilities{margin-inline-start:0!important;order:3!important;}
+@media(max-width:480px){
+  .internal-page-utilities{gap:5px!important;margin-inline-start:5px!important;}
+  .internal-page-utility-btn{width:38px!important;height:38px!important;min-width:38px!important;border-radius:11px!important;}
+}
+</style>
+
+<script id="internal-course-pages-navigation-v1-js">
+(function(){
+  'use strict';
+  if(window.__internalCoursePagesNavigationV1)return;
+  window.__internalCoursePagesNavigationV1=true;
+  const $=id=>document.getElementById(id);
+  const targets=new Set(['learning','lessonPlayer','quizzes','assignments','files','chat']);
+  const pageMap={
+    lessons:'courseLessonsPage',
+    lessonPlayer:'courseLessonPlayerPage',
+    quizzes:'courseQuizzesPage',
+    assignments:'courseAssignmentsPage',
+    files:'courseFilesPage',
+    chat:'courseChatPage',
+    assignmentDetail:'courseAssignmentDetailPage',
+    quizOverlay:'quizOverlay'
+  };
+  function isInternal(){
+    return targets.has(String(window.currentCoursePage||'')) ||
+      !!$('courseAssignmentDetailPage')?.classList.contains('active') ||
+      !!$('quizOverlay')?.classList.contains('active');
+  }
+  function profileClick(){
+    try{
+      if(window.currentUser && typeof window.openUserProfilePage==='function') return window.openUserProfilePage();
+      $('authToggleBtn')?.click();
+    }catch(_){try{$('authToggleBtn')?.click();}catch(__){}}
+  }
+  function themeClick(){ $('themeToggle')?.click(); }
+  function makeUtilities(host){
+    if(!host || host.querySelector('.internal-page-utilities'))return;
+    const wrap=document.createElement('div');
+    wrap.className='internal-page-utilities';
+    const profile=document.createElement('button');
+    profile.type='button';profile.className='internal-page-utility-btn internal-profile-btn';
+    profile.title='الملف الشخصي';profile.setAttribute('aria-label','الملف الشخصي');
+    profile.innerHTML='<span class="internal-profile-avatar"><i class="fas fa-user" aria-hidden="true"></i></span>';
+    const theme=document.createElement('button');
+    theme.type='button';theme.className='internal-page-utility-btn internal-theme-btn';
+    theme.title='تغيير الوضع';theme.setAttribute('aria-label','تغيير الوضع');
+    theme.innerHTML='<i class="fas fa-circle-half-stroke" aria-hidden="true"></i>';
+    profile.addEventListener('click',e=>{e.preventDefault();e.stopPropagation();profileClick();});
+    theme.addEventListener('click',e=>{e.preventDefault();e.stopPropagation();themeClick();});
+    wrap.append(profile,theme);
+    host.appendChild(wrap);
+    updateProfileButton(wrap);
+  }
+  function updateProfileButton(wrap){
+    const btn=wrap?.querySelector('.internal-profile-btn'); if(!btn)return;
+    const avatar=wrap.querySelector('.internal-profile-avatar'); if(!avatar)return;
+    const u=window.currentUser||window.currentUserProfile||null;
+    const photo=u?.photoURL||u?.photoUrl||u?.photo||window.currentUserProfile?.photoURL||window.currentUserProfile?.photoUrl||window.currentUserProfile?.photo||'';
+    avatar.innerHTML=photo?'<img src="'+String(photo).replace(/&/g,'&amp;').replace(/"/g,'&quot;')+'" alt="">':'<i class="fas fa-user" aria-hidden="true"></i>';
+    const theme=wrap.querySelector('.internal-theme-btn');if(theme)theme.innerHTML=document.body.classList.contains('light-mode')?'<i class="fas fa-moon" aria-hidden="true"></i>':'<i class="fas fa-sun" aria-hidden="true"></i>';
+  }
+  function mountNearBack(root,backSelector,preferredHostSelector){
+    if(!root)return;
+    const back=root.querySelector(backSelector);
+    if(preferredHostSelector){const host=root.querySelector(preferredHostSelector);if(host){makeUtilities(host);return;}}
+    if(back){
+      let host=back.parentElement;
+      if(host && (host.matches('.full-page-actions')||host.matches('.lesson-player-topbar')||host.matches('.chat-topbar'))){makeUtilities(host);return;}
+      const wrap=document.createElement('div');wrap.style.cssText='display:inline-flex;align-items:center;gap:7px;flex:0 0 auto;';
+      back.insertAdjacentElement('beforebegin',wrap);wrap.appendChild(back);makeUtilities(wrap);return;
+    }
+    makeUtilities(root.querySelector('.page-title')||root);
+  }
+  function ensureToolbars(){
+    const lessons=$('courseLessonsPage');
+    if(lessons)mountNearBack(lessons,'.full-page-back-btn','.page-title .full-page-actions');
+    const quizzes=$('courseQuizzesPage');
+    if(quizzes)mountNearBack(quizzes,'.full-page-back-btn','.page-title .full-page-actions');
+    const assignments=$('courseAssignmentsPage');
+    if(assignments)mountNearBack(assignments,'.full-page-back-btn','.page-title .full-page-actions');
+    const files=$('courseFilesPage');
+    if(files)mountNearBack(files,'.full-page-back-btn','.page-title .full-page-actions');
+    const assignmentDetail=$('courseAssignmentDetailPage');
+    if(assignmentDetail)mountNearBack(assignmentDetail,'.full-page-back-btn','.page-title');
+    const lessonPlayer=$('courseLessonPlayerPage');
+    if(lessonPlayer)mountNearBack(lessonPlayer,'#backToLessonsBtn','.lesson-player-topbar');
+    const chat=$('courseChatPage');
+    if(chat)mountNearBack(chat,'#chatBackBtn','#chatTopbar');
+    const quiz=$('quizOverlay');
+    if(quiz)mountNearBack(quiz,'.quiz-header .close-btn','.quiz-header');
+    document.querySelectorAll('.internal-page-utilities').forEach(updateProfileButton);
+  }
+  function applyState(){
+    const active=isInternal();
+    document.documentElement.classList.toggle('internal-course-page-active',active);
+    document.body.classList.toggle('internal-course-page-active',active);
+    $('courseDetailView')?.classList.toggle('internal-course-page-active',active);
+    ensureToolbars();
+  }
+  ensureToolbars();
+  applyState();
+  const observeTargets=[$('courseDetailView'),$('courseAssignmentDetailPage'),$('quizOverlay'),document.body].filter(Boolean);
+  const mo=new MutationObserver(()=>{applyState();});
+  observeTargets.forEach(el=>mo.observe(el,{attributes:true,attributeFilter:['class','style']}));
+  document.addEventListener('click',()=>setTimeout(applyState,0),true);
+  window.addEventListener('resize',applyState,{passive:true});
+  window.addEventListener('themechange',applyState,{passive:true});
+  if(typeof auth!=='undefined'&&auth?.onAuthStateChanged){auth.onAuthStateChanged(()=>setTimeout(applyState,0));}
+  else setTimeout(applyState,300);
+})();
+</script>
 </body>
 </html>
