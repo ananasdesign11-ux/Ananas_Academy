@@ -1922,6 +1922,45 @@ html.chat-fullscreen-mode #courseChatPage{
   margin-inline-start:9px !important;
 }
 </style>
+
+<style id="chat-stage28-popups-above-chat-css">
+/* Stage 28: every popup/dialog opened while chat fullscreen is active must sit above the chat layer. */
+body.chat-fullscreen-mode :where(
+    #userProfilePage,
+    #ananasCanonicalProfilePage,
+    #ananasV10ProfilePage,
+    #aaRebuiltProfilePage,
+    #chatLockModal,
+    #quizOverlay,
+    #platformImageViewer,
+    #platformGalleryViewer,
+    #customAlert,
+    #customConfirm,
+    #authPopup,
+    .modal.active,
+    .modal.show,
+    [role="dialog"],
+    [aria-modal="true"]
+){
+    z-index:2147483647 !important;
+}
+/* Popups whose own z-index is already controlled by their script keep their position and geometry. */
+body.chat-fullscreen-mode :where(
+    #userProfilePage,
+    #ananasCanonicalProfilePage,
+    #ananasV10ProfilePage,
+    #aaRebuiltProfilePage,
+    #chatLockModal,
+    #quizOverlay,
+    #platformImageViewer,
+    #platformGalleryViewer,
+    #customAlert,
+    #customConfirm,
+    #authPopup
+){
+    pointer-events:auto;
+}
+</style>
 </head>
 <body class="light-mode">
     
@@ -16920,6 +16959,28 @@ body.chat-fullscreen-mode #courseChatPage .chat-rebuilt-shell{
   window.addEventListener('resize',position,{passive:true});
   window.addEventListener('orientationchange',()=>setTimeout(position,80),{passive:true});
   document.addEventListener('click',()=>setTimeout(position,0),true);
+})();
+</script>
+
+<script id="chat-stage28-popups-above-chat-js">
+(function(){
+  'use strict';
+  if(window.__chatStage28PopupLayerFix) return;
+  window.__chatStage28PopupLayerFix=true;
+  const ROOT_SELECTOR='body.chat-fullscreen-mode';
+  const POPUP_SELECTOR='#userProfilePage,#ananasCanonicalProfilePage,#ananasV10ProfilePage,#aaRebuiltProfilePage,#chatLockModal,#quizOverlay,#platformImageViewer,#platformGalleryViewer,#customAlert,#customConfirm,#authPopup,.modal.active,.modal.show,[role="dialog"],[aria-modal="true"]';
+  function lift(){
+    if(!document.body.matches(ROOT_SELECTOR)) return;
+    document.querySelectorAll(POPUP_SELECTOR).forEach(el=>{
+      if(el.id==='chatEmojiPickerPage') return;
+      el.style.setProperty('z-index','2147483647','important');
+    });
+  }
+  const mo=new MutationObserver(m=>{ if(m.some(x=>x.addedNodes&&x.addedNodes.length)) lift(); });
+  mo.observe(document.body,{subtree:true,childList:true});
+  document.addEventListener('click',()=>setTimeout(lift,0),true);
+  window.addEventListener('resize',lift,{passive:true});
+  lift();
 })();
 </script>
 </body>
