@@ -6714,6 +6714,37 @@ label[for*="En"], input[id*="En"], textarea[id*="En"] { display:none !important;
             });
         };
 
+        let courseSuspendTargetCodeId = null;
+        let courseSuspendEditing = false;
+        let courseSuspendUsersCache = [];
+        window.toggleEnrollmentCode = async function(codeId, currentlySuspended) {
+            if (!isAdmin || !activeCourseId) return showCustomAlert('غير مسموح','هذه العملية للمشرف فقط.');
+            const codeRef = db.collection('courses').doc(activeCourseId).collection('codes').doc(codeId);
+            if (currentlySuspended) {
+                try {
+                    await codeRef.update({disabled:false,suspendedUntil:null,suspensionReason:null,suspensionUpdatedAt:firebase.firestore.FieldValue.serverTimestamp(),blockedUsers:[]});
+                    await loadCodesForCourse(activeCourseId);
+                    showCustomAlert('تم الإلغاء','تم إلغاء إيقاف الكود بالكامل.');
+                } catch(e) { showCustomAlert('خطأ','تعذر إلغاء إيقاف الكود: '+e.message); }
+                return;
+            }
+            courseSuspendTargetCodeId = codeId;
+            courseSuspendEditing = false;
+            const codeSnap = await codeRef.get();
+            if (!codeSnap.exists) return showCustomAlert('خطأ','الكود غير موجود.');
+            const code = codeSnap.data() || {};
+            document.getElementById('suspendCodeLabel').textContent = `الكود: ${code.code || codeId}`;
+            document.getElementById('courseSuspendDuration').value = '1d';
+            document.querySelectorAll('.suspend-duration-choice').forEach(b=>b.classList.toggle('active',b.dataset.duration==='1d'));
+            document.getElementById('courseSuspendUntil').value = '';
+            document.getElementById('courseSuspendReason').value = code.suspensionReason || '';
+            document.getElementById('courseSuspendCustomWrap').style.display = 'none';
+            const users = Array.isArray(code.usedByInfo) ? code.usedByInfo : [];
+            courseSuspendUsersCache = users.filter(u=>u && u.uid);
+            renderSuspendUserChoices(code.blockedUsers || []);
+            document.getElementById('courseAccessSuspendModal').classList.add('active');
+        };
+
         function renderSuspendUserChoices(existingBlocked=[]) {
             const list=document.getElementById('codeSuspendUsersList');
             const count=document.getElementById('codeSuspendSelectedCount');
@@ -6796,7 +6827,45 @@ label[for*="En"], input[id*="En"], textarea[id*="En"] { display:none !important;
             document.getElementById('courseSuspendCustomWrap').style.display = this.value === 'custom' ? 'block' : 'none';
         });
 
-        /* V12 owns the global suspension save handler. The legacy click handler was removed to prevent duplicate saves and conflicting state. */
+        document.getElementById('confirmCourseSuspendBtn').addEventListener('click', async function(){
+            if (!isAdmin || !activeCourseId || !courseSuspendTargetCodeId) return;
+            const btn=this, mode=document.getElementById('courseSuspendDuration').value, reason=document.getElementById('courseSuspendReason').value.trim();
+            let until=null;
+            if(mode==='custom'){
+                const raw=document.getElementById('courseSuspendUntil').value;
+                if(!raw) return showCustomAlert('تنبيه','حدد تاريخ ووقت انتهاء الإيقاف.');
+                const m=raw.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/);
+                if(!m) return showCustomAlert('تنبيه','أدخل تاريخًا ووقتًا صحيحين.');
+                until=new Date(`${m[1]}-${m[2]}-${m[3]}T${m[4]}:${m[5]}:00+03:00`);
+                if(isNaN(until.getTime())||until.getTime()<=Date.now()) return showCustomAlert('تنبيه','وقت الانتهاء يجب أن يكون في المستقبل.');
+            } else if(mode!=='permanent') {
+                const days=({'1d':1,'3d':3,'7d':7,'30d':30})[mode]||1;
+                until=new Date(Date.now()+days*86400000);
+            }
+            try{
+                btn.disabled=true; btn.dataset.originalText=btn.textContent; btn.textContent='جاري حفظ الإيقاف...';
+                const selectedUids=[...document.querySelectorAll('#codeSuspendUsersList .suspend-user-check:checked')].map(x=>x.value);
+                if(!selectedUids.length) return showCustomAlert('تنبيه','اختر حسابًا واحدًا على الأقل لإيقافه.');
+                const selectedBlockedUsers=selectedUids.map(uid=>{
+                    const info=courseSuspendUsersCache.find(x=>String(x.uid)===String(uid))||{};
+                    return {uid:String(uid),name:info.name||'مستخدم',email:info.email||'',suspendedUntil:until?until.toISOString():null,reason:reason||null};
+                });
+                const codeRef=db.collection('courses').doc(activeCourseId).collection('codes').doc(courseSuspendTargetCodeId);
+                const latestCodeSnap=await codeRef.get();
+                const latestBlocked=latestCodeSnap.exists&&Array.isArray(latestCodeSnap.data()?.blockedUsers)?latestCodeSnap.data().blockedUsers:[];
+                const keep=latestBlocked.filter(x=>!selectedUids.includes(String(typeof x==='string'?x:x?.uid)));
+                const blockedUsers=keep.concat(selectedBlockedUsers);
+                await codeRef.update({
+                    blockedUsers,
+                    userSuspensionUpdatedAt:firebase.firestore.FieldValue.serverTimestamp(),
+                    userSuspensionUpdatedBy:currentUser?.uid||null
+                });
+                document.getElementById('courseAccessSuspendModal').classList.remove('active');
+                await loadCodesForCourse(activeCourseId);
+                showCustomAlert('تم الإيقاف','تم إيقاف الحسابات المحددة بالمدة التي اخترتها.');
+            }catch(e){showCustomAlert('خطأ','تعذر إيقاف الكود: '+e.message);}
+            finally{btn.disabled=false;btn.textContent=btn.dataset.originalText||'إيقاف الكود';}
+        });
 
         window.removeCodeUserEnrollment = async function(codeId, uid) {
             if (!isAdmin || !activeCourseId) return showCustomAlert('غير مسموح','هذه العملية للمشرف فقط.');
@@ -8287,6 +8356,25 @@ async function isCodePermanentlyArchived(courseId,rawCode){
   const snaps=await Promise.all(keys.map(k=>db.collection('courses').doc(courseId).collection('codeArchive').doc(k).get()));
   return snaps.some(s=>s.exists);
 }
+const oldLoadCodes=window.loadCodesForCourse;
+window.loadCodesForCourse=async function(courseId){
+  if(!isAdmin)return;
+  const tbody=document.getElementById('codesTableBody');if(!tbody)return;
+  try{
+    const snap=await db.collection('courses').doc(courseId).collection('codes').get();
+    let host=document.getElementById('codeLifecycleTabs');
+    if(!host){
+      host=document.createElement('div');host.id='codeLifecycleTabs';host.innerHTML='<button data-filter="unused">الأكواد غير المستخدمة</button><button data-filter="used">الأكواد المستخدمة</button><button data-filter="expired">الأكواد المنتهية</button>';tbody.closest('table')?.parentElement?.insertBefore(host,tbody.closest('table'));
+      host.querySelectorAll('button').forEach(b=>b.addEventListener('click',()=>{host.querySelectorAll('button').forEach(x=>x.classList.remove('active'));b.classList.add('active');window.__codeLifecycleFilter=b.dataset.filter;window.loadCodesForCourse(courseId);}));
+    }
+    if(!window.__codeLifecycleFilter)window.__codeLifecycleFilter='unused';
+    host.querySelectorAll('button').forEach(b=>b.classList.toggle('active',b.dataset.filter===window.__codeLifecycleFilter));
+    const rows=[];snap.forEach(doc=>{const c=doc.data()||{}, used=Number(c.usedCount||0)>0, end=c.endTime?.toDate?c.endTime.toDate():c.endTime?new Date(c.endTime):null, expired=!!end&&end.getTime()<Date.now();let category=expired?'expired':used?'used':'unused';if(category!==window.__codeLifecycleFilter)return;const info=Array.isArray(c.usedByInfo)?c.usedByInfo:[];const name=info[0]?.name||'كود غير مستخدم';const label=category==='used'?name:(c.code||'كود');rows.push(`<tr data-code-row="${doc.id}"><td colspan="6"><button class="code-card-button" onclick="__codeDetail('${courseId}','${doc.id}')"><span>${escapeHtml(label)}</span><small>${escapeHtml(c.code||'')}</small></button><div class="code-card-actions"><button class="code-action-btn danger" onclick="toggleEnrollmentCode('${doc.id}',${!!c.disabled})">${c.disabled?'إلغاء الإيقاف':'إيقاف'}</button><button class="code-action-btn danger" onclick="deleteEnrollmentCode('${doc.id}')">حذف</button></div></td></tr>`);});
+    tbody.innerHTML=rows.length?rows.join(''):'<tr><td colspan="6" style="text-align:center;color:var(--text-muted);padding:30px">لا توجد أكواد في هذه القائمة.</td></tr>';
+  }catch(e){console.error(e);showCustomAlert('خطأ','تعذر تحميل الأكواد.');}
+};
+
+/* Delete = archive forever + block the linked account immediately. */
 window.deleteEnrollmentCode=async function(codeId){
  if(!isAdmin||!activeCourseId)return showCustomAlert('غير مسموح','هذه العملية للمشرف فقط.');
  showCustomConfirm('حذف الكود','سيتم حذف الكود وأرشفته نهائيًا ومنع الحساب المرتبط به من الدخول حتى يستخدم كودًا جديدًا. هل أنت متأكد؟',async()=>{
@@ -11091,6 +11179,21 @@ if(oldWatchCourseAccess&&!window.__aaExpiryGuardPatched){
 const logoutNames=['signOutUser','logoutUser','handleLogout'];
 logoutNames.forEach(n=>{const fn=window[n];if(typeof fn==='function'&&!fn.__aaLogoutPatched){const wrap=async function(){try{if(activeCourseId&&!isAdmin)aaEjectFromCourse('تم تسجيل الخروج من الدورة.');}catch(_){} try{window.mobileNavigate?.('courses');}catch(_){} return fn.apply(this,arguments)};wrap.__aaLogoutPatched=true;window[n]=wrap;}});
 
+/* ---------- Suspended code button state: always "cancel" while active ---------- */
+const oldLoadCodes=window.loadCodesForCourse;
+if(oldLoadCodes&&!window.__aaCodeListPatched){
+  window.__aaCodeListPatched=true;
+  window.loadCodesForCourse=async function(courseId){
+    const r=await oldLoadCodes.apply(this,arguments);
+    const rows=document.querySelectorAll('#codesTableBody tr[data-code-row]');
+    for(const row of rows){
+      const id=row.dataset.codeRow,btn=row.querySelector('button[onclick*="toggleEnrollmentCode"]');
+      if(btn){const txt=btn.textContent.trim();if(txt==='إيقاف')btn.textContent='إيقاف';else if(txt.includes('إلغاء الإيقاف'))btn.textContent='إلغاء الإيقاف';}
+    }
+    return r;
+  };
+}
+
 /* ---------- Refresh assignment fallback initials after any render ---------- */
 document.addEventListener('DOMContentLoaded',()=>refreshAssignmentSubmitterAvatars(document));
 const assignmentObserver=new MutationObserver(()=>refreshAssignmentSubmitterAvatars(document));assignmentObserver.observe(document.body,{subtree:true,childList:true});
@@ -11674,7 +11777,7 @@ const nowMs=()=>Date.now();
       const note=document.createElement('div');
       note.id='globalCodeSuspendNote';
       note.style.cssText='display:flex;align-items:center;gap:12px;padding:11px 13px;border:1px solid var(--border);border-radius:14px;background:var(--bg-secondary);color:var(--text-primary);margin:0 0 12px;min-height:72px;';
-      note.innerHTML='<span style="width:52px;height:52px;flex:0 0 52px;border-radius:50%;overflow:hidden;display:grid;place-items:center;background:var(--accent-gradient);color:#fff;font-weight:900;font-size:1rem;"><i class="fas fa-user"></i></span><span style="min-width:0;display:flex;flex-direction:column;gap:3px;"><strong style="font-size:.92rem;">بيانات الحساب المرتبط</strong><small style="color:var(--text-muted);">سيتم عرض البريد الإلكتروني والصورة عند فتح النافذة</small></span>';
+      note.innerHTML='<span style="width:52px;height:52px;flex:0 0 52px;border-radius:50%;overflow:hidden;display:grid;place-items:center;background:var(--accent-gradient);color:#fff;font-weight:900;font-size:1rem;"><i class="fas fa-user"></i></span><span style="min-width:0;display:flex;flex-direction:column;gap:3px;"><strong style="font-size:.92rem;">جاري تحميل بيانات الحساب...</strong><small style="color:var(--text-muted);">جاري تحميل البريد الإلكتروني</small></span>';
       users.parentNode.insertBefore(note,users);
     }
     const btn=$('confirmCourseSuspendBtn'); if(btn) btn.textContent='إيقاف الكود';
@@ -11714,6 +11817,128 @@ function codeStatus(c){
   if(used>=max) return {key:'active-full',label:'نشط فعال',color:'#16a085'};
   return {key:'active',label:'نشط فعال',color:'#16a085'};
 }
+
+/* ---------- Rebuild the code table renderer ---------- */
+window.loadCodesForCourse=async function(courseId){
+  if(!isAdmin||!courseId)return;
+  const tbody=$('codesTableBody'); if(!tbody)return;
+  tbody.innerHTML='<tr><td colspan="6" style="text-align:center;color:var(--text-muted);padding:22px">جاري تحميل الأكواد...</td></tr>';
+  try{
+    const snap=await db.collection('courses').doc(courseId).collection('codes').orderBy('createdAt','desc').get();
+    if(snap.empty){tbody.innerHTML='<tr><td colspan="6" style="text-align:center;color:var(--text-muted);padding:22px">لا توجد أكواد بعد.</td></tr>';return;}
+    const rows=[];
+    for(const d of snap.docs){
+      let c=await normalizeCodeState(courseId,d.id,d.data()||{});
+      const st=codeStatus(c);
+      const start=asDate(c.startTime),end=asDate(c.endTime);
+      const startTxt=start?start.toLocaleString('ar-SA',{timeZone:'Asia/Riyadh'}):'—';
+      const endTxt=end?end.toLocaleString('ar-SA',{timeZone:'Asia/Riyadh'}):'مفتوح';
+      const untilTxt=st.until?st.until.toLocaleString('ar-SA',{timeZone:'Asia/Riyadh'}):'';
+      const used=Number(c.usedCount||0),max=Number(c.maxUses||1);
+      const toggle=st.key==='suspended'
+        ? `<button class="code-action-btn success" onclick="toggleEnrollmentCode('${esc(d.id)}',true)">إلغاء الإيقاف</button>`
+        : st.key==='expired'
+          ? `<button class="code-action-btn" disabled style="opacity:.55;cursor:not-allowed">منتهي</button>`
+          : `<button class="code-action-btn danger" onclick="toggleEnrollmentCode('${esc(d.id)}',false)">إيقاف الكود</button>`;
+      rows.push(`<tr data-code-row="${esc(d.id)}">
+        <td><strong>${esc(c.code||d.id)}</strong><div style="color:var(--text-muted);font-size:.74rem;margin-top:4px">${st.key==='suspended'&&untilTxt?`الإيقاف حتى ${esc(untilTxt)}`:''}</div></td>
+        <td>${esc(startTxt)}</td>
+        <td>${esc(endTxt)}</td>
+        <td>${used}/${max}</td>
+        <td><span style="color:${st.color};font-weight:800">${st.label}</span></td>
+        <td><div class="code-actions">${toggle}${used?`<button class="code-action-btn" onclick="manageCodeUsers('${esc(d.id)}')">المستخدمون (${used})</button>`:''}<button class="code-action-btn danger" onclick="deleteEnrollmentCode('${esc(d.id)}')">حذف</button></div></td>
+      </tr>`);
+    }
+    tbody.innerHTML=rows.join('');
+  }catch(e){console.error('load codes v11',e);tbody.innerHTML='<tr><td colspan="6" style="text-align:center;color:#e74c3c;padding:22px">تعذر تحميل الأكواد.</td></tr>';}
+};
+
+/* ---------- Open the global suspension modal ---------- */
+window.toggleEnrollmentCode=async function(codeId,currentlySuspended){
+  if(!isAdmin||!activeCourseId)return showCustomAlert?.('غير مسموح','هذه العملية للمشرف فقط.');
+  const ref=db.collection('courses').doc(activeCourseId).collection('codes').doc(codeId);
+  const snap=await ref.get(); if(!snap.exists)return showCustomAlert?.('خطأ','الكود غير موجود.');
+  const c=await normalizeCodeState(activeCourseId,codeId,snap.data()||{});
+  if(codeStatus(c).key==='expired')return showCustomAlert?.('الكود منتهي','هذا الكود منتهي ولا يمكن إيقافه أو إعادة تشغيله.');
+  if(currentlySuspended || codeStatus(c).key==='suspended'){
+    try{
+      await ref.update({disabled:false,suspendedUntil:null,suspensionReason:null,suspensionMode:null,suspensionUpdatedAt:firebase.firestore.FieldValue.serverTimestamp()});
+      await window.loadCodesForCourse(activeCourseId);
+      showCustomAlert?.('تم الإلغاء','تم إلغاء إيقاف الكود، وعاد الكود نشطًا. سيتم السماح للحسابات بالدخول مجددًا.');
+    }catch(e){showCustomAlert?.('خطأ','تعذر إلغاء إيقاف الكود: '+e.message);}
+    return;
+  }
+  window.__aaCodeSuspendTarget=codeId;
+  $('suspendCodeLabel').textContent=`الكود: ${c.code||codeId}`;
+  const suspendAccountBox=$('globalCodeSuspendNote');
+  if(suspendAccountBox){
+    const cached=Array.isArray(c.usedByInfo)?c.usedByInfo.find(x=>x&&x.uid):null;
+    let accountName=cached?.name||'مستخدم';
+    let accountEmail=cached?.email||'لا يوجد بريد إلكتروني';
+    let accountPhoto='';
+    if(cached?.uid){
+      try{
+        const userSnap=await db.collection('users').doc(String(cached.uid)).get();
+        if(userSnap.exists){
+          const profile=userSnap.data()||{};
+          accountName=profile.displayName||profile.name||accountName;
+          accountEmail=profile.email||accountEmail;
+          accountPhoto=profile.photoURL||profile.photoUrl||profile.photo||'';
+        }
+      }catch(_){}
+    }
+    const safeName=esc(accountName),safeEmail=esc(accountEmail);
+    suspendAccountBox.innerHTML=`<span style="width:52px;height:52px;flex:0 0 52px;border-radius:50%;overflow:hidden;display:grid;place-items:center;background:var(--accent-gradient);color:#fff;font-weight:900;font-size:1rem;">${accountPhoto?`<img src="${esc(accountPhoto)}" alt="${safeName}" style="width:100%;height:100%;object-fit:cover;display:block;">`:`${esc(accountName.slice(0,1)||'م')}`}</span><span style="min-width:0;display:flex;flex-direction:column;gap:3px;"><strong style="font-size:.92rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${safeName}</strong><small style="color:var(--text-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"><i class="fas fa-envelope"></i> ${safeEmail}</small></span>`;
+  }
+  $('courseSuspendDuration').value='1d';
+  document.querySelectorAll('.suspend-duration-choice').forEach(b=>b.classList.toggle('active',b.dataset.duration==='1d'));
+  $('courseSuspendUntil').value='';
+  $('courseSuspendReason').value='';
+  $('courseSuspendCustomWrap').style.display='none';
+  const note=$('globalCodeSuspendNote');if(note&&!note.querySelector('strong'))note.innerHTML='<span style="width:52px;height:52px;flex:0 0 52px;border-radius:50%;overflow:hidden;display:grid;place-items:center;background:var(--accent-gradient);color:#fff;font-weight:900;font-size:1rem;"><i class="fas fa-user"></i></span><span style="min-width:0;display:flex;flex-direction:column;gap:3px;"><strong style="font-size:.92rem;">لا يوجد حساب مرتبط بهذا الكود</strong><small style="color:var(--text-muted);">سيتم إيقاف الكود نفسه حسب المدة المحددة.</small></span>';
+  $('courseAccessSuspendModal').classList.add('active');
+};
+
+/* ---------- Save global suspension */
+(function rebindGlobalSuspendSave(){
+  const btn=$('confirmCourseSuspendBtn'); if(!btn||window.__aaGlobalSuspendBound)return;
+  window.__aaGlobalSuspendBound=true;
+  btn.onclick=async function(){
+    if(!isAdmin||!activeCourseId||!window.__aaCodeSuspendTarget)return;
+    const mode=$('courseSuspendDuration').value;
+    const reason=$('courseSuspendReason').value.trim();
+    let until=null;
+    if(mode==='custom'){
+      const raw=$('courseSuspendUntil').value;
+      if(!raw)return showCustomAlert?.('تنبيه','حدد تاريخ ووقت انتهاء الإيقاف.');
+      const m=raw.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/);
+      if(!m)return showCustomAlert?.('تنبيه','أدخل تاريخًا ووقتًا صحيحين.');
+      until=new Date(`${m[1]}-${m[2]}-${m[3]}T${m[4]}:${m[5]}:00+03:00`);
+      if(isNaN(until.getTime())||until.getTime()<=Date.now())return showCustomAlert?.('تنبيه','وقت الانتهاء يجب أن يكون في المستقبل.');
+    }else if(mode!=='permanent'){
+      const days=({'1d':1,'3d':3,'7d':7,'14d':14,'30d':30})[mode];
+      if(!days)return showCustomAlert?.('تنبيه','مدة الإيقاف غير صحيحة.');
+      until=new Date(Date.now()+days*86400000);
+    }
+    const codeId=window.__aaCodeSuspendTarget;
+    const codeRef=db.collection('courses').doc(activeCourseId).collection('codes').doc(codeId);
+    try{
+      btn.disabled=true;const old=btn.textContent;btn.textContent='جاري إيقاف الكود...';
+      await codeRef.update({
+        disabled:true,
+        suspendedUntil:until?firebase.firestore.Timestamp.fromDate(until):null,
+        suspensionReason:reason||null,
+        suspensionMode:'global',
+        suspensionUpdatedAt:firebase.firestore.FieldValue.serverTimestamp(),
+        suspensionUpdatedBy:currentUser?.uid||null
+      });
+      $('courseAccessSuspendModal').classList.remove('active');
+      await window.loadCodesForCourse(activeCourseId);
+      showCustomAlert?.('تم الإيقاف',until?`تم إيقاف الكود حتى ${until.toLocaleString('ar-SA',{timeZone:'Asia/Riyadh'})}.`:'تم إيقاف الكود حتى تلغي الإيقاف يدويًا.');
+    }catch(e){showCustomAlert?.('خطأ','تعذر إيقاف الكود: '+e.message);}
+    finally{btn.disabled=false;btn.textContent='إيقاف الكود';}
+  };
+})();
 
 /* ---------- Client-side instant ejection and automatic timed restoration ---------- */
 function aaSafeEject(reason){
@@ -12095,49 +12320,35 @@ const s=document.createElement('style');s.textContent=`
     window.__aaCodeSuspendTarget=codeId;
     $v12('suspendCodeLabel').textContent=`الكود: ${c.code||codeId}`;
 
-    const suspendAccountBox=$v12('globalCodeSuspendNote');
-    const cachedAccount=usedInfoV12(c)[0]||{};
-    const accountUid=String(cachedAccount.uid||'');
-    let accountName=cachedAccount.name||'مستخدم';
-    let accountEmail=cachedAccount.email||'لا يوجد بريد إلكتروني';
-    let accountPhoto=cachedAccount.photoURL||cachedAccount.photoUrl||cachedAccount.photo||'';
-    const renderSuspendAccount=()=>{
-      if(!suspendAccountBox)return;
-      const safeName=escV12(accountName),safeEmail=escV12(accountEmail);
-      suspendAccountBox.innerHTML=`<span style="width:52px;height:52px;flex:0 0 52px;border-radius:50%;overflow:hidden;display:grid;place-items:center;background:var(--accent-gradient);color:#fff;font-weight:900;font-size:1rem;">${accountPhoto?`<img src="${escV12(accountPhoto)}" alt="${safeName}" style="width:100%;height:100%;object-fit:cover;display:block;">`:escV12(accountName.slice(0,1)||'م')}</span><span style="min-width:0;display:flex;flex-direction:column;gap:3px;"><strong style="font-size:.92rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${safeName}</strong><small style="color:var(--text-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"><i class="fas fa-envelope"></i> ${safeEmail}</small></span>`;
-    };
-    if(!accountUid){
-      accountName='لا يوجد حساب مرتبط بهذا الكود';
-      accountEmail='سيتم إيقاف الكود نفسه حسب المدة المحددة.';
-      accountPhoto='';
+    // اعرض بيانات الحساب المخزنة مع الكود فورًا، ثم حدّث الصورة/البيانات من ملف الحساب إن وُجد.
+    const suspendAccountBox=$('globalCodeSuspendNote');
+    if(suspendAccountBox){
+      const info=Array.isArray(c.usedByInfo)?c.usedByInfo.find(x=>x&&x.uid):null;
+      const fallbackUid=Array.isArray(c.usedBy)?c.usedBy.find(Boolean):'';
+      let accountUid=String(info?.uid||fallbackUid||'');
+      let accountName=info?.name||'مستخدم';
+      let accountEmail=info?.email||'لا يوجد بريد إلكتروني';
+      let accountPhoto='';
+      const renderSuspendAccount=()=>{
+        const safeName=esc(accountName),safeEmail=esc(accountEmail);
+        suspendAccountBox.innerHTML=`<span style="width:52px;height:52px;flex:0 0 52px;border-radius:50%;overflow:hidden;display:grid;place-items:center;background:var(--accent-gradient);color:#fff;font-weight:900;font-size:1rem;">${accountPhoto?`<img src="${esc(accountPhoto)}" alt="${safeName}" style="width:100%;height:100%;object-fit:cover;display:block;">`:`${esc(accountName.slice(0,1)||'م')}`}</span><span style="min-width:0;display:flex;flex-direction:column;gap:3px;"><strong style="font-size:.92rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${safeName}</strong><small style="color:var(--text-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"><i class="fas fa-envelope"></i> ${safeEmail}</small></span>`;
+      };
+      renderSuspendAccount();
+      if(accountUid){
+        db.collection('users').doc(accountUid).get().then(userSnap=>{
+          if(!userSnap.exists)return;
+          const profile=userSnap.data()||{};
+          accountName=profile.displayName||profile.name||accountName;
+          accountEmail=profile.email||accountEmail;
+          accountPhoto=profile.photoURL||profile.photoUrl||profile.photo||'';
+          renderSuspendAccount();
+        }).catch(()=>{});
+      }
     }
-    renderSuspendAccount();
+
     $v12('courseSuspendDuration').value='1d';
     document.querySelectorAll('.suspend-duration-choice').forEach(b=>b.classList.toggle('active',b.dataset.duration==='1d'));
-    $v12('courseSuspendUntil').value='';
-    $v12('courseSuspendReason').value='';
-    $v12('courseSuspendCustomWrap').style.display='none';
-    const emptyNote=$v12('globalCodeSuspendNote');
-    if(!accountUid){
-      emptyNote.innerHTML='<span style="width:52px;height:52px;flex:0 0 52px;border-radius:50%;overflow:hidden;display:grid;place-items:center;background:var(--accent-gradient);color:#fff;font-weight:900;font-size:1rem;"><i class="fas fa-user"></i></span><span style="min-width:0;display:flex;flex-direction:column;gap:3px;"><strong style="font-size:.92rem;">لا يوجد حساب مرتبط بهذا الكود</strong><small style="color:var(--text-muted);">سيتم إيقاف الكود نفسه حسب المدة المحددة.</small></span>';
-    }
-    $v12('courseAccessSuspendModal').classList.add('active');
-
-    if(accountUid){
-      const profilePromise=typeof window.__aaGetUserProfileFast==='function'
-        ? window.__aaGetUserProfileFast(accountUid)
-        : db.collection('users').doc(accountUid).get().then(s=>s.exists?(s.data()||{}):null);
-      Promise.race([
-        Promise.resolve(profilePromise),
-        new Promise(resolve=>setTimeout(()=>resolve(null),2500))
-      ]).then(profile=>{
-        if(!profile)return;
-        accountName=profile.displayName||profile.name||accountName;
-        accountEmail=profile.email||accountEmail;
-        accountPhoto=profile.photoURL||profile.photoUrl||profile.photo||accountPhoto;
-        renderSuspendAccount();
-      }).catch(()=>{});
-    }
+    $v12('courseSuspendUntil').value='';$v12('courseSuspendReason').value='';$v12('courseSuspendCustomWrap').style.display='none';$v12('courseAccessSuspendModal').classList.add('active');
   };
 
   const oldConfirm=$v12('confirmCourseSuspendBtn');
@@ -14703,81 +14914,6 @@ body.light-mode #lessonVideoWrapper .aa-speed-value{color:#172033!important;}
     return promise;
   };
 
-})();
-</script>
-
-
-<!-- ===== FINAL MODAL LAYER + FAST USER PROFILE READ CACHE ===== -->
-<style id="aa-final-modal-layer-and-fast-data-v1">
-  .aa-modal-layer-active{z-index:500000!important;}
-  body.aa-modal-open{overflow:hidden!important;}
-</style>
-<script id="aa-final-modal-layer-and-fast-data-v1-script">
-(function(){
-  'use strict';
-
-  const userStore=window.__aaUserProfileCache=window.__aaUserProfileCache||new Map();
-  const USER_TTL=60000;
-  window.__aaGetUserProfileFast=function(uid){
-    uid=String(uid||'').trim();
-    if(!uid)return Promise.resolve(null);
-    const now=Date.now(),hit=userStore.get(uid);
-    if(hit){
-      if(hit.promise)return hit.promise;
-      if(hit.data&&now-hit.time<USER_TTL)return Promise.resolve(hit.data);
-    }
-    const promise=db.collection('users').doc(uid).get().then(s=>{
-      const data=s.exists?(s.data()||{}):null;
-      userStore.set(uid,{data,time:Date.now()});
-      return data;
-    }).catch(err=>{userStore.delete(uid);throw err;});
-    userStore.set(uid,{promise,time:now});
-    return promise;
-  };
-
-  let nextLayer=500000;
-  const isModal=el=>{
-    if(!(el instanceof Element))return false;
-    if(el.matches('.edit-modal.active,.auth-popup.active,.custom-alert-modal.active,[role="dialog"],.ananas-modal-overlay.active,#codeDetailModalV12.active,#codeEndDateEditModalV12.active'))return true;
-    const id=String(el.id||'');
-    return /(?:Modal|Overlay)$/i.test(id)&&getComputedStyle(el).position==='fixed';
-  };
-  function raiseModal(el){
-    if(!isModal(el))return;
-    el.classList.add('aa-modal-layer-active');
-    el.style.zIndex=String(++nextLayer);
-    let p=el.parentElement;
-    while(p&&p!==document.body){
-      if(getComputedStyle(p).position==='fixed'){
-        p.style.zIndex=String(nextLayer-1);
-        break;
-      }
-      p=p.parentElement;
-    }
-    document.body.classList.add('aa-modal-open');
-  }
-  function sync(){
-    document.querySelectorAll('.aa-modal-layer-active').forEach(el=>{
-      if(!isModal(el)||!el.classList.contains('active')||getComputedStyle(el).display==='none')el.classList.remove('aa-modal-layer-active');
-    });
-    document.querySelectorAll('.edit-modal.active,.auth-popup.active,.custom-alert-modal.active,[role="dialog"],.ananas-modal-overlay.active').forEach(el=>{
-      if(isModal(el)&&getComputedStyle(el).display!=='none'&&!el.classList.contains('aa-modal-layer-active'))raiseModal(el);
-    });
-    if(!document.querySelector('.aa-modal-layer-active'))document.body.classList.remove('aa-modal-open');
-  }
-  const observer=new MutationObserver(mutations=>{
-    let changed=false;
-    for(const m of mutations){
-      if(m.type==='attributes'&&m.attributeName==='class'){
-        const el=m.target;
-        if(isModal(el)&&el.classList.contains('active')){raiseModal(el);changed=true;}
-        else if(el.classList.contains('aa-modal-layer-active')&&!el.classList.contains('active')){el.classList.remove('aa-modal-layer-active');changed=true;}
-      }else if(m.type==='childList'&&m.addedNodes.length){changed=true;}
-    }
-    if(changed)sync();
-  });
-  observer.observe(document.body,{subtree:true,childList:true,attributes:true,attributeFilter:['class']});
-  sync();
 })();
 </script>
 
