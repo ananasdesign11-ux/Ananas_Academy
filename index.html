@@ -16751,5 +16751,184 @@ body.light-mode .chat-custom-scrollbar-thumb{
 })();
 </script>
 
+
+<!-- ===== CHAT STAGE 8: DARK/LIGHT MESSAGE COLORS + SINGLE MESSAGE-VIEWPORT SCROLLBAR ===== -->
+<style id="chat-stage8-final-css">
+/* Message colors must follow the site's theme rather than the legacy global chat colors. */
+#courseChatPage .chat-msg.sent{
+    color:#fff!important;
+}
+#courseChatPage .chat-msg.received{
+    color:var(--text-primary)!important;
+}
+#courseChatPage .chat-msg.received .t,
+#courseChatPage .chat-msg.received .chat-profile-name{
+    color:var(--text-primary)!important;
+}
+#courseChatPage .chat-msg.sent .t,
+#courseChatPage .chat-msg.sent .chat-profile-name{
+    color:#fff!important;
+}
+#courseChatPage .chat-msg .msg-actions button{color:inherit!important;}
+#courseChatPage .chat-msg .msg-time{color:inherit!important;}
+#courseChatPage .chat-msg .reply-block .ru{color:var(--accent1)!important;}
+#courseChatPage .chat-msg.received .reply-block .rt{color:var(--text-primary)!important;}
+#courseChatPage .chat-msg.sent .reply-block .rt{color:#fff!important;}
+body.light-mode #courseChatPage .chat-msg.received{
+    color:#1a1a1a!important;
+}
+body.light-mode #courseChatPage .chat-msg.received .t,
+body.light-mode #courseChatPage .chat-msg.received .chat-profile-name,
+body.light-mode #courseChatPage .chat-msg.received .reply-block .rt{
+    color:#1a1a1a!important;
+}
+
+/* One scrollbar only: a visual indicator whose track is exactly the visible message area. */
+.chat-stage8-scrollbar{
+    position:fixed!important;
+    right:2px!important;
+    left:auto!important;
+    top:0!important;
+    width:3px!important;
+    height:0!important;
+    padding:0!important;
+    margin:0!important;
+    border:0!important;
+    z-index:2147483646!important;
+    pointer-events:none!important;
+    box-sizing:border-box!important;
+    opacity:0!important;
+    visibility:hidden!important;
+    overflow:visible!important;
+    transition:opacity .22s ease,visibility .22s ease!important;
+}
+.chat-stage8-scrollbar.visible{
+    opacity:.46!important;
+    visibility:visible!important;
+}
+.chat-stage8-scrollbar-thumb{
+    position:absolute!important;
+    top:0!important;
+    right:0!important;
+    width:100%!important;
+    min-height:28px!important;
+    height:28px;
+    margin:0!important;
+    padding:0!important;
+    border:0!important;
+    border-radius:999px!important;
+    background:linear-gradient(180deg,rgba(108,92,231,.90),rgba(9,132,227,.68))!important;
+    box-shadow:0 0 9px rgba(108,92,231,.20)!important;
+    transform:translateY(0)!important;
+    will-change:transform,height!important;
+}
+body.light-mode .chat-stage8-scrollbar-thumb{
+    background:linear-gradient(180deg,rgba(108,92,231,.58),rgba(9,132,227,.42))!important;
+    box-shadow:0 0 8px rgba(108,92,231,.12)!important;
+}
+@media(max-width:768px){
+    .chat-stage8-scrollbar{right:2px!important;width:3px!important;}
+}
+</style>
+<script id="chat-stage8-final-js">
+(function(){
+    'use strict';
+    if(window.__chatStage8Installed)return;
+    window.__chatStage8Installed=true;
+
+    const page=document.getElementById('courseChatPage');
+    const list=document.getElementById('chatPageMessagesList');
+    if(!page||!list)return;
+
+    /* Remove every earlier visual scrollbar so only this system can control the indicator. */
+    document.querySelectorAll('.chat-custom-scrollbar').forEach(el=>el.remove());
+    document.querySelectorAll('.chat-stage8-scrollbar').forEach(el=>el.remove());
+
+    const bar=document.createElement('div');
+    bar.className='chat-stage8-scrollbar';
+    bar.setAttribute('aria-hidden','true');
+    const thumb=document.createElement('div');
+    thumb.className='chat-stage8-scrollbar-thumb';
+    bar.appendChild(thumb);
+    document.body.appendChild(bar);
+
+    let raf=0;
+    let hideTimer=null;
+
+    function hideLater(){
+        clearTimeout(hideTimer);
+        hideTimer=setTimeout(()=>bar.classList.remove('visible'),2000);
+    }
+
+    function sync(show){
+        if(raf)return;
+        raf=requestAnimationFrame(()=>{
+            raf=0;
+
+            const rect=list.getBoundingClientRect();
+            const viewport=Math.max(0,list.clientHeight);
+            const content=Math.max(0,list.scrollHeight);
+
+            /* The track starts/ends at the exact visible message viewport. */
+            const top=Math.max(0,Math.min(window.innerHeight,rect.top));
+            const bottom=Math.max(0,Math.min(window.innerHeight,rect.bottom));
+            const trackHeight=Math.max(0,bottom-top);
+
+            bar.style.top=top+'px';
+            bar.style.height=trackHeight+'px';
+
+            if(!trackHeight || !viewport || content<=viewport+1){
+                bar.classList.remove('visible');
+                thumb.style.height='0px';
+                thumb.style.transform='translateY(0)';
+                return;
+            }
+
+            const ratio=Math.min(1,Math.max(0,viewport/content));
+            const thumbHeight=Math.max(28,Math.min(trackHeight,trackHeight*ratio));
+            const maxTravel=Math.max(0,trackHeight-thumbHeight);
+            const maxScroll=Math.max(1,content-viewport);
+            const progress=Math.min(1,Math.max(0,list.scrollTop/maxScroll));
+
+            thumb.style.height=Math.round(thumbHeight*100)/100+'px';
+            thumb.style.transform='translateY('+Math.round(maxTravel*progress*100)/100+'px)';
+
+            if(show){
+                bar.classList.add('visible');
+                hideLater();
+            }
+        });
+    }
+
+    const show=()=>sync(true);
+    const quiet=()=>sync(false);
+
+    list.addEventListener('scroll',show,{passive:true});
+    list.addEventListener('wheel',show,{passive:true});
+    list.addEventListener('touchstart',show,{passive:true});
+    list.addEventListener('touchmove',show,{passive:true});
+
+    window.addEventListener('resize',quiet,{passive:true});
+    window.addEventListener('orientationchange',()=>setTimeout(quiet,60),{passive:true});
+
+    if(typeof ResizeObserver!=='undefined'){
+        const ro=new ResizeObserver(quiet);
+        ro.observe(list);
+        ro.observe(page);
+    }
+    if(typeof MutationObserver!=='undefined'){
+        const mo=new MutationObserver(()=>requestAnimationFrame(quiet));
+        mo.observe(list,{childList:true,subtree:true,characterData:true});
+    }
+
+    /* Keep the geometry correct when the chat opens, closes, or the lock banner changes height. */
+    const pageObserver=new MutationObserver(()=>setTimeout(quiet,0));
+    pageObserver.observe(page,{attributes:true,attributeFilter:['class','style']});
+
+    quiet();
+    window.__chatStage8Scrollbar={sync:quiet,show};
+})();
+</script>
+
 </body>
 </html>
