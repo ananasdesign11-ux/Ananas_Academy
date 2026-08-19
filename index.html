@@ -1860,7 +1860,7 @@ label[for*="En"], input[id*="En"], textarea[id*="En"] { display:none !important;
 
     <!-- ===== Loading Screen ===== -->
     <div id="loadingScreen">
-        <img src="https://i.postimg.cc/q7Frnj7k/image.png" alt="Ananas Academy">
+        <img id="loadingLogo" src="https://i.postimg.cc/WbmsKG5y/image.png" alt="Ananas Academy">
         <div class="loader-spinner"></div>
         <p id="loadingText">جاري تحميل المنصة...</p>
     </div>
@@ -9628,9 +9628,11 @@ const fmtDate=v=>{try{const d=v?.toDate?v.toDate():(v?new Date(v):null);return d
 const fileSize=n=>{n=Number(n)||0;if(!n)return '—';if(n<1024)return n+' بايت';if(n<1048576)return (n/1024).toFixed(1)+' كيلوبايت';return (n/1048576).toFixed(1)+' ميجابايت';};
 
 /* ---------- 1) Brand logo: keep the actual brand image in both themes ---------- */
-function fixBrandLogo(){const img=$('siteLogo');if(img){img.src='https://i.postimg.cc/q7Frnj7k/image.png';img.style.filter='none';img.style.mixBlendMode='normal';}}
+function fixBrandLogo(){const isLight=document.body.classList.contains('light-mode');const src=isLight?'https://i.postimg.cc/q7Frnj7k/image.png':'https://i.postimg.cc/WbmsKG5y/image.png';const img=$('siteLogo');if(img){img.src=src;img.style.filter='none';img.style.mixBlendMode='normal';}const loading=$('loadingLogo');if(loading){loading.src=src;}}
 fixBrandLogo();
 $('themeToggle')?.addEventListener('click',()=>setTimeout(fixBrandLogo,0),true);
+try{new MutationObserver(()=>fixBrandLogo()).observe(document.body,{attributes:true,attributeFilter:['class']});}catch(_){}
+fixBrandLogo();
 
 /* ---------- 2) Assignment detail: reliable standalone page ---------- */
 async function openAssignmentDetailV2(courseId,assignmentId){
@@ -15613,33 +15615,6 @@ body.light-mode #courseChatPage .chat-msg.received{
     to{opacity:1;transform:translateY(0) scale(1)}
 }
 
-/* ---------- Exact left-edge custom scrollbar ---------- */
-.chat-custom-scrollbar{
-    position:absolute!important;
-    left:0!important;
-    top:60px!important;
-    bottom:0!important;
-    width:3px!important;
-    margin:0!important;
-    padding:0!important;
-    z-index:110!important;
-    pointer-events:none!important;
-    opacity:0!important;
-    transition:opacity .28s ease!important;
-}
-.chat-custom-scrollbar.visible{opacity:.40!important;}
-.chat-custom-scrollbar-thumb{
-    left:0!important;
-    width:3px!important;
-    min-height:28px!important;
-    border-radius:0 999px 999px 0!important;
-    background:linear-gradient(180deg,rgba(139,124,255,.88),rgba(108,92,231,.76))!important;
-    box-shadow:0 0 12px rgba(108,92,231,.25)!important;
-}
-body.light-mode .chat-custom-scrollbar-thumb{
-    background:linear-gradient(180deg,rgba(108,92,231,.54),rgba(80,66,180,.45))!important;
-    box-shadow:0 0 10px rgba(108,92,231,.16)!important;
-}
 
 /* ---------- Responsive safe area ---------- */
 @media(max-width:768px){
@@ -15660,7 +15635,6 @@ body.light-mode .chat-custom-scrollbar-thumb{
     #courseChatPage .chat-send-btn{flex-basis:40px!important;width:40px!important;height:40px!important;min-width:40px!important;min-height:40px!important;}
     #courseChatPage #fullChatPageInput{min-height:40px!important;padding-inline:12px!important;font-size:.92rem!important;}
     #courseChatPage .chat-scroll-bottom{bottom:calc(76px + env(safe-area-inset-bottom))!important;width:42px!important;height:42px!important;min-width:42px!important;}
-    .chat-custom-scrollbar{top:56px!important;}
 }
 @media(max-width:380px){
     #courseChatPage{
@@ -15681,20 +15655,6 @@ body.light-mode .chat-custom-scrollbar-thumb{
     }
 }
 </style>
-
-<script id="chat-stage4-scrollbar-sync-js">
-(function(){
-  'use strict';
-  const list=document.getElementById('chatPageMessagesList');
-  if(!list || window.__chatStage4ScrollbarSyncInstalled) return;
-  window.__chatStage4ScrollbarSyncInstalled=true;
-  const sync=()=>window.__chatStage3Scrollbar?.update?.(false);
-  const mo=new MutationObserver(()=>requestAnimationFrame(sync));
-  mo.observe(list,{childList:true,subtree:true,characterData:true});
-  window.addEventListener('resize',sync,{passive:true});
-})();
-</script>
-
 
 <style id="chat-stage2-rebuilt-css">
 /* ===== CHAT STAGE 2 — rebuilt chat page only ===== */
@@ -15832,12 +15792,10 @@ body.light-mode .chat-custom-scrollbar-thumb{
     padding:14px clamp(12px,2.2vw,28px) 18px;
     scroll-behavior:auto;
     overscroll-behavior-y:contain;
-    scrollbar-width:thin;
-    scrollbar-color:rgba(108,92,231,.78) rgba(108,92,231,.08);
+    scrollbar-width:none;
+    -ms-overflow-style:none;
 }
-#courseChatPage .chat-messages-rebuilt::-webkit-scrollbar{width:7px;}
-#courseChatPage .chat-messages-rebuilt::-webkit-scrollbar-track{background:rgba(108,92,231,.06);}
-#courseChatPage .chat-messages-rebuilt::-webkit-scrollbar-thumb{background:rgba(108,92,231,.6);border-radius:999px;}
+#courseChatPage .chat-messages-rebuilt::-webkit-scrollbar{width:0!important;height:0!important;display:none!important;}
 #courseChatPage .chat-date-divider{
     align-self:center;
     max-width:calc(100% - 24px);
@@ -16193,346 +16151,6 @@ body.light-mode .chat-custom-scrollbar-thumb{
 })();
 </script>
 
-<!-- ===== CHAT STAGE 3: LEFT SAFE-AREA + AUTO-HIDING CUSTOM SCROLLBAR ===== -->
-<style id="chat-stage3-scrollbar-css">
-    #courseDetailView > #courseChatPage .chat-topbar{
-        padding-inline-start:max(16px, env(safe-area-inset-left) + 8px)!important;
-        padding-inline-end:max(16px, env(safe-area-inset-right) + 8px)!important;
-    }
-
-    #courseChatPage .chat-messages-rebuilt{
-        position:relative!important;
-        padding-inline-start:max(18px, env(safe-area-inset-left) + 14px)!important;
-        padding-inline-end:max(18px, env(safe-area-inset-right) + 14px)!important;
-        scrollbar-width:none!important;
-        -ms-overflow-style:none!important;
-    }
-    #courseChatPage .chat-messages-rebuilt::-webkit-scrollbar{
-        width:0!important;
-        height:0!important;
-    }
-    #courseChatPage .chat-messages-rebuilt::-webkit-scrollbar-track,
-    #courseChatPage .chat-messages-rebuilt::-webkit-scrollbar-thumb{
-        width:0!important;
-        background:transparent!important;
-    }
-
-    .chat-custom-scrollbar{
-        position:absolute;
-        z-index:70;
-        left:max(6px, env(safe-area-inset-left) + 4px);
-        top:8px;
-        bottom:8px;
-        width:4px;
-        pointer-events:none;
-        opacity:0;
-        transition:opacity .22s ease;
-    }
-    .chat-custom-scrollbar.visible{
-        opacity:.52;
-    }
-    .chat-custom-scrollbar-thumb{
-        position:absolute;
-        left:0;
-        top:0;
-        width:100%;
-        min-height:32px;
-        border-radius:999px;
-        background:rgba(255,255,255,.76);
-        box-shadow:0 0 0 1px rgba(108,92,231,.14),0 3px 12px rgba(0,0,0,.16);
-        transform:translateY(0);
-        will-change:transform,height;
-    }
-    body.light-mode .chat-custom-scrollbar-thumb{
-        background:rgba(61,49,122,.34);
-        box-shadow:0 0 0 1px rgba(108,92,231,.12),0 3px 10px rgba(0,0,0,.08);
-    }
-
-    @media(max-width:768px){
-        #courseDetailView > #courseChatPage .chat-topbar{
-            padding-inline-start:max(16px, env(safe-area-inset-left) + 8px)!important;
-            padding-inline-end:max(16px, env(safe-area-inset-right) + 8px)!important;
-        }
-        #courseChatPage .chat-messages-rebuilt{
-            padding-inline-start:max(18px, env(safe-area-inset-left) + 14px)!important;
-            padding-inline-end:max(18px, env(safe-area-inset-right) + 14px)!important;
-        }
-        .chat-custom-scrollbar{
-            left:max(7px, env(safe-area-inset-left) + 5px);
-            top:7px;
-            bottom:7px;
-            width:3px;
-        }
-    }
-</style>
-
-<script id="chat-stage3-scrollbar-js">
-(function(){
-    'use strict';
-    const list=document.getElementById('chatPageMessagesList');
-    const page=document.getElementById('courseChatPage');
-    if(!list||!page||window.__chatStage3ScrollbarInstalled)return;
-    window.__chatStage3ScrollbarInstalled=true;
-
-    const bar=document.createElement('div');
-    bar.className='chat-custom-scrollbar';
-    bar.setAttribute('aria-hidden','true');
-    const thumb=document.createElement('div');
-    thumb.className='chat-custom-scrollbar-thumb';
-    bar.appendChild(thumb);
-    list.parentElement?.appendChild(bar);
-
-    let hideTimer=null;
-    let raf=0;
-
-    function scheduleHide(){
-        clearTimeout(hideTimer);
-        hideTimer=setTimeout(()=>bar.classList.remove('visible'),2000);
-    }
-
-    function updateScrollbar(show=true){
-        if(raf)return;
-        raf=requestAnimationFrame(()=>{
-            raf=0;
-            const viewport=list.clientHeight;
-            const content=list.scrollHeight;
-            const track=bar.clientHeight;
-            if(!viewport||!content||!track||content<=viewport+1){
-                bar.classList.remove('visible');
-                thumb.style.height='100%';
-                thumb.style.transform='translateY(0)';
-                return;
-            }
-
-            const ratio=viewport/content;
-            const thumbHeight=Math.max(32,Math.min(track,track*ratio));
-            const maxTravel=Math.max(0,track-thumbHeight);
-            const maxScroll=content-viewport;
-            const progress=maxScroll>0?Math.min(1,Math.max(0,list.scrollTop/maxScroll)):0;
-
-            thumb.style.height=thumbHeight+'px';
-            thumb.style.transform='translateY('+(maxTravel*progress)+'px)';
-            if(show){
-                bar.classList.add('visible');
-                scheduleHide();
-            }
-        });
-    }
-
-    function showDuringInteraction(){updateScrollbar(true);}
-
-    list.addEventListener('scroll',showDuringInteraction,{passive:true});
-    list.addEventListener('touchstart',showDuringInteraction,{passive:true});
-    list.addEventListener('wheel',showDuringInteraction,{passive:true});
-    window.addEventListener('resize',()=>updateScrollbar(false),{passive:true});
-
-    const resizeObserver=new ResizeObserver(()=>updateScrollbar(false));
-    resizeObserver.observe(list);
-
-    const mutationObserver=new MutationObserver(()=>updateScrollbar(false));
-    mutationObserver.observe(list,{childList:true,subtree:true,characterData:true});
-
-    updateScrollbar(false);
-    window.__chatStage3Scrollbar={update:updateScrollbar};
-})();
-</script>
-
-
-
-<!-- ===== CHAT STAGE 5: HARD VIEWPORT SAFE-EDGES + EDGE scrollbar ===== -->
-<style id="chat-stage5-safe-edges-css">
-/* Establish one predictable coordinate system for the rebuilt chat. */
-#courseDetailView > #courseChatPage{
-    box-sizing:border-box!important;
-    width:100%!important;
-    max-width:100%!important;
-    min-width:0!important;
-    overflow:hidden!important;
-}
-#courseDetailView > #courseChatPage .chat-rebuilt-shell{
-    box-sizing:border-box!important;
-    width:100%!important;
-    max-width:100%!important;
-    min-width:0!important;
-    overflow:hidden!important;
-}
-
-/* Physical left/right safe zones. Do not use logical inline-start/end here because the site is RTL. */
-#courseDetailView > #courseChatPage .chat-topbar{
-    box-sizing:border-box!important;
-    width:100%!important;
-    max-width:100%!important;
-    min-width:0!important;
-    padding-left:max(14px, env(safe-area-inset-left) + 10px)!important;
-    padding-right:max(14px, env(safe-area-inset-right) + 10px)!important;
-}
-#courseChatPage .chat-topbar > #chatBackBtn,
-#courseChatPage .chat-topbar > #chatAdminRoot,
-#courseChatPage .chat-topbar > .chat-topbar-title{
-    box-sizing:border-box!important;
-    min-width:0!important;
-}
-#courseChatPage .chat-admin-root{
-    flex:0 0 40px!important;
-    width:40px!important;
-    max-width:40px!important;
-    min-width:40px!important;
-}
-#courseChatPage .chat-topbar-btn,
-#courseChatPage .chat-admin-menu-btn{
-    box-sizing:border-box!important;
-    max-width:100%!important;
-}
-
-/* Composer: never allow the row to calculate wider than the actual viewport. */
-#courseChatPage .chat-composer-shell{
-    box-sizing:border-box!important;
-    width:100%!important;
-    max-width:100%!important;
-    min-width:0!important;
-    padding-left:max(12px, env(safe-area-inset-left) + 8px)!important;
-    padding-right:max(12px, env(safe-area-inset-right) + 8px)!important;
-}
-#courseChatPage .chat-input-group{
-    box-sizing:border-box!important;
-    width:100%!important;
-    max-width:100%!important;
-    min-width:0!important;
-    overflow:visible!important;
-}
-#courseChatPage .chat-input-wrap,
-#courseChatPage #fullChatPageInput{
-    min-width:0!important;
-    max-width:100%!important;
-    box-sizing:border-box!important;
-}
-#courseChatPage #chatEmojiBtnPage,
-#courseChatPage #chatImageBtnPage,
-#courseChatPage #fullChatPageSendBtn{
-    flex:0 0 auto!important;
-    box-sizing:border-box!important;
-}
-
-/* Message area: keep content away from the edge, without moving the custom scrollbar. */
-#courseChatPage .chat-messages-rebuilt{
-    box-sizing:border-box!important;
-    width:100%!important;
-    max-width:100%!important;
-    min-width:0!important;
-    padding-left:max(18px, env(safe-area-inset-left) + 14px)!important;
-    padding-right:max(18px, env(safe-area-inset-right) + 14px)!important;
-}
-
-/* The scrollbar itself is outside the message padding and touches the viewport edge exactly. */
-.chat-custom-scrollbar{
-    position:fixed!important;
-    left:0!important;
-    width:4px!important;
-    top:0!important;
-    bottom:auto!important;
-    margin:0!important;
-    padding:0!important;
-    z-index:1500!important;
-    pointer-events:none!important;
-    box-sizing:border-box!important;
-    overflow:visible!important;
-    transform:none!important;
-}
-.chat-custom-scrollbar-thumb{
-    left:0!important;
-    right:auto!important;
-    width:100%!important;
-    max-width:100%!important;
-    box-sizing:border-box!important;
-}
-@media(max-width:768px){
-    #courseDetailView > #courseChatPage .chat-topbar{
-        padding-left:max(16px, env(safe-area-inset-left) + 8px)!important;
-        padding-right:max(16px, env(safe-area-inset-right) + 8px)!important;
-    }
-    #courseChatPage .chat-composer-shell{
-        padding-left:max(10px, env(safe-area-inset-left) + 6px)!important;
-        padding-right:max(10px, env(safe-area-inset-right) + 6px)!important;
-    }
-    #courseChatPage .chat-messages-rebuilt{
-        padding-left:max(16px, env(safe-area-inset-left) + 12px)!important;
-        padding-right:max(16px, env(safe-area-inset-right) + 12px)!important;
-    }
-    .chat-custom-scrollbar{width:3px!important;}
-}
-@media(max-width:380px){
-    #courseChatPage .chat-topbar{
-        padding-left:max(12px, env(safe-area-inset-left) + 6px)!important;
-        padding-right:max(12px, env(safe-area-inset-right) + 6px)!important;
-    }
-    #courseChatPage .chat-composer-shell{
-        padding-left:max(8px, env(safe-area-inset-left) + 4px)!important;
-        padding-right:max(8px, env(safe-area-inset-right) + 4px)!important;
-    }
-}
-</style>
-
-<script id="chat-stage5-safe-edges-js">
-(function(){
-    'use strict';
-    const page=document.getElementById('courseChatPage');
-    const list=document.getElementById('chatPageMessagesList');
-    if(!page||!list)return;
-    if(window.__chatStage5SafeEdgesInstalled)return;
-    window.__chatStage5SafeEdgesInstalled=true;
-
-    const bar=page.querySelector('.chat-custom-scrollbar');
-    const thumb=page.querySelector('.chat-custom-scrollbar-thumb');
-    if(!bar||!thumb)return;
-
-    let raf=0;
-    function syncBarGeometry(show){
-        if(raf)return;
-        raf=requestAnimationFrame(()=>{
-            raf=0;
-            const pageRect=page.getBoundingClientRect();
-            const listRect=list.getBoundingClientRect();
-            const viewport=list.clientHeight;
-            const content=list.scrollHeight;
-            if(!viewport||!content||content<=viewport+1){
-                bar.classList.remove('visible');
-                thumb.style.height='100%';
-                thumb.style.transform='translateY(0)';
-                bar.style.top=Math.max(0,listRect.top)+'px';
-                bar.style.height=Math.max(0,listRect.height)+'px';
-                return;
-            }
-            const top=Math.max(0,listRect.top);
-            const bottom=Math.max(0,window.innerHeight-listRect.bottom);
-            const track=Math.max(1,window.innerHeight-top-bottom);
-            const ratio=viewport/content;
-            const thumbHeight=Math.max(28,Math.min(track,track*ratio));
-            const maxTravel=Math.max(0,track-thumbHeight);
-            const maxScroll=Math.max(1,content-viewport);
-            const progress=Math.min(1,Math.max(0,list.scrollTop/maxScroll));
-
-            bar.style.top=top+'px';
-            bar.style.height=track+'px';
-            thumb.style.height=thumbHeight+'px';
-            thumb.style.transform='translateY('+(maxTravel*progress)+'px)';
-            if(show)bar.classList.add('visible');
-        });
-    }
-
-    list.addEventListener('scroll',()=>syncBarGeometry(true),{passive:true});
-    list.addEventListener('wheel',()=>syncBarGeometry(true),{passive:true});
-    list.addEventListener('touchstart',()=>syncBarGeometry(true),{passive:true});
-    window.addEventListener('resize',()=>syncBarGeometry(false),{passive:true});
-    window.addEventListener('orientationchange',()=>setTimeout(()=>syncBarGeometry(false),50),{passive:true});
-
-    const ro=new ResizeObserver(()=>syncBarGeometry(false));
-    ro.observe(list);
-    ro.observe(page);
-    syncBarGeometry(false);
-})();
-</script>
-
-
 <style id="chat-stage6-hide-browser-scrollbar">
 /* Stage 6: when the chat page is open, the document itself must never expose a browser scrollbar.
    The message list remains the only scrollable surface. */
@@ -16614,145 +16232,6 @@ body.chat-document-locked::-webkit-scrollbar,
 
 
 
-<!-- ===== CHAT STAGE 7: RIGHT EDGE SCROLLBAR LOCKED TO MESSAGE VIEWPORT ===== -->
-<style id="chat-stage7-final-scrollbar-css">
-.chat-custom-scrollbar{
-    position:fixed!important;
-    top:0!important;
-    right:2px!important;
-    left:auto!important;
-    bottom:auto!important;
-    width:3px!important;
-    height:0!important;
-    margin:0!important;
-    padding:0!important;
-    z-index:2147483000!important;
-    pointer-events:none!important;
-    overflow:visible!important;
-    box-sizing:border-box!important;
-    opacity:0!important;
-    visibility:hidden!important;
-    transition:opacity .22s ease, visibility .22s ease!important;
-}
-.chat-custom-scrollbar.visible{
-    opacity:.48!important;
-    visibility:visible!important;
-}
-.chat-custom-scrollbar-thumb{
-    position:absolute!important;
-    top:0!important;
-    left:0!important;
-    right:auto!important;
-    width:100%!important;
-    min-height:28px!important;
-    max-height:none!important;
-    border-radius:999px!important;
-    transform:translateY(0)!important;
-    box-sizing:border-box!important;
-    background:linear-gradient(180deg,rgba(108,92,231,.92),rgba(9,132,227,.72))!important;
-    box-shadow:0 0 10px rgba(108,92,231,.22)!important;
-    will-change:transform,height!important;
-}
-body.light-mode .chat-custom-scrollbar-thumb{
-    background:linear-gradient(180deg,rgba(108,92,231,.62),rgba(9,132,227,.48))!important;
-    box-shadow:0 0 8px rgba(108,92,231,.14)!important;
-}
-@media(max-width:768px){
-    .chat-custom-scrollbar{right:2px!important;width:3px!important;}
-}
-</style>
-
-<script id="chat-stage7-final-scrollbar-js">
-(function(){
-    'use strict';
-    if(window.__chatStage7ScrollbarInstalled)return;
-    window.__chatStage7ScrollbarInstalled=true;
-
-    const page=document.getElementById('courseChatPage');
-    const list=document.getElementById('chatPageMessagesList');
-    if(!page||!list)return;
-
-    const bar=page.querySelector('.chat-custom-scrollbar');
-    const thumb=page.querySelector('.chat-custom-scrollbar-thumb');
-    if(!bar||!thumb)return;
-
-    // Move the visual scrollbar to body so no chat container can clip it.
-    if(bar.parentElement!==document.body) document.body.appendChild(bar);
-
-    let raf=0,hideTimer=null;
-    function hideLater(){
-        clearTimeout(hideTimer);
-        hideTimer=setTimeout(()=>bar.classList.remove('visible'),2000);
-    }
-
-    function sync(show=false){
-        if(raf)return;
-        raf=requestAnimationFrame(()=>{
-            raf=0;
-            const rect=list.getBoundingClientRect();
-            const viewport=Math.max(0,list.clientHeight);
-            const content=Math.max(0,list.scrollHeight);
-
-            const top=Math.max(0,Math.min(window.innerHeight,rect.top));
-            const bottom=Math.max(0,Math.min(window.innerHeight,rect.bottom));
-            const trackHeight=Math.max(0,bottom-top);
-
-            bar.style.top=top+'px';
-            bar.style.height=trackHeight+'px';
-
-            if(!viewport||!trackHeight||content<=viewport+1){
-                bar.classList.remove('visible');
-                thumb.style.height='0px';
-                thumb.style.transform='translateY(0)';
-                return;
-            }
-
-            const ratio=viewport/content;
-            const thumbHeight=Math.max(28,Math.min(trackHeight,trackHeight*ratio));
-            const maxTravel=Math.max(0,trackHeight-thumbHeight);
-            const maxScroll=Math.max(1,content-viewport);
-            const progress=Math.min(1,Math.max(0,list.scrollTop/maxScroll));
-
-            thumb.style.height=thumbHeight+'px';
-            thumb.style.transform='translateY('+Math.round(maxTravel*progress)+'px)';
-
-            if(show){
-                bar.classList.add('visible');
-                hideLater();
-            }
-        });
-    }
-
-    const show=()=>sync(true);
-    list.addEventListener('scroll',show,{passive:true});
-    list.addEventListener('wheel',show,{passive:true});
-    list.addEventListener('touchstart',show,{passive:true});
-    list.addEventListener('touchmove',show,{passive:true});
-
-    window.addEventListener('resize',()=>sync(false),{passive:true});
-    window.addEventListener('orientationchange',()=>setTimeout(()=>sync(false),60),{passive:true});
-
-    if(typeof ResizeObserver!=='undefined'){
-        const ro=new ResizeObserver(()=>sync(false));
-        ro.observe(list);
-        ro.observe(page);
-    }
-    if(typeof MutationObserver!=='undefined'){
-        const mo=new MutationObserver(()=>sync(false));
-        mo.observe(list,{childList:true,subtree:true,characterData:true});
-    }
-
-    // Keep geometry correct when the chat is opened/closed or another overlay changes layout.
-    const pageObserver=new MutationObserver(()=>setTimeout(()=>sync(false),0));
-    pageObserver.observe(page,{attributes:true,attributeFilter:['class','style']});
-
-    sync(false);
-    window.__chatStage7Scrollbar={sync};
-})();
-</script>
-
-
-<!-- ===== CHAT STAGE 8: DARK/LIGHT MESSAGE COLORS + SINGLE MESSAGE-VIEWPORT SCROLLBAR ===== -->
 <style id="chat-stage8-final-css">
 /* Message colors must follow the site's theme rather than the legacy global chat colors. */
 #courseChatPage .chat-msg.sent{
@@ -16783,93 +16262,99 @@ body.light-mode #courseChatPage .chat-msg.received .reply-block .rt{
     color:#1a1a1a!important;
 }
 
-/* Stage 9: exact message-area scrollbar geometry. */
-.chat-stage9-scrollbar{
+
+</style>
+
+<style id="chat-scrollbar-single-final-css">
+/* ===== Single draggable chat scrollbar ===== */
+.chat-single-scrollbar{
     position:fixed!important;
-    left:auto!important;
     right:2px!important;
+    left:auto!important;
     top:0!important;
-    width:3px!important;
+    width:5px!important;
     height:0!important;
     margin:0!important;
     padding:0!important;
     border:0!important;
     box-sizing:border-box!important;
-    z-index:2147483646!important;
-    pointer-events:none!important;
+    z-index:2147483647!important;
     opacity:0!important;
     visibility:hidden!important;
     overflow:visible!important;
-    transition:opacity .22s ease,visibility .22s ease!important;
+    pointer-events:none!important;
+    transition:opacity .2s ease,visibility .2s ease!important;
 }
-.chat-stage9-scrollbar.visible{
-    opacity:.46!important;
+.chat-single-scrollbar.visible{
+    opacity:.74!important;
     visibility:visible!important;
+    pointer-events:none!important;
 }
-.chat-stage9-scrollbar-thumb{
+.chat-single-scrollbar-thumb{
     position:absolute!important;
-    left:0!important;
-    right:0!important;
     top:0!important;
-    width:100%!important;
+    right:0!important;
+    width:5px!important;
     height:28px!important;
-    min-height:0!important;
+    min-height:28px!important;
     margin:0!important;
     padding:0!important;
     border:0!important;
     border-radius:999px!important;
-    background:linear-gradient(180deg,rgba(108,92,231,.90),rgba(9,132,227,.68))!important;
-    box-shadow:0 0 9px rgba(108,92,231,.20)!important;
-    transform:translate3d(0,0,0)!important;
+    background:linear-gradient(180deg,#8b7cff 0%,#6c5ce7 52%,#356bda 100%)!important;
+    box-shadow:0 0 10px rgba(108,92,231,.30),0 0 2px rgba(255,255,255,.24)!important;
+    cursor:grab!important;
+    pointer-events:auto!important;
+    touch-action:none!important;
+    user-select:none!important;
+    -webkit-user-select:none!important;
     will-change:transform,height!important;
 }
-body.light-mode .chat-stage9-scrollbar-thumb{
-    background:linear-gradient(180deg,rgba(108,92,231,.58),rgba(9,132,227,.42))!important;
-    box-shadow:0 0 8px rgba(108,92,231,.12)!important;
-}
-@media(max-width:768px){
-    .chat-stage9-scrollbar{right:2px!important;width:3px!important;}
+.chat-single-scrollbar-thumb:active{cursor:grabbing!important;}
+body.light-mode .chat-single-scrollbar-thumb{
+    background:linear-gradient(180deg,#8a7cff 0%,#6c5ce7 52%,#4d73d6 100%)!important;
+    box-shadow:0 0 9px rgba(108,92,231,.20),0 0 2px rgba(255,255,255,.55)!important;
 }
 </style>
-<script id="chat-stage9-exact-scrollbar-js">
+<script id="chat-single-scrollbar-final-js">
 (function(){
     'use strict';
-    if(window.__chatStage9Installed)return;
-    window.__chatStage9Installed=true;
+    if(window.__ananasSingleChatScrollbarInstalled)return;
+    window.__ananasSingleChatScrollbarInstalled=true;
 
     const page=document.getElementById('courseChatPage');
     const list=document.getElementById('chatPageMessagesList');
     if(!page||!list)return;
 
-    // Remove all previous visual scrollbar implementations.
-    document.querySelectorAll('.chat-custom-scrollbar,.chat-stage8-scrollbar,.chat-stage9-scrollbar').forEach(el=>el.remove());
+    // Remove every previous custom scrollbar element/implementation target.
+    document.querySelectorAll('.chat-single-scrollbar').forEach(el=>el.remove());
 
     const bar=document.createElement('div');
-    bar.className='chat-stage9-scrollbar';
+    bar.className='chat-single-scrollbar';
     bar.setAttribute('aria-hidden','true');
     const thumb=document.createElement('div');
-    thumb.className='chat-stage9-scrollbar-thumb';
+    thumb.className='chat-single-scrollbar-thumb';
     bar.appendChild(thumb);
     document.body.appendChild(bar);
 
-    let raf=0;
-    let hideTimer=null;
+    let raf=0, hideTimer=null, dragging=false, dragPointerId=null;
 
-    const cancelHide=()=>{
-        if(hideTimer!==null){clearTimeout(hideTimer);hideTimer=null;}
-    };
-    const hideLater=()=>{
-        cancelHide();
-        hideTimer=setTimeout(()=>{
-            bar.classList.remove('visible');
-            hideTimer=null;
-        },2000);
-    };
+    const clearHide=()=>{if(hideTimer!==null){clearTimeout(hideTimer);hideTimer=null;}};
+    const hideLater=()=>{clearHide();hideTimer=setTimeout(()=>{if(!dragging)bar.classList.remove('visible');},2000);};
 
-    function updateGeometry(show){
+    function pageIsVisible(){
+        const cs=getComputedStyle(page);
+        return cs.display!=='none' && cs.visibility!=='hidden' && page.getClientRects().length>0;
+    }
+
+    function sync(show=true){
         if(raf)return;
         raf=requestAnimationFrame(()=>{
             raf=0;
+            if(!pageIsVisible()){
+                bar.classList.remove('visible');
+                return;
+            }
 
             const rect=list.getBoundingClientRect();
             const trackTop=Math.max(0,rect.top);
@@ -16881,6 +16366,7 @@ body.light-mode .chat-stage9-scrollbar-thumb{
 
             bar.style.top=trackTop+'px';
             bar.style.height=trackHeight+'px';
+            bar.style.right='2px';
 
             if(trackHeight<=0 || viewport<=0 || maxScroll<=0){
                 bar.classList.remove('visible');
@@ -16889,38 +16375,71 @@ body.light-mode .chat-stage9-scrollbar-thumb{
                 return;
             }
 
-            // Thumb size mirrors the visible-message ratio.
-            const ratio=Math.min(1,Math.max(0,viewport/content));
-            const thumbHeight=Math.min(trackHeight,Math.max(12,trackHeight*ratio));
+            // Thumb height reflects the portion of messages currently visible.
+            const thumbHeight=Math.max(28,Math.min(trackHeight,trackHeight*(viewport/content)));
             const travel=Math.max(0,trackHeight-thumbHeight);
-
-            // Exact endpoints:
-            // scrollTop=0      => thumbTop=0
-            // scrollTop=maxScroll => thumbBottom=trackHeight
             const progress=Math.min(1,Math.max(0,list.scrollTop/maxScroll));
-            const thumbTop=travel*progress;
 
             thumb.style.height=thumbHeight+'px';
-            thumb.style.transform='translate3d(0,'+thumbTop+'px,0)';
-
-            if(show){
-                bar.classList.add('visible');
-                hideLater();
-            }
+            thumb.style.transform='translate3d(0,'+(travel*progress)+'px,0)';
+            if(show){bar.classList.add('visible');hideLater();}
         });
     }
 
-    const show=()=>updateGeometry(true);
-    const quiet=()=>updateGeometry(false);
+    const show=()=>sync(true);
+    const quiet=()=>sync(false);
 
+    // Normal message scrolling.
     list.addEventListener('scroll',show,{passive:true});
     list.addEventListener('wheel',show,{passive:true});
     list.addEventListener('touchstart',show,{passive:true});
     list.addEventListener('touchmove',show,{passive:true});
 
+    // Drag the thumb itself to scroll the message list.
+    thumb.addEventListener('pointerdown',e=>{
+        if(e.button!==undefined && e.button!==0)return;
+        if(!pageIsVisible())return;
+        clearHide();
+        dragging=true;
+        dragPointerId=e.pointerId;
+        bar.classList.add('visible');
+        thumb.style.cursor='grabbing';
+        try{thumb.setPointerCapture(e.pointerId);}catch(_){}
+        e.preventDefault();
+    });
+
+    thumb.addEventListener('pointermove',e=>{
+        if(!dragging || e.pointerId!==dragPointerId)return;
+        const rect=list.getBoundingClientRect();
+        const trackTop=Math.max(0,rect.top);
+        const trackHeight=Math.max(0,Math.min(window.innerHeight,rect.bottom)-trackTop);
+        const viewport=Math.max(0,list.clientHeight);
+        const content=Math.max(0,list.scrollHeight);
+        const maxScroll=Math.max(0,content-viewport);
+        if(trackHeight<=0 || maxScroll<=0)return;
+
+        const thumbHeight=Math.max(28,Math.min(trackHeight,trackHeight*(viewport/content)));
+        const travel=Math.max(1,trackHeight-thumbHeight);
+        const progress=Math.min(1,Math.max(0,(e.clientY-trackTop-thumbHeight/2)/travel));
+        list.scrollTop=progress*maxScroll;
+        sync(true);
+        e.preventDefault();
+    });
+
+    const endDrag=e=>{
+        if(!dragging || (e?.pointerId!=null && e.pointerId!==dragPointerId))return;
+        dragging=false;
+        dragPointerId=null;
+        try{thumb.releasePointerCapture?.(e.pointerId);}catch(_){}
+        thumb.style.cursor='grab';
+        hideLater();
+    };
+    thumb.addEventListener('pointerup',endDrag);
+    thumb.addEventListener('pointercancel',endDrag);
+    thumb.addEventListener('lostpointercapture',()=>{if(dragging){dragging=false;dragPointerId=null;thumb.style.cursor='grab';hideLater();}});
+
     window.addEventListener('resize',quiet,{passive:true});
     window.addEventListener('orientationchange',()=>setTimeout(quiet,60),{passive:true});
-    window.addEventListener('scroll',quiet,{passive:true});
 
     if(typeof ResizeObserver!=='undefined'){
         const ro=new ResizeObserver(quiet);
@@ -16928,15 +16447,19 @@ body.light-mode .chat-stage9-scrollbar-thumb{
         ro.observe(page);
     }
     if(typeof MutationObserver!=='undefined'){
-        const mo=new MutationObserver(()=>requestAnimationFrame(quiet));
-        mo.observe(list,{childList:true,subtree:true,characterData:true});
-
-        const pageObserver=new MutationObserver(()=>setTimeout(quiet,0));
+        const listObserver=new MutationObserver(()=>requestAnimationFrame(quiet));
+        listObserver.observe(list,{childList:true,subtree:true,characterData:true});
+        const pageObserver=new MutationObserver(()=>requestAnimationFrame(quiet));
         pageObserver.observe(page,{attributes:true,attributeFilter:['class','style']});
+        const rootObserver=new MutationObserver(()=>requestAnimationFrame(quiet));
+        rootObserver.observe(document.getElementById('courseDetailView')||document.body,{attributes:true,attributeFilter:['class','style']});
     }
 
+    // Initial and delayed sync catches route transitions where display changes asynchronously.
     quiet();
-    window.__chatStage9Scrollbar={sync:quiet,show};
+    setTimeout(quiet,120);
+    setTimeout(quiet,400);
+    window.__ananasSingleChatScrollbar={sync:quiet,show};
 })();
 </script>
 
