@@ -16783,115 +16783,125 @@ body.light-mode #courseChatPage .chat-msg.received .reply-block .rt{
     color:#1a1a1a!important;
 }
 
-/* One scrollbar only: a visual indicator whose track is exactly the visible message area. */
-.chat-stage8-scrollbar{
+/* Stage 9: exact message-area scrollbar geometry. */
+.chat-stage9-scrollbar{
     position:fixed!important;
-    right:2px!important;
     left:auto!important;
+    right:2px!important;
     top:0!important;
     width:3px!important;
     height:0!important;
-    padding:0!important;
     margin:0!important;
+    padding:0!important;
     border:0!important;
+    box-sizing:border-box!important;
     z-index:2147483646!important;
     pointer-events:none!important;
-    box-sizing:border-box!important;
     opacity:0!important;
     visibility:hidden!important;
     overflow:visible!important;
     transition:opacity .22s ease,visibility .22s ease!important;
 }
-.chat-stage8-scrollbar.visible{
+.chat-stage9-scrollbar.visible{
     opacity:.46!important;
     visibility:visible!important;
 }
-.chat-stage8-scrollbar-thumb{
+.chat-stage9-scrollbar-thumb{
     position:absolute!important;
-    top:0!important;
+    left:0!important;
     right:0!important;
+    top:0!important;
     width:100%!important;
-    min-height:28px!important;
-    height:28px;
+    height:28px!important;
+    min-height:0!important;
     margin:0!important;
     padding:0!important;
     border:0!important;
     border-radius:999px!important;
     background:linear-gradient(180deg,rgba(108,92,231,.90),rgba(9,132,227,.68))!important;
     box-shadow:0 0 9px rgba(108,92,231,.20)!important;
-    transform:translateY(0)!important;
+    transform:translate3d(0,0,0)!important;
     will-change:transform,height!important;
 }
-body.light-mode .chat-stage8-scrollbar-thumb{
+body.light-mode .chat-stage9-scrollbar-thumb{
     background:linear-gradient(180deg,rgba(108,92,231,.58),rgba(9,132,227,.42))!important;
     box-shadow:0 0 8px rgba(108,92,231,.12)!important;
 }
 @media(max-width:768px){
-    .chat-stage8-scrollbar{right:2px!important;width:3px!important;}
+    .chat-stage9-scrollbar{right:2px!important;width:3px!important;}
 }
 </style>
-<script id="chat-stage8-final-js">
+<script id="chat-stage9-exact-scrollbar-js">
 (function(){
     'use strict';
-    if(window.__chatStage8Installed)return;
-    window.__chatStage8Installed=true;
+    if(window.__chatStage9Installed)return;
+    window.__chatStage9Installed=true;
 
     const page=document.getElementById('courseChatPage');
     const list=document.getElementById('chatPageMessagesList');
     if(!page||!list)return;
 
-    /* Remove every earlier visual scrollbar so only this system can control the indicator. */
-    document.querySelectorAll('.chat-custom-scrollbar').forEach(el=>el.remove());
-    document.querySelectorAll('.chat-stage8-scrollbar').forEach(el=>el.remove());
+    // Remove all previous visual scrollbar implementations.
+    document.querySelectorAll('.chat-custom-scrollbar,.chat-stage8-scrollbar,.chat-stage9-scrollbar').forEach(el=>el.remove());
 
     const bar=document.createElement('div');
-    bar.className='chat-stage8-scrollbar';
+    bar.className='chat-stage9-scrollbar';
     bar.setAttribute('aria-hidden','true');
     const thumb=document.createElement('div');
-    thumb.className='chat-stage8-scrollbar-thumb';
+    thumb.className='chat-stage9-scrollbar-thumb';
     bar.appendChild(thumb);
     document.body.appendChild(bar);
 
     let raf=0;
     let hideTimer=null;
 
-    function hideLater(){
-        clearTimeout(hideTimer);
-        hideTimer=setTimeout(()=>bar.classList.remove('visible'),2000);
-    }
+    const cancelHide=()=>{
+        if(hideTimer!==null){clearTimeout(hideTimer);hideTimer=null;}
+    };
+    const hideLater=()=>{
+        cancelHide();
+        hideTimer=setTimeout(()=>{
+            bar.classList.remove('visible');
+            hideTimer=null;
+        },2000);
+    };
 
-    function sync(show){
+    function updateGeometry(show){
         if(raf)return;
         raf=requestAnimationFrame(()=>{
             raf=0;
 
             const rect=list.getBoundingClientRect();
+            const trackTop=Math.max(0,rect.top);
+            const trackBottom=Math.min(window.innerHeight,rect.bottom);
+            const trackHeight=Math.max(0,trackBottom-trackTop);
             const viewport=Math.max(0,list.clientHeight);
             const content=Math.max(0,list.scrollHeight);
+            const maxScroll=Math.max(0,content-viewport);
 
-            /* The track starts/ends at the exact visible message viewport. */
-            const top=Math.max(0,Math.min(window.innerHeight,rect.top));
-            const bottom=Math.max(0,Math.min(window.innerHeight,rect.bottom));
-            const trackHeight=Math.max(0,bottom-top);
-
-            bar.style.top=top+'px';
+            bar.style.top=trackTop+'px';
             bar.style.height=trackHeight+'px';
 
-            if(!trackHeight || !viewport || content<=viewport+1){
+            if(trackHeight<=0 || viewport<=0 || maxScroll<=0){
                 bar.classList.remove('visible');
                 thumb.style.height='0px';
-                thumb.style.transform='translateY(0)';
+                thumb.style.transform='translate3d(0,0,0)';
                 return;
             }
 
+            // Thumb size mirrors the visible-message ratio.
             const ratio=Math.min(1,Math.max(0,viewport/content));
-            const thumbHeight=Math.max(28,Math.min(trackHeight,trackHeight*ratio));
-            const maxTravel=Math.max(0,trackHeight-thumbHeight);
-            const maxScroll=Math.max(1,content-viewport);
-            const progress=Math.min(1,Math.max(0,list.scrollTop/maxScroll));
+            const thumbHeight=Math.min(trackHeight,Math.max(12,trackHeight*ratio));
+            const travel=Math.max(0,trackHeight-thumbHeight);
 
-            thumb.style.height=Math.round(thumbHeight*100)/100+'px';
-            thumb.style.transform='translateY('+Math.round(maxTravel*progress*100)/100+'px)';
+            // Exact endpoints:
+            // scrollTop=0      => thumbTop=0
+            // scrollTop=maxScroll => thumbBottom=trackHeight
+            const progress=Math.min(1,Math.max(0,list.scrollTop/maxScroll));
+            const thumbTop=travel*progress;
+
+            thumb.style.height=thumbHeight+'px';
+            thumb.style.transform='translate3d(0,'+thumbTop+'px,0)';
 
             if(show){
                 bar.classList.add('visible');
@@ -16900,8 +16910,8 @@ body.light-mode .chat-stage8-scrollbar-thumb{
         });
     }
 
-    const show=()=>sync(true);
-    const quiet=()=>sync(false);
+    const show=()=>updateGeometry(true);
+    const quiet=()=>updateGeometry(false);
 
     list.addEventListener('scroll',show,{passive:true});
     list.addEventListener('wheel',show,{passive:true});
@@ -16910,6 +16920,7 @@ body.light-mode .chat-stage8-scrollbar-thumb{
 
     window.addEventListener('resize',quiet,{passive:true});
     window.addEventListener('orientationchange',()=>setTimeout(quiet,60),{passive:true});
+    window.addEventListener('scroll',quiet,{passive:true});
 
     if(typeof ResizeObserver!=='undefined'){
         const ro=new ResizeObserver(quiet);
@@ -16919,14 +16930,13 @@ body.light-mode .chat-stage8-scrollbar-thumb{
     if(typeof MutationObserver!=='undefined'){
         const mo=new MutationObserver(()=>requestAnimationFrame(quiet));
         mo.observe(list,{childList:true,subtree:true,characterData:true});
+
+        const pageObserver=new MutationObserver(()=>setTimeout(quiet,0));
+        pageObserver.observe(page,{attributes:true,attributeFilter:['class','style']});
     }
 
-    /* Keep the geometry correct when the chat opens, closes, or the lock banner changes height. */
-    const pageObserver=new MutationObserver(()=>setTimeout(quiet,0));
-    pageObserver.observe(page,{attributes:true,attributeFilter:['class','style']});
-
     quiet();
-    window.__chatStage8Scrollbar={sync:quiet,show};
+    window.__chatStage9Scrollbar={sync:quiet,show};
 })();
 </script>
 
