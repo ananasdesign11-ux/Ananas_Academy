@@ -14999,5 +14999,147 @@ body.light-mode #lessonVideoWrapper .aa-speed-value{color:#172033!important;}
 #manageCodesModal #codeEndDate{width:100%!important;box-sizing:border-box!important;min-height:44px!important;}
 #manageCodesModal #codeEndDate:disabled{opacity:1!important;}
 </style>
+
+<script id="ananas-modal-stack-controller">
+(function(){
+  'use strict';
+  if(window.__ananasModalStackController)return;
+  window.__ananasModalStackController=true;
+
+  const BASE=210000;
+  const STEP=20;
+  let top=BASE;
+
+  const selectors=[
+    '.edit-modal.active',
+    '.auth-popup.active',
+    '.custom-alert-modal.active',
+    '.gallery-viewer.active',
+    '.platform-image-viewer.active',
+    '.file-viewer-overlay.active',
+    '.ananas-modal-overlay.active',
+    '#quizOverlay.active',
+    '#courseFileViewer.active',
+    '#enrollTermsPreviewModal.active',
+    '#courseAccessSuspendModal.active',
+    '#manageCodesModal.active',
+    '#codeDetailModalV12.active',
+    '#codeExpiryEditModalV12.active',
+    '#ananasQuizBuilderV2.active',
+    '#chatLockModal.active',
+    '#ananasProfileEditor.active'
+  ];
+
+  const allRootSelector=[
+    '.edit-modal',
+    '.auth-popup',
+    '.custom-alert-modal',
+    '.gallery-viewer',
+    '.platform-image-viewer',
+    '.file-viewer-overlay',
+    '.ananas-modal-overlay',
+    '#quizOverlay',
+    '#courseFileViewer',
+    '#enrollTermsPreviewModal',
+    '#courseAccessSuspendModal',
+    '#manageCodesModal',
+    '#codeDetailModalV12',
+    '#codeExpiryEditModalV12',
+    '#ananasQuizBuilderV2',
+    '#chatLockModal',
+    '#ananasProfileEditor'
+  ].join(',');
+
+  function getOpenModals(){
+    const found=[];
+    const seen=new Set();
+    selectors.forEach(sel=>document.querySelectorAll(sel).forEach(el=>{
+      if(!seen.has(el)){seen.add(el);found.push(el);}
+    }));
+    return found;
+  }
+
+  function elevate(el){
+    if(!el || !el.isConnected)return;
+    top=Math.max(top,BASE)+STEP;
+    el.dataset.ananasModalZ=String(top);
+    el.style.setProperty('z-index',String(top),'important');
+  }
+
+  function isOpen(el){
+    if(!(el instanceof HTMLElement) || !el.isConnected)return false;
+    return el.matches('.edit-modal.active,.auth-popup.active,.custom-alert-modal.active,'+
+      '.gallery-viewer.active,.platform-image-viewer.active,.file-viewer-overlay.active,'+
+      '.ananas-modal-overlay.active,#quizOverlay.active,#courseFileViewer.active,'+
+      '#enrollTermsPreviewModal.active,#courseAccessSuspendModal.active,#manageCodesModal.active,'+
+      '#codeDetailModalV12.active,#codeExpiryEditModalV12.active,#ananasQuizBuilderV2.active,'+
+      '#chatLockModal.active,#ananasProfileEditor.active');
+  }
+
+  function clearClosed(){
+    document.querySelectorAll(allRootSelector).forEach(el=>{
+      if(isOpen(el))return;
+      delete el.dataset.ananasModalZ;
+      const value=el.style.getPropertyValue('z-index');
+      const priority=el.style.getPropertyPriority('z-index');
+      if(priority==='important' && Number(value)>=BASE)el.style.removeProperty('z-index');
+    });
+  }
+
+  function sync(){
+    clearClosed();
+    const modals=getOpenModals();
+    if(!modals.length)return;
+
+    // Every active modal gets an owned z-index. The highest one is the top layer.
+    // Existing modal order is preserved; a modal without an assigned layer is new.
+    modals.forEach(el=>{
+      if(!el.dataset.ananasModalZ)elevate(el);
+      else el.style.setProperty('z-index',el.dataset.ananasModalZ,'important');
+    });
+  }
+
+  const observer=new MutationObserver(records=>{
+    for(const record of records){
+      if(record.type==='childList' ||
+         (record.type==='attributes' &&
+          (record.attributeName==='class'||record.attributeName==='style'||record.attributeName==='hidden'))){
+        requestAnimationFrame(sync);
+        return;
+      }
+    }
+  });
+
+  function start(){
+    if(!document.body)return;
+    observer.observe(document.body,{
+      subtree:true,
+      childList:true,
+      attributes:true,
+      attributeFilter:['class','style','hidden']
+    });
+    sync();
+  }
+
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',start,{once:true});
+  else start();
+
+  window.__ananasModalStackSync=sync;
+})();
+</script>
+
+
+<script id="ananas-modal-stack-click-hook">
+(function(){
+  'use strict';
+  if(window.__ananasModalStackClickHook)return;
+  window.__ananasModalStackClickHook=true;
+  document.addEventListener('click',function(){
+    requestAnimationFrame(()=>window.__ananasModalStackSync?.());
+    setTimeout(()=>window.__ananasModalStackSync?.(),50);
+  },true);
+})();
+</script>
+
 </body>
 </html>
