@@ -16404,5 +16404,258 @@ syncHeight();
 })();
 </script>
 
+
+<style id="chat-stage23-read-state-css">
+/* Stage 23: unread badge/read-state styling only. */
+#courseChatPage .chat-scroll-bottom{position:fixed!important;}
+#courseChatPage #chatUnreadCount.chat-unread-count.chat-unread-purple{
+  display:grid!important;
+  place-items:center!important;
+  min-width:20px!important;
+  height:20px!important;
+  padding:0 5px!important;
+  border-radius:999px!important;
+  background:linear-gradient(135deg,#8b7cff,#6c5ce7)!important;
+  color:#fff!important;
+  border:2px solid var(--bg-primary)!important;
+  box-shadow:0 4px 14px rgba(108,92,231,.32)!important;
+  font-size:.64rem!important;
+  font-weight:900!important;
+  line-height:1!important;
+  position:absolute!important;
+  top:-7px!important;
+  inset-inline-end:-7px!important;
+  pointer-events:none!important;
+}
+#courseChatPage #chatUnreadDivider{
+  align-self:stretch!important;
+  display:flex!important;
+  align-items:center!important;
+  justify-content:center!important;
+  gap:9px!important;
+  margin:14px 8px 10px!important;
+  color:#fff!important;
+  font-size:.72rem!important;
+  font-weight:900!important;
+  letter-spacing:.01em!important;
+}
+#courseChatPage #chatUnreadDivider::before,
+#courseChatPage #chatUnreadDivider::after{
+  content:"";
+  flex:1 1 80px;
+  height:1px;
+  background:linear-gradient(90deg,transparent,rgba(108,92,231,.45));
+}
+#courseChatPage #chatUnreadDivider::after{background:linear-gradient(90deg,rgba(108,92,231,.45),transparent);}
+#courseChatPage #chatUnreadDivider span{
+  padding:5px 11px;
+  border-radius:999px;
+  background:linear-gradient(135deg,rgba(108,92,231,.96),rgba(91,75,210,.96));
+  box-shadow:0 6px 18px rgba(108,92,231,.20);
+  white-space:nowrap;
+}
+.dashboard-chat-unread-badge{
+  position:absolute!important;
+  top:12px!important;
+  inset-inline-end:12px!important;
+  min-width:22px!important;
+  height:22px!important;
+  padding:0 6px!important;
+  display:grid!important;
+  place-items:center!important;
+  border-radius:999px!important;
+  background:linear-gradient(135deg,#8b7cff,#6c5ce7)!important;
+  color:#fff!important;
+  border:2px solid var(--bg-card)!important;
+  box-shadow:0 5px 16px rgba(108,92,231,.28)!important;
+  font-size:.65rem!important;
+  font-weight:900!important;
+  line-height:1!important;
+  pointer-events:none!important;
+  z-index:4!important;
+}
+.dashboard-chat-unread-badge[hidden]{display:none!important;}
+body.light-mode .dashboard-chat-unread-badge{border-color:#fff!important;}
+</style>
+<script id="chat-stage23-read-state-js">
+(function(){
+  'use strict';
+  if(window.__chatStage23ReadStateInstalled)return;
+  window.__chatStage23ReadStateInstalled=true;
+
+  const $=id=>document.getElementById(id);
+  const badge=$('chatUnreadCount');
+  const chatBtn=$('chatScrollBottomBtn');
+  const chatList=$('chatPageMessagesList');
+  let monitorUnsub=null;
+  let monitorCourseId=null;
+  let monitorReadAt=0;
+  let unreadDocs=[];
+  let latestMessageAt=0;
+  let dashboardBadge=null;
+  let pendingUnreadScroll=true;
+
+  function userKey(){ return String(window.currentUser?.uid||'guest'); }
+  function storageKey(courseId){ return 'ananas.chat.read.'+userKey()+'.'+String(courseId); }
+  function getReadAt(courseId){
+    try{return Number(localStorage.getItem(storageKey(courseId))||0)||0;}catch(_){return 0;}
+  }
+  function setReadAt(courseId,ms){
+    if(!courseId||!Number.isFinite(ms)||ms<=0)return;
+    monitorReadAt=ms;
+    try{localStorage.setItem(storageKey(courseId),String(ms));}catch(_){ }
+  }
+  function docMs(doc){
+    const v=doc?.data?.().createdAt;
+    return v?.toDate ? v.toDate().getTime() : (v?.seconds ? Number(v.seconds)*1000 : 0);
+  }
+  function isOtherMessage(doc){ return String(doc?.data?.().userId||'')!==String(window.currentUser?.uid||''); }
+
+  function ensureDashboardBadge(){
+    const btn=document.querySelector('#courseDashboard .dashboard-btn[onclick*="switchCoursePage(\'chat\')"]');
+    if(!btn)return null;
+    btn.style.position='relative';
+    if(!btn.querySelector('.dashboard-chat-unread-badge')){
+      const b=document.createElement('span');
+      b.className='dashboard-chat-unread-badge';
+      b.hidden=true;
+      b.setAttribute('aria-label','رسائل غير مقروءة');
+      btn.appendChild(b);
+    }
+    return btn.querySelector('.dashboard-chat-unread-badge');
+  }
+  function setBadgeCount(count){
+    const n=Math.max(0,Number(count)||0);
+    if(badge){
+      badge.classList.toggle('chat-unread-purple',n>0);
+      badge.hidden=n<=0;
+      badge.textContent=n>99?'99+':String(n);
+    }
+    const b=ensureDashboardBadge();
+    if(b){b.hidden=n<=0;b.textContent=n>99?'99+':String(n);}
+    if(chatBtn && n>0){chatBtn.classList.add('visible');chatBtn.setAttribute('aria-hidden','false');}
+  }
+
+  function clearUnreadDivider(){
+    const old=$('chatUnreadDivider'); if(old)old.remove();
+  }
+  function injectUnreadDividerAndPosition(){
+    if(!chatList || !unreadDocs.length)return false;
+    clearUnreadDivider();
+    const ids=new Set(unreadDocs.map(d=>d.id));
+    let target=null;
+    for(const el of chatList.querySelectorAll('[data-message-id]')){
+      if(ids.has(el.getAttribute('data-message-id'))){target=el;break;}
+    }
+    if(!target)return false;
+    const div=document.createElement('div');
+    div.id='chatUnreadDivider';
+    div.setAttribute('role','separator');
+    div.innerHTML='<span>رسائل غير مقروءة</span>';
+    target.parentNode.insertBefore(div,target);
+    return true;
+  }
+  function positionAtUnread(){
+    if(!chatList)return;
+    const divider=$('chatUnreadDivider');
+    if(divider){
+      chatList.scrollTo({top:Math.max(0,divider.offsetTop-12),behavior:'auto'});
+    }
+  }
+  function markRead(){
+    if(!monitorCourseId||!latestMessageAt)return;
+    setReadAt(monitorCourseId,latestMessageAt);
+    unreadDocs=[];
+    setBadgeCount(0);
+    clearUnreadDivider();
+    pendingUnreadScroll=false;
+  }
+
+  function stopMonitor(){
+    try{monitorUnsub?.();}catch(_){ }
+    monitorUnsub=null;monitorCourseId=null;unreadDocs=[];latestMessageAt=0;
+  }
+  function startMonitor(courseId){
+    if(!courseId||!window.db)return;
+    if(monitorCourseId===courseId && monitorUnsub)return;
+    stopMonitor();
+    monitorCourseId=courseId;
+    monitorReadAt=getReadAt(courseId);
+    pendingUnreadScroll=true;
+    try{
+      monitorUnsub=db.collection('courses').doc(courseId).collection('chat')
+        .orderBy('createdAt','asc')
+        .onSnapshot(snapshot=>{
+          latestMessageAt=0;
+          const all=snapshot.docs;
+          all.forEach(d=>{latestMessageAt=Math.max(latestMessageAt,docMs(d));});
+          if(!monitorReadAt && all.length){
+            /* First visit: establish a baseline without showing old history as unread. */
+            setReadAt(courseId,latestMessageAt);
+            unreadDocs=[];
+          }else{
+            unreadDocs=all.filter(d=>docMs(d)>monitorReadAt && docMs(d)>0 && isOtherMessage(d));
+          }
+          setBadgeCount(unreadDocs.length);
+          if($('courseChatPage')?.classList.contains('active') && unreadDocs.length){
+            pendingUnreadScroll=true;
+            requestAnimationFrame(()=>{
+              if(injectUnreadDividerAndPosition())positionAtUnread();
+            });
+          }
+        },err=>console.warn('chat unread monitor',err));
+    }catch(e){console.warn('chat unread monitor init',e);}
+  }
+
+  const oldSwitch=window.switchCoursePage;
+  if(typeof oldSwitch==='function'&&!oldSwitch.__chatStage23Wrapped){
+    const wrapped=function(page){
+      const result=oldSwitch.apply(this,arguments);
+      if(window.activeCourseId)startMonitor(window.activeCourseId);
+      if(page==='chat'){
+        pendingUnreadScroll=true;
+        setTimeout(()=>{
+          if(unreadDocs.length){
+            if(injectUnreadDividerAndPosition())positionAtUnread();
+          }else if(chatList){
+            chatList.scrollTo({top:chatList.scrollHeight,left:0,behavior:'auto'});
+          }
+        },140);
+      }
+      return result;
+    };
+    wrapped.__chatStage23Wrapped=true;
+    window.switchCoursePage=wrapped;
+  }
+
+  const oldLoad=window.loadChatPage;
+  if(typeof oldLoad==='function'&&!oldLoad.__chatStage23LoadWrapped){
+    const wrappedLoad=async function(courseId){
+      startMonitor(courseId);
+      const result=await oldLoad.apply(this,arguments);
+      setTimeout(()=>{
+        if(unreadDocs.length){
+          if(injectUnreadDividerAndPosition())positionAtUnread();
+        }else if(chatList){
+          chatList.scrollTo({top:chatList.scrollHeight,left:0,behavior:'auto'});
+        }
+      },220);
+      return result;
+    };
+    wrappedLoad.__chatStage23LoadWrapped=true;
+    window.loadChatPage=wrappedLoad;
+  }
+
+  chatList?.addEventListener('scroll',()=>{
+    if(!monitorCourseId||!unreadDocs.length)return;
+    const distance=chatList.scrollHeight-chatList.clientHeight-chatList.scrollTop;
+    if(distance<=24)markRead();
+  },{passive:true});
+
+  ensureDashboardBadge();
+  if(window.activeCourseId)startMonitor(window.activeCourseId);
+})();
+</script>
+
 </body>
 </html>
