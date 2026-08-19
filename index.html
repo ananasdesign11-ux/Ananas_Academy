@@ -16964,8 +16964,8 @@ html.chat-fullscreen-mode body.chat-fullscreen-mode #customConfirmModal.active{
 })();
 </script>
 
-<style id="chat-stage30-lock-modal-above-chat">
-/* Stage 30: the chat-lock dialog must sit above the fullscreen chat. */
+<style id="chat-stage31-lock-modal-above-chat">
+/* Stage 31: keep only the chat-lock dialog above the fullscreen chat without an observer loop. */
 html.chat-fullscreen-mode body.chat-fullscreen-mode #chatLockModal {
   position: fixed !important;
   inset: 0 !important;
@@ -16984,26 +16984,28 @@ html.chat-fullscreen-mode body.chat-fullscreen-mode #chatLockModal.active {
   display: flex !important;
 }
 </style>
-<script id="chat-stage30-lock-modal-above-chat-js">
+<script id="chat-stage31-lock-modal-above-chat-js">
 (function(){
   'use strict';
   const lock=document.getElementById('chatLockModal');
-  if(!lock || window.__chatStage30LockModalFix) return;
-  window.__chatStage30LockModalFix=true;
-  function sync(){
-    const chat=document.getElementById('courseChatPage');
-    const open=chat && (chat.classList.contains('active') || (getComputedStyle(chat).display!=='none' && chat.offsetParent!==null));
-    if(open){
+  if(!lock || window.__chatStage31LockModalFix) return;
+  window.__chatStage31LockModalFix=true;
+  const chat=document.getElementById('courseChatPage');
+  const sync=()=>{
+    const fullscreen=document.documentElement.classList.contains('chat-fullscreen-mode') && document.body.classList.contains('chat-fullscreen-mode');
+    if(fullscreen && lock.classList.contains('active')){
       lock.style.setProperty('z-index','2147483647','important');
       lock.style.setProperty('position','fixed','important');
-    }else{
+    }else if(!fullscreen){
       lock.style.removeProperty('z-index');
       lock.style.removeProperty('position');
     }
-  }
-  new MutationObserver(sync).observe(lock,{attributes:true,attributeFilter:['class','style']});
-  const chat=document.getElementById('courseChatPage');
-  if(chat) new MutationObserver(sync).observe(chat,{attributes:true,attributeFilter:['class','style']});
+  };
+  /* Observe class changes only. We intentionally do not observe style, because sync itself changes style. */
+  new MutationObserver(sync).observe(lock,{attributes:true,attributeFilter:['class']});
+  if(chat) new MutationObserver(sync).observe(chat,{attributes:true,attributeFilter:['class']});
+  new MutationObserver(sync).observe(document.documentElement,{attributes:true,attributeFilter:['class']});
+  new MutationObserver(sync).observe(document.body,{attributes:true,attributeFilter:['class']});
   document.addEventListener('click',()=>setTimeout(sync,0),true);
   sync();
 })();
