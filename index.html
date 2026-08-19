@@ -1858,6 +1858,13 @@ label[for*="En"], input[id*="En"], textarea[id*="En"] { display:none !important;
         <div class="custom-alert-box">
             <button class="close-lightbox" onclick="document.getElementById('customConfirmModal').classList.remove('active')">&times;</button>
             <h4 id="customConfirmTitle">تأكيد</h4>
+            <div id="customConfirmAccountCardV12" aria-live="polite">
+                <div class="account-avatar" id="customConfirmAccountAvatarV12"><i class="fas fa-user"></i></div>
+                <div class="account-copy">
+                    <strong id="customConfirmAccountNameV12">مستخدم</strong>
+                    <small class="email" id="customConfirmAccountEmailV12">—</small>
+                </div>
+            </div>
             <p id="customConfirmMessage">هل أنت متأكد؟</p>
             <div class="buttons">
                 <button class="btn btn-secondary" id="customConfirmNoBtn">إلغاء</button>
@@ -12046,6 +12053,16 @@ const s=document.createElement('style');s.textContent=`
 #codeExpiryEditModalV12 .expiry-save:hover{background:#0875c5;border-color:#0875c5;transform:translateY(-1px);}
 #codeExpiryEditModalV12 .expiry-cancel{background:var(--bg-secondary);color:var(--text-primary);}
 #codeExpiryEditModalV12 .expiry-cancel:hover{border-color:var(--accent1);color:var(--accent1);}
+#customConfirmAccountCardV12{display:none;align-items:center;gap:12px;text-align:right;padding:12px;margin:0 0 16px;border:1px solid var(--border);border-radius:16px;background:var(--bg-secondary);}
+#customConfirmAccountCardV12.active{display:flex;}
+#customConfirmAccountCardV12 .account-avatar{width:52px;height:52px;flex:0 0 52px;border-radius:50%;overflow:hidden;display:grid;place-items:center;background:var(--accent-gradient);color:#fff;font-weight:900;font-size:1.1rem;border:2px solid rgba(108,92,231,.18);}
+#customConfirmAccountCardV12 .account-avatar img{width:100%;height:100%;object-fit:cover;display:block;}
+#customConfirmAccountCardV12 .account-copy{min-width:0;flex:1;}
+#customConfirmAccountCardV12 .account-copy strong{display:block;font-size:.95rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+#customConfirmAccountCardV12 .account-copy small{display:block;color:var(--text-muted);margin-top:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+#customConfirmAccountCardV12 .account-copy .email{direction:ltr;text-align:right;}
+@media(max-width:600px){#customConfirmAccountCardV12{align-items:flex-start;}}
+
 @media(max-width:600px){#codeExpiryEditModalV12 .expiry-actions{flex-direction:column;}#codeExpiryEditModalV12{padding:18px;}}
 
 </style>
@@ -12755,10 +12772,60 @@ const s=document.createElement('style');s.textContent=`
    * This is intentionally the last definition so older delete wrappers cannot
    * leave accessBlocked/codeDeleted records behind.
    */
+  async function prepareDeleteCodeConfirmAccountV12(codeData){
+    const card=document.getElementById('customConfirmAccountCardV12');
+    if(!card)return;
+    const avatar=document.getElementById('customConfirmAccountAvatarV12');
+    const nameEl=document.getElementById('customConfirmAccountNameV12');
+    const emailEl=document.getElementById('customConfirmAccountEmailV12');
+    const info=Array.isArray(codeData?.usedByInfo)?codeData.usedByInfo[0]:null;
+    const uid=String(info?.uid||codeData?.usedBy?.[0]||'');
+    let name=String(info?.name||'لا يوجد حساب مرتبط');
+    let email=String(info?.email||'لا يوجد بريد إلكتروني');
+    let photo='';
+    if(uid){
+      try{
+        const snap=await db.collection('users').doc(uid).get();
+        if(snap.exists){
+          const p=snap.data()||{};
+          name=String(p.displayName||p.name||name);
+          email=String(p.email||email);
+          photo=String(p.photoURL||p.photoUrl||p.photo||'');
+        }
+      }catch(e){console.warn('تعذر تحميل بيانات حساب تأكيد حذف الكود:',e)}
+    }
+    nameEl.textContent=name;
+    emailEl.textContent=email;
+    avatar.innerHTML='';
+    if(photo){
+      const img=document.createElement('img');
+      img.src=photo;img.alt=name;
+      avatar.appendChild(img);
+    }else{
+      avatar.textContent=uid?(name.slice(0,1)||'م'):'i';
+    }
+    card.classList.add('active');
+  }
+
+  function clearDeleteCodeConfirmAccountV12(){
+    const card=document.getElementById('customConfirmAccountCardV12');
+    if(card)card.classList.remove('active');
+  }
+
   window.deleteEnrollmentCode=async function(codeId){
     if(!isAdmin||!activeCourseId)return showCustomAlert?.('غير مسموح','هذه العملية للمشرف فقط.');
+    const courseId=activeCourseId;
+    try{
+      const preRef=db.collection('courses').doc(courseId).collection('codes').doc(codeId);
+      const preSnap=await preRef.get();
+      if(!preSnap.exists)return showCustomAlert?.('خطأ','الكود غير موجود.');
+      const preData=preSnap.data()||{};
+      await prepareDeleteCodeConfirmAccountV12(preData);
+    }catch(e){
+      console.warn('تعذر تجهيز بيانات حساب حذف الكود:',e);
+    }
     showCustomConfirm('حذف الكود','سيتم حذف الكود وإخراج كل حساب استخدمه من الدورة. بعد الحذف سيصبح الدخول للدورة اشتراكًا من جديد. هل أنت متأكد؟',async()=>{
-      const courseId=activeCourseId;
+      clearDeleteCodeConfirmAccountV12();
       try{
         const ref=db.collection('courses').doc(courseId).collection('codes').doc(codeId);
         const snap=await ref.get();
