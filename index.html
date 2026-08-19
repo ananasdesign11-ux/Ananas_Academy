@@ -8120,37 +8120,10 @@ label[for*="En"], input[id*="En"], textarea[id*="En"] { display:none !important;
   };
 
   // ------------------------------------------------------------
-  // 6) Desktop emoji picker: contain all emojis and scroll internally;
-  //    anchor above composer / reply indicator.
-  // ------------------------------------------------------------
-  const style=document.createElement('style');
-  style.textContent=`
-    #chatEmojiPickerPage{box-sizing:border-box;max-height:min(360px,55vh)!important;overflow-y:auto!important;overflow-x:hidden!important;overscroll-behavior:contain!important;padding:10px!important;display:none;}
-    #chatEmojiPickerPage.active{display:grid!important;grid-template-columns:repeat(8,minmax(0,1fr));gap:5px!important;align-content:start!important;}
-    #chatEmojiPickerPage button,#chatEmojiPickerPage .emoji-item{box-sizing:border-box;min-width:0!important;width:100%!important;height:34px!important;display:flex!important;align-items:center!important;justify-content:center!important;font-size:20px!important;line-height:1!important;border-radius:8px!important;}
-    @media (max-width:700px){#chatEmojiPickerPage.active{grid-template-columns:repeat(6,minmax(0,1fr));gap:4px!important;}#chatEmojiPickerPage{max-height:240px!important;width:210px!important;}}
-  `;
-  document.head.appendChild(style);
-  function __positionEmoji(){
-    const btn=document.getElementById('chatEmojiBtnPage'),picker=document.getElementById('chatEmojiPickerPage');
-    if(!btn||!picker||!picker.classList.contains('active'))return;
-    const anchor=document.getElementById('replyIndicator')?.classList.contains('active')?document.getElementById('replyIndicator'):btn;
-    const r=anchor.getBoundingClientRect(), w=Math.min(window.innerWidth<=700?210:320,window.innerWidth-20);
-    let left=Math.max(10,Math.min(window.innerWidth-w-10,r.left+(r.width/2)-w/2));
-    let bottom=Math.max(10,window.innerHeight-r.top+8);
-    picker.style.width=w+'px';picker.style.left=left+'px';picker.style.right='auto';picker.style.bottom=bottom+'px';picker.style.top='auto';
-  }
-  window.positionEmojiPicker=__positionEmoji;
-  window.addEventListener('resize',__positionEmoji,{passive:true});
-  window.addEventListener('scroll',__positionEmoji,{passive:true,capture:true});
 })();
 </script>
 
-
-
-
-
-\n<script id="arabic-only-final-fixes">
+<script id="arabic-only-final-fixes">
 (function(){
   currentLang = 'ar';
   try { localStorage.setItem('ananas.language','ar'); } catch(e){}
@@ -8263,7 +8236,8 @@ label[for*="En"], input[id*="En"], textarea[id*="En"] { display:none !important;
   };
   window.applyChatLockNow=applyChatLockNow;
 })();
-</script>\n
+</script>
+
 
 <style id="ananas-final-files-profile-polish">
 /* ===== FINAL FILES / PROFILE EXPERIENCE ===== */
@@ -16223,201 +16197,332 @@ body.light-mode #courseChatPage .chat-msg.received .reply-block .rt{
 
 </style>
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-<style id="chat-stage18-clean-input-emoji-css">
-/* Stage 18 — one clean composer + one clean emoji panel. */
+<!-- CHAT INPUT + EMOJI: SINGLE CLEAN IMPLEMENTATION -->
+<style id="chat-input-emoji-v2-css">
 #courseChatPage .chat-composer-shell{
-  position:relative!important;flex:0 0 auto!important;width:100%!important;box-sizing:border-box!important;
-  padding:9px max(10px,env(safe-area-inset-right)) max(10px,env(safe-area-inset-bottom)) max(10px,env(safe-area-inset-left))!important;
-  margin:0!important;background:transparent!important;border:0!important;box-shadow:none!important;
-  backdrop-filter:none!important;-webkit-backdrop-filter:none!important;z-index:35!important;overflow:visible!important;
+    position:relative!important;
+    flex:0 0 auto!important;
+    width:100%!important;
+    margin:0!important;
+    padding:8px max(10px,env(safe-area-inset-right)) max(10px,env(safe-area-inset-bottom)) max(10px,env(safe-area-inset-left))!important;
+    background:transparent!important;
+    border:0!important;
+    box-shadow:none!important;
+    backdrop-filter:none!important;
+    -webkit-backdrop-filter:none!important;
+    overflow:visible!important;
+    z-index:40!important;
 }
-#courseChatPage .chat-input-group{
-  position:relative!important;display:flex!important;flex-direction:row!important;align-items:flex-end!important;gap:4px!important;
-  width:100%!important;min-width:0!important;padding:4px!important;box-sizing:border-box!important;
-  border:1px solid color-mix(in srgb,var(--border) 58%,var(--accent1) 42%)!important;
-  border-radius:999px!important;background:color-mix(in srgb,var(--bg-card) 95%,transparent)!important;
-  box-shadow:0 12px 32px rgba(0,0,0,.18),inset 0 1px 0 rgba(255,255,255,.08)!important;
-  backdrop-filter:blur(18px) saturate(1.18)!important;-webkit-backdrop-filter:blur(18px) saturate(1.18)!important;
-  overflow:visible!important;transition:border-color .2s ease,box-shadow .2s ease,background .2s ease!important;
+
+/* One unified capsule. Its height follows the textarea up to five lines. */
+#courseChatPage #chatComposerControls{
+    position:relative!important;
+    display:flex!important;
+    flex-direction:row!important;
+    align-items:flex-end!important;
+    gap:3px!important;
+    width:100%!important;
+    min-width:0!important;
+    padding:4px!important;
+    box-sizing:border-box!important;
+    border:1px solid color-mix(in srgb,var(--border) 62%,var(--accent1) 38%)!important;
+    border-radius:28px!important;
+    background:color-mix(in srgb,var(--bg-card) 94%,transparent)!important;
+    box-shadow:0 10px 28px rgba(0,0,0,.16),inset 0 1px 0 rgba(255,255,255,.08)!important;
+    backdrop-filter:blur(20px) saturate(1.15)!important;
+    -webkit-backdrop-filter:blur(20px) saturate(1.15)!important;
+    overflow:visible!important;
+    transition:border-color .2s ease,box-shadow .2s ease,background .2s ease!important;
 }
-#courseChatPage .chat-input-group:focus-within{
-  border-color:color-mix(in srgb,var(--accent1) 68%,var(--border) 32%)!important;
-  box-shadow:0 14px 34px rgba(108,92,231,.18),0 0 0 3px rgba(108,92,231,.08),inset 0 1px 0 rgba(255,255,255,.08)!important;
+#courseChatPage #chatComposerControls:focus-within{
+    border-color:color-mix(in srgb,var(--accent1) 72%,var(--border) 28%)!important;
+    box-shadow:0 12px 32px rgba(108,92,231,.18),0 0 0 3px rgba(108,92,231,.08),inset 0 1px 0 rgba(255,255,255,.08)!important;
 }
-#courseChatPage .chat-composer-btn,#courseChatPage .chat-send-btn{
-  flex:0 0 40px!important;width:40px!important;height:40px!important;min-width:40px!important;min-height:40px!important;
-  margin:0!important;padding:0!important;border:0!important;border-radius:50%!important;
-  display:inline-flex!important;align-items:center!important;justify-content:center!important;align-self:flex-end!important;
-  position:relative!important;z-index:4!important;background:transparent!important;color:var(--text-muted)!important;
-  box-shadow:none!important;transition:transform .18s ease,color .18s ease,background .18s ease!important;
+
+/* Tools stay fixed at the bottom while the text area grows upward. */
+#courseChatPage #chatEmojiBtnPage,
+#courseChatPage #chatImageBtnPage,
+#courseChatPage #fullChatPageSendBtn{
+    flex:0 0 40px!important;
+    width:40px!important;
+    height:40px!important;
+    min-width:40px!important;
+    min-height:40px!important;
+    padding:0!important;
+    margin:0!important;
+    align-self:flex-end!important;
+    position:relative!important;
+    border:0!important;
+    border-radius:50%!important;
+    display:inline-flex!important;
+    align-items:center!important;
+    justify-content:center!important;
+    background:transparent!important;
+    color:var(--text-muted)!important;
+    box-shadow:none!important;
+    z-index:3!important;
 }
-#courseChatPage .chat-composer-btn:hover{color:var(--accent1)!important;background:rgba(108,92,231,.10)!important;transform:translateY(-1px)!important;}
-#courseChatPage .chat-send-btn{background:var(--accent-gradient)!important;color:#fff!important;box-shadow:0 7px 18px rgba(108,92,231,.25)!important;}
-#courseChatPage .chat-send-btn:hover{transform:translateY(-1px) scale(1.03)!important;color:#fff!important;}
-#courseChatPage .chat-composer-btn::before,#courseChatPage .chat-composer-btn::after,#courseChatPage .chat-send-btn::before,#courseChatPage .chat-send-btn::after{content:none!important;display:none!important;}
+#courseChatPage #chatEmojiBtnPage:hover,
+#courseChatPage #chatImageBtnPage:hover{
+    color:var(--accent1)!important;
+    background:rgba(108,92,231,.10)!important;
+}
+#courseChatPage #fullChatPageSendBtn{
+    background:var(--accent-gradient)!important;
+    color:#fff!important;
+    box-shadow:0 7px 18px rgba(108,92,231,.24)!important;
+}
+#courseChatPage #fullChatPageSendBtn:hover{transform:translateY(-1px) scale(1.02)!important;}
+#courseChatPage #chatEmojiBtnPage::before,
+#courseChatPage #chatEmojiBtnPage::after,
+#courseChatPage #chatImageBtnPage::before,
+#courseChatPage #chatImageBtnPage::after,
+#courseChatPage #fullChatPageSendBtn::before,
+#courseChatPage #fullChatPageSendBtn::after{
+    content:none!important;
+    display:none!important;
+}
+
 #courseChatPage .chat-input-wrap{
-  order:3!important;flex:1 1 auto!important;min-width:0!important;display:flex!important;align-items:flex-end!important;
-  overflow:visible!important;position:relative!important;
+    order:3!important;
+    flex:1 1 auto!important;
+    min-width:0!important;
+    display:flex!important;
+    align-items:flex-end!important;
+    overflow:visible!important;
 }
+
+/* Five lines maximum; after that, wheel/touch scroll the textarea itself. */
 #courseChatPage #fullChatPageInput{
-  display:block!important;width:100%!important;min-width:0!important;height:40px!important;min-height:40px!important;
-  max-height:118px!important;margin:0!important;padding:9px 10px!important;box-sizing:border-box!important;
-  border:0!important;border-radius:0!important;outline:0!important;resize:none!important;background:transparent!important;
-  color:var(--text-primary)!important;font:inherit!important;font-size:.94rem!important;line-height:1.55!important;direction:rtl!important;
-  overflow-x:hidden!important;overflow-y:hidden!important;overscroll-behavior:contain!important;scrollbar-width:none!important;-ms-overflow-style:none!important;
+    display:block!important;
+    width:100%!important;
+    min-width:0!important;
+    height:42px!important;
+    min-height:42px!important;
+    max-height:none!important;
+    margin:0!important;
+    padding:9px 10px!important;
+    box-sizing:border-box!important;
+    border:0!important;
+    border-radius:0!important;
+    outline:none!important;
+    resize:none!important;
+    background:transparent!important;
+    color:var(--text-primary)!important;
+    font:inherit!important;
+    line-height:1.55!important;
+    direction:rtl!important;
+    overflow-x:hidden!important;
+    overflow-y:hidden!important;
+    overscroll-behavior:contain!important;
+    scrollbar-width:none!important;
+    -ms-overflow-style:none!important;
 }
 #courseChatPage #fullChatPageInput::-webkit-scrollbar{width:0!important;height:0!important;display:none!important;}
+#courseChatPage #fullChatPageInput:focus{box-shadow:none!important;background:transparent!important;}
 #courseChatPage #fullChatPageInput::placeholder{color:var(--text-muted)!important;opacity:.82!important;}
-#courseChatPage #chatImageBtnPage{overflow:hidden!important;position:relative!important;}
+
+/* The hidden file input is limited to the visual icon area. */
+#courseChatPage #chatImageBtnPage{overflow:hidden!important;}
 #courseChatPage #chatImageBtnPage i{pointer-events:none!important;position:relative!important;z-index:2!important;}
 #courseChatPage #chatImageBtnPage #fullChatPageFileInput{
-  position:absolute!important;left:50%!important;top:50%!important;width:24px!important;height:24px!important;
-  min-width:24px!important;min-height:24px!important;margin:0!important;padding:0!important;
-  transform:translate(-50%,-50%)!important;opacity:0!important;cursor:pointer!important;z-index:3!important;
+    position:absolute!important;
+    top:50%!important;
+    left:50%!important;
+    width:24px!important;
+    height:24px!important;
+    min-width:24px!important;
+    min-height:24px!important;
+    margin:0!important;
+    padding:0!important;
+    transform:translate(-50%,-50%)!important;
+    opacity:0!important;
+    cursor:pointer!important;
+    z-index:3!important;
 }
-/* Independent panel: it lives in <body>, so no chat container can clip it. */
-#chatEmojiPickerPage.chat-stage18-emoji-panel{
-  position:fixed!important;left:0;top:0;width:min(346px,calc(100vw - 24px))!important;
-  max-width:calc(100vw - 24px)!important;max-height:min(300px,42vh)!important;
-  padding:12px!important;box-sizing:border-box!important;display:none!important;
-  grid-template-columns:repeat(8,minmax(0,1fr))!important;gap:6px!important;align-content:start!important;
-  overflow-x:hidden!important;overflow-y:auto!important;overscroll-behavior:contain!important;
-  background:color-mix(in srgb,var(--bg-secondary) 92%,transparent)!important;
-  border:1px solid color-mix(in srgb,var(--border) 62%,var(--accent1) 38%)!important;
-  border-radius:20px!important;
-  box-shadow:0 22px 55px rgba(0,0,0,.28),0 0 0 1px rgba(108,92,231,.07)!important;
-  backdrop-filter:blur(26px) saturate(1.28)!important;-webkit-backdrop-filter:blur(26px) saturate(1.28)!important;
-  z-index:2147483000!important;opacity:0;transform:translateY(7px) scale(.985);transform-origin:center bottom;
+
+/* Professional standalone emoji panel. It is moved to body and positioned from the trigger. */
+#chatEmojiPickerPage.chat-emoji-v2{
+    position:fixed!important;
+    top:0!important;
+    left:0!important;
+    right:auto!important;
+    bottom:auto!important;
+    width:min(342px,calc(100vw - 20px))!important;
+    max-width:calc(100vw - 20px)!important;
+    height:auto!important;
+    max-height:min(310px,44vh)!important;
+    padding:12px!important;
+    box-sizing:border-box!important;
+    display:none!important;
+    grid-template-columns:repeat(8,minmax(0,1fr))!important;
+    gap:5px!important;
+    align-content:start!important;
+    overflow-x:hidden!important;
+    overflow-y:auto!important;
+    overscroll-behavior:contain!important;
+    border:1px solid color-mix(in srgb,var(--border) 58%,var(--accent1) 42%)!important;
+    border-radius:20px!important;
+    background:color-mix(in srgb,var(--bg-secondary) 93%,transparent)!important;
+    box-shadow:0 24px 55px rgba(0,0,0,.28),0 0 0 1px rgba(108,92,231,.07)!important;
+    backdrop-filter:blur(26px) saturate(1.22)!important;
+    -webkit-backdrop-filter:blur(26px) saturate(1.22)!important;
+    z-index:2147483000!important;
+    transform-origin:center bottom!important;
 }
-#chatEmojiPickerPage.chat-stage18-emoji-panel.active{display:grid!important;animation:chatStage18EmojiIn .18s cubic-bezier(.2,.8,.2,1) forwards!important;}
-#chatEmojiPickerPage.chat-stage18-emoji-panel::after{
-  content:"";position:absolute;bottom:-6px;left:var(--emoji-pointer-left,50%);width:12px;height:12px;
-  transform:translateX(-50%) rotate(45deg);background:var(--bg-secondary);
-  border-right:1px solid color-mix(in srgb,var(--border) 62%,var(--accent1) 38%);
-  border-bottom:1px solid color-mix(in srgb,var(--border) 62%,var(--accent1) 38%);
+#chatEmojiPickerPage.chat-emoji-v2.active{
+    display:grid!important;
+    animation:chatEmojiV2Open .18s cubic-bezier(.2,.8,.2,1) both!important;
 }
-#chatEmojiPickerPage.chat-stage18-emoji-panel::-webkit-scrollbar{width:6px!important;height:6px!important;}
-#chatEmojiPickerPage.chat-stage18-emoji-panel::-webkit-scrollbar-track{background:transparent!important;}
-#chatEmojiPickerPage.chat-stage18-emoji-panel::-webkit-scrollbar-thumb{background:rgba(108,92,231,.55)!important;border-radius:999px!important;}
-#chatEmojiPickerPage.chat-stage18-emoji-panel .emoji-item{
-  width:100%!important;height:38px!important;min-width:0!important;padding:0!important;margin:0!important;
-  border:0!important;border-radius:12px!important;display:flex!important;align-items:center!important;justify-content:center!important;
-  background:transparent!important;color:var(--text-primary)!important;font-size:21px!important;line-height:1!important;cursor:pointer!important;
-  transition:transform .13s ease,background .13s ease,box-shadow .13s ease!important;
+@keyframes chatEmojiV2Open{
+    from{opacity:0;transform:translateY(8px) scale(.96)}
+    to{opacity:1;transform:translateY(0) scale(1)}
 }
-#chatEmojiPickerPage.chat-stage18-emoji-panel .emoji-item:hover{background:rgba(108,92,231,.14)!important;transform:scale(1.08)!important;box-shadow:0 5px 14px rgba(108,92,231,.10)!important;}
-#chatEmojiPickerPage.chat-stage18-emoji-panel .emoji-item:active{transform:scale(.93)!important;}
-@keyframes chatStage18EmojiIn{from{opacity:0;transform:translateY(8px) scale(.975)}to{opacity:1;transform:translateY(0) scale(1)}}
+#chatEmojiPickerPage.chat-emoji-v2::-webkit-scrollbar{width:6px!important;height:6px!important;}
+#chatEmojiPickerPage.chat-emoji-v2::-webkit-scrollbar-track{background:transparent!important;}
+#chatEmojiPickerPage.chat-emoji-v2::-webkit-scrollbar-thumb{background:rgba(108,92,231,.55)!important;border-radius:999px!important;}
+#chatEmojiPickerPage.chat-emoji-v2 .emoji-item{
+    width:100%!important;
+    height:38px!important;
+    min-width:0!important;
+    padding:0!important;
+    margin:0!important;
+    border:0!important;
+    border-radius:11px!important;
+    display:flex!important;
+    align-items:center!important;
+    justify-content:center!important;
+    background:transparent!important;
+    color:var(--text-primary)!important;
+    font-size:21px!important;
+    line-height:1!important;
+    cursor:pointer!important;
+    transition:background .13s ease,transform .13s ease,box-shadow .13s ease!important;
+}
+#chatEmojiPickerPage.chat-emoji-v2 .emoji-item:hover{
+    background:rgba(108,92,231,.13)!important;
+    transform:scale(1.08)!important;
+    box-shadow:0 4px 13px rgba(108,92,231,.08)!important;
+}
+#chatEmojiPickerPage.chat-emoji-v2 .emoji-item:active{transform:scale(.93)!important;}
 @media(max-width:700px){
-  #courseChatPage .chat-composer-shell{padding-left:max(8px,env(safe-area-inset-left));padding-right:max(8px,env(safe-area-inset-right));}
-  #courseChatPage .chat-composer-btn,#courseChatPage .chat-send-btn{flex-basis:38px!important;width:38px!important;height:38px!important;min-width:38px!important;min-height:38px!important;}
-  #courseChatPage #fullChatPageInput{height:38px!important;min-height:38px!important;padding:8px 8px!important;font-size:.92rem!important;}
-  #chatEmojiPickerPage.chat-stage18-emoji-panel{width:min(304px,calc(100vw - 20px))!important;max-width:calc(100vw - 20px)!important;max-height:250px!important;grid-template-columns:repeat(6,minmax(0,1fr))!important;}
+    #courseChatPage #chatComposerControls{padding:3px!important;}
+    #courseChatPage #chatEmojiBtnPage,
+    #courseChatPage #chatImageBtnPage,
+    #courseChatPage #fullChatPageSendBtn{flex-basis:39px!important;width:39px!important;height:39px!important;min-width:39px!important;min-height:39px!important;}
+    #chatEmojiPickerPage.chat-emoji-v2{width:min(304px,calc(100vw - 18px))!important;max-width:calc(100vw - 18px)!important;max-height:260px!important;grid-template-columns:repeat(6,minmax(0,1fr))!important;gap:5px!important;}
 }
 @media(max-width:380px){
-  #courseChatPage .chat-composer-btn,#courseChatPage .chat-send-btn{flex-basis:36px!important;width:36px!important;height:36px!important;min-width:36px!important;min-height:36px!important;}
-  #courseChatPage #fullChatPageInput{height:36px!important;min-height:36px!important;padding:7px!important;font-size:.88rem!important;}
-  #chatEmojiPickerPage.chat-stage18-emoji-panel{width:min(286px,calc(100vw - 16px))!important;max-width:calc(100vw - 16px)!important;grid-template-columns:repeat(6,minmax(0,1fr))!important;padding:9px!important;gap:4px!important;}
+    #courseChatPage #chatEmojiBtnPage,
+    #courseChatPage #chatImageBtnPage,
+    #courseChatPage #fullChatPageSendBtn{flex-basis:37px!important;width:37px!important;height:37px!important;min-width:37px!important;min-height:37px!important;}
+    #courseChatPage #fullChatPageInput{font-size:.89rem!important;padding:8px!important;}
 }
 </style>
-<script id="chat-stage18-clean-input-emoji-js">
-(function(){
-  'use strict';
-  const input=document.getElementById('fullChatPageInput');
-  const group=document.getElementById('chatComposerControls');
-  const emojiBtn=document.getElementById('chatEmojiBtnPage');
-  if(!input||!group||!emojiBtn)return;
-  const existing=document.getElementById('chatEmojiPickerPage');
-  existing?.remove();
-  const picker=document.createElement('div');
-  picker.id='chatEmojiPickerPage';
-  picker.className='chat-stage18-emoji-panel';
-  picker.setAttribute('role','dialog');
-  picker.setAttribute('aria-label','اختيار رمز تعبيري');
-  const emojis=['😀','😂','😍','🥰','😎','😭','😡','👍','👏','🔥','❤️','🎉','✨','💯','🙏','🤍','🤣','😅','🤔','👀','💪','🙌','🌟','🎯','📚','✏️','🚀','😊','😮','😢','❤️‍🔥','💙','😄','😁','😆','😇','🙂','🙃','😉','😌','😘','😗','😙','😚','😋','😛','😝','😜','🤪','🤨','🧐','🤓','😏','😒','🙄','😬','🤐','😴','🤤','😷','🤒','🤕','🤢','🤮','🤧','🥳','🤠','🤡','🤩','🥺','😱','😨','😰','😥','😓','🤗','🤭','🤫','🫡','🤥','😶','😐','😑','😶‍🌫️','😯','😲','🥱','😪','😵','🤯','😈','👿','💀','☠️','👻','👽','🤖','💩','🎃','😺','😸','😹','😻','😼','😽','🙀','😿','😾','🐶','🐱','🦊','🐻','🐼','🐨','🐯','🦁','🐮','🐷','🐸','🐵','🙈','🙉','🙊','🐔','🐧','🐦','🦄','🐝','🦋','🌸','🌹','🌺','🌻','🌷','🌱','🌿','🍀','🍎','🍓','🍉','🍕','🍔','🍟','🍩','🍪','☕','🎂','⚽','🏆','🎮','🎵','🎶','🚀','⭐','🌟','💫','🌈','☀️','🌙','❤️','🧡','💛','💚','💙','💜','🖤','🤍','🤎','💔','❣️','💕','💞','💓','💗','💖','💘','💝','💟','✅','❌','❗','❓','‼️','⁉️','✔️','➕','➖','🔔','📌','📎','🎁','💡','📝','🔒','🔓'];
-  emojis.forEach(em=>{
-    const b=document.createElement('button'); b.type='button'; b.className='emoji-item'; b.textContent=em; b.title=em;
-    b.addEventListener('mousedown',e=>e.preventDefault());
-    b.addEventListener('click',()=>{
-      const start=input.selectionStart??input.value.length, end=input.selectionEnd??input.value.length;
-      input.value=input.value.slice(0,start)+em+input.value.slice(end);
-      input.selectionStart=input.selectionEnd=start+em.length;
-      input.focus(); autoGrow();
-    });
-    picker.appendChild(b);
-  });
-  document.body.appendChild(picker);
 
-  let open=false, resizeRaf=0;
-  function autoGrow(){
-    const cs=getComputedStyle(input);
-    const line=Math.max(1,parseFloat(cs.lineHeight)||22);
-    const pt=parseFloat(cs.paddingTop)||0, pb=parseFloat(cs.paddingBottom)||0;
-    const min=parseFloat(cs.minHeight)||40;
-    const max=Math.max(min,line*5+pt+pb);
-    input.style.height='auto';
-    const target=Math.min(Math.max(input.scrollHeight,min),max);
-    input.style.height=Math.ceil(target)+'px';
-    input.style.overflowY=input.scrollHeight>max+1?'auto':'hidden';
-  }
-  function positionPanel(){
-    if(!open)return;
-    if(resizeRaf)return;
-    resizeRaf=requestAnimationFrame(()=>{
-      resizeRaf=0;
-      const r=emojiBtn.getBoundingClientRect();
-      const panelW=Math.min(window.innerWidth<=700?304:346,window.innerWidth-16);
-      const center=r.left+r.width/2;
-      let left=center-panelW/2;
-      left=Math.max(8,Math.min(window.innerWidth-panelW-8,left));
-      const gap=9;
-      let bottom=window.innerHeight-r.top+gap;
-      const maxTop=window.innerHeight-panelW*0;
-      if(bottom>window.innerHeight-8)bottom=window.innerHeight-8;
-      picker.style.width=panelW+'px';
-      picker.style.left=Math.round(left)+'px';
-      picker.style.bottom=Math.round(bottom)+'px';
-      picker.style.top='auto';
-      picker.style.setProperty('--emoji-pointer-left',Math.max(14,Math.min(panelW-14,center-left))+'px');
+<script id="chat-input-emoji-v2-js">
+(function(){
+    'use strict';
+    const input=document.getElementById('fullChatPageInput');
+    const group=document.getElementById('chatComposerControls');
+    const emojiBtn=document.getElementById('chatEmojiBtnPage');
+    if(!input||!group||!emojiBtn)return;
+
+    const emojis=['😀','😂','😍','🥰','😎','😭','😡','👍','👏','🔥','❤️','🎉','✨','💯','🙏','🤍','🤣','😅','🤔','👀','💪','🙌','🌟','🎯','📚','✏️','🚀','😊','😮','😢','❤️‍🔥','💙','😄','😁','😆','😇','🙂','🙃','😉','😌','😘','😗','😙','😚','😋','😛','😝','😜','🤪','🤨','🧐','🤓','😏','😒','🙄','😬','🤐','😴','🤤','😷','🤒','🤕','🤢','🤮','🤧','🥳','🤠','🤡','🤩','🥺','😱','😨','😰','😥','😓','🤗','🤭','🤫','🫡','🤥','😶','😐','😑','😶‍🌫️','😯','😲','🥱','😪','😵','🤯','😈','👿','💀','☠️','👻','👽','🤖','💩','🎃','😺','😸','😹','😻','😼','😽','🙀','😿','😾','🐶','🐱','🦊','🐻','🐼','🐨','🐯','🦁','🐮','🐷','🐸','🐵','🙈','🙉','🙊','🐔','🐧','🐦','🦄','🐝','🦋','🌸','🌹','🌺','🌻','🌷','🌱','🌿','🍀','🍎','🍓','🍉','🍕','🍔','🍟','🍩','🍪','☕','🎂','⚽','🏆','🎮','🎵','🎶','🚀','⭐','💫','🌈','☀️','🌙','🧡','💛','💚','💜','🖤','🤎','💔','❣️','💕','💞','💓','💗','💖','💘','💝','💟','✅','❌','❗','❓','‼️','⁉️','✔️','➕','➖','🔔','📌','📎','🎁','💡','📝','🔒','🔓'];
+
+    let picker=document.getElementById('chatEmojiPickerPage');
+    if(!picker){
+        picker=document.createElement('div');
+        picker.id='chatEmojiPickerPage';
+        document.body.appendChild(picker);
+    } else if(picker.parentElement!==document.body){
+        document.body.appendChild(picker);
+    }
+    picker.className='emoji-picker chat-emoji-v2';
+    picker.setAttribute('role','dialog');
+    picker.setAttribute('aria-label','اختيار رمز تعبيري');
+    picker.innerHTML='';
+    emojis.forEach(em=>{
+        const b=document.createElement('button');
+        b.type='button';
+        b.className='emoji-item';
+        b.textContent=em;
+        b.title=em;
+        b.addEventListener('click',()=>{
+            const start=input.selectionStart ?? input.value.length;
+            const end=input.selectionEnd ?? input.value.length;
+            input.value=input.value.slice(0,start)+em+input.value.slice(end);
+            input.selectionStart=input.selectionEnd=start+em.length;
+            input.focus();
+            growInput();
+        });
+        picker.appendChild(b);
     });
-  }
-  function close(){open=false;picker.classList.remove('active');}
-  emojiBtn.addEventListener('click',e=>{
-    e.preventDefault(); e.stopPropagation();
-    open=!open;
-    picker.classList.toggle('active',open);
-    if(open){positionPanel();input.focus();}
-  },true);
-  document.addEventListener('pointerdown',e=>{
-    if(open&&!picker.contains(e.target)&&!emojiBtn.contains(e.target))close();
-  },true);
-  window.addEventListener('resize',()=>{autoGrow();positionPanel();},{passive:true});
-  window.addEventListener('orientationchange',()=>setTimeout(()=>{autoGrow();positionPanel();},50),{passive:true});
-  input.addEventListener('input',autoGrow);
-  input.addEventListener('focus',autoGrow);
-  input.addEventListener('keyup',autoGrow);
-  autoGrow();
+
+    function metrics(){
+        const cs=getComputedStyle(input);
+        const line=parseFloat(cs.lineHeight)||23;
+        const pt=parseFloat(cs.paddingTop)||0;
+        const pb=parseFloat(cs.paddingBottom)||0;
+        const border=(parseFloat(cs.borderTopWidth)||0)+(parseFloat(cs.borderBottomWidth)||0);
+        return {line,boxPadding:pt+pb+border,min:42,max:Math.ceil(line*5+pt+pb+border)};
+    }
+
+    function growInput(){
+        const m=metrics();
+        input.style.height='0px';
+        const natural=input.scrollHeight;
+        const next=Math.max(m.min,Math.min(natural,m.max));
+        input.style.height=Math.ceil(next)+'px';
+        input.style.overflowY=natural>m.max+1?'auto':'hidden';
+    }
+
+    function positionPicker(){
+        if(!picker.classList.contains('active'))return;
+        const r=emojiBtn.getBoundingClientRect();
+        const width=Math.min(window.innerWidth<=700?304:342,Math.max(180,window.innerWidth-18));
+        let left=r.left+(r.width/2)-(width/2);
+        left=Math.max(9,Math.min(window.innerWidth-width-9,left));
+        const gap=8;
+        const bottom=window.innerHeight-r.top+gap;
+        picker.style.width=width+'px';
+        picker.style.left=Math.round(left)+'px';
+        picker.style.bottom=Math.max(8,Math.round(bottom))+'px';
+        picker.style.top='auto';
+    }
+
+    function closePicker(){picker.classList.remove('active');}
+    function togglePicker(e){
+        e.preventDefault();
+        e.stopPropagation();
+        picker.classList.toggle('active');
+        if(picker.classList.contains('active')){
+            positionPicker();
+            requestAnimationFrame(positionPicker);
+            growInput();
+        }
+    }
+
+    emojiBtn.addEventListener('click',togglePicker,true);
+    document.addEventListener('pointerdown',e=>{
+        if(!picker.classList.contains('active'))return;
+        if(picker.contains(e.target)||emojiBtn.contains(e.target))return;
+        closePicker();
+    },true);
+    input.addEventListener('input',growInput);
+    input.addEventListener('focus',growInput);
+    window.addEventListener('resize',()=>{growInput();positionPicker();},{passive:true});
+    window.addEventListener('orientationchange',()=>setTimeout(()=>{growInput();positionPicker();},60),{passive:true});
+    window.addEventListener('scroll',positionPicker,{passive:true,capture:true});
+
+    const observer=new MutationObserver(()=>{
+        if(picker.parentElement!==document.body)document.body.appendChild(picker);
+        if(picker.className!=='emoji-picker chat-emoji-v2' && picker.classList.contains('active'))picker.className='emoji-picker chat-emoji-v2 active';
+        positionPicker();
+    });
+    observer.observe(picker,{attributes:true,attributeFilter:['class','style']});
+
+    growInput();
 })();
 </script>
 
