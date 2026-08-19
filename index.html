@@ -16829,5 +16829,139 @@ body.chat-document-locked::-webkit-scrollbar,
     sync(false);
 })();
 </script>
+
+
+<!-- ===== CHAT STAGE 9: isolated moving scrollbar ===== -->
+<style id="chat-stage9-scrollbar-css">
+#courseChatPage .chat-custom-scrollbar{display:none!important;}
+#chatStage9Scrollbar{
+  position:fixed!important;
+  top:0!important;
+  right:0!important;
+  left:auto!important;
+  width:4px!important;
+  height:0!important;
+  margin:0!important;
+  padding:0!important;
+  z-index:2147483000!important;
+  pointer-events:none!important;
+  opacity:0!important;
+  transition:opacity .18s ease!important;
+  overflow:visible!important;
+  box-sizing:border-box!important;
+}
+#chatStage9Scrollbar.visible{opacity:.62!important;}
+#chatStage9Scrollbar .track{
+  position:absolute!important;
+  inset:0!important;
+  width:100%!important;
+  background:transparent!important;
+}
+#chatStage9Scrollbar .thumb{
+  position:absolute!important;
+  top:0!important;
+  right:0!important;
+  width:100%!important;
+  min-height:30px!important;
+  border-radius:999px 0 0 999px!important;
+  background:rgba(108,92,231,.72)!important;
+  box-shadow:0 0 10px rgba(108,92,231,.22)!important;
+  transform:translateY(0)!important;
+  will-change:transform,height!important;
+}
+body.light-mode #chatStage9Scrollbar .thumb{
+  background:rgba(67,52,150,.58)!important;
+  box-shadow:0 0 9px rgba(67,52,150,.16)!important;
+}
+@media(max-width:768px){#chatStage9Scrollbar{width:3px!important;}#chatStage9Scrollbar .thumb{min-height:28px!important;}}
+</style>
+<script id="chat-stage9-scrollbar-js">
+(function(){
+  'use strict';
+  if(window.__chatStage9ScrollbarInstalled)return;
+  window.__chatStage9ScrollbarInstalled=true;
+
+  const page=document.getElementById('courseChatPage');
+  const list=document.getElementById('chatPageMessagesList');
+  const topbar=page?.querySelector('.chat-topbar');
+  const composer=page?.querySelector('.chat-composer-shell');
+  if(!page||!list||!topbar||!composer)return;
+
+  const old=page.querySelector('.chat-custom-scrollbar');
+  if(old)old.remove();
+
+  const bar=document.createElement('div');
+  bar.id='chatStage9Scrollbar';
+  bar.setAttribute('aria-hidden','true');
+  const track=document.createElement('div');
+  track.className='track';
+  const thumb=document.createElement('div');
+  thumb.className='thumb';
+  track.appendChild(thumb);
+  bar.appendChild(track);
+  document.body.appendChild(bar);
+
+  let raf=0, hideTimer=0;
+  function show(){
+    bar.classList.add('visible');
+    clearTimeout(hideTimer);
+    hideTimer=setTimeout(()=>bar.classList.remove('visible'),2000);
+  }
+
+  function sync(showBar=false){
+    if(raf)return;
+    raf=requestAnimationFrame(()=>{
+      raf=0;
+      const active=page.classList.contains('active') || getComputedStyle(page).display!=='none';
+      if(!active){bar.classList.remove('visible');return;}
+
+      const topRect=topbar.getBoundingClientRect();
+      const compRect=composer.getBoundingClientRect();
+      const start=Math.max(0,topRect.bottom);
+      const end=Math.min(window.innerHeight,compRect.top);
+      const trackHeight=Math.max(0,end-start);
+      const viewport=list.clientHeight;
+      const content=list.scrollHeight;
+
+      bar.style.top=start+'px';
+      bar.style.height=trackHeight+'px';
+
+      if(trackHeight<=0 || viewport<=0 || content<=viewport+1){
+        bar.classList.remove('visible');
+        thumb.style.height='0px';
+        thumb.style.transform='translateY(0)';
+        return;
+      }
+
+      const ratio=Math.min(1,viewport/content);
+      const thumbHeight=Math.max(30,Math.min(trackHeight,trackHeight*ratio));
+      const maxTravel=Math.max(0,trackHeight-thumbHeight);
+      const maxScroll=Math.max(1,content-viewport);
+      const progress=Math.min(1,Math.max(0,list.scrollTop/maxScroll));
+      thumb.style.height=thumbHeight+'px';
+      thumb.style.transform='translateY('+((maxTravel*progress).toFixed(3))+'px)';
+      if(showBar)show();
+    });
+  }
+
+  const onScroll=()=>sync(true);
+  list.addEventListener('scroll',onScroll,{passive:true});
+  list.addEventListener('wheel',()=>sync(true),{passive:true});
+  list.addEventListener('touchmove',()=>sync(true),{passive:true});
+  window.addEventListener('resize',()=>sync(false),{passive:true});
+  window.addEventListener('orientationchange',()=>setTimeout(()=>sync(false),80),{passive:true});
+
+  const ro=new ResizeObserver(()=>sync(false));
+  ro.observe(topbar); ro.observe(composer); ro.observe(list);
+  const mo=new MutationObserver(()=>sync(false));
+  mo.observe(list,{childList:true,subtree:true,characterData:true});
+  mo.observe(page,{attributes:true,attributeFilter:['class','style']});
+
+  // Re-sync after layout settles (fonts, mobile bars, lock modal, etc.)
+  [0,50,150,300].forEach(ms=>setTimeout(()=>sync(false),ms));
+  window.__chatStage9ScrollbarSync=()=>sync(false);
+})();
+</script>
+
 </body>
 </html>
