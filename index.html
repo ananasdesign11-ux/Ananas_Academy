@@ -16734,5 +16734,100 @@ body.chat-document-locked::-webkit-scrollbar,
     sync(false);
 })();
 </script>
+
+
+<!-- ===== CHAT STAGE 8: right scrollbar starts below top bar ===== -->
+<style id="chat-stage8-right-scrollbar-css">
+#courseChatPage .chat-custom-scrollbar{
+    left:auto!important;
+    right:0!important;
+    top:0!important;
+    bottom:auto!important;
+    width:3px!important;
+    z-index:35!important;
+    border-radius:999px!important;
+}
+#courseChatPage .chat-custom-scrollbar-thumb{
+    left:auto!important;
+    right:0!important;
+    width:3px!important;
+    max-width:3px!important;
+    border-radius:999px 0 0 999px!important;
+}
+</style>
+<script id="chat-stage8-right-scrollbar-js">
+(function(){
+    'use strict';
+    if(window.__chatStage8RightScrollbarInstalled)return;
+    window.__chatStage8RightScrollbarInstalled=true;
+    const page=document.getElementById('courseChatPage');
+    const shell=page?.querySelector('.chat-rebuilt-shell');
+    const list=document.getElementById('chatPageMessagesList');
+    const bar=page?.querySelector('.chat-custom-scrollbar');
+    const thumb=page?.querySelector('.chat-custom-scrollbar-thumb');
+    const topbar=page?.querySelector('.chat-topbar');
+    const composer=page?.querySelector('.chat-composer-shell');
+    if(!page||!shell||!list||!bar||!thumb||!topbar||!composer)return;
+
+    let raf=0;
+    function sync(show){
+        if(raf)return;
+        raf=requestAnimationFrame(()=>{
+            raf=0;
+            const shellRect=shell.getBoundingClientRect();
+            const topRect=topbar.getBoundingClientRect();
+            const composerRect=composer.getBoundingClientRect();
+            const viewport=list.clientHeight;
+            const content=list.scrollHeight;
+            const start=Math.max(0,topRect.bottom-shellRect.top);
+            const end=Math.max(start,composerRect.top-shellRect.top);
+            const trackHeight=Math.max(1,end-start);
+
+            bar.style.top=start+'px';
+            bar.style.height=trackHeight+'px';
+
+            if(!viewport||!content||content<=viewport+1){
+                bar.classList.remove('visible');
+                thumb.style.height='0px';
+                thumb.style.transform='translateY(0)';
+                return;
+            }
+
+            const ratio=Math.min(1,viewport/content);
+            const thumbHeight=Math.max(28,Math.min(trackHeight,trackHeight*ratio));
+            const maxTravel=Math.max(0,trackHeight-thumbHeight);
+            const maxScroll=Math.max(1,content-viewport);
+            const progress=Math.min(1,Math.max(0,list.scrollTop/maxScroll));
+
+            thumb.style.height=thumbHeight+'px';
+            thumb.style.transform='translateY('+(maxTravel*progress)+'px)';
+            if(show){
+                bar.classList.add('visible');
+                clearTimeout(sync._hide);
+                sync._hide=setTimeout(()=>bar.classList.remove('visible'),2000);
+            }
+        });
+    }
+
+    list.addEventListener('scroll',()=>sync(true),{passive:true});
+    list.addEventListener('wheel',()=>sync(true),{passive:true});
+    list.addEventListener('touchstart',()=>sync(true),{passive:true});
+    window.addEventListener('resize',()=>sync(false),{passive:true});
+    window.addEventListener('orientationchange',()=>setTimeout(()=>sync(false),80),{passive:true});
+
+    const ro=new ResizeObserver(()=>sync(false));
+    ro.observe(shell);
+    ro.observe(topbar);
+    ro.observe(composer);
+    ro.observe(list);
+
+    const mo=new MutationObserver(()=>sync(false));
+    mo.observe(list,{childList:true,subtree:true,characterData:true});
+    mo.observe(page,{attributes:true,attributeFilter:['class','style']});
+
+    window.__chatStage8ScrollbarSync=()=>sync(false);
+    sync(false);
+})();
+</script>
 </body>
 </html>
