@@ -16837,5 +16837,124 @@ body.light-mode #courseChatPage .chat-msg.received .reply-block .rt{
 }
 </style>
 
+
+
+<!-- STAGE 17 FINAL: five-line composer + emoji picker anchored to its button -->
+<style id="chat-stage17-input-emoji-final-css">
+#courseChatPage .chat-input-group{
+    align-items:flex-end!important;
+    overflow:visible!important;
+}
+#courseChatPage .chat-composer-btn,
+#courseChatPage .chat-send-btn,
+#courseChatPage #chatImageBtnPage{
+    flex:0 0 40px!important;
+    width:40px!important;
+    height:40px!important;
+    min-width:40px!important;
+    min-height:40px!important;
+    align-self:flex-end!important;
+}
+#courseChatPage #fullChatPageInput{
+    height:40px!important;
+    min-height:40px!important;
+    max-height:calc((1.55em * 5) + 18px)!important;
+    overflow-y:auto!important;
+    overflow-x:hidden!important;
+    resize:none!important;
+    overscroll-behavior:contain!important;
+    scrollbar-width:none!important;
+    -ms-overflow-style:none!important;
+}
+#courseChatPage #fullChatPageInput::-webkit-scrollbar,
+#courseChatPage #fullChatPageInput::-webkit-scrollbar-track,
+#courseChatPage #fullChatPageInput::-webkit-scrollbar-thumb{
+    width:0!important;
+    height:0!important;
+    display:none!important;
+    background:transparent!important;
+    border:0!important;
+}
+#courseChatPage #chatEmojiPickerPage{
+    position:fixed!important;
+    top:auto!important;
+    right:auto!important;
+    bottom:auto!important;
+    transform:translateX(-50%)!important;
+    display:none!important;
+    z-index:100000!important;
+}
+#courseChatPage #chatEmojiPickerPage.active{
+    display:grid!important;
+}
+@media(max-width:380px){
+    #courseChatPage .chat-composer-btn,
+    #courseChatPage .chat-send-btn,
+    #courseChatPage #chatImageBtnPage{
+        flex-basis:37px!important;
+        width:37px!important;
+        height:37px!important;
+        min-width:37px!important;
+        min-height:37px!important;
+    }
+    #courseChatPage #fullChatPageInput{
+        height:37px!important;
+        min-height:37px!important;
+    }
+}
+</style>
+<script id="chat-stage17-input-emoji-final-js">
+(function(){
+    'use strict';
+    const input=document.getElementById('fullChatPageInput');
+    const picker=document.getElementById('chatEmojiPickerPage');
+    const emojiBtn=document.getElementById('chatEmojiBtnPage');
+    if(!input)return;
+    const lineCountMax=5;
+
+    function syncInputHeight(){
+        const cs=getComputedStyle(input);
+        const line=parseFloat(cs.lineHeight)||((parseFloat(cs.fontSize)||15)*1.55);
+        const pad=(parseFloat(cs.paddingTop)||0)+(parseFloat(cs.paddingBottom)||0);
+        const min=parseFloat(cs.minHeight)||40;
+        const max=Math.ceil(line*lineCountMax+pad);
+        input.style.height='auto';
+        const target=Math.min(Math.max(input.scrollHeight,min),max);
+        input.style.height=Math.round(target)+'px';
+        input.style.overflowY=input.scrollHeight>max+1?'auto':'hidden';
+        positionEmojiPicker();
+    }
+
+    function positionEmojiPicker(){
+        if(!picker||!emojiBtn||!picker.classList.contains('active'))return;
+        const r=emojiBtn.getBoundingClientRect();
+        const gap=8;
+        const width=Math.min(window.innerWidth<=700?300:340,Math.max(180,window.innerWidth-20));
+        let center=r.left+(r.width/2);
+        const half=width/2;
+        center=Math.max(10+half,Math.min(window.innerWidth-10-half,center));
+        const bottom=Math.max(8,window.innerHeight-r.top+gap);
+        picker.style.width=width+'px';
+        picker.style.left=Math.round(center)+'px';
+        picker.style.bottom=Math.round(bottom)+'px';
+        picker.style.top='auto';
+        picker.style.right='auto';
+    }
+
+    input.addEventListener('input',syncInputHeight,{passive:true});
+    input.addEventListener('focus',syncInputHeight,{passive:true});
+    input.addEventListener('keyup',syncInputHeight,{passive:true});
+    window.addEventListener('resize',syncInputHeight,{passive:true});
+    window.addEventListener('resize',positionEmojiPicker,{passive:true});
+    window.addEventListener('scroll',positionEmojiPicker,{passive:true,capture:true});
+    document.addEventListener('click',e=>{
+        if(e.target?.closest?.('#chatEmojiBtnPage'))requestAnimationFrame(positionEmojiPicker);
+    },true);
+    const observer=new MutationObserver(()=>requestAnimationFrame(positionEmojiPicker));
+    if(picker)observer.observe(picker,{attributes:true,attributeFilter:['class','style']});
+    syncInputHeight();
+})();
+</script>
+
 </body>
 </html>
