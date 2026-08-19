@@ -16404,258 +16404,255 @@ syncHeight();
 })();
 </script>
 
-
-<style id="chat-stage23-read-state-css">
-/* Stage 23: unread badge/read-state styling only. */
-#courseChatPage .chat-scroll-bottom{position:fixed!important;}
-#courseChatPage #chatUnreadCount.chat-unread-count.chat-unread-purple{
-  display:grid!important;
-  place-items:center!important;
-  min-width:20px!important;
-  height:20px!important;
-  padding:0 5px!important;
-  border-radius:999px!important;
-  background:linear-gradient(135deg,#8b7cff,#6c5ce7)!important;
-  color:#fff!important;
-  border:2px solid var(--bg-primary)!important;
-  box-shadow:0 4px 14px rgba(108,92,231,.32)!important;
-  font-size:.64rem!important;
-  font-weight:900!important;
-  line-height:1!important;
-  position:absolute!important;
-  top:-7px!important;
-  inset-inline-end:-7px!important;
-  pointer-events:none!important;
+\n<style id="chat-stage23-unread-ui-css">
+/* Stage 23: unread state UI. */
+#courseChatPage .chat-scroll-bottom{overflow:visible!important;}
+#courseChatPage .chat-unread-count{
+  position:absolute!important;top:-7px!important;right:-7px!important;left:auto!important;
+  min-width:21px!important;height:21px!important;padding:0 6px!important;
+  display:inline-flex!important;align-items:center!important;justify-content:center!important;
+  border-radius:999px!important;background:#6c5ce7!important;color:#fff!important;
+  border:2px solid var(--bg-primary)!important;box-shadow:0 5px 14px rgba(108,92,231,.34)!important;
+  font:800 .68rem/1 var(--font-family,inherit)!important;white-space:nowrap!important;z-index:4!important;
 }
-#courseChatPage #chatUnreadDivider{
-  align-self:stretch!important;
-  display:flex!important;
-  align-items:center!important;
-  justify-content:center!important;
-  gap:9px!important;
-  margin:14px 8px 10px!important;
-  color:#fff!important;
-  font-size:.72rem!important;
-  font-weight:900!important;
+#courseDashboard .dashboard-btn[data-chat-entry]{position:relative!important;}
+.chat-dashboard-unread-badge{
+  position:absolute!important;top:10px!important;right:10px!important;
+  min-width:22px!important;height:22px!important;padding:0 6px!important;
+  display:inline-flex!important;align-items:center!important;justify-content:center!important;
+  border-radius:999px!important;background:#6c5ce7!important;color:#fff!important;
+  border:2px solid var(--bg-card)!important;box-shadow:0 5px 14px rgba(108,92,231,.30)!important;
+  font:800 .68rem/1 var(--font-family,inherit)!important;z-index:3!important;
+}
+.chat-unread-divider{
+  align-self:stretch!important;display:flex!important;align-items:center!important;gap:10px!important;
+  margin:12px 0 8px!important;color:#6c5ce7!important;font-size:.72rem!important;font-weight:900!important;
   letter-spacing:.01em!important;
 }
-#courseChatPage #chatUnreadDivider::before,
-#courseChatPage #chatUnreadDivider::after{
-  content:"";
-  flex:1 1 80px;
-  height:1px;
-  background:linear-gradient(90deg,transparent,rgba(108,92,231,.45));
+.chat-unread-divider::before,.chat-unread-divider::after{
+  content:"";height:1px;flex:1 1 auto;background:linear-gradient(90deg,transparent,rgba(108,92,231,.42));
 }
-#courseChatPage #chatUnreadDivider::after{background:linear-gradient(90deg,rgba(108,92,231,.45),transparent);}
-#courseChatPage #chatUnreadDivider span{
-  padding:5px 11px;
-  border-radius:999px;
-  background:linear-gradient(135deg,rgba(108,92,231,.96),rgba(91,75,210,.96));
-  box-shadow:0 6px 18px rgba(108,92,231,.20);
+.chat-unread-divider::after{background:linear-gradient(90deg,rgba(108,92,231,.42),transparent);}
+.chat-unread-divider span{
+  padding:5px 10px;border:1px solid rgba(108,92,231,.22);border-radius:999px;
+  background:color-mix(in srgb,var(--bg-card) 92%,#6c5ce7 8%);box-shadow:0 5px 14px rgba(108,92,231,.08);
   white-space:nowrap;
 }
-.dashboard-chat-unread-badge{
-  position:absolute!important;
-  top:12px!important;
-  inset-inline-end:12px!important;
-  min-width:22px!important;
-  height:22px!important;
-  padding:0 6px!important;
-  display:grid!important;
-  place-items:center!important;
-  border-radius:999px!important;
-  background:linear-gradient(135deg,#8b7cff,#6c5ce7)!important;
-  color:#fff!important;
-  border:2px solid var(--bg-card)!important;
-  box-shadow:0 5px 16px rgba(108,92,231,.28)!important;
-  font-size:.65rem!important;
-  font-weight:900!important;
-  line-height:1!important;
-  pointer-events:none!important;
-  z-index:4!important;
-}
-.dashboard-chat-unread-badge[hidden]{display:none!important;}
-body.light-mode .dashboard-chat-unread-badge{border-color:#fff!important;}
 </style>
-<script id="chat-stage23-read-state-js">
+
+<script id="chat-stage23-unread-system-js">
 (function(){
   'use strict';
-  if(window.__chatStage23ReadStateInstalled)return;
-  window.__chatStage23ReadStateInstalled=true;
+  if(window.__chatStage23UnreadSystemInstalled)return;
+  window.__chatStage23UnreadSystemInstalled=true;
 
-  const $=id=>document.getElementById(id);
-  const badge=$('chatUnreadCount');
-  const chatBtn=$('chatScrollBottomBtn');
-  const chatList=$('chatPageMessagesList');
-  let monitorUnsub=null;
-  let monitorCourseId=null;
-  let monitorReadAt=0;
-  let unreadDocs=[];
-  let latestMessageAt=0;
-  let dashboardBadge=null;
-  let pendingUnreadScroll=true;
+  const chatList=document.getElementById('chatPageMessagesList');
+  const chatPage=document.getElementById('courseChatPage');
+  const scrollBtn=document.getElementById('chatScrollBottomBtn');
+  const unreadBadge=document.getElementById('chatUnreadCount');
+  const dashboard=document.getElementById('courseDashboard');
+  if(!chatList||!chatPage)return;
 
-  function userKey(){ return String(window.currentUser?.uid||'guest'); }
-  function storageKey(courseId){ return 'ananas.chat.read.'+userKey()+'.'+String(courseId); }
-  function getReadAt(courseId){
-    try{return Number(localStorage.getItem(storageKey(courseId))||0)||0;}catch(_){return 0;}
+  let watchUnsub=null;
+  let watchedCourseId=null;
+  let unreadFirstId=null;
+  let unreadCount=0;
+  let lastStateSignature='';
+  let observerTimer=null;
+
+  function uid(){return currentUser?.uid||'guest';}
+  function stateKey(courseId){return `ananas.chat.read.${uid()}.${courseId}`;}
+  function readState(courseId){
+    try{const raw=localStorage.getItem(stateKey(courseId));return raw?Number(raw)||0:0;}catch(_){return 0;}
   }
-  function setReadAt(courseId,ms){
+  function saveRead(courseId,ms){
     if(!courseId||!Number.isFinite(ms)||ms<=0)return;
-    monitorReadAt=ms;
-    try{localStorage.setItem(storageKey(courseId),String(ms));}catch(_){ }
+    try{localStorage.setItem(stateKey(courseId),String(Math.floor(ms)));}catch(_){}
   }
-  function docMs(doc){
-    const v=doc?.data?.().createdAt;
-    return v?.toDate ? v.toDate().getTime() : (v?.seconds ? Number(v.seconds)*1000 : 0);
+  function tsMs(v){
+    if(v?.toDate){const d=v.toDate();return Number.isFinite(d.getTime())?d.getTime():0;}
+    if(v?.seconds)return Number(v.seconds)*1000+Math.floor(Number(v.nanoseconds||0)/1e6);
+    if(v instanceof Date)return v.getTime();
+    const n=Number(v);return Number.isFinite(n)?n:0;
   }
-  function isOtherMessage(doc){ return String(doc?.data?.().userId||'')!==String(window.currentUser?.uid||''); }
+  function currentOpenChat(){return chatPage.classList.contains('active')||getComputedStyle(chatPage).display!=='none';}
+  function formatCount(n){return n>99?'99+':String(Math.max(0,n));}
 
-  function ensureDashboardBadge(){
-    const btn=document.querySelector('#courseDashboard .dashboard-btn[onclick*="switchCoursePage(\'chat\')"]');
-    if(!btn)return null;
-    btn.style.position='relative';
-    if(!btn.querySelector('.dashboard-chat-unread-badge')){
-      const b=document.createElement('span');
-      b.className='dashboard-chat-unread-badge';
-      b.hidden=true;
-      b.setAttribute('aria-label','رسائل غير مقروءة');
-      btn.appendChild(b);
-    }
-    return btn.querySelector('.dashboard-chat-unread-badge');
+  function dashboardChatButton(){
+    if(!dashboard)return null;
+    const btn=dashboard.querySelector('button.dashboard-btn[onclick*="chat"]');
+    if(btn)btn.dataset.chatEntry='1';
+    return btn;
   }
-  function setBadgeCount(count){
-    const n=Math.max(0,Number(count)||0);
-    if(badge){
-      badge.classList.toggle('chat-unread-purple',n>0);
-      badge.hidden=n<=0;
-      badge.textContent=n>99?'99+':String(n);
-    }
-    const b=ensureDashboardBadge();
-    if(b){b.hidden=n<=0;b.textContent=n>99?'99+':String(n);}
-    if(chatBtn && n>0){chatBtn.classList.add('visible');chatBtn.setAttribute('aria-hidden','false');}
+  function renderDashboardBadge(count){
+    const btn=dashboardChatButton();
+    if(!btn)return;
+    let badge=btn.querySelector('.chat-dashboard-unread-badge');
+    if(count>0){
+      if(!badge){badge=document.createElement('span');badge.className='chat-dashboard-unread-badge';badge.setAttribute('aria-label','رسائل جديدة');btn.appendChild(badge);}
+      badge.textContent=formatCount(count);
+      badge.hidden=false;
+    }else if(badge){badge.remove();}
   }
 
-  function clearUnreadDivider(){
-    const old=$('chatUnreadDivider'); if(old)old.remove();
-  }
-  function injectUnreadDividerAndPosition(){
-    if(!chatList || !unreadDocs.length)return false;
-    clearUnreadDivider();
-    const ids=new Set(unreadDocs.map(d=>d.id));
-    let target=null;
-    for(const el of chatList.querySelectorAll('[data-message-id]')){
-      if(ids.has(el.getAttribute('data-message-id'))){target=el;break;}
-    }
-    if(!target)return false;
-    const div=document.createElement('div');
-    div.id='chatUnreadDivider';
-    div.setAttribute('role','separator');
-    div.innerHTML='<span>رسائل غير مقروءة</span>';
-    target.parentNode.insertBefore(div,target);
-    return true;
-  }
-  function positionAtUnread(){
-    if(!chatList)return;
-    const divider=$('chatUnreadDivider');
-    if(divider){
-      chatList.scrollTo({top:Math.max(0,divider.offsetTop-12),behavior:'auto'});
-    }
-  }
-  function markRead(){
-    if(!monitorCourseId||!latestMessageAt)return;
-    setReadAt(monitorCourseId,latestMessageAt);
-    unreadDocs=[];
-    setBadgeCount(0);
-    clearUnreadDivider();
-    pendingUnreadScroll=false;
+  function renderFloatingBadge(){
+    if(!unreadBadge)return;
+    unreadBadge.hidden=unreadCount<=0;
+    unreadBadge.textContent=formatCount(unreadCount);
   }
 
-  function stopMonitor(){
-    try{monitorUnsub?.();}catch(_){ }
-    monitorUnsub=null;monitorCourseId=null;unreadDocs=[];latestMessageAt=0;
+  function setUnreadState(count,firstId){
+    unreadCount=Math.max(0,Number(count)||0);
+    unreadFirstId=firstId||null;
+    renderFloatingBadge();
+    renderDashboardBadge(unreadCount);
+    lastStateSignature=`${unreadCount}|${unreadFirstId||''}`;
   }
-  function startMonitor(courseId){
-    if(!courseId||!window.db)return;
-    if(monitorCourseId===courseId && monitorUnsub)return;
-    stopMonitor();
-    monitorCourseId=courseId;
-    monitorReadAt=getReadAt(courseId);
-    pendingUnreadScroll=true;
+
+  function stopWatcher(){
+    if(watchUnsub){try{watchUnsub();}catch(_){}watchUnsub=null;}
+    watchedCourseId=null;
+  }
+
+  async function ensureBaseline(courseId){
+    if(readState(courseId)>0)return readState(courseId);
     try{
-      monitorUnsub=db.collection('courses').doc(courseId).collection('chat')
-        .orderBy('createdAt','asc')
-        .onSnapshot(snapshot=>{
-          latestMessageAt=0;
-          const all=snapshot.docs;
-          all.forEach(d=>{latestMessageAt=Math.max(latestMessageAt,docMs(d));});
-          if(!monitorReadAt && all.length){
-            /* First visit: establish a baseline without showing old history as unread. */
-            setReadAt(courseId,latestMessageAt);
-            unreadDocs=[];
-          }else{
-            unreadDocs=all.filter(d=>docMs(d)>monitorReadAt && docMs(d)>0 && isOtherMessage(d));
-          }
-          setBadgeCount(unreadDocs.length);
-          if($('courseChatPage')?.classList.contains('active') && unreadDocs.length){
-            pendingUnreadScroll=true;
-            requestAnimationFrame(()=>{
-              if(injectUnreadDividerAndPosition())positionAtUnread();
-            });
-          }
-        },err=>console.warn('chat unread monitor',err));
-    }catch(e){console.warn('chat unread monitor init',e);}
+      const snap=await db.collection('courses').doc(courseId).collection('chat').orderBy('createdAt','desc').limit(1).get();
+      const last=snap.docs[0]?.data()?.createdAt;
+      const ms=tsMs(last)||Date.now();
+      saveRead(courseId,ms);
+      return ms;
+    }catch(_){
+      saveRead(courseId,Date.now());
+      return Date.now();
+    }
   }
 
+  async function markReadToLatest(courseId){
+    if(!courseId)return;
+    try{
+      const snap=await db.collection('courses').doc(courseId).collection('chat').orderBy('createdAt','desc').limit(1).get();
+      const ms=tsMs(snap.docs[0]?.data()?.createdAt)||Date.now();
+      saveRead(courseId,ms);
+    }catch(_){}
+    setUnreadState(0,null);
+  }
+
+  function applyUnreadMarker(){
+    if(!currentOpenChat()||!unreadFirstId||unreadCount<=0)return;
+    const target=chatList.querySelector(`[data-message-id="${CSS.escape(unreadFirstId)}"]`);
+    if(!target)return;
+    if(!target.previousElementSibling?.classList.contains('chat-unread-divider')){
+      const marker=document.createElement('div');
+      marker.className='chat-unread-divider';
+      marker.setAttribute('role','separator');
+      marker.innerHTML='<span>رسائل غير مقروءة</span>';
+      target.parentNode.insertBefore(marker,target);
+    }
+    clearTimeout(observerTimer);
+    observerTimer=setTimeout(()=>{
+      if(!target.isConnected)return;
+      chatList.scrollTo({top:Math.max(0,target.offsetTop-12),behavior:'auto'});
+      const distance=chatList.scrollHeight-chatList.clientHeight-chatList.scrollTop;
+      if(distance>80){
+        try{window.__chatStage23ForceUnreadView?.();}catch(_){}
+      }
+    },30);
+  }
+
+  function startWatcher(courseId){
+    if(!courseId||currentOpenChat()||watchedCourseId===courseId)return;
+    stopWatcher();
+    watchedCourseId=courseId;
+    (async()=>{
+      const baseline=await ensureBaseline(courseId);
+      if(watchedCourseId!==courseId)return;
+      try{
+        watchUnsub=db.collection('courses').doc(courseId).collection('chat')
+          .where('createdAt','>',firebase.firestore.Timestamp.fromMillis(baseline))
+          .orderBy('createdAt','asc')
+          .onSnapshot(snap=>{
+            if(watchedCourseId!==courseId)return;
+            let count=0,firstId=null;
+            snap.docs.forEach(doc=>{
+              const m=doc.data()||{};
+              if(m.userId===uid()||m.userId===currentUser?.uid) return;
+              if(!firstId)firstId=doc.id;
+              count++;
+            });
+            setUnreadState(count,firstId);
+          },()=>{setUnreadState(0,null);});
+      }catch(_){setUnreadState(0,null);}
+    })();
+  }
+
+  // Public hook for the existing chat scroll handler and opening logic.
+  window.__chatStage23ForceUnreadView=function(){
+    if(scrollBtn)scrollBtn.classList.add('visible');
+    if(unreadBadge){unreadBadge.hidden=unreadCount<=0;unreadBadge.textContent=formatCount(unreadCount);}
+  };
+
+  // Mark messages as read only after the user reaches the newest message.
+  chatList.addEventListener('scroll',()=>{
+    const distance=chatList.scrollHeight-chatList.clientHeight-chatList.scrollTop;
+    if(distance<=80 && activeCourseId){
+      const course=activeCourseId;
+      if(unreadCount>0||readState(course)>0) markReadToLatest(course);
+      else setUnreadState(0,null);
+    }
+  },{passive:true});
+
+  // When chat opens, wait for its first render, then place the viewport at the first unread message.
+  const chatObserver=new MutationObserver(()=>{
+    if(currentOpenChat())requestAnimationFrame(()=>requestAnimationFrame(applyUnreadMarker));
+  });
+  chatObserver.observe(chatList,{childList:true,subtree:true});
+
+  // Patch the existing page navigation without replacing its implementation.
   const oldSwitch=window.switchCoursePage;
   if(typeof oldSwitch==='function'&&!oldSwitch.__chatStage23Wrapped){
     const wrapped=function(page){
       const result=oldSwitch.apply(this,arguments);
-      if(window.activeCourseId)startMonitor(window.activeCourseId);
-      if(page==='chat'){
-        pendingUnreadScroll=true;
-        setTimeout(()=>{
-          if(unreadDocs.length){
-            if(injectUnreadDividerAndPosition())positionAtUnread();
-          }else if(chatList){
-            chatList.scrollTo({top:chatList.scrollHeight,left:0,behavior:'auto'});
-          }
-        },140);
-      }
-      return result;
-    };
-    wrapped.__chatStage23Wrapped=true;
-    window.switchCoursePage=wrapped;
-  }
-
-  const oldLoad=window.loadChatPage;
-  if(typeof oldLoad==='function'&&!oldLoad.__chatStage23LoadWrapped){
-    const wrappedLoad=async function(courseId){
-      startMonitor(courseId);
-      const result=await oldLoad.apply(this,arguments);
       setTimeout(()=>{
-        if(unreadDocs.length){
-          if(injectUnreadDividerAndPosition())positionAtUnread();
-        }else if(chatList){
-          chatList.scrollTo({top:chatList.scrollHeight,left:0,behavior:'auto'});
+        if(page==='chat'){
+          stopWatcher();
+          requestAnimationFrame(()=>requestAnimationFrame(applyUnreadMarker));
+        }else if(activeCourseId){
+          startWatcher(activeCourseId);
         }
-      },220);
+      },60);
       return result;
     };
-    wrappedLoad.__chatStage23LoadWrapped=true;
-    window.loadChatPage=wrappedLoad;
+    wrapped.__chatStage23Wrapped=true;wrapped.__original=oldSwitch;window.switchCoursePage=wrapped;
   }
 
-  chatList?.addEventListener('scroll',()=>{
-    if(!monitorCourseId||!unreadDocs.length)return;
-    const distance=chatList.scrollHeight-chatList.clientHeight-chatList.scrollTop;
-    if(distance<=24)markRead();
-  },{passive:true});
+  const oldOpenCourse=window.openCourseContent;
+  if(typeof oldOpenCourse==='function'&&!oldOpenCourse.__chatStage23Wrapped){
+    const wrapped=async function(courseId){
+      const result=await oldOpenCourse.apply(this,arguments);
+      setTimeout(()=>startWatcher(courseId),80);
+      return result;
+    };
+    wrapped.__chatStage23Wrapped=true;wrapped.__original=oldOpenCourse;window.openCourseContent=wrapped;
+  }
 
-  ensureDashboardBadge();
-  if(window.activeCourseId)startMonitor(window.activeCourseId);
+  document.getElementById('backToCoursesBtn')?.addEventListener('click',()=>stopWatcher(),true);
+
+  // If the active course changes outside the wrapped navigation, reconcile it cheaply.
+  let lastCourse=null;
+  setInterval(()=>{
+    const cid=activeCourseId||null;
+    if(cid!==lastCourse){
+      lastCourse=cid;
+      if(!cid)stopWatcher();
+      else if(!currentOpenChat())startWatcher(cid);
+      renderDashboardBadge(unreadCount);
+    }
+    if(currentOpenChat())applyUnreadMarker();
+  },800);
+
+  // When the dashboard is shown again, refresh its badge from current persisted state.
+  renderDashboardBadge(unreadCount);
 })();
-</script>
-
-</body>
+</script>\n</body>
 </html>
