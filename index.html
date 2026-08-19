@@ -16356,9 +16356,28 @@ body.light-mode .chat-single-scrollbar-thumb{
                 return;
             }
 
-            const rect=list.getBoundingClientRect();
-            const trackTop=Math.max(0,rect.top);
-            const trackBottom=Math.min(window.innerHeight,rect.bottom);
+            const pageRect=page.getBoundingClientRect();
+            const topbar=document.getElementById('chatTopbar');
+            const banner=document.getElementById('chatLockBannerPage');
+            const composer=document.querySelector('#courseChatPage .chat-composer-shell');
+            const topbarRect=topbar?.getBoundingClientRect?.();
+            const bannerRect=banner?.getBoundingClientRect?.();
+            const composerRect=composer?.getBoundingClientRect?.();
+            const listRect=list.getBoundingClientRect();
+
+            /* The scrollbar track is exactly the visible message viewport: below
+               the top bar/lock banner and above the composer, never outside it. */
+            const trackTop=Math.max(0,
+                pageRect.top,
+                topbarRect?.bottom ?? listRect.top,
+                bannerRect?.bottom ?? listRect.top,
+                listRect.top
+            );
+            const trackBottom=Math.min(window.innerHeight,
+                pageRect.bottom,
+                composerRect?.top ?? listRect.bottom,
+                listRect.bottom
+            );
             const trackHeight=Math.max(0,trackBottom-trackTop);
             const viewport=Math.max(0,list.clientHeight);
             const content=Math.max(0,list.scrollHeight);
@@ -16410,9 +16429,26 @@ body.light-mode .chat-single-scrollbar-thumb{
 
     thumb.addEventListener('pointermove',e=>{
         if(!dragging || e.pointerId!==dragPointerId)return;
-        const rect=list.getBoundingClientRect();
-        const trackTop=Math.max(0,rect.top);
-        const trackHeight=Math.max(0,Math.min(window.innerHeight,rect.bottom)-trackTop);
+        const pageRect=page.getBoundingClientRect();
+        const topbar=document.getElementById('chatTopbar');
+        const banner=document.getElementById('chatLockBannerPage');
+        const composer=document.querySelector('#courseChatPage .chat-composer-shell');
+        const topbarRect=topbar?.getBoundingClientRect?.();
+        const bannerRect=banner?.getBoundingClientRect?.();
+        const composerRect=composer?.getBoundingClientRect?.();
+        const listRect=list.getBoundingClientRect();
+        const trackTop=Math.max(0,
+            pageRect.top,
+            topbarRect?.bottom ?? listRect.top,
+            bannerRect?.bottom ?? listRect.top,
+            listRect.top
+        );
+        const trackBottom=Math.min(window.innerHeight,
+            pageRect.bottom,
+            composerRect?.top ?? listRect.bottom,
+            listRect.bottom
+        );
+        const trackHeight=Math.max(0,trackBottom-trackTop);
         const viewport=Math.max(0,list.clientHeight);
         const content=Math.max(0,list.scrollHeight);
         const maxScroll=Math.max(0,content-viewport);
@@ -16463,5 +16499,15 @@ body.light-mode .chat-single-scrollbar-thumb{
 })();
 </script>
 
+
+<style id="chat-scrollbar-stage11-edge-lock-css">
+/* The fixed scrollbar is positioned only by JS inside the message viewport. */
+.chat-single-scrollbar{
+  top:0!important;
+  bottom:auto!important;
+  right:2px!important;
+  max-height:100dvh!important;
+}
+</style>
 </body>
 </html>
