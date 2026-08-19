@@ -2138,11 +2138,7 @@ label[for*="En"], input[id*="En"], textarea[id*="En"] { display:none !important;
                             <i class="fas fa-arrow-right"></i>
                             <span>عودة</span>
                         </button>
-                        <div id="chatAdminToolsPage" class="chat-admin-tools admin-only ananas-chat-admin-tools">
-                            <button id="clearChatPageBtn" type="button"><i class="fas fa-trash"></i> حذف المحادثة كلها</button>
-                            <button id="chatLockBtn" type="button"><i class="fas fa-lock"></i> قفل الدردشة</button>
-                            <button id="chatUnlockBtn" type="button" style="display:none;"><i class="fas fa-lock-open"></i> فتح الدردشة</button>
-                        </div>
+                        <div id="chatAdminControlsHost" class="ananas-chat-admin-host" aria-hidden="true"></div>
                     </div>
 
                     <div id="chatLockBannerPage" class="chat-lock-banner ananas-chat-lock-banner"></div>
@@ -7916,12 +7912,11 @@ label[for*="En"], input[id*="En"], textarea[id*="En"] { display:none !important;
           const m=doc.data()||{};
           const date=m.createdAt?.toDate?m.createdAt.toDate():
             (m.createdAt?.seconds?new Date(m.createdAt.seconds*1000):new Date());
-          const dateKey=date.toLocaleDateString('ar-SA',{
-            year:'numeric',month:'long',day:'numeric'
-          });
+          const dateKey=date.toLocaleDateString('en-CA',{timeZone:'Asia/Riyadh',year:'numeric',month:'2-digit',day:'2-digit'});
+          const dividerLabel=window.__ananasFormatChatDateDivider ? window.__ananasFormatChatDateDivider(date) : date.toLocaleDateString('ar-SA',{timeZone:'Asia/Riyadh',day:'numeric',month:'long'});
 
           if(dateKey!==lastDate){
-            html+=`<div style="text-align:center;margin:15px 0;font-size:.8rem;color:var(--text-muted);"><span style="background:var(--bg-card);padding:5px 15px;border-radius:20px;">${escapeHtml(dateKey)}</span></div>`;
+            html+=`<div class="ananas-chat-date-divider" data-chat-date-divider="1" data-chat-date-ts="${date.getTime()}" role="separator"><span>${escapeHtml(dividerLabel)}</span></div>`;
             lastDate=dateKey;
             previousUserId=null;
             previousWasReceived=false;
@@ -15281,26 +15276,152 @@ body.light-mode #lessonVideoWrapper .aa-speed-value{color:#172033!important;}
 </script>
 
 
-<script id="ananas-chat-stage1-controller">
+<script id="ananas-chat-stage2-controller">
 (function(){
   'use strict';
-  function init(){
-    const page=document.getElementById('courseChatPage');
-    const list=document.getElementById('chatPageMessagesList');
-    const button=document.getElementById('chatScrollBottomBtn');
-    const badge=document.getElementById('chatScrollBottomCount');
-    if(!page||!list||!button||!badge||button.dataset.bound==='1')return;
-    button.dataset.bound='1';
-    button.dataset.unreadCount='0';
+  if(window.__ananasChatStage2Controller)return;
+  window.__ananasChatStage2Controller=true;
 
+  const byId=id=>document.getElementById(id);
+  const safeIsAdmin=()=>typeof isAdmin!=='undefined' && isAdmin===true;
+
+  function formatChatDateDivider(date){
+    if(!(date instanceof Date) || Number.isNaN(date.getTime())) return 'تاريخ';
+    const fmt={timeZone:'Asia/Riyadh',year:'numeric',month:'2-digit',day:'2-digit'};
+    const key=date.toLocaleDateString('en-CA',fmt);
+    const now=new Date();
+    const todayKey=now.toLocaleDateString('en-CA',fmt);
+    const yesterday=new Date(now.getTime()-86400000);
+    const yesterdayKey=yesterday.toLocaleDateString('en-CA',fmt);
+    if(key===todayKey)return 'اليوم';
+    if(key===yesterdayKey)return 'أمس';
+    return date.toLocaleDateString('ar-SA',{timeZone:'Asia/Riyadh',day:'numeric',month:'long'});
+  }
+  window.__ananasFormatChatDateDivider=formatChatDateDivider;
+
+  function createAdminMenu(){
+    const host=byId('chatAdminControlsHost');
+    if(!host || !safeIsAdmin())return;
+    if(byId('chatAdminMenuBtn'))return;
+    host.setAttribute('aria-hidden','false');
+    host.innerHTML=`
+      <div class="ananas-chat-admin-menu-wrap">
+        <button id="chatAdminMenuBtn" class="ananas-chat-admin-menu-btn" type="button" aria-label="خيارات الإشراف" aria-expanded="false" aria-controls="chatAdminMenu">
+          <i class="fas fa-ellipsis-vertical" aria-hidden="true"></i>
+        </button>
+        <div id="chatAdminMenu" class="ananas-chat-admin-menu" hidden>
+          <button id="clearChatPageBtn" type="button"><i class="fas fa-trash"></i><span>حذف المحادثة كلها</span></button>
+          <button id="chatLockBtn" type="button"><i class="fas fa-lock"></i><span>قفل الدردشة</span></button>
+          <button id="chatUnlockBtn" type="button" hidden><i class="fas fa-lock-open"></i><span>فتح الدردشة</span></button>
+        </div>
+      </div>`;
+
+    const menu=byId('chatAdminMenu'), btn=byId('chatAdminMenuBtn');
+    btn?.addEventListener('click',e=>{
+      e.preventDefault(); e.stopPropagation();
+      const open=!menu.hidden;
+      menu.hidden=open;
+      btn.setAttribute('aria-expanded',String(!open));
+    });
+  }
+
+  function removeAdminMenu(){
+    const host=byId('chatAdminControlsHost');
+    if(!host)return;
+    host.innerHTML='';
+    host.setAttribute('aria-hidden','true');
+  }
+
+  function syncAdminMenu(){
+    if(safeIsAdmin())createAdminMenu();
+    else removeAdminMenu();
+    syncAdminLockButtons();
+  }
+
+  function syncAdminLockButtons(){
+    const lock=byId('chatLockBtn'), unlock=byId('chatUnlockBtn');
+    if(!lock||!unlock)return;
+    const locked=!!(typeof currentChatLock!=='undefined' && currentChatLock?.locked &&
+      (!currentChatLock?.endAt || Date.now() < (currentChatLock.endAt?.toDate ? currentChatLock.endAt.toDate().getTime() : Number(currentChatLock.endAt))));
+    lock.hidden=!safeIsAdmin()||locked;
+    unlock.hidden=!safeIsAdmin()||!locked;
+  }
+  window.__ananasChatStage2SyncAdmin=syncAdminMenu;
+
+  function installBackRoute(){
+    const currentSwitch=window.switchCoursePage;
+    if(typeof currentSwitch!=='function' || currentSwitch.__ananasChatStage2BackWrapper)return;
+    if(currentSwitch.__ananasChatStage2WrappedOriginal)return;
+    const wrapped=function(page){
+      if(page==='chat'){
+        const previous=(typeof currentCoursePage!=='undefined' ? currentCoursePage : 'dashboard');
+        window.__ananasChatPreviousPage=(previous && previous!=='chat')?previous:'dashboard';
+      }
+      return currentSwitch.apply(this,arguments);
+    };
+    wrapped.__ananasChatStage2BackWrapper=true;
+    wrapped.__ananasChatStage2WrappedOriginal=currentSwitch;
+    window.switchCoursePage=wrapped;
+  }
+
+  function bindBack(){
+    if(document.documentElement.dataset.ananasChatStage2BackBound==='1')return;
+    document.documentElement.dataset.ananasChatStage2BackBound='1';
+    document.addEventListener('click',e=>{
+      const btn=e.target?.closest?.('#fullPageCloseChatBtn');
+      if(!btn)return;
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      const previous=window.__ananasChatPreviousPage;
+      window.switchCoursePage?.(previous && previous!=='chat' ? previous : 'dashboard');
+    },true);
+  }
+
+  function bindAdminActions(){
+    document.addEventListener('click',async e=>{
+      const target=e.target?.closest?.('#clearChatPageBtn,#chatLockBtn,#chatUnlockBtn');
+      if(!target || !safeIsAdmin())return;
+      e.preventDefault(); e.stopPropagation();
+      if(target.id==='chatLockBtn'){
+        window.openChatLockDialog?.();
+        return;
+      }
+      if(target.id==='chatUnlockBtn'){
+        if(window.unlockCourseChat){await window.unlockCourseChat();return;}
+        if(!activeCourseId)return;
+        try{
+          await db.collection('courses').doc(activeCourseId).collection('settings').doc('chat').set({locked:false,startAt:null,endAt:null,reason:'',timezone:'Asia/Riyadh',updatedAt:firebase.firestore.FieldValue.serverTimestamp()},{merge:true});
+          currentChatLock={locked:false,startAt:null,endAt:null,reason:''};
+          window.applyChatLockNow?.();
+        }catch(err){console.error(err);showCustomAlert?.('خطأ','تعذر فتح الدردشة.');}
+        return;
+      }
+      if(target.id==='clearChatPageBtn'){
+        if(!activeCourseId)return;
+        showCustomConfirm?.('حذف المحادثة','سيتم حذف جميع الرسائل. هل أنت متأكد؟',async()=>{
+          const snap=await db.collection('courses').doc(activeCourseId).collection('chat').get();
+          const batch=db.batch(); snap.forEach(d=>batch.delete(d.ref)); await batch.commit();
+        });
+      }
+    },true);
+  }
+
+  function bindScrollAndTimeline(){
+    const list=byId('chatPageMessagesList'), button=byId('chatScrollBottomBtn'), badge=byId('chatScrollBottomCount');
+    if(!list||!button||!badge||button.dataset.stage2Bound==='1')return;
+    button.dataset.stage2Bound='1';
+    button.dataset.unreadCount='0';
+    let initialized=false;
+    let lastRenderedCount=0;
+
+    const nearBottom=()=>list.scrollHeight-list.scrollTop-list.clientHeight<=72;
     const update=()=>{
-      const distance=list.scrollHeight-list.scrollTop-list.clientHeight;
-      const nearBottom=distance<=72;
-      if(nearBottom){
+      const isNear=nearBottom();
+      if(isNear){
         button.dataset.unreadCount='0';
-        button.classList.remove('is-visible');
         badge.textContent='0';
         badge.classList.remove('is-visible');
+        button.classList.remove('is-visible');
         return;
       }
       const hasOverflow=list.scrollHeight>list.clientHeight+16;
@@ -15310,24 +15431,71 @@ body.light-mode #lessonVideoWrapper .aa-speed-value{color:#172033!important;}
       badge.classList.toggle('is-visible',unread>0);
     };
 
+    function convertTimeline(){
+      list.querySelectorAll('[data-chat-date-divider="1"]').forEach(div=>{
+        const timestamp=Number(div.dataset.chatDateTs||0);
+        if(timestamp){
+          const span=div.querySelector('span');
+          if(span)span.textContent=formatChatDateDivider(new Date(timestamp));
+        }
+      });
+    }
+    window.__ananasChatStage2Refresh=()=>{convertTimeline();update();};
+
     list.addEventListener('scroll',update,{passive:true});
     button.addEventListener('click',()=>{
       button.dataset.unreadCount='0';
       list.scrollTo({top:list.scrollHeight,behavior:'smooth'});
-      update();
+      setTimeout(update,180);
     });
 
     const observer=new MutationObserver(()=>{
-      if(list.dataset.chatInitialised!=='1')list.dataset.chatInitialised='1';
+      convertTimeline();
+      const messageNodes=[...list.querySelectorAll('.chat-msg[data-message-id]')];
+      const renderedCount=messageNodes.length;
+      if(!initialized){
+        initialized=true;
+        lastRenderedCount=renderedCount;
+        requestAnimationFrame(()=>list.scrollTop=list.scrollHeight);
+      }else if(renderedCount>lastRenderedCount && !nearBottom()){
+        const delta=renderedCount-lastRenderedCount;
+        button.dataset.unreadCount=String(Number(button.dataset.unreadCount||0)+delta);
+      }else if(nearBottom()){
+        button.dataset.unreadCount='0';
+      }
+      lastRenderedCount=renderedCount;
       update();
     });
-    observer.observe(list,{childList:true,subtree:false});
-
-    window.__ananasChatStage1UpdateScroll=update;
+    observer.observe(list,{childList:true,subtree:true});
+    window.__ananasChatStage2ListObserver=observer;
     update();
   }
-  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init,{once:true});
-  else init();
+
+  function watchAuthAdminState(){
+    const observer=new MutationObserver(mutations=>{
+      if(mutations.some(m=>m.target?.classList?.contains('admin-only')))syncAdminMenu();
+    });
+    observer.observe(document.body,{subtree:true,attributes:true,attributeFilter:['class']});
+    window.__ananasChatStage2AdminObserver=observer;
+    syncAdminMenu();
+  }
+
+  function patchTimelineRenderer(){
+    const fn=window.loadChatPage;
+    if(typeof fn!=='function' || fn.__ananasChatStage2TimelineWrapped)return;
+    return;
+  }
+
+  function boot(){
+    installBackRoute();
+    bindBack();
+    bindAdminActions();
+    bindScrollAndTimeline();
+    watchAuthAdminState();
+  }
+
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});
+  else boot();
 })();
 </script>
 <style id="ananas-chat-stage1-css">
@@ -15524,6 +15692,56 @@ body.light-mode #lessonVideoWrapper .aa-speed-value{color:#172033!important;}
 }
 @media(prefers-reduced-motion:reduce){
     #courseChatPage .ananas-chat-scroll-bottom { transition: none; }
+}
+</style>
+<style id="ananas-chat-stage2-css">
+/* ===== Ananas Academy — Course Chat Stage 2: Top Bar & Timeline ===== */
+#courseChatPage .ananas-chat-overlay-actions{inset:10px 12px auto!important;align-items:flex-start!important;}
+#courseChatPage .ananas-chat-back-btn{
+  width:42px!important;height:42px!important;min-height:42px!important;padding:0!important;border-radius:50%!important;
+  font-size:1rem!important;box-shadow:0 8px 24px rgba(0,0,0,.14)!important;
+}
+#courseChatPage .ananas-chat-back-btn span{display:none!important;}
+#courseChatPage .ananas-chat-admin-host{margin-inline-start:auto;display:flex;align-items:flex-start;}
+#courseChatPage .ananas-chat-admin-menu-wrap{position:relative;}
+#courseChatPage .ananas-chat-admin-menu-btn{
+  width:42px;height:42px;border:1px solid var(--border);border-radius:50%;background:var(--bg-secondary);color:var(--text-muted);
+  display:inline-flex;align-items:center;justify-content:center;cursor:pointer;font-family:inherit;font-size:1rem;
+  box-shadow:0 8px 24px rgba(0,0,0,.14);transition:.2s ease;
+}
+#courseChatPage .ananas-chat-admin-menu-btn:hover{color:var(--accent1);border-color:var(--accent1);transform:translateY(-1px);}
+#courseChatPage .ananas-chat-admin-menu{
+  position:absolute;top:calc(100% + 8px);inset-inline-end:0;min-width:190px;padding:7px;
+  background:var(--bg-secondary);border:1px solid var(--border);border-radius:16px;box-shadow:var(--shadow);z-index:80;
+}
+#courseChatPage .ananas-chat-admin-menu[hidden]{display:none!important;}
+#courseChatPage .ananas-chat-admin-menu button{
+  width:100%;display:flex;align-items:center;gap:9px;padding:10px 11px;border:0;border-radius:11px;background:transparent;
+  color:var(--text-primary);font-family:inherit;font-weight:700;text-align:start;cursor:pointer;
+}
+#courseChatPage .ananas-chat-admin-menu button:hover{background:var(--bg-card);color:var(--accent1);}
+#courseChatPage .ananas-chat-admin-menu button i{width:18px;text-align:center;}
+#courseChatPage .ananas-chat-admin-menu button[hidden]{display:none!important;}
+#courseChatPage .ananas-chat-date-divider{
+  flex:0 0 auto;display:flex;align-items:center;justify-content:center;gap:10px;margin:12px auto 10px;
+  width:100%;font-size:.76rem;color:var(--text-muted);text-align:center;
+}
+#courseChatPage .ananas-chat-date-divider::before,
+#courseChatPage .ananas-chat-date-divider::after{
+  content:"";height:1px;flex:1 1 70px;max-width:140px;background:var(--border);opacity:.8;
+}
+#courseChatPage .ananas-chat-date-divider span{
+  display:inline-flex;align-items:center;justify-content:center;min-width:70px;padding:4px 12px;border:1px solid var(--border);
+  border-radius:999px;background:var(--bg-card);color:var(--text-muted);font-weight:700;box-shadow:0 3px 10px rgba(0,0,0,.05);
+}
+@media(max-width:768px){
+  #courseChatPage .ananas-chat-overlay-actions{inset:8px 8px auto!important;}
+  #courseChatPage .ananas-chat-back-btn,#courseChatPage .ananas-chat-admin-menu-btn{width:38px!important;height:38px!important;}
+  #courseChatPage .ananas-chat-admin-menu{min-width:175px;}
+  #courseChatPage .ananas-chat-date-divider{margin:9px auto 7px;font-size:.72rem;}
+}
+@media(prefers-reduced-motion:reduce){
+  #courseChatPage .ananas-chat-admin-menu-btn{transition:none;}
 }
 </style>
 </body>
