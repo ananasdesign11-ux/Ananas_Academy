@@ -11776,8 +11776,8 @@ const nowMs=()=>Date.now();
       users.style.display='none';
       const note=document.createElement('div');
       note.id='globalCodeSuspendNote';
-      note.style.cssText='padding:11px 13px;border:1px solid var(--border);border-radius:14px;background:var(--bg-secondary);color:var(--text-muted);line-height:1.8;font-size:.84rem;margin:0 0 12px;';
-      note.textContent='الحساب المرتبط بهذا الكود';
+      note.style.cssText='display:flex;align-items:center;gap:12px;padding:11px 13px;border:1px solid var(--border);border-radius:14px;background:var(--bg-secondary);color:var(--text-primary);margin:0 0 12px;min-height:72px;';
+      note.innerHTML='<span style="width:52px;height:52px;flex:0 0 52px;border-radius:50%;overflow:hidden;display:grid;place-items:center;background:var(--accent-gradient);color:#fff;font-weight:900;font-size:1rem;"><i class="fas fa-user"></i></span><span style="min-width:0;display:flex;flex-direction:column;gap:3px;"><strong style="font-size:.92rem;">جاري تحميل بيانات الحساب...</strong><small style="color:var(--text-muted);">جاري تحميل البريد الإلكتروني</small></span>';
       users.parentNode.insertBefore(note,users);
     }
     const btn=$('confirmCourseSuspendBtn'); if(btn) btn.textContent='إيقاف الكود';
@@ -11870,22 +11870,32 @@ window.toggleEnrollmentCode=async function(codeId,currentlySuspended){
   }
   window.__aaCodeSuspendTarget=codeId;
   $('suspendCodeLabel').textContent=`الكود: ${c.code||codeId}`;
+  const suspendAccountBox=$('globalCodeSuspendNote');
+  if(suspendAccountBox){
+    const cached=Array.isArray(c.usedByInfo)?c.usedByInfo.find(x=>x&&x.uid):null;
+    let accountName=cached?.name||'مستخدم';
+    let accountEmail=cached?.email||'لا يوجد بريد إلكتروني';
+    let accountPhoto='';
+    if(cached?.uid){
+      try{
+        const userSnap=await db.collection('users').doc(String(cached.uid)).get();
+        if(userSnap.exists){
+          const profile=userSnap.data()||{};
+          accountName=profile.displayName||profile.name||accountName;
+          accountEmail=profile.email||accountEmail;
+          accountPhoto=profile.photoURL||profile.photoUrl||profile.photo||'';
+        }
+      }catch(_){}
+    }
+    const safeName=esc(accountName),safeEmail=esc(accountEmail);
+    suspendAccountBox.innerHTML=`<span style="width:52px;height:52px;flex:0 0 52px;border-radius:50%;overflow:hidden;display:grid;place-items:center;background:var(--accent-gradient);color:#fff;font-weight:900;font-size:1rem;">${accountPhoto?`<img src="${esc(accountPhoto)}" alt="${safeName}" style="width:100%;height:100%;object-fit:cover;display:block;">`:`${esc(accountName.slice(0,1)||'م')}`}</span><span style="min-width:0;display:flex;flex-direction:column;gap:3px;"><strong style="font-size:.92rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${safeName}</strong><small style="color:var(--text-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"><i class="fas fa-envelope"></i> ${safeEmail}</small></span>`;
+  }
   $('courseSuspendDuration').value='1d';
   document.querySelectorAll('.suspend-duration-choice').forEach(b=>b.classList.toggle('active',b.dataset.duration==='1d'));
   $('courseSuspendUntil').value='';
   $('courseSuspendReason').value='';
   $('courseSuspendCustomWrap').style.display='none';
-  const note=$('globalCodeSuspendNote');
-  if(note){
-    const account=usedInfoV12(c)[0]||{};
-    let live={};
-    if(account.uid){try{const us=await db.collection('users').doc(String(account.uid)).get();if(us.exists)live=us.data()||{};}catch(_){}}
-    const name=live.displayName||live.name||account.name||'غير مستخدم';
-    const email=live.email||account.email||'—';
-    const photo=live.photoURL||live.photoUrl||live.photo||account.photoURL||account.photoUrl||account.photo||'';
-    const avatar=photo?`<img src="${escV12(photo)}" alt="${escV12(name)}">`:`<span>${escV12(name.slice(0,1)||'م')}</span>`;
-    note.innerHTML=`<div class="global-code-suspend-account"><div class="global-code-suspend-avatar">${avatar}</div><div class="global-code-suspend-meta"><strong>${escV12(name)}</strong><span dir="ltr">${escV12(email)}</span></div></div>`;
-  }
+  const note=$('globalCodeSuspendNote');if(note&&!note.querySelector('strong'))note.innerHTML='<span style="width:52px;height:52px;flex:0 0 52px;border-radius:50%;overflow:hidden;display:grid;place-items:center;background:var(--accent-gradient);color:#fff;font-weight:900;font-size:1rem;"><i class="fas fa-user"></i></span><span style="min-width:0;display:flex;flex-direction:column;gap:3px;"><strong style="font-size:.92rem;">لا يوجد حساب مرتبط بهذا الكود</strong><small style="color:var(--text-muted);">سيتم إيقاف الكود نفسه حسب المدة المحددة.</small></span>';
   $('courseAccessSuspendModal').classList.add('active');
 };
 
@@ -11978,13 +11988,6 @@ if(typeof oldSignOut==='function'&&!oldSignOut.__aaLogoutCodeGuard){
 /* Basic visual states for the modal. */
 const s=document.createElement('style');s.textContent=`
 #courseAccessSuspendModal .code-suspend-users{display:none!important}
-#courseAccessSuspendModal #globalCodeSuspendNote{padding:12px 14px!important;margin:0 0 14px!important}
-#courseAccessSuspendModal .global-code-suspend-account{display:flex;align-items:center;gap:12px;min-width:0}
-#courseAccessSuspendModal .global-code-suspend-avatar{width:58px;height:58px;flex:0 0 58px;border-radius:16px;background:var(--accent-gradient);color:#fff;display:grid;place-items:center;overflow:hidden;font-size:1.3rem;font-weight:900}
-#courseAccessSuspendModal .global-code-suspend-avatar img{width:100%;height:100%;object-fit:cover;display:block}
-#courseAccessSuspendModal .global-code-suspend-meta{min-width:0;display:flex;flex-direction:column;gap:3px}
-#courseAccessSuspendModal .global-code-suspend-meta strong{font-size:.98rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-#courseAccessSuspendModal .global-code-suspend-meta span{color:var(--text-muted);font-size:.8rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 #courseAccessSuspendModal .suspend-duration-choices{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
 #courseAccessSuspendModal .suspend-duration-choice{min-height:52px}
 @media(max-width:600px){#courseAccessSuspendModal .suspend-duration-choices{grid-template-columns:1fr!important}}
