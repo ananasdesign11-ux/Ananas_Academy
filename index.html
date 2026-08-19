@@ -1922,24 +1922,6 @@ html.chat-fullscreen-mode #courseChatPage{
   margin-inline-start:9px !important;
 }
 </style>
-
-<style id="chat-stage28-popups-above-fullscreen">
-/* Any modal opened from the fullscreen chat must render above the chat surface. */
-html.chat-fullscreen-mode body.chat-fullscreen-mode .custom-alert-modal,
-html.chat-fullscreen-mode body.chat-fullscreen-mode .edit-modal,
-html.chat-fullscreen-mode body.chat-fullscreen-mode #chatLockModal,
-html.chat-fullscreen-mode body.chat-fullscreen-mode #chatEditMessageModal,
-html.chat-fullscreen-mode body.chat-fullscreen-mode #customAlertModal,
-html.chat-fullscreen-mode body.chat-fullscreen-mode #customConfirmModal,
-html.chat-fullscreen-mode body.chat-fullscreen-mode #xpDeletionChoiceModal,
-html.chat-fullscreen-mode body.chat-fullscreen-mode #userProfilePage,
-html.chat-fullscreen-mode body.chat-fullscreen-mode #ananasCanonicalProfilePage,
-html.chat-fullscreen-mode body.chat-fullscreen-mode #ananasV10ProfilePage,
-html.chat-fullscreen-mode body.chat-fullscreen-mode #aaRebuiltProfilePage,
-html.chat-fullscreen-mode body.chat-fullscreen-mode #ananasPrivateProfileOverlay{
-  z-index:2147483647 !important;
-}
-</style>
 </head>
 <body class="light-mode">
     
@@ -16941,75 +16923,60 @@ body.chat-fullscreen-mode #courseChatPage .chat-rebuilt-shell{
 })();
 </script>
 
-<style id="chat-confirm-delete-above-fullscreen">
-/* The delete-confirmation dialog must sit above the fullscreen chat. */
-html.chat-fullscreen-mode body.chat-fullscreen-mode #customConfirmModal.active{
-  z-index:2147483647!important;
-}
-</style>
-<script id="chat-confirm-delete-above-fullscreen-js">
-(function(){
-  'use strict';
-  const modal=document.getElementById('customConfirmModal');
-  if(!modal)return;
-  function sync(){
-    const fullscreen=document.documentElement.classList.contains('chat-fullscreen-mode') && document.body.classList.contains('chat-fullscreen-mode');
-    const active=modal.classList.contains('active');
-    if(fullscreen && active) modal.style.setProperty('z-index','2147483647','important');
+<!-- ===== FINAL MODAL TOP-LAYER SAFETY PATCH ===== -->
+<style id="ananas-modal-top-layer-safety">
+  /* All real modal roots must render above course/chat content. */
+  .edit-modal,
+  .auth-popup,
+  .custom-alert-modal,
+  .gallery-viewer,
+  .platform-image-viewer,
+  .file-viewer-overlay,
+  .ananas-modal-overlay,
+  #quizOverlay,
+  #courseFileViewer,
+  #enrollTermsPreviewModal,
+  #courseAccessSuspendModal,
+  #manageCodesModal,
+  #codeDetailModalV12,
+  #codeExpiryEditModalV12,
+  #ananasQuizBuilderV2,
+  #chatLockModal,
+  #ananasProfileEditor {
+    position: fixed !important;
   }
-  new MutationObserver(sync).observe(modal,{attributes:true,attributeFilter:['class','style']});
-  new MutationObserver(sync).observe(document.documentElement,{attributes:true,attributeFilter:['class']});
-  new MutationObserver(sync).observe(document.body,{attributes:true,attributeFilter:['class']});
-  sync();
-})();
-</script>
 
-<style id="chat-stage31-lock-modal-above-chat">
-/* Stage 31: keep only the chat-lock dialog above the fullscreen chat without an observer loop. */
-html.chat-fullscreen-mode body.chat-fullscreen-mode #chatLockModal {
-  position: fixed !important;
-  inset: 0 !important;
-  width: 100vw !important;
-  height: 100dvh !important;
-  max-width: none !important;
-  max-height: none !important;
-  margin: 0 !important;
-  z-index: 2147483647 !important;
-  display: none;
-  align-items: center !important;
-  justify-content: center !important;
-  box-sizing: border-box !important;
-}
-html.chat-fullscreen-mode body.chat-fullscreen-mode #chatLockModal.active {
-  display: flex !important;
-}
+  /* Keep every opened modal above #courseDetailView / #courseChatPage.
+     The existing modal stack controller still assigns the actual order. */
+  .edit-modal.active,
+  .auth-popup.active,
+  .custom-alert-modal.active,
+  .gallery-viewer.active,
+  .platform-image-viewer.active,
+  .file-viewer-overlay.active,
+  .ananas-modal-overlay.active,
+  #quizOverlay.active,
+  #courseFileViewer.active,
+  #enrollTermsPreviewModal.active,
+  #courseAccessSuspendModal.active,
+  #manageCodesModal.active,
+  #codeDetailModalV12.active,
+  #codeExpiryEditModalV12.active,
+  #ananasQuizBuilderV2.active,
+  #chatLockModal.active,
+  #ananasProfileEditor.active {
+    z-index: 300000 !important;
+  }
+
+  /* Chat-specific guarantee: lock/delete confirmations stay above the chat page. */
+  #courseChatPage ~ .custom-alert-modal.active,
+  #courseChatPage ~ #chatLockModal.active,
+  #chatLockModal.active,
+  #customConfirmModal.active,
+  #customAlertModal.active,
+  #xpDeletionChoiceModal.active {
+    z-index: 300000 !important;
+  }
 </style>
-<script id="chat-stage31-lock-modal-above-chat-js">
-(function(){
-  'use strict';
-  const lock=document.getElementById('chatLockModal');
-  if(!lock || window.__chatStage31LockModalFix) return;
-  window.__chatStage31LockModalFix=true;
-  const chat=document.getElementById('courseChatPage');
-  const sync=()=>{
-    const fullscreen=document.documentElement.classList.contains('chat-fullscreen-mode') && document.body.classList.contains('chat-fullscreen-mode');
-    if(fullscreen && lock.classList.contains('active')){
-      lock.style.setProperty('z-index','2147483647','important');
-      lock.style.setProperty('position','fixed','important');
-    }else if(!fullscreen){
-      lock.style.removeProperty('z-index');
-      lock.style.removeProperty('position');
-    }
-  };
-  /* Observe class changes only. We intentionally do not observe style, because sync itself changes style. */
-  new MutationObserver(sync).observe(lock,{attributes:true,attributeFilter:['class']});
-  if(chat) new MutationObserver(sync).observe(chat,{attributes:true,attributeFilter:['class']});
-  new MutationObserver(sync).observe(document.documentElement,{attributes:true,attributeFilter:['class']});
-  new MutationObserver(sync).observe(document.body,{attributes:true,attributeFilter:['class']});
-  document.addEventListener('click',()=>setTimeout(sync,0),true);
-  sync();
-})();
-</script>
-
 </body>
 </html>
