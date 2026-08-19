@@ -16962,98 +16962,39 @@ body.chat-fullscreen-mode #courseChatPage .chat-rebuilt-shell{
 })();
 </script>
 
-<script id="chat-stage28-popups-above-chat-js">
-(function(){
-  'use strict';
-  if(window.__chatStage28PopupLayerFix) return;
-  window.__chatStage28PopupLayerFix=true;
-  const ROOT_SELECTOR='body.chat-fullscreen-mode';
-  const POPUP_SELECTOR='#userProfilePage,#ananasCanonicalProfilePage,#ananasV10ProfilePage,#aaRebuiltProfilePage,#chatLockModal,#quizOverlay,#platformImageViewer,#platformGalleryViewer,#customAlert,#customConfirm,#authPopup,.modal.active,.modal.show,[role="dialog"],[aria-modal="true"]';
-  function lift(){
-    if(!document.body.matches(ROOT_SELECTOR)) return;
-    document.querySelectorAll(POPUP_SELECTOR).forEach(el=>{
-      if(el.id==='chatEmojiPickerPage') return;
-      el.style.setProperty('z-index','2147483647','important');
-    });
-  }
-  const mo=new MutationObserver(m=>{ if(m.some(x=>x.addedNodes&&x.addedNodes.length)) lift(); });
-  mo.observe(document.body,{subtree:true,childList:true});
-  document.addEventListener('click',()=>setTimeout(lift,0),true);
-  window.addEventListener('resize',lift,{passive:true});
-  lift();
-})();
-</script>
-
-
-<style id="chat-stage29-lock-confirm-over-chat-css">
-/* Only these two chat actions must always sit above the fullscreen chat layer. */
+<style id="chat-stage29-modal-layer-fix">
+/* Stage 29: chat-specific dialogs must sit above the fullscreen chat layer. */
 body.chat-fullscreen-mode #chatLockModal,
-body.chat-fullscreen-mode #customConfirmModal{
-    position:fixed !important;
+body.chat-fullscreen-mode #customAlertModal,
+body.chat-fullscreen-mode #customConfirmModal,
+body.chat-fullscreen-mode #userProfileModal{
     z-index:2147483647 !important;
 }
-body.chat-fullscreen-mode #chatLockModal.active,
-body.chat-fullscreen-mode #customConfirmModal.active{
-    display:flex !important;
-}
-body.chat-fullscreen-mode #chatLockModal{
-    inset:0 !important;
-    align-items:center !important;
-    justify-content:center !important;
-    width:100vw !important;
-    height:100dvh !important;
-    max-width:none !important;
-    max-height:none !important;
-}
-body.chat-fullscreen-mode #customConfirmModal{
-    inset:0 !important;
-    width:100vw !important;
-    height:100dvh !important;
-    max-width:none !important;
-    max-height:none !important;
-    align-items:center !important;
-    justify-content:center !important;
-}
 </style>
-<script id="chat-stage29-lock-confirm-over-chat-js">
+
+<script id="chat-stage29-modal-layer-fix-js">
 (function(){
-    'use strict';
-    const chat=document.getElementById('courseChatPage');
-    if(!chat) return;
-
-    const ids=['chatLockModal','customConfirmModal'];
-    function isChatOpen(){
-        return chat.classList.contains('active') ||
-            (getComputedStyle(chat).display!=='none' && chat.offsetParent!==null);
-    }
-    function promote(){
-        if(!isChatOpen()) return;
-        ids.forEach(id=>{
-            const el=document.getElementById(id);
-            if(!el) return;
-            /* Keep the existing element, handlers, content and IDs; only move it
-               to the document root when needed so no ancestor stacking context can trap it. */
-            if(el.parentElement!==document.body) document.body.appendChild(el);
-            el.style.setProperty('z-index','2147483647','important');
-        });
-    }
-
-    const bodyObserver=new MutationObserver(mutations=>{
-        for(const m of mutations){
-            if(m.type==='childList' || (m.type==='attributes' && m.attributeName==='class')){
-                promote();
-                break;
-            }
-        }
+  'use strict';
+  if(window.__chatStage29ModalLayerFix) return;
+  window.__chatStage29ModalLayerFix=true;
+  const ids=['chatLockModal','customAlertModal','customConfirmModal','userProfileModal'];
+  function liftChatModals(){
+    const chatOpen=document.body.classList.contains('chat-fullscreen-mode');
+    ids.forEach(id=>{
+      const el=document.getElementById(id);
+      if(!el)return;
+      if(chatOpen){
+        el.style.setProperty('z-index','2147483647','important');
+      }else{
+        el.style.removeProperty('z-index');
+      }
     });
-    bodyObserver.observe(document.body,{childList:true,subtree:true,attributes:true,attributeFilter:['class']});
-    new MutationObserver(promote).observe(chat,{attributes:true,attributeFilter:['class','style']});
-    document.addEventListener('click',()=>setTimeout(promote,0),true);
-    window.addEventListener('resize',promote,{passive:true});
-    window.addEventListener('orientationchange',()=>setTimeout(promote,50),{passive:true});
-    promote();
+  }
+  const observer=new MutationObserver(liftChatModals);
+  observer.observe(document.body,{attributes:true,attributeFilter:['class']});
+  document.addEventListener('click',()=>setTimeout(liftChatModals,0),true);
+  liftChatModals();
 })();
 </script>
-
 </body>
 </html>
