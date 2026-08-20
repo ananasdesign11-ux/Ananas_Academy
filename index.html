@@ -16050,6 +16050,7 @@ body.light-mode #courseChatPage .chat-msg.received{
                     const profileUid=String(m.userId||'');
                     const profile=profileCache[profileUid]||{name:m.userName||'مستخدم',photo:''};
                     const showHeader=!isMine&&(!previousWasReceived||previousUserId!==profileUid);
+                    const isGroupedSameUser=previousUserId===profileUid && previousWasReceived===!isMine;
                     const images=Array.isArray(m.imageUrls)?m.imageUrls:(m.imageUrl?[m.imageUrl]:[]);
                     const deleted=!!m.deleted;
                     const reply=m.replyToText?`<div class="reply-block"><div class="ru">${safeEscape(m.replyToName||'زائر')}</div><div class="rt">${safeEscape(m.replyToText)}</div></div>`:'';
@@ -16064,7 +16065,7 @@ body.light-mode #courseChatPage .chat-msg.received{
                     const readBy=Array.isArray(m.readBy)?m.readBy:(Array.isArray(m.readByUids)?m.readByUids:(m.readBy&&typeof m.readBy==='object'?Object.keys(m.readBy):[]));
                     const readBySomeoneElse=isMine && readBy.some(uid=>String(uid)!==String(currentUserId));
                     const messageStatus=isMine?`<span class="chat-message-status ${readBySomeoneElse?'is-read':''}" aria-label="${readBySomeoneElse?'تمت القراءة':'تم الإرسال'}"><i class="fas ${readBySomeoneElse?'fa-check-double':'fa-check'}" aria-hidden="true"></i></span>`:'';
-                    html+=`<div class="chat-msg ${isMine?'sent':'received'} ${deleted?'deleted-message':''} ${(!isMine&&!showHeader)?'chat-msg-grouped':''}" data-message-id="${safeEscape(doc.id)}">${showHeader?`<div class="chat-profile-avatar chat-profile-avatar-outside" data-profile-uid="${safeEscape(profileUid)}">${profile.photo?`<img src="${safeEscape(profile.photo)}" alt="">`:safeEscape((profile.name||'مستخدم').slice(0,1))}</div><div class="msg-header"><span class="chat-profile-name chat-profile-name-trigger" data-profile-uid="${safeEscape(profileUid)}">${safeEscape(profile.name||m.userName||'مستخدم')}</span></div>`:''}${reply}${body}<div class="msg-time"><span>${safeEscape(msgDate.toLocaleTimeString('ar-SA',{hour:'2-digit',minute:'2-digit'}))}</span>${messageStatus}</div>${actions}</div>`;
+                    html+=`<div class="chat-msg ${isMine?'sent':'received'} ${deleted?'deleted-message':''} ${(!isMine&&!showHeader)?'chat-msg-grouped':''} ${(isMine&&isGroupedSameUser)?'chat-msg-grouped-sent':''}" data-message-id="${safeEscape(doc.id)}">${showHeader?`<div class="chat-profile-avatar chat-profile-avatar-outside" data-profile-uid="${safeEscape(profileUid)}">${profile.photo?`<img src="${safeEscape(profile.photo)}" alt="">`:safeEscape((profile.name||'مستخدم').slice(0,1))}</div><div class="msg-header"><span class="chat-profile-name chat-profile-name-trigger" data-profile-uid="${safeEscape(profileUid)}">${safeEscape(profile.name||m.userName||'مستخدم')}</span></div>`:''}${reply}${body}<div class="msg-time"><span>${safeEscape(msgDate.toLocaleTimeString('ar-SA',{hour:'2-digit',minute:'2-digit'}))}</span>${messageStatus}</div>${actions}</div>`;
                     previousUserId=profileUid; previousWasReceived=!isMine;
                 });
                 const lastId=docs[docs.length-1]?.id||null;
@@ -16911,35 +16912,66 @@ body.chat-fullscreen-active #aaRebuiltProfilePage{
 <style id="chat-stage4-bubble-design-css">
 /* ===== CHAT STAGE 4: Bubble Design ===== */
 #courseChatPage .chat-msg{
+    position:relative!important;
     border-radius:16px!important;
 }
+
+/* Received: subtle WhatsApp-style tail toward the outside avatar. */
 #courseChatPage .chat-msg.received{
-    border-top-right-radius:8px!important;
+    border-top-left-radius:8px!important;
+    border-top-right-radius:16px!important;
     border-bottom-right-radius:16px!important;
+    border-bottom-left-radius:16px!important;
+    background:linear-gradient(145deg,#20252f,#171b23)!important;
+    border-color:#303744!important;
 }
-#courseChatPage .chat-msg.received::before{
+#courseChatPage .chat-msg.received:not(.chat-msg-grouped)::before{
+    content:"";
+    position:absolute;
+    top:0;
+    left:-8px;
+    width:13px;
+    height:12px;
+    background:inherit;
+    border-radius:0 0 0 8px;
+    clip-path:polygon(100% 0,0 0,100% 100%);
+    -webkit-clip-path:polygon(100% 0,0 0,100% 100%);
+    z-index:0;
+    pointer-events:none;
+}
+
+/* Light mode: keep the incoming bubble clearly separated from the page. */
+body.light-mode #courseChatPage .chat-msg.received{
+    background:linear-gradient(145deg,#ffffff,#f3f4f8)!important;
+    border-color:#d9dde6!important;
+}
+
+/* Sent: same tail language, mirrored to the opposite side, without profile/name. */
+#courseChatPage .chat-msg.sent{
+    border-top-right-radius:8px!important;
+    border-top-left-radius:16px!important;
+    border-bottom-left-radius:16px!important;
+    border-bottom-right-radius:16px!important;
+    background:linear-gradient(145deg,#765ff0 0%,#604fd7 58%,#5544c5 100%)!important;
+    border-color:rgba(255,255,255,.12)!important;
+    color:#fff!important;
+    box-shadow:0 9px 24px rgba(108,92,231,.22)!important;
+}
+#courseChatPage .chat-msg.sent:not(.chat-msg-grouped-sent)::before{
     content:"";
     position:absolute;
     top:0;
     right:-8px;
-    width:14px;
+    width:13px;
     height:12px;
     background:inherit;
-    clip-path:polygon(0 0,100% 0,44% 42%,0 100%);
-    -webkit-clip-path:polygon(0 0,100% 0,44% 42%,0 100%);
-    border-top-right-radius:3px;
-    transform:none;
-    transform-origin:top right;
+    border-radius:0 0 8px 0;
+    clip-path:polygon(0 0,100% 0,0 100%);
+    -webkit-clip-path:polygon(0 0,100% 0,0 100%);
     z-index:0;
     pointer-events:none;
 }
-#courseChatPage .chat-msg.received.chat-msg-grouped::before{
-    content:none!important;
-}
-#courseChatPage .chat-msg.sent{
-    border-top-left-radius:16px!important;
-    border-bottom-left-radius:16px!important;
-}
+
 #courseChatPage .chat-msg .msg-header{
     display:flex!important;
     align-items:center!important;
