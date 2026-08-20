@@ -16049,7 +16049,7 @@ body.light-mode #courseChatPage .chat-msg.received{
                     const showHeader=!isMine&&(!previousWasReceived||previousUserId!==profileUid);
                     const images=Array.isArray(m.imageUrls)?m.imageUrls:(m.imageUrl?[m.imageUrl]:[]);
                     const deleted=!!m.deleted;
-                    const reply=m.replyToText?`<div class="reply-block"><div class="ru">${safeEscape(m.replyToName||'زائر')}</div><div class="rt">${safeEscape(m.replyToText)}</div></div>`:'';
+                    const reply=m.replyToText?`<div class="reply-block" data-reply-to-id="${safeEscape(m.replyToId||'')}"><div class="ru">${safeEscape(m.replyToName||'زائر')}</div><div class="rt">${safeEscape(m.replyToText)}</div></div>`:'';
                     const gallery=(!deleted&&images.length)?`<div class="message-gallery">${images.map(u=>`<img src="${safeEscape(u)}" alt="صورة" onclick="openChatMessageGallery('${safeEscape(courseId)}','${safeEscape(doc.id)}')">`).join('')}</div>`:'';
                     let body='';
                     if(deleted&&!isAdmin){
@@ -16765,4 +16765,41 @@ if(typeof originalEdit==='function'&&!originalEdit.__aaStage6Wrapped){const wrap
 })();
 </script>
 </body>
+
+<style id="aa-chat-stage7-smart-reply-css">
+#courseChatPage .reply-block[data-reply-to-id]{cursor:pointer;position:relative;transition:filter .16s ease,box-shadow .16s ease;}
+#courseChatPage .reply-block[data-reply-to-id]:hover{filter:brightness(1.03);box-shadow:0 0 0 1px rgba(108,92,231,.14);}
+#courseChatPage .reply-block .aa-reply-thumb{width:34px;height:34px;min-width:34px;border-radius:8px;object-fit:cover;display:block;float:right;margin-left:8px;}
+#courseChatPage .reply-indicator-enhanced .aa-reply-preview{display:flex;align-items:center;gap:9px;min-width:0;}
+#courseChatPage .reply-indicator-enhanced .aa-reply-preview-thumb{width:42px;height:42px;min-width:42px;border-radius:10px;object-fit:cover;display:block;}
+#courseChatPage .reply-indicator-enhanced .aa-reply-preview-copy{min-width:0;overflow:hidden;}
+#courseChatPage .reply-indicator-enhanced .aa-reply-preview-copy strong{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+#courseChatPage .reply-indicator-enhanced .aa-reply-preview-copy span{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--text-muted);font-size:.82rem;}
+#courseChatPage .chat-msg.aa-reply-flash{animation:aaChatReplyFlash 1s ease both!important;}
+@keyframes aaChatReplyFlash{
+  0%{box-shadow:inherit;filter:none;}
+  20%{box-shadow:0 0 0 3px var(--accent1),0 0 0 8px rgba(108,92,231,.18);filter:brightness(1.04);}
+  65%{box-shadow:0 0 0 3px var(--accent1),0 0 0 8px rgba(108,92,231,.10);filter:brightness(1.02);}
+  100%{box-shadow:inherit;filter:none;}
+}
+@media(max-width:768px){#courseChatPage .reply-indicator-enhanced .aa-reply-preview-thumb{width:38px;height:38px;min-width:38px;}}
+</style>
+<script id="aa-chat-stage7-smart-reply-js">
+(function(){
+'use strict';
+if(window.__aaChatStage7SmartReply)return;window.__aaChatStage7SmartReply=true;
+const page=document.getElementById('courseChatPage'),list=document.getElementById('chatPageMessagesList');if(!page||!list)return;
+function getMsg(id){if(!id)return null;try{return page.querySelector('.chat-msg[data-message-id="'+CSS.escape(String(id))+'"]')}catch(_){return [...page.querySelectorAll('.chat-msg')].find(x=>String(x.dataset.messageId)===String(id))||null;}}
+function getReplyData(el){if(!el)return null;const name=el.querySelector('.chat-profile-name')?.textContent?.trim()||el.querySelector('.u')?.textContent?.trim()||'مستخدم';const text=el.querySelector('.t')?.innerText?.trim()||'';const img=el.querySelector('.message-gallery img,.chat-msg > img');return{id:el.dataset.messageId||'',name,text,thumb:img?.src||''};}
+function renderReplyPreview(name,text,thumb){const box=document.getElementById('chatReplyIndicatorPage');if(!box)return;let wrap=box.querySelector('.aa-reply-preview');let close=box.querySelector('.close-reply');if(!wrap){wrap=document.createElement('div');wrap.className='aa-reply-preview';const copy=document.createElement('div');copy.className='aa-reply-preview-copy';copy.innerHTML='<strong></strong><span></span>';wrap.appendChild(copy);box.innerHTML='';box.appendChild(wrap);if(close)box.appendChild(close);}const old=wrap.querySelector('.aa-reply-preview-thumb');if(old)old.remove();if(thumb){const im=document.createElement('img');im.className='aa-reply-preview-thumb';im.src=thumb;im.alt='';wrap.insertBefore(im,wrap.firstChild);}const n=wrap.querySelector('strong'),t=wrap.querySelector('span');if(n)n.textContent=name||'مستخدم';if(t)t.textContent=text||'صورة';}
+const baseReply=window.replyTo||function(){};window.replyTo=function(msgId,userName,msgText,replyThumb){baseReply.apply(this,arguments);renderReplyPreview(userName,msgText,replyThumb||'');};
+function setReplyFromElement(el){const d=getReplyData(el);if(d?.id)window.replyTo?.(d.id,d.name,d.text.slice(0,120),d.thumb);}
+function flashOriginal(id){const el=getMsg(id);if(!el)return;el.scrollIntoView({behavior:'smooth',block:'center'});el.classList.remove('aa-reply-flash');void el.offsetWidth;el.classList.add('aa-reply-flash');clearTimeout(el.__aaReplyFlashTimer);el.__aaReplyFlashTimer=setTimeout(()=>el.classList.remove('aa-reply-flash'),1050);}
+document.addEventListener('click',e=>{const block=e.target.closest?.('#courseChatPage .reply-block[data-reply-to-id]');if(!block)return;e.preventDefault();e.stopPropagation();flashOriginal(block.getAttribute('data-reply-to-id'));},true);
+let sx=0,sy=0,st=0,target=null;list.addEventListener('touchstart',e=>{if(e.touches.length!==1)return;const t=e.target.closest?.('.chat-msg');if(!t||e.target.closest('button,input,textarea,select,.msg-actions,.message-gallery,.chat-profile-avatar-outside,.chat-profile-name-trigger,.reply-block')){target=null;return;}const p=e.touches[0];sx=p.clientX;sy=p.clientY;st=Date.now();target=t;},{passive:true,capture:true});
+list.addEventListener('touchmove',e=>{if(!target||e.touches.length!==1)return;const p=e.touches[0],dx=p.clientX-sx,dy=p.clientY-sy;if(Math.abs(dx)>28&&Math.abs(dx)>Math.abs(dy)*1.25)e.preventDefault();},{passive:false,capture:true});
+list.addEventListener('touchend',e=>{if(!target)return;const p=e.changedTouches[0],dx=p.clientX-sx,dy=p.clientY-sy,duration=Date.now()-st,el=target;target=null;if(Math.abs(dx)>=64&&Math.abs(dx)>Math.abs(dy)*1.2&&duration<900){e.preventDefault();e.stopPropagation();setReplyFromElement(el);}},{passive:false,capture:true});
+window.__aaChatStage7FlashOriginal=flashOriginal;
+})();
+</script>
 </html>
