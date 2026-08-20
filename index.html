@@ -7891,9 +7891,13 @@ label[for*="En"], input[id*="En"], textarea[id*="En"] { display:none !important;
     const container=document.getElementById('chatPageMessagesList');
     if(!container)return;
     if(chatUnsubscribe){chatUnsubscribe();chatUnsubscribe=null;}
-    container.innerHTML='<p style="color:var(--text-muted);text-align:center;padding:30px;">جاري تحميل الرسائل...</p>';
-
     const profileCache=window.__chatProfileCache=window.__chatProfileCache||{};
+    const chatCache=window.__aaChatPageCache=window.__aaChatPageCache||{};
+    const courseCache=chatCache[courseId]||(chatCache[courseId]={signature:'',ids:[],rendered:false,lastDate:'',lastUserId:null,lastWasReceived:false});
+    const hiddenReady=window.__aaLoadHiddenChatIds?.(courseId)||Promise.resolve(new Set());
+    if(!courseCache.rendered || !container.querySelector('.chat-msg')){
+      container.innerHTML='<p style=\"color:var(--text-muted);text-align:center;padding:30px;\">جاري تحميل الرسائل...</p>';
+    }
 
     try{
       chatUnsubscribe=db.collection('courses').doc(courseId).collection('chat').orderBy('createdAt','asc').onSnapshot(async snapshot=>{
@@ -7902,7 +7906,13 @@ label[for*="En"], input[id*="En"], textarea[id*="En"] { display:none !important;
           return;
         }
 
-        const docs=snapshot.docs;
+        const hiddenIds=await hiddenReady;
+        const docs=snapshot.docs.filter(d=>!hiddenIds?.has?.(String(d.id)));
+        if(!docs.length){
+          container.innerHTML='<p style="color:var(--text-muted);text-align:center;padding:30px;">لا توجد رسائل.</p>';
+          courseCache.signature='';courseCache.ids=[];courseCache.rendered=false;
+          return;
+        }
         const ids=[...new Set(docs.map(d=>String(d.data()?.userId||'')).filter(Boolean))];
 
         await Promise.all(ids.map(async uid=>{
@@ -7919,8 +7929,36 @@ label[for*="En"], input[id*="En"], textarea[id*="En"] { display:none !important;
           }
         }));
 
-        let html='',lastDate='',previousUserId=null,previousWasReceived=false;
+        const signature=docs.map(d=>{const x=d.data()||{},u=x.updatedAt?.toMillis?x.updatedAt.toMillis():x.updatedAt?.seconds?x.updatedAt.seconds*1000:'';return String(d.id)+':'+String(u||x.editedAt?.seconds||x.deletedAt?.seconds||x.message||'')}).join('|');
+        const visibleIds=docs.map(d=>String(d.id));
+        if(courseCache.rendered && courseCache.signature===signature && container.querySelector('.chat-msg')){
+          return;
+        }
+
         const uid=currentUser?.uid||null;
+        const previousIds=Array.isArray(courseCache.ids)?courseCache.ids:[];
+        const isAppendOnly=courseCache.rendered && visibleIds.length===previousIds.length+1 && previousIds.every((id,i)=>id===visibleIds[i]);
+
+        if(isAppendOnly){
+          const newDoc=docs[docs.length-1],m=newDoc.data()||{};
+          const date=m.createdAt?.toDate?m.createdAt.toDate():(m.createdAt?.seconds?new Date(m.createdAt.seconds*1000):new Date());
+          const dateKey=date.toLocaleDateString('ar-SA',{year:'numeric',month:'long',day:'numeric'});
+          const mine=m.userId===uid,profileUid=String(m.userId||''),profile=profileCache[profileUid]||{name:m.userName||'مستخدم',photo:''};
+          const lastEl=container.querySelector('.chat-msg:last-of-type');
+          const showHeader=!mine&&!(lastEl?.classList.contains('received')&&lastEl?.dataset.userId===profileUid);
+          const images=Array.isArray(m.imageUrls)?m.imageUrls:(m.imageUrl?[m.imageUrl]:[]),deleted=!!m.deleted;
+          const reply=m.replyToText?`<div class=\"reply-block\" data-reply-to-id=\"${escapeHtml(m.replyToId||'')}\"><div class=\"ru\">${escapeHtml(m.replyToName||'زائر')}</div><div class=\"rt\">${escapeHtml(m.replyToText)}</div></div>`:'';
+          const gallery=(!deleted&&images.length)?`<div class=\"message-gallery\">${images.map(u=>`<img src=\"${escapeHtml(u)}\" alt=\"صورة\" onclick=\"openChatMessageGallery('${courseId}','${newDoc.id}')\">`).join('')}</div>`:'';
+          const body=deleted&&!isAdmin?'<div class=\"t\" style=\"color:var(--text-muted);font-style:italic;\"><i class=\"fas fa-ban\"></i> هذه الرسالة محذوفة</div>':`${deleted?'<div style=\"color:#e74c3c;font-size:.78rem;font-weight:800;margin-bottom:5px;\"><i class=\"fas fa-trash\"></i> تم حذف هذه الرسالة</div>':''}<div class=\"t\">${escapeHtml(m.message||'')}${m.edited?'<span class=\"edited-label\">(معدلة)</span>':''}</div>${gallery}`;
+          const actions=deleted?'':`<div class=\"msg-actions\"><button onclick='replyTo(${JSON.stringify(newDoc.id)},${JSON.stringify(profile.name||m.userName||'زائر')},${JSON.stringify((m.message||'').slice(0,120))})' title=\"رد\"><i class=\"fas fa-reply\"></i></button>${mine?`<button onclick=\"editChatMessage('${courseId}','${newDoc.id}')\" title=\"تعديل\"><i class=\"fas fa-edit\"></i></button>`:''}${(mine||isAdmin)?`<button onclick=\"deleteChatMessage('${courseId}','${newDoc.id}')\" title=\"حذف\"><i class=\"fas fa-trash\"></i></button>`:''}</div>`;
+          if(dateKey!==courseCache.lastDate){const divider=document.createElement('div');divider.className='chat-date-divider';divider.setAttribute('role','separator');divider.textContent=dateKey;container.appendChild(divider);}
+          const wrap=document.createElement('div');wrap.className=`chat-msg ${mine?'sent':'received'} ${deleted?'deleted-message':''} ${(!mine&&!showHeader)?'chat-msg-grouped':''}`;wrap.dataset.messageId=String(newDoc.id);wrap.dataset.userId=String(m.userId||'');wrap.innerHTML=`${showHeader?`<div class=\"chat-profile-avatar chat-profile-avatar-outside\" data-profile-uid=\"${escapeHtml(profileUid)}\">${profile.photo?`<img src=\"${escapeHtml(profile.photo)}\" alt=\"\">`:escapeHtml((profile.name||'مستخدم').slice(0,1))}</div><div class=\"msg-header\"><span class=\"chat-profile-name chat-profile-name-trigger\" data-profile-uid=\"${escapeHtml(profileUid)}\">${escapeHtml(profile.name||m.userName||'مستخدم')}</span></div>`:''}${reply}${body}<div class=\"msg-time\">${escapeHtml(date.toLocaleTimeString('ar-SA',{hour:'2-digit',minute:'2-digit'}))}</div>${actions}`;container.appendChild(wrap);
+          const atBottom=(container.scrollHeight-container.clientHeight-container.scrollTop)<80;if(atBottom)container.scrollTop=container.scrollHeight;
+          courseCache.signature=signature;courseCache.ids=visibleIds;courseCache.lastDate=dateKey;courseCache.lastUserId=String(m.userId||'');courseCache.lastWasReceived=!mine;
+          return;
+        }
+
+        let html='',lastDate='',previousUserId=null,previousWasReceived=false;
 
         docs.forEach(doc=>{
           const m=doc.data()||{};
@@ -7960,7 +7998,7 @@ label[for*="En"], input[id*="En"], textarea[id*="En"] { display:none !important;
 
           const actions=deleted?'':`<div class="msg-actions"><button onclick='replyTo(${JSON.stringify(doc.id)},${JSON.stringify(profile.name||m.userName||'زائر')},${JSON.stringify((m.message||'').slice(0,120))})' title="رد"><i class="fas fa-reply"></i></button>${mine?`<button onclick="editChatMessage('${courseId}','${doc.id}')" title="تعديل"><i class="fas fa-edit"></i></button>`:''}${(mine||isAdmin)?`<button onclick="deleteChatMessage('${courseId}','${doc.id}')" title="حذف"><i class="fas fa-trash"></i></button>`:''}</div>`;
 
-          html+=`<div class="chat-msg ${mine?'sent':'received'} ${deleted?'deleted-message':''} ${(!mine&&!showHeader)?'chat-msg-grouped':''}" data-message-id="${doc.id}">${showHeader?`<div class="chat-profile-avatar chat-profile-avatar-outside" data-profile-uid="${escapeHtml(profileUid)}">${profile.photo?`<img src="${escapeHtml(profile.photo)}" alt="">`:escapeHtml((profile.name||'مستخدم').slice(0,1))}</div><div class="msg-header"><span class="chat-profile-name chat-profile-name-trigger" data-profile-uid="${escapeHtml(profileUid)}">${escapeHtml(profile.name||m.userName||'مستخدم')}</span></div>`:''}${reply}${body}<div class="msg-time">${time}</div>${actions}</div>`;
+          html+=`<div class="chat-msg ${mine?'sent':'received'} ${deleted?'deleted-message':''} ${(!mine&&!showHeader)?'chat-msg-grouped':''}" data-message-id="${doc.id}" data-user-id="${escapeHtml(m.userId||'')}" data-created-at="${escapeHtml(date.getTime())}">${showHeader?`<div class="chat-profile-avatar chat-profile-avatar-outside" data-profile-uid="${escapeHtml(profileUid)}">${profile.photo?`<img src="${escapeHtml(profile.photo)}" alt="">`:escapeHtml((profile.name||'مستخدم').slice(0,1))}</div><div class="msg-header"><span class="chat-profile-name chat-profile-name-trigger" data-profile-uid="${escapeHtml(profileUid)}">${escapeHtml(profile.name||m.userName||'مستخدم')}</span></div>`:''}${reply}${body}<div class="msg-time">${time}</div>${actions}</div>`;
 
           previousUserId=profileUid;
           previousWasReceived=!mine;
@@ -7968,6 +8006,12 @@ label[for*="En"], input[id*="En"], textarea[id*="En"] { display:none !important;
 
         container.innerHTML=html;
         container.scrollTop=container.scrollHeight;
+        courseCache.signature=signature;
+        courseCache.ids=visibleIds;
+        courseCache.lastDate=lastDate;
+        courseCache.lastUserId=previousUserId;
+        courseCache.lastWasReceived=previousWasReceived;
+        courseCache.rendered=true;
       },err=>{
         console.error(err);
         container.innerHTML='<p style="color:#e74c3c;text-align:center;padding:30px;">حدث خطأ في تحميل الدردشة.</p>';
@@ -16915,5 +16959,20 @@ window.__aaChatStage7FlashOriginal=flashOriginal;
 #chatLockModal.ananas-chat-lock-v12 #chatV12CustomEndWrap[style*="display: block"]{display:block!important;}
 #chatLockModal.ananas-chat-lock-v12 #chatV12CustomEndWrap input{display:block!important;width:100%!important;box-sizing:border-box!important;}
 </style>
+<script id="aa-chat-performance-lock-final">
+(function(){
+'use strict';
+if(window.__aaChatPerformanceLockFinal)return;window.__aaChatPerformanceLockFinal=true;
+const $=id=>document.getElementById(id);let lockTimer=null;
+function lockTimes(d){const start=d?.startAt?.toDate?d.startAt.toDate().getTime():Number(d?.startAt||0),end=d?.endAt?.toDate?d.endAt.toDate().getTime():Number(d?.endAt||0),now=Date.now();return{start,end,active:!!d?.locked&&(!start||now>=start)&&(!end||now<end)}}
+function syncLockUI(){const d=currentChatLock||{},t=lockTimes(d),btn=$('chatLockBtn');if(btn){btn.style.display='flex';btn.innerHTML=t.active?'<i class="fas fa-lock-open" aria-hidden="true"></i><span>فتح الدردشة</span>':'<i class="fas fa-lock" aria-hidden="true"></i><span>قفل الدردشة</span>';btn.setAttribute('aria-label',t.active?'فتح الدردشة':'قفل الدردشة')}try{window.__aaSyncChatLockMenu?.()}catch(_){}const b=$('chatLockBtn');if(b){const a=lockTimes(currentChatLock||{}).active;b.style.display='flex';b.innerHTML=a?'<i class="fas fa-lock-open" aria-hidden="true"></i><span>فتح الدردشة</span>':'<i class="fas fa-lock" aria-hidden="true"></i><span>قفل الدردشة</span>'}}
+function scheduleLockClock(){clearTimeout(lockTimer);lockTimer=null;const d=currentChatLock||{},t=lockTimes(d),events=[];if(d.locked&&t.start&&t.start>Date.now())events.push(t.start);if(d.locked&&t.end&&t.end>Date.now())events.push(t.end);if(!events.length)return;lockTimer=setTimeout(async()=>{const nowT=lockTimes(currentChatLock||{});if(currentChatLock?.locked&&nowT.end&&Date.now()>=nowT.end&&currentChatLock?.autoExpire!==false){currentChatLock={...currentChatLock,locked:false};syncLockUI();try{await db.collection('courses').doc(activeCourseId).collection('settings').doc('chat').set({locked:false,updatedAt:firebase.firestore.FieldValue.serverTimestamp()},{merge:true})}catch(e){console.warn('تعذر إنهاء قفل الدردشة تلقائيًا:',e)}}else{syncLockUI()}scheduleLockClock()},Math.max(30,Math.min(...events)-Date.now()+25))}
+const originalApply=window.applyChatLockNow;window.applyChatLockNow=function(){const r=originalApply?.apply(this,arguments);syncLockUI();scheduleLockClock();return r};
+const originalOpen=window.openChatLockDialog;window.openChatLockDialog=function(){const r=originalOpen?.apply(this,arguments);requestAnimationFrame(()=>{const save=$('chatV12Save');if(!save||save.dataset.perfLockBound==='1')return;save.dataset.perfLockBound='1';save.onclick=async()=>{if(!isAdmin||!activeCourseId)return;const m=$('chatLockModal'),mode=m?.querySelector('[data-chat-lock-duration].active')?.dataset.chatLockDuration||'1d',s=$('chatV12Start')?.value||'',e=$('chatV12End')?.value||'',reason=($('chatV12Reason')?.value||'').trim(),start=s?parseRiyadhDateTime(s):new Date();let end=null;if(mode==='custom'){if(!e)return showCustomAlert('تنبيه','حدد تاريخ ووقت انتهاء القفل.');end=parseRiyadhDateTime(e)}else if(mode!=='manual'){const days=({'1d':1,'3d':3,'7d':7,'14d':14,'30d':30})[mode];if(!days)return showCustomAlert('تنبيه','اختر مدة صحيحة للقفل.');end=new Date(start.getTime()+days*86400000)}if(isNaN(start.getTime())||(end&&isNaN(end.getTime()))||(end&&end<=start))return showCustomAlert('خطأ','تحقق من تاريخ ووقت بداية ونهاية القفل.');const payload={locked:true,startAt:firebase.firestore.Timestamp.fromDate(start),endAt:end?firebase.firestore.Timestamp.fromDate(end):null,autoExpire:!!end,reason,timezone:'Asia/Riyadh'};currentChatLock={...payload,startAt:firebase.firestore.Timestamp.fromDate(start),endAt:end?firebase.firestore.Timestamp.fromDate(end):null};m?.classList.remove('active');syncLockUI();scheduleLockClock();try{await db.collection('courses').doc(activeCourseId).collection('settings').doc('chat').set({...payload,updatedAt:firebase.firestore.FieldValue.serverTimestamp()},{merge:true});showCustomAlert('تم الحفظ','تم إعداد قفل الدردشة بنجاح.')}catch(err){console.error(err);showCustomAlert('خطأ','تعذر حفظ إعدادات قفل الدردشة.')}}});return r};
+document.addEventListener('click',e=>{const btn=e.target.closest?.('#chatLockBtn');if(!btn)return;e.preventDefault();e.stopImmediatePropagation();if(lockTimes(currentChatLock||{}).active)window.unlockCourseChat?.();else window.openChatLockDialog?.()},true);
+window.unlockCourseChat=async function(){if(!isAdmin||!activeCourseId)return;clearTimeout(lockTimer);lockTimer=null;const prev=currentChatLock||{};currentChatLock={...prev,locked:false,startAt:null,endAt:null,autoExpire:false,reason:''};syncLockUI();try{await db.collection('courses').doc(activeCourseId).collection('settings').doc('chat').set({locked:false,startAt:null,endAt:null,reason:'',autoExpire:false,updatedAt:firebase.firestore.FieldValue.serverTimestamp()},{merge:true});showCustomAlert('تم الفتح','الدردشة مفتوحة الآن ويمكن للطلاب المشاركة.')}catch(err){console.error(err);currentChatLock=prev;syncLockUI();scheduleLockClock();showCustomAlert('خطأ','تعذر فتح الدردشة.');throw err}};
+setTimeout(()=>{syncLockUI();scheduleLockClock()},0);
+})();
+</script>
 </body>
 </html>
