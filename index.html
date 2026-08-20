@@ -16049,7 +16049,9 @@ body.light-mode #courseChatPage .chat-msg.received{
                     const isMine=m.userId===currentUserId;
                     const profileUid=String(m.userId||'');
                     const profile=profileCache[profileUid]||{name:m.userName||'مستخدم',photo:''};
-                    const showHeader=!isMine&&(!previousWasReceived||previousUserId!==profileUid);
+                    const sameGroup=previousUserId===profileUid && previousWasReceived===!isMine;
+                    const showHeader=!isMine&&!sameGroup;
+                    const isGrouped=sameGroup;
                     const images=Array.isArray(m.imageUrls)?m.imageUrls:(m.imageUrl?[m.imageUrl]:[]);
                     const deleted=!!m.deleted;
                     const reply=m.replyToText?`<div class="reply-block"><div class="ru">${safeEscape(m.replyToName||'زائر')}</div><div class="rt">${safeEscape(m.replyToText)}</div></div>`:'';
@@ -16061,7 +16063,7 @@ body.light-mode #courseChatPage .chat-msg.received{
                         body=`${deleted?'<div style="color:#e74c3c;font-size:.78rem;font-weight:800;margin-bottom:5px;"><i class="fas fa-trash"></i> تم حذف هذه الرسالة</div>':''}<div class="t">${safeEscape(m.message||'')}${m.edited?'<span class="edited-label">(معدلة)</span>':''}</div>${gallery}`;
                     }
                     const actions=deleted?'':`<div class="msg-actions"><button onclick='replyTo(${JSON.stringify(doc.id)},${JSON.stringify(m.userName||profile.name||'زائر')},${JSON.stringify((m.message||'').slice(0,120))})' title="رد"><i class="fas fa-reply"></i></button>${isMine?`<button onclick="editChatMessage('${safeEscape(courseId)}','${safeEscape(doc.id)}')" title="تعديل"><i class="fas fa-edit"></i></button>`:''}${(isMine||isAdmin)?`<button onclick="deleteChatMessage('${safeEscape(courseId)}','${safeEscape(doc.id)}')" title="حذف"><i class="fas fa-trash"></i></button>`:''}</div>`;
-                    html+=`<div class="chat-msg ${isMine?'sent':'received'} ${deleted?'deleted-message':''} ${(!isMine&&!showHeader)?'chat-msg-grouped':''}" data-message-id="${safeEscape(doc.id)}">${showHeader?`<div class="chat-profile-avatar chat-profile-avatar-outside" data-profile-uid="${safeEscape(profileUid)}">${profile.photo?`<img src="${safeEscape(profile.photo)}" alt="">`:safeEscape((profile.name||'مستخدم').slice(0,1))}</div><div class="msg-header"><span class="chat-profile-name chat-profile-name-trigger" data-profile-uid="${safeEscape(profileUid)}">${safeEscape(profile.name||m.userName||'مستخدم')}</span></div>`:''}${reply}${body}<div class="msg-time">${safeEscape(msgDate.toLocaleTimeString('ar-SA',{hour:'2-digit',minute:'2-digit'}))}</div>${actions}</div>`;
+                    html+=`<div class="chat-msg ${isMine?'sent':'received'} ${deleted?'deleted-message':''} ${isGrouped?'chat-msg-grouped':''}" data-message-id="${safeEscape(doc.id)}">${showHeader?`<div class="chat-profile-avatar chat-profile-avatar-outside" data-profile-uid="${safeEscape(profileUid)}">${profile.photo?`<img src="${safeEscape(profile.photo)}" alt="">`:safeEscape((profile.name||'مستخدم').slice(0,1))}</div><div class="msg-header"><span class="chat-profile-name chat-profile-name-trigger" data-profile-uid="${safeEscape(profileUid)}">${safeEscape(profile.name||m.userName||'مستخدم')}</span></div>`:''}${reply}${body}<div class="msg-time">${safeEscape(msgDate.toLocaleTimeString('ar-SA',{hour:'2-digit',minute:'2-digit'}))}</div>${actions}</div>`;
                     previousUserId=profileUid; previousWasReceived=!isMine;
                 });
                 const lastId=docs[docs.length-1]?.id||null;
@@ -16911,5 +16913,35 @@ body.chat-fullscreen-active #aaRebuiltProfilePage{
     syncFullscreenState();
 })();
 </script>
+<style id="chat-smart-grouping-stage5-final-css">
+/* Stage 5: smart grouping — only the first message keeps the avatar-facing corner. */
+#courseChatPage .chat-msg.received{
+    border-radius:16px!important;
+    border-top-right-radius:0!important;
+}
+#courseChatPage .chat-msg.received.chat-msg-grouped{
+    border-radius:13px!important;
+}
+#courseChatPage .chat-msg.chat-msg-grouped{
+    padding:7px 10px!important;
+    margin-top:-4px!important;
+    margin-bottom:1px!important;
+    border-radius:13px!important;
+}
+#courseChatPage .chat-msg.chat-msg-grouped .t{
+    font-size:.90rem!important;
+    line-height:1.34!important;
+}
+#courseChatPage .chat-msg.chat-msg-grouped .msg-time{
+    margin-top:1px!important;
+}
+@media(max-width:768px){
+    #courseChatPage .chat-msg.chat-msg-grouped{
+        padding:6px 8px!important;
+        margin-top:-4px!important;
+        margin-bottom:1px!important;
+    }
+}
+</style>
 </body>
 </html>
