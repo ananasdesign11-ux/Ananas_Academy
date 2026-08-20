@@ -16664,68 +16664,73 @@ syncHeight();
 })();
 </script>\n
 
-<style id="chat-stage26-overlay-navigation-css">
-/* Stage 26: keep chat fullscreen unchanged; only reposition top controls and elevate overlays. */
-body.chat-fullscreen-mode #courseChatPage .chat-topbar{
-    position:relative !important;
-}
+<style id="chat-stage27-overlay-navigation-css">
+/* Stage 27: keep fullscreen chat unchanged; fix overlay stacking and admin menu direction. */
+body.chat-fullscreen-mode #courseChatPage .chat-topbar{position:relative!important;}
 body.chat-fullscreen-mode #courseChatPage .chat-back-btn{
-    position:absolute !important;
-    right:max(10px,env(safe-area-inset-right) + 6px) !important;
-    left:auto !important;
-    top:50% !important;
-    transform:translateY(-50%) !important;
-    z-index:5 !important;
+    position:absolute!important;
+    right:max(10px,env(safe-area-inset-right) + 6px)!important;
+    left:auto!important;
+    top:50%!important;
+    transform:translateY(-50%)!important;
+    z-index:5!important;
 }
 body.chat-fullscreen-mode #courseChatPage .chat-topbar-actions{
-    position:absolute !important;
-    left:max(10px,env(safe-area-inset-left) + 6px) !important;
-    right:auto !important;
-    top:50% !important;
-    transform:translateY(-50%) !important;
-    display:flex !important;
-    flex-direction:row !important;
-    direction:ltr !important;
-    align-items:center !important;
-    justify-content:flex-start !important;
-    gap:7px !important;
-    z-index:5 !important;
+    position:absolute!important;
+    left:max(10px,env(safe-area-inset-left) + 6px)!important;
+    right:auto!important;
+    top:50%!important;
+    transform:translateY(-50%)!important;
+    display:flex!important;
+    flex-direction:row!important;
+    direction:ltr!important;
+    align-items:center!important;
+    justify-content:flex-start!important;
+    gap:7px!important;
+    z-index:5!important;
 }
-body.chat-fullscreen-mode #courseChatPage .chat-topbar-actions #chatAdminRoot{order:1 !important;}
-body.chat-fullscreen-mode #courseChatPage .chat-topbar-actions #chatProfileBtn{order:2 !important;}
-body.chat-fullscreen-mode #courseChatPage .chat-topbar-actions #chatThemeBtn{order:3 !important;}
+body.chat-fullscreen-mode #courseChatPage .chat-topbar-actions #chatAdminRoot{order:1!important;}
+body.chat-fullscreen-mode #courseChatPage .chat-topbar-actions #chatProfileBtn{order:2!important;}
+body.chat-fullscreen-mode #courseChatPage .chat-topbar-actions #chatThemeBtn{order:3!important;}
 
-/* Any dialog/profile page launched from chat must sit above the fullscreen chat. */
+/* Admin menu: physical left edge of the admin root, so the menu opens toward the right. */
+body.chat-fullscreen-mode #courseChatPage .chat-admin-menu{
+    left:0!important;
+    right:auto!important;
+    inset-inline-start:auto!important;
+    inset-inline-end:auto!important;
+}
+
+/* Overlays launched from chat must be above the fullscreen chat, including overlays
+   whose DOM node lives inside #courseDetailView. */
 body.chat-fullscreen-mode #customAlertModal.active,
 body.chat-fullscreen-mode #customConfirmModal.active,
 body.chat-fullscreen-mode #chatLockModal.active,
 body.chat-fullscreen-mode #chatEditMessageModal.active,
 body.chat-fullscreen-mode .edit-modal.active{
-    z-index:2147483020 !important;
+    z-index:2147483020!important;
 }
 body.chat-fullscreen-mode #aaRebuiltProfilePage.active,
 body.chat-fullscreen-mode #ananasCanonicalProfilePage.active,
 body.chat-fullscreen-mode #ananasV10ProfilePage.active,
 body.chat-fullscreen-mode #ananasPrivateProfileOverlay.active,
 body.chat-fullscreen-mode #userProfilePage.active{
-    position:fixed !important;
-    inset:0 !important;
-    z-index:2147483010 !important;
+    position:fixed!important;
+    inset:0!important;
+    z-index:2147483030!important;
 }
 body.chat-fullscreen-mode #aaRebuiltProfilePage.active{
-    width:100vw !important;
-    height:100dvh !important;
-    max-height:100dvh !important;
-    overflow:auto !important;
+    width:100vw!important;
+    height:100dvh!important;
+    max-height:100dvh!important;
+    overflow:auto!important;
 }
 @media(max-width:768px){
-    body.chat-fullscreen-mode #courseChatPage .chat-topbar-actions{
-        gap:5px !important;
-    }
+    body.chat-fullscreen-mode #courseChatPage .chat-topbar-actions{gap:5px!important;}
 }
 </style>
 
-<script id="chat-stage26-overlay-navigation-js">
+<script id="chat-stage27-overlay-navigation-js">
 (function(){
   'use strict';
   const chat=document.getElementById('courseChatPage');
@@ -16734,47 +16739,82 @@ body.chat-fullscreen-mode #aaRebuiltProfilePage.active{
   const adminRoot=document.getElementById('chatAdminRoot');
   if(!chat||!detail||!topActions)return;
 
+  const modalSelectors=[
+    '#customAlertModal','#customConfirmModal','#chatLockModal','#chatEditMessageModal',
+    '.edit-modal.active'
+  ];
+  const profileSelectors=[
+    '#aaRebuiltProfilePage','#ananasCanonicalProfilePage','#ananasV10ProfilePage',
+    '#ananasPrivateProfileOverlay','#userProfilePage'
+  ];
+
   function syncOverlayLayer(){
     const visible=getComputedStyle(chat).display!=='none' && chat.offsetParent!==null;
     document.documentElement.classList.toggle('chat-overlay-active',visible);
     document.body.classList.toggle('chat-overlay-active',visible);
-    if(visible){
-      [
-        '#customAlertModal', '#customConfirmModal', '#chatLockModal', '#chatEditMessageModal',
-        '#aaRebuiltProfilePage','#ananasCanonicalProfilePage','#ananasV10ProfilePage',
-        '#ananasPrivateProfileOverlay','#userProfilePage'
-      ].forEach(sel=>{
-        document.querySelectorAll(sel).forEach(el=>{
-          if(el.classList.contains('active')) el.style.setProperty('z-index',el.id?.toLowerCase().includes('profile')||el.id==='aaRebuiltProfilePage'?'2147483010':'2147483020','important');
-        });
-      });
+    if(!visible)return;
+
+    const modalOpen=modalSelectors.some(sel=>{
+      try{return [...document.querySelectorAll(sel)].some(el=>el.classList.contains('active')||el.matches('.edit-modal.active'));}
+      catch(_){return false;}
+    });
+    const profileOpen=profileSelectors.some(sel=>document.querySelector(`${sel}.active`));
+
+    /* #courseDetailView owns several legacy chat modals. Raise only while a modal is active,
+       so the underlying fullscreen chat keeps the exact same stacking when nothing is open. */
+    if(modalOpen){
+      detail.style.setProperty('z-index','2147483020','important');
+    }else{
+      detail.style.removeProperty('z-index');
+    }
+
+    if(profileOpen){
+      profileSelectors.forEach(sel=>document.querySelectorAll(`${sel}.active`).forEach(el=>{
+        el.style.setProperty('z-index','2147483030','important');
+      }));
     }
   }
 
-  /* Keep the requested physical ordering even when the admin menu is created dynamically. */
+  /* Keep the physical ordering requested by the user. */
   const normalizeTopActions=()=>{
     if(!topActions)return;
     topActions.style.direction='ltr';
     if(adminRoot && adminRoot.parentElement===topActions) topActions.insertBefore(adminRoot,topActions.firstChild);
     const profile=document.getElementById('chatProfileBtn');
     const theme=document.getElementById('chatThemeBtn');
-    if(profile) topActions.appendChild(profile);
-    if(theme) topActions.appendChild(theme);
+    if(profile)topActions.appendChild(profile);
+    if(theme)topActions.appendChild(theme);
   };
   normalizeTopActions();
   new MutationObserver(normalizeTopActions).observe(topActions,{childList:true,subtree:false});
 
-  const observer=new MutationObserver(syncOverlayLayer);
+  const observer=new MutationObserver(()=>requestAnimationFrame(syncOverlayLayer));
   observer.observe(chat,{attributes:true,attributeFilter:['class','style']});
+  observer.observe(detail,{attributes:true,attributeFilter:['class','style']});
   observer.observe(document.body,{attributes:true,attributeFilter:['class']});
-  observer.observe(document.documentElement,{attributes:true,attributeFilter:['class']});
-  document.addEventListener('click',()=>setTimeout(syncOverlayLayer,0),true);
+  ['customAlertModal','customConfirmModal','chatLockModal','chatEditMessageModal','aaRebuiltProfilePage','ananasCanonicalProfilePage','ananasV10ProfilePage','ananasPrivateProfileOverlay','userProfilePage'].forEach(id=>{
+    const el=document.getElementById(id);
+    if(el)observer.observe(el,{attributes:true,attributeFilter:['class','style']});
+  });
+  window.addEventListener('resize',syncOverlayLayer,{passive:true});
+  window.addEventListener('orientationchange',()=>setTimeout(syncOverlayLayer,80),{passive:true});
   syncOverlayLayer();
 })();
 </script>
 
-</body>
-</html>
+
+<style id="chat-stage27-admin-menu-physical-right">
+body.chat-fullscreen-mode #courseChatPage .chat-admin-menu{
+  left:0!important;
+  right:auto!important;
+  inset-inline-start:auto!important;
+  inset-inline-end:auto!important;
+  transform-origin:top left!important;
+}
+</style>
+
+
+
 
 
 <style id="chat-stage25-fullscreen-css">
@@ -16903,3 +16943,5 @@ body.chat-fullscreen-mode #courseChatPage .chat-rebuilt-shell{
   setFullscreenState();
 })();
 </script>
+</body>
+</html>
