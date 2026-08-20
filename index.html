@@ -7165,7 +7165,7 @@ label[for*="En"], input[id*="En"], textarea[id*="En"] { display:none !important;
 
                             const timeStr = msgDate.toLocaleTimeString('ar-EG', {hour:'2-digit', minute:'2-digit'});
                             msgHtml += `<div class="msg-time">${timeStr}</div>`;
-                            msgHtml += `<div class="msg-actions"><button onclick='replyTo(${JSON.stringify(doc.id)},${JSON.stringify(m.userName||profile.name||'زائر')},${JSON.stringify((m.message||'').substring(0,50))})'><i class="fas fa-reply"></i></button>`;
+                            msgHtml += `<div class="msg-actions"><button onclick='replyTo(${JSON.stringify(doc.id)},${JSON.stringify(profile.name||m.userName||'زائر')},${JSON.stringify((m.message||'').substring(0,50))})'><i class="fas fa-reply"></i></button>`;
 
                             if (isAdmin || isMine) {
                                 msgHtml += `<button onclick="deleteChatMessage('${courseId}', '${doc.id}')" style="color:${isMine ? '#fff' : '#e74c3c'}"><i class="fas fa-trash"></i></button>`;
@@ -7958,7 +7958,7 @@ label[for*="En"], input[id*="En"], textarea[id*="En"] { display:none !important;
             body=`${deleted?'<div style="color:#e74c3c;font-size:.78rem;font-weight:800;margin-bottom:5px;"><i class="fas fa-trash"></i> تم حذف هذه الرسالة</div>':''}<div class="t">${escapeHtml(m.message||'')}${m.edited?'<span class="edited-label">(معدلة)</span>':''}</div>${gallery}`;
           }
 
-          const actions=deleted?'':`<div class="msg-actions"><button onclick='replyTo(${JSON.stringify(doc.id)},${JSON.stringify(m.userName||profile.name||'زائر')},${JSON.stringify((m.message||'').slice(0,120))})' title="رد"><i class="fas fa-reply"></i></button>${mine?`<button onclick="editChatMessage('${courseId}','${doc.id}')" title="تعديل"><i class="fas fa-edit"></i></button>`:''}${(mine||isAdmin)?`<button onclick="deleteChatMessage('${courseId}','${doc.id}')" title="حذف"><i class="fas fa-trash"></i></button>`:''}</div>`;
+          const actions=deleted?'':`<div class="msg-actions"><button onclick='replyTo(${JSON.stringify(doc.id)},${JSON.stringify(profile.name||m.userName||'زائر')},${JSON.stringify((m.message||'').slice(0,120))})' title="رد"><i class="fas fa-reply"></i></button>${mine?`<button onclick="editChatMessage('${courseId}','${doc.id}')" title="تعديل"><i class="fas fa-edit"></i></button>`:''}${(mine||isAdmin)?`<button onclick="deleteChatMessage('${courseId}','${doc.id}')" title="حذف"><i class="fas fa-trash"></i></button>`:''}</div>`;
 
           html+=`<div class="chat-msg ${mine?'sent':'received'} ${deleted?'deleted-message':''} ${(!mine&&!showHeader)?'chat-msg-grouped':''}" data-message-id="${doc.id}">${showHeader?`<div class="chat-profile-avatar chat-profile-avatar-outside" data-profile-uid="${escapeHtml(profileUid)}">${profile.photo?`<img src="${escapeHtml(profile.photo)}" alt="">`:escapeHtml((profile.name||'مستخدم').slice(0,1))}</div><div class="msg-header"><span class="chat-profile-name chat-profile-name-trigger" data-profile-uid="${escapeHtml(profileUid)}">${escapeHtml(profile.name||m.userName||'مستخدم')}</span></div>`:''}${reply}${body}<div class="msg-time">${time}</div>${actions}</div>`;
 
@@ -9778,44 +9778,57 @@ function buildChatLockV12(){
   m.className='edit-modal chat-lock-modal ananas-chat-lock-v12';
   m.innerHTML=`<div style="padding:22px 24px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:12px;background:linear-gradient(145deg,var(--bg-card),rgba(108,92,231,.05))">
     <div style="width:50px;height:50px;border-radius:16px;background:rgba(108,92,231,.10);color:var(--accent1);display:grid;place-items:center;font-size:1.25rem"><i class="fas fa-lock"></i></div>
-    <div><h3 style="margin:0">قفل الدردشة</h3><p style="margin:5px 0 0;color:var(--text-muted);font-size:.82rem">حدد بداية القفل، ثم اختر طريقة فتح الدردشة.</p></div>
+    <div><h3 style="margin:0">قفل الدردشة</h3><p style="margin:5px 0 0;color:var(--text-muted);font-size:.82rem">اختر مدة القفل أو حدد وقتًا مخصصًا، ويمكن إبقاؤه حتى الفتح اليدوي.</p></div>
     <button type="button" id="chatV12Close" style="margin-inline-start:auto;width:40px;height:40px;border-radius:13px;border:1px solid var(--border);background:var(--bg-secondary);color:var(--text-primary);cursor:pointer"><i class="fas fa-xmark"></i></button>
   </div>
   <div style="padding:22px 24px">
-    <label class="v11-field"><span>بداية الإيقاف</span><input id="chatV12Start" type="datetime-local"><small>افتراضيًا الوقت الحالي، ويمكنك تحديد وقت مستقبلي.</small></label>
+    <label class="v11-field"><span>بداية القفل</span><input id="chatV12Start" type="datetime-local"><small>افتراضيًا الوقت الحالي، ويمكنك تحديد وقت مستقبلي.</small></label>
     <div class="v11-field">
-      <span>نهاية الإيقاف</span>
-      <div style="display:grid;gap:10px">
-        <label class="v11-choice" id="chatV12TimedChoice"><input type="radio" name="chatV12EndMode" value="timed"><span class="v11-choice-dot"></span><span><strong>فتح تلقائيًا</strong><small style="display:block;color:var(--text-muted)">حدد تاريخ ووقت فتح الدردشة تلقائيًا.</small></span></label>
-        <label class="v11-choice" id="chatV12ManualChoice"><input type="radio" name="chatV12EndMode" value="manual" checked><span class="v11-choice-dot"></span><span><strong>فتح يدويًا</strong><small style="display:block;color:var(--text-muted)">يبقى القفل حتى أضغط زر فتح الدردشة.</small></span></label>
+      <span>مدة القفل</span>
+      <div id="chatV12DurationChoices" class="suspend-duration-choices" role="radiogroup" aria-label="مدة قفل الدردشة">
+        <button type="button" class="suspend-duration-choice active" data-chat-lock-duration="1d"><i class="fas fa-clock"></i><span>يوم واحد</span></button>
+        <button type="button" class="suspend-duration-choice" data-chat-lock-duration="3d"><i class="fas fa-calendar-day"></i><span>3 أيام</span></button>
+        <button type="button" class="suspend-duration-choice" data-chat-lock-duration="7d"><i class="fas fa-calendar-week"></i><span>7 أيام</span></button>
+        <button type="button" class="suspend-duration-choice" data-chat-lock-duration="14d"><i class="fas fa-calendar-days"></i><span>14 يومًا</span></button>
+        <button type="button" class="suspend-duration-choice" data-chat-lock-duration="30d"><i class="fas fa-calendar-alt"></i><span>30 يومًا</span></button>
+        <button type="button" class="suspend-duration-choice" data-chat-lock-duration="custom"><i class="fas fa-calendar-check"></i><span>وقت مخصص</span></button>
+        <button type="button" class="suspend-duration-choice" data-chat-lock-duration="manual"><i class="fas fa-hand"></i><span>حتى الفتح اليدوي</span></button>
       </div>
       <input id="chatV12End" type="datetime-local" disabled style="margin-top:10px">
+      <small style="display:block;color:var(--text-muted);margin-top:6px">عند اختيار مدة جاهزة يُحسب وقت الانتهاء من بداية القفل. خيار الوقت المخصص يتيح تحديد التاريخ والوقت يدويًا.</small>
     </div>
     <label class="v11-field"><span>سبب القفل <small>(اختياري)</small></span><textarea id="chatV12Reason" rows="4" placeholder="يمكنك كتابة سبب القفل أو ترك الحقل فارغًا"></textarea></label>
     <div style="padding:11px 13px;border-radius:14px;background:rgba(108,92,231,.07);border:1px solid rgba(108,92,231,.14);color:var(--text-muted);font-size:.8rem"><i class="fas fa-circle-info" style="color:var(--accent1)"></i> المشرف يستطيع إرسال الرسائل حتى أثناء القفل.</div>
     <div style="display:flex;gap:10px;margin-top:17px"><button type="button" id="chatV12Cancel" class="ananas-secondary-btn" style="flex:1">إلغاء</button><button type="button" id="chatV12Save" class="ananas-primary-btn" style="flex:1"><i class="fas fa-lock"></i> حفظ القفل</button></div>
   </div>`;
-  document.body.appendChild(m);
-  m.querySelectorAll('input[name="chatV12EndMode"]').forEach(r=>r.addEventListener('change',()=>{
-    const timed=$('chatV12TimedChoice')?.querySelector('input')?.checked;
-    $('chatV12End').disabled=!timed;
-    $('chatV12TimedChoice')?.classList.toggle('active',timed);
-    $('chatV12ManualChoice')?.classList.toggle('active',!timed);
+  const choices=[...m.querySelectorAll('[data-chat-lock-duration]')];
+  choices.forEach(btn=>btn.addEventListener('click',()=>{
+    choices.forEach(x=>x.classList.toggle('active',x===btn));
+    $('chatV12End').disabled=btn.dataset.chatLockDuration!=='custom';
   }));
   $('chatV12Close').onclick=()=>m.classList.remove('active');
   $('chatV12Cancel').onclick=()=>m.classList.remove('active');
   $('chatV12Save').onclick=async()=>{
     if(!isAdmin||!activeCourseId)return;
+    const mode=m.querySelector('[data-chat-lock-duration].active')?.dataset.chatLockDuration||'1d';
     const s=$('chatV12Start').value,e=$('chatV12End').value,reason=$('chatV12Reason').value.trim();
-    const endMode=$('chatV12TimedChoice').querySelector('input').checked;
-    const start=s?parseRiyadhDateTime(s):new Date(),end=endMode&&e?parseRiyadhDateTime(e):null;
-    if(isNaN(start.getTime())||(endMode&&!end)|| (end&&isNaN(end.getTime())) || (end&&end<=start)) return showCustomAlert('خطأ','تحقق من تاريخ ووقت بداية ونهاية القفل.');
+    const start=s?parseRiyadhDateTime(s):new Date();
+    let end=null;
+    if(mode==='custom'){
+      if(!e)return showCustomAlert('تنبيه','حدد تاريخ ووقت انتهاء القفل.');
+      end=parseRiyadhDateTime(e);
+    }else if(mode!=='manual'){
+      const days=({'1d':1,'3d':3,'7d':7,'14d':14,'30d':30})[mode];
+      if(!days)return showCustomAlert('تنبيه','اختر مدة صحيحة للقفل.');
+      end=new Date(start.getTime()+days*86400000);
+    }
+    if(isNaN(start.getTime())||(end&&isNaN(end.getTime()))||(end&&end<=start))return showCustomAlert('خطأ','تحقق من تاريخ ووقت بداية ونهاية القفل.');
     try{
       const payload={locked:true,startAt:firebase.firestore.Timestamp.fromDate(start),endAt:end?firebase.firestore.Timestamp.fromDate(end):null,autoExpire:!!end,reason,timezone:'Asia/Riyadh',updatedAt:firebase.firestore.FieldValue.serverTimestamp()};
       await db.collection('courses').doc(activeCourseId).collection('settings').doc('chat').set(payload,{merge:true});
       currentChatLock={...payload,startAt:firebase.firestore.Timestamp.fromDate(start),endAt:end?firebase.firestore.Timestamp.fromDate(end):null};
-      window.applyChatLockNow?.();m.classList.remove('active');showCustomAlert('تم الحفظ','تم إعداد قفل الدردشة.');
-    }catch(err){console.error(err);showCustomAlert('خطأ','تعذر حفظ إعدادات قفل الدردشة.')}
+      window.applyChatLockNow?.();m.classList.remove('active');showCustomAlert('تم الحفظ','تم إعداد قفل الدردشة بنجاح.');
+    }catch(err){console.error(err);showCustomAlert('خطأ','تعذر حفظ إعدادات قفل الدردشة.');}
   };
 }
 function openChatLockV12(){
@@ -9825,10 +9838,8 @@ function openChatLockV12(){
   const n=new Date(),p=x=>String(x).padStart(2,'0');
   $('chatV12Start').value=`${n.getFullYear()}-${p(n.getMonth()+1)}-${p(n.getDate())}T${p(n.getHours())}:${p(n.getMinutes())}`;
   $('chatV12End').value='';$('chatV12Reason').value='';
-  $('chatV12ManualChoice').querySelector('input').checked=true;
-  $('chatV12TimedChoice').querySelector('input').checked=false;
+  m.querySelectorAll('[data-chat-lock-duration]').forEach(b=>b.classList.toggle('active',b.dataset.chatLockDuration==='1d'));
   $('chatV12End').disabled=true;
-  $('chatV12TimedChoice').classList.remove('active');$('chatV12ManualChoice').classList.add('active');
   m.classList.add('active');
 }
 document.addEventListener('click',e=>{
@@ -16026,8 +16037,9 @@ body.light-mode #courseChatPage .chat-msg.received{
                     container.innerHTML='<p style="color:var(--text-muted);text-align:center;padding:30px;">لا توجد رسائل.</p>';
                     chatInitialized=true; chatLastMessageId=null; chatUnread=0; chatUserAtBottom=true; updateScrollButton(); return;
                 }
-                const docs=snapshot.docs.filter(d=>!hiddenIds.has(String(d.id)));
-                const ids=[...new Set(docs.map(d=>String(d.data()?.userId||'')).filter(Boolean))];
+                const allDocs=snapshot.docs;
+                const docs=allDocs.filter(d=>!hiddenIds.has(String(d.id)));
+                const ids=[...new Set(allDocs.map(d=>String(d.data()?.userId||'')).filter(Boolean))];
                 await Promise.all(ids.map(async uid=>{
                     if(profileCache[uid])return;
                     try{
@@ -16052,7 +16064,9 @@ body.light-mode #courseChatPage .chat-msg.received{
                     const showHeader=!isMine&&(!previousWasReceived||previousUserId!==profileUid);
                     const images=Array.isArray(m.imageUrls)?m.imageUrls:(m.imageUrl?[m.imageUrl]:[]);
                     const deleted=!!m.deleted;
-                    const reply=m.replyToText?`<div class="reply-block" data-reply-to-id="${safeEscape(m.replyToId||'')}"><div class="ru">${safeEscape(m.replyToName||'زائر')}</div><div class="rt">${safeEscape(m.replyToText)}</div></div>`:'';
+                    const replyAuthorUid=String(m.replyToId||'') ? String((allDocs.find(d=>String(d.id)===String(m.replyToId))?.data()?.userId)||'') : '';
+                    const replyAuthorName=replyAuthorUid&&profileCache[replyAuthorUid]?.name ? profileCache[replyAuthorUid].name : (m.replyToName||'مستخدم');
+                    const reply=m.replyToText?`<div class="reply-block" data-reply-to-id="${safeEscape(m.replyToId||'')}"><div class="ru">${safeEscape(replyAuthorName)}</div><div class="rt">${safeEscape(m.replyToText)}</div></div>`:'';
                     const gallery=(!deleted&&images.length)?`<div class="message-gallery">${images.map(u=>`<img src="${safeEscape(u)}" alt="صورة" onclick="openChatMessageGallery('${safeEscape(courseId)}','${safeEscape(doc.id)}')">`).join('')}</div>`:'';
                     let body='';
                     if(deleted&&!isAdmin){
@@ -16686,7 +16700,17 @@ body.aa-chat-fullscreen-open #courseChatPage .chat-topbar-title{display:none!imp
 #courseChatPage .aa-chat-left-controls button{position:relative!important;flex:0 0 42px!important;width:42px!important;height:42px!important;min-width:42px!important;min-height:42px!important;box-sizing:border-box!important;border:1px solid color-mix(in srgb,var(--chat-purple) 16%,var(--border))!important;border-radius:14px!important;background:linear-gradient(145deg,color-mix(in srgb,var(--bg-card) 96%,transparent),color-mix(in srgb,var(--chat-purple) 6%,var(--bg-card)))!important;color:var(--text-primary)!important;display:inline-flex!important;align-items:center!important;justify-content:center!important;cursor:pointer;font:inherit;overflow:hidden;}
 #courseChatPage .aa-chat-left-controls button:hover{color:#fff!important;border-color:rgba(108,92,231,.65)!important;background:linear-gradient(145deg,#6c5ce7,#5546ce)!important;}
 #courseChatPage .chat-back-btn{order:2!important;margin-inline-start:auto!important;}
-body.aa-chat-fullscreen-open #courseChatPage .chat-admin-menu{left:0!important;right:auto!important;inset-inline-start:auto!important;inset-inline-end:auto!important;}
+body.aa-chat-fullscreen-open #courseChatPage .chat-admin-menu{
+    left:0!important;
+    right:auto!important;
+    inset-inline-start:0!important;
+    inset-inline-end:auto!important;
+    width:min(250px,calc(100vw - 24px))!important;
+    max-width:calc(100vw - 24px)!important;
+    box-sizing:border-box!important;
+    overflow:visible!important;
+    direction:rtl!important;
+}
 body.aa-chat-fullscreen-open #userProfilePage,body.aa-chat-fullscreen-open #ananasCanonicalProfilePage,body.aa-chat-fullscreen-open #ananasV10ProfilePage,body.aa-chat-fullscreen-open #aaRebuiltProfilePage{inset:0!important;top:0!important;right:0!important;bottom:0!important;left:0!important;max-height:none!important;}
 @media(max-width:768px){#courseChatPage .aa-chat-left-controls button{width:38px!important;height:38px!important;min-width:38px!important;min-height:38px!important;border-radius:12px!important;}}
 #courseChatPage .chat-msg{touch-action:manipulation;-webkit-touch-callout:none;}
