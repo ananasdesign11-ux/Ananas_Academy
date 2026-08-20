@@ -16050,7 +16050,6 @@ body.light-mode #courseChatPage .chat-msg.received{
                     const profileUid=String(m.userId||'');
                     const profile=profileCache[profileUid]||{name:m.userName||'مستخدم',photo:''};
                     const showHeader=!isMine&&(!previousWasReceived||previousUserId!==profileUid);
-                    const isGroupedSameUser=previousUserId===profileUid && previousWasReceived===!isMine;
                     const images=Array.isArray(m.imageUrls)?m.imageUrls:(m.imageUrl?[m.imageUrl]:[]);
                     const deleted=!!m.deleted;
                     const reply=m.replyToText?`<div class="reply-block"><div class="ru">${safeEscape(m.replyToName||'زائر')}</div><div class="rt">${safeEscape(m.replyToText)}</div></div>`:'';
@@ -16062,10 +16061,7 @@ body.light-mode #courseChatPage .chat-msg.received{
                         body=`${deleted?'<div style="color:#e74c3c;font-size:.78rem;font-weight:800;margin-bottom:5px;"><i class="fas fa-trash"></i> تم حذف هذه الرسالة</div>':''}<div class="t">${safeEscape(m.message||'')}${m.edited?'<span class="edited-label">(معدلة)</span>':''}</div>${gallery}`;
                     }
                     const actions=deleted?'':`<div class="msg-actions"><button onclick='replyTo(${JSON.stringify(doc.id)},${JSON.stringify(m.userName||profile.name||'زائر')},${JSON.stringify((m.message||'').slice(0,120))})' title="رد"><i class="fas fa-reply"></i></button>${isMine?`<button onclick="editChatMessage('${safeEscape(courseId)}','${safeEscape(doc.id)}')" title="تعديل"><i class="fas fa-edit"></i></button>`:''}${(isMine||isAdmin)?`<button onclick="deleteChatMessage('${safeEscape(courseId)}','${safeEscape(doc.id)}')" title="حذف"><i class="fas fa-trash"></i></button>`:''}</div>`;
-                    const readBy=Array.isArray(m.readBy)?m.readBy:(Array.isArray(m.readByUids)?m.readByUids:(m.readBy&&typeof m.readBy==='object'?Object.keys(m.readBy):[]));
-                    const readBySomeoneElse=isMine && readBy.some(uid=>String(uid)!==String(currentUserId));
-                    const messageStatus=isMine?`<span class="chat-message-status ${readBySomeoneElse?'is-read':''}" aria-label="${readBySomeoneElse?'تمت القراءة':'تم الإرسال'}"><i class="fas ${readBySomeoneElse?'fa-check-double':'fa-check'}" aria-hidden="true"></i></span>`:'';
-                    html+=`<div class="chat-msg ${isMine?'sent':'received'} ${deleted?'deleted-message':''} ${(!isMine&&!showHeader)?'chat-msg-grouped':''} ${(isMine&&isGroupedSameUser)?'chat-msg-grouped-sent':''}" data-message-id="${safeEscape(doc.id)}">${showHeader?`<div class="chat-profile-avatar chat-profile-avatar-outside" data-profile-uid="${safeEscape(profileUid)}">${profile.photo?`<img src="${safeEscape(profile.photo)}" alt="">`:safeEscape((profile.name||'مستخدم').slice(0,1))}</div><div class="msg-header"><span class="chat-profile-name chat-profile-name-trigger" data-profile-uid="${safeEscape(profileUid)}">${safeEscape(profile.name||m.userName||'مستخدم')}</span></div>`:''}${reply}${body}<div class="msg-time"><span>${safeEscape(msgDate.toLocaleTimeString('ar-SA',{hour:'2-digit',minute:'2-digit'}))}</span>${messageStatus}</div>${actions}</div>`;
+                    html+=`<div class="chat-msg ${isMine?'sent':'received'} ${deleted?'deleted-message':''} ${(!isMine&&!showHeader)?'chat-msg-grouped':''}" data-message-id="${safeEscape(doc.id)}">${showHeader?`<div class="chat-profile-avatar chat-profile-avatar-outside" data-profile-uid="${safeEscape(profileUid)}">${profile.photo?`<img src="${safeEscape(profile.photo)}" alt="">`:safeEscape((profile.name||'مستخدم').slice(0,1))}</div><div class="msg-header"><span class="chat-profile-name chat-profile-name-trigger" data-profile-uid="${safeEscape(profileUid)}">${safeEscape(profile.name||m.userName||'مستخدم')}</span></div>`:''}${reply}${body}<div class="msg-time">${safeEscape(msgDate.toLocaleTimeString('ar-SA',{hour:'2-digit',minute:'2-digit'}))}</div>${actions}</div>`;
                     previousUserId=profileUid; previousWasReceived=!isMine;
                 });
                 const lastId=docs[docs.length-1]?.id||null;
@@ -16543,31 +16539,34 @@ syncHeight();
   async function markReadToLatest(courseId){
     if(!courseId)return;
     try{
-      const previousRead=readState(courseId);
-      const latestSnap=await db.collection('courses').doc(courseId).collection('chat').orderBy('createdAt','desc').limit(1).get();
-      const ms=tsMs(latestSnap.docs[0]?.data()?.createdAt)||Date.now();
+      const snap=await db.collection('courses').doc(courseId).collection('chat').orderBy('createdAt','desc').limit(1).get();
+      const ms=tsMs(snap.docs[0]?.data()?.createdAt)||Date.now();
       saveRead(courseId,ms);
-
-      /* Chat Stage 4: persist a lightweight per-message read receipt. */
-      if(currentUser?.uid){
-        let q=db.collection('courses').doc(courseId).collection('chat');
-        if(previousRead>0){
-          q=q.where('createdAt','>',firebase.firestore.Timestamp.fromMillis(previousRead));
-        }
-        const unreadSnap=await q.orderBy('createdAt','asc').get();
-        const refs=unreadSnap.docs.map(d=>d.ref);
-        for(let i=0;i<refs.length;i+=450){
-          const batch=db.batch();
-          refs.slice(i,i+450).forEach(ref=>batch.update(ref,{readBy:firebase.firestore.FieldValue.arrayUnion(currentUser.uid)}));
-          await batch.commit();
-        }
-      }
-    }catch(_){
-      /* Reading the chat must remain functional even when receipt writes are rejected by Firestore rules. */
-    }
+    }catch(_){}
     setUnreadState(0,null);
   }
 
+  function applyUnreadMarker(){
+    if(!currentOpenChat()||!unreadFirstId||unreadCount<=0)return;
+    const target=chatList.querySelector(`[data-message-id="${CSS.escape(unreadFirstId)}"]`);
+    if(!target)return;
+    if(!target.previousElementSibling?.classList.contains('chat-unread-divider')){
+      const marker=document.createElement('div');
+      marker.className='chat-unread-divider';
+      marker.setAttribute('role','separator');
+      marker.innerHTML='<span>رسائل غير مقروءة</span>';
+      target.parentNode.insertBefore(marker,target);
+    }
+    clearTimeout(observerTimer);
+    observerTimer=setTimeout(()=>{
+      if(!target.isConnected)return;
+      chatList.scrollTo({top:Math.max(0,target.offsetTop-12),behavior:'auto'});
+      const distance=chatList.scrollHeight-chatList.clientHeight-chatList.scrollTop;
+      if(distance>80){
+        try{window.__chatStage23ForceUnreadView?.();}catch(_){}
+      }
+    },30);
+  }
 
   function startWatcher(courseId){
     if(!courseId||currentOpenChat()||watchedCourseId===courseId)return;
@@ -16724,8 +16723,6 @@ body.chat-fullscreen-active #courseChatPage .chat-back-btn{
     position:absolute!important;
     right:max(14px,env(safe-area-inset-right))!important;
     left:auto!important;
-    inset-inline-end:auto!important;
-    inset-inline-start:auto!important;
     order:initial!important;
 }
 body.chat-fullscreen-active #courseChatPage .chat-left-controls{
@@ -16792,8 +16789,6 @@ body.chat-fullscreen-active #aaRebuiltProfilePage{
     body.chat-fullscreen-active #courseChatPage .chat-back-btn{
         right:max(11px,env(safe-area-inset-right))!important;
         left:auto!important;
-        inset-inline-end:auto!important;
-        inset-inline-start:auto!important;
     }
     body.chat-fullscreen-active #courseChatPage .chat-left-controls{
         inset-inline-start:max(11px,env(safe-area-inset-left))!important;
@@ -16909,94 +16904,5 @@ body.chat-fullscreen-active #aaRebuiltProfilePage{
     syncFullscreenState();
 })();
 </script>
-<style id="chat-stage4-bubble-design-css">
-/* ===== CHAT STAGE 4: Bubble Design ===== */
-#courseChatPage .chat-msg{
-    position:relative!important;
-    border-radius:16px!important;
-}
-
-/* Received: subtle WhatsApp-style tail toward the outside avatar. */
-#courseChatPage .chat-msg.received{
-    border-top-left-radius:0!important;
-    border-top-right-radius:16px!important;
-    border-bottom-right-radius:16px!important;
-    border-bottom-left-radius:16px!important;
-    background:linear-gradient(145deg,#20252f,#171b23)!important;
-    border-color:#303744!important;
-}
-#courseChatPage .chat-msg.received:not(.chat-msg-grouped)::before{
-    content:"";
-    position:absolute;
-    top:0;
-    left:-8px;
-    width:13px;
-    height:12px;
-    background:inherit;
-    border-radius:0 0 0 8px;
-    clip-path:polygon(100% 0,0 0,100% 100%);
-    -webkit-clip-path:polygon(100% 0,0 0,100% 100%);
-    z-index:0;
-    pointer-events:none;
-}
-
-/* Light mode: keep the incoming bubble clearly separated from the page. */
-body.light-mode #courseChatPage .chat-msg.received{
-    background:linear-gradient(145deg,#ffffff,#f3f4f8)!important;
-    border-color:#d9dde6!important;
-}
-
-/* Sent: same tail language, mirrored to the opposite side, without profile/name. */
-#courseChatPage .chat-msg.sent{
-    border-top-right-radius:16px!important;
-    border-top-left-radius:16px!important;
-    border-bottom-left-radius:16px!important;
-    border-bottom-right-radius:16px!important;
-    background:linear-gradient(145deg,#765ff0 0%,#604fd7 58%,#5544c5 100%)!important;
-    border-color:rgba(255,255,255,.12)!important;
-    color:#fff!important;
-    box-shadow:0 9px 24px rgba(108,92,231,.22)!important;
-}
-
-#courseChatPage .chat-msg .msg-header{
-    display:flex!important;
-    align-items:center!important;
-    width:100%!important;
-    margin:0 0 4px!important;
-    min-height:18px!important;
-}
-#courseChatPage .chat-msg.received .chat-profile-name{
-    display:block!important;
-    max-width:100%!important;
-    overflow:hidden!important;
-    text-overflow:ellipsis!important;
-    white-space:nowrap!important;
-}
-#courseChatPage .chat-msg.sent .msg-header,
-#courseChatPage .chat-msg.sent .chat-profile-avatar-outside,
-#courseChatPage .chat-msg.sent .chat-profile-name{
-    display:none!important;
-}
-#courseChatPage .chat-msg .msg-time{
-    display:inline-flex!important;
-    align-items:center!important;
-    justify-content:flex-end!important;
-    gap:4px!important;
-}
-#courseChatPage .chat-message-status{
-    display:inline-flex!important;
-    align-items:center!important;
-    justify-content:center!important;
-    font-size:.64rem!important;
-    line-height:1!important;
-    opacity:.78!important;
-}
-#courseChatPage .chat-message-status.is-read{
-    opacity:1!important;
-}
-#courseChatPage .chat-message-status .fa-check-double{
-    letter-spacing:-2px!important;
-}
-</style>
 </body>
 </html>
