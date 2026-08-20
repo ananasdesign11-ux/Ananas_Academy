@@ -16097,82 +16097,288 @@ body.light-mode #courseChatPage .chat-msg.received{
     // Replace only the chat-page renderer; Firestore data shape and all other site functions remain unchanged.
     window.loadChatPage=async function(courseId){
         const container=$('chatPageMessagesList'); if(!container)return;
-        if(chatUnsubscribe){chatUnsubscribe();chatUnsubscribe=null;}
+        const courseKey=String(courseId||'');
+        const sessions=window.__aaChatSessions||(window.__aaChatSessions=new Map());
+        let session=sessions.get(courseKey);
+        if(!session){
+            session={
+                courseId:courseKey,
+                unsubscribe:null,
+                initialized:false,
+                hiddenIds:new Set(),
+                hiddenLoaded:false,
+                docs:new Map(),
+                allDocs:new Map(),
+                lastId:null
+            };
+            sessions.set(courseKey,session);
+        }
+
         renderAdminMenu();
         loadChatLockState?.(courseId);
-        chatInitialized=false; chatUnread=0; chatLastMessageId=null; chatUserAtBottom=true; updateScrollButton();
-        container.innerHTML='<p style="color:var(--text-muted);text-align:center;padding:30px;">جاري تحميل الرسائل...</p>';
-        const profileCache=window.__chatProfileCache=window.__chatProfileCache||{};
-        try{
-            const hiddenPromise=window.__aaLoadHiddenChatIds?.(courseId)||Promise.resolve(new Set());
-            chatUnsubscribe=db.collection('courses').doc(courseId).collection('chat').orderBy('createdAt','asc').onSnapshot(async snapshot=>{
-                const hiddenIds=await hiddenPromise;
-                if(snapshot.empty){
-                    container.innerHTML='<p style="color:var(--text-muted);text-align:center;padding:30px;">لا توجد رسائل.</p>';
-                    chatInitialized=true; chatLastMessageId=null; chatUnread=0; chatUserAtBottom=true; updateScrollButton(); return;
-                }
-                const allDocs=snapshot.docs;
-                const docs=allDocs.filter(d=>!hiddenIds.has(String(d.id)));
-                const ids=[...new Set(allDocs.map(d=>String(d.data()?.userId||'')).filter(Boolean))];
-                await Promise.all(ids.map(async uid=>{
-                    if(profileCache[uid])return;
-                    try{
-                        const s=await db.collection('users').doc(uid).get();
-                        const p=s.exists?(s.data()||{}):{};
-                        profileCache[uid]={name:p.displayName||p.name||'مستخدم',photo:p.photoURL||p.photoUrl||p.photo||''};
-                    }catch(_){profileCache[uid]={name:'مستخدم',photo:''};}
-                }));
-                const currentUserId=currentUser?.uid||null;
-                let html='',lastDate='',previousUserId=null,previousWasReceived=false;
-                docs.forEach(doc=>{
-                    const m=doc.data()||{};
-                    const msgDate=m.createdAt?.toDate?m.createdAt.toDate():(m.createdAt?.seconds?new Date(m.createdAt.seconds*1000):new Date());
-                    const dateLabel=formatDateLabel(msgDate);
-                    if(dateLabel!==lastDate){
-                        html+=`<div class="chat-date-divider" role="separator">${safeEscape(dateLabel)}</div>`;
-                        lastDate=dateLabel; previousUserId=null; previousWasReceived=false;
-                    }
-                    const isMine=m.userId===currentUserId;
-                    const profileUid=String(m.userId||'');
-                    const profile=profileCache[profileUid]||{name:m.userName||'مستخدم',photo:''};
-                    const showHeader=!isMine&&(!previousWasReceived||previousUserId!==profileUid);
-                    const images=Array.isArray(m.imageUrls)?m.imageUrls:(m.imageUrl?[m.imageUrl]:[]);
-                    const deleted=!!m.deleted;
-                    const replyAuthorUid=String(m.replyToId||'') ? String((allDocs.find(d=>String(d.id)===String(m.replyToId))?.data()?.userId)||'') : '';
-                    const replyAuthorName=replyAuthorUid&&profileCache[replyAuthorUid]?.name ? profileCache[replyAuthorUid].name : (m.replyToName||'مستخدم');
-                    const reply=m.replyToText?`<div class="reply-block" data-reply-to-id="${safeEscape(m.replyToId||'')}"><div class="ru">${safeEscape(replyAuthorName)}</div><div class="rt">${safeEscape(m.replyToText)}</div></div>`:'';
-                    const gallery=(!deleted&&images.length)?`<div class="message-gallery">${images.map(u=>`<img src="${safeEscape(u)}" alt="صورة" onclick="openChatMessageGallery('${safeEscape(courseId)}','${safeEscape(doc.id)}')">`).join('')}</div>`:'';
-                    let body='';
-                    if(deleted&&!isAdmin){
-                        body='<div class="t" style="color:var(--text-muted);font-style:italic;"><i class="fas fa-ban"></i> هذه الرسالة محذوفة</div>';
-                    }else{
-                        body=`${deleted?'<div style="color:#e74c3c;font-size:.78rem;font-weight:800;margin-bottom:5px;"><i class="fas fa-trash"></i> تم حذف هذه الرسالة</div>':''}<div class="t">${safeEscape(m.message||'')}${m.edited?'<span class="edited-label">(معدلة)</span>':''}</div>${gallery}`;
-                    }
-                    const canEdit=!!window.__aaChatCanEditMessage?.(m);
-                    const actions=deleted?'':`<div class="msg-actions"><button onclick='replyTo(${JSON.stringify(doc.id)},${JSON.stringify(m.userName||profile.name||'زائر')},${JSON.stringify((m.message||'').slice(0,120))})' title="رد"><i class="fas fa-reply"></i></button>${isMine&&canEdit?`<button data-chat-action="edit" onclick="editChatMessage('${safeEscape(courseId)}','${safeEscape(doc.id)}')" title="تعديل"><i class="fas fa-edit"></i></button>`:''}${(isMine||isAdmin)?`<button onclick="deleteChatMessage('${safeEscape(courseId)}','${safeEscape(doc.id)}')" title="حذف"><i class="fas fa-trash"></i></button>`:''}</div>`;
-                    html+=`<div class="chat-msg ${isMine?'sent':'received'} ${deleted?'deleted-message':''} ${(!isMine&&!showHeader)?'chat-msg-grouped':''}" data-message-id="${safeEscape(doc.id)}" data-user-id="${safeEscape(m.userId||'')}" data-created-at="${safeEscape(msgDate.getTime())}">${showHeader?`<div class="chat-profile-avatar chat-profile-avatar-outside" data-profile-uid="${safeEscape(profileUid)}">${profile.photo?`<img src="${safeEscape(profile.photo)}" alt="">`:safeEscape((profile.name||'مستخدم').slice(0,1))}</div><div class="msg-header"><span class="chat-profile-name chat-profile-name-trigger" data-profile-uid="${safeEscape(profileUid)}">${safeEscape(profile.name||m.userName||'مستخدم')}</span></div>`:''}${reply}${body}<div class="msg-time">${safeEscape(msgDate.toLocaleTimeString('ar-SA',{hour:'2-digit',minute:'2-digit'}))}</div>${actions}</div>`;
-                    previousUserId=profileUid; previousWasReceived=!isMine;
-                });
-                const lastId=docs[docs.length-1]?.id||null;
-                const changed=chatInitialized && lastId!==chatLastMessageId;
-                const addedBySomeoneElse=changed && lastId && (docs[docs.length-1].data()?.userId!==currentUserId);
-                container.innerHTML=html;
-                chatLastMessageId=lastId;
-                if(!chatInitialized || chatUserAtBottom){ chatUnread=0; requestAnimationFrame(()=>scrollToBottom('auto')); }
-                else if(addedBySomeoneElse){ chatUnread=Math.min(999,chatUnread+1); }
+        updateScrollButton();
+
+        /* Keep the existing DOM alive while navigating around the site.
+           A session may have no active listener after leaving the course, but its
+           already-rendered messages remain visible and are reused immediately. */
+        if(session.initialized && container.querySelector('.chat-msg')){
+            if(!session.unsubscribe){
+                /* Reconnect silently in the background; never replace the visible DOM. */
+            }else{
+                chatUnsubscribe=session.unsubscribe;
                 chatInitialized=true;
-                updateScrollButton();
-            },err=>{
-                console.error(err);
-                container.innerHTML='<p style="color:#e74c3c;text-align:center;padding:30px;">حدث خطأ في تحميل الدردشة.</p>';
-                updateScrollButton();
+                chatLastMessageId=session.lastId;
+                return;
+            }
+        }else if(!container.querySelector('.chat-msg')){
+            container.innerHTML='<p style="color:var(--text-muted);text-align:center;padding:30px;">جاري تحميل الرسائل...</p>';
+        }
+
+        if(chatUnsubscribe && chatUnsubscribe!==session.unsubscribe){
+            try{chatUnsubscribe();}catch(_){ }
+            chatUnsubscribe=null;
+        }
+
+        chatUnread=0; chatUserAtBottom=true; updateScrollButton();
+        const profileCache=window.__chatProfileCache=window.__chatProfileCache||{};
+
+        function tsMs(value){
+            try{
+                if(value?.toMillis)return value.toMillis();
+                if(value?.toDate)return value.toDate().getTime();
+                if(value?.seconds)return Number(value.seconds)*1000+Math.floor(Number(value.nanoseconds||0)/1e6);
+                const n=Number(value); return Number.isFinite(n)?n:0;
+            }catch(_){return 0;}
+        }
+        function docContentSignature(doc){
+            const m=doc.data()||{};
+            return JSON.stringify({
+                userId:m.userId||'',userName:m.userName||'',message:m.message||'',
+                imageUrl:m.imageUrl||'',imageUrls:Array.isArray(m.imageUrls)?m.imageUrls:[],
+                edited:!!m.edited,deleted:!!m.deleted,
+                replyToId:m.replyToId||'',replyToName:m.replyToName||'',replyToText:m.replyToText||''
             });
+        }
+        function dateFromDoc(doc){
+            const m=doc.data()||{};
+            const ms=tsMs(m.createdAt);
+            return new Date(ms||Date.now());
+        }
+        function buildMessageNode(doc,allDocsMap){
+            const m=doc.data()||{};
+            const currentUserId=currentUser?.uid||null;
+            const isMine=m.userId===currentUserId;
+            const profileUid=String(m.userId||'');
+            const profile=profileCache[profileUid]||{name:m.userName||'مستخدم',photo:''};
+            const date=dateFromDoc(doc);
+            const images=Array.isArray(m.imageUrls)?m.imageUrls:(m.imageUrl?[m.imageUrl]:[]);
+            const deleted=!!m.deleted;
+            let replyAuthorName=m.replyToName||'مستخدم';
+            if(m.replyToId){
+                const original=allDocsMap.get(String(m.replyToId));
+                const originalUid=String(original?.data()?.userId||'');
+                if(originalUid&&profileCache[originalUid]?.name) replyAuthorName=profileCache[originalUid].name;
+            }
+            const reply=m.replyToText?`<div class="reply-block" data-reply-to-id="${safeEscape(m.replyToId||'')}"><div class="ru">${safeEscape(replyAuthorName)}</div><div class="rt">${safeEscape(m.replyToText)}</div></div>`:'';
+            const gallery=(!deleted&&images.length)?`<div class="message-gallery">${images.map(u=>`<img src="${safeEscape(u)}" alt="صورة" onclick="openChatMessageGallery('${safeEscape(courseId)}','${safeEscape(doc.id)}')">`).join('')}</div>`:'';
+            let body='';
+            if(deleted&&!isAdmin){
+                body='<div class="t" style="color:var(--text-muted);font-style:italic;"><i class="fas fa-ban"></i> هذه الرسالة محذوفة</div>';
+            }else{
+                body=`${deleted?'<div style="color:#e74c3c;font-size:.78rem;font-weight:800;margin-bottom:5px;"><i class="fas fa-trash"></i> تم حذف هذه الرسالة</div>':''}<div class="t">${safeEscape(m.message||'')}${m.edited?'<span class="edited-label">(معدلة)</span>':''}</div>${gallery}`;
+            }
+            const canEdit=!!window.__aaChatCanEditMessage?.(m);
+            const actions=deleted?'':`<div class="msg-actions"><button onclick='replyTo(${JSON.stringify(doc.id)},${JSON.stringify(replyAuthorName||m.userName||profile.name||'زائر')},${JSON.stringify((m.message||'').slice(0,120))})' title="رد"><i class="fas fa-reply"></i></button>${isMine&&canEdit?`<button data-chat-action="edit" onclick="editChatMessage('${safeEscape(courseId)}','${safeEscape(doc.id)}')" title="تعديل"><i class="fas fa-edit"></i></button>`:''}${(isMine||isAdmin)?`<button onclick="deleteChatMessage('${safeEscape(courseId)}','${safeEscape(doc.id)}')" title="حذف"><i class="fas fa-trash"></i></button>`:''}</div>`;
+            const wrapper=document.createElement('div');
+            wrapper.innerHTML=`<div class="chat-msg ${isMine?'sent':'received'} ${deleted?'deleted-message':''}" data-message-id="${safeEscape(doc.id)}" data-user-id="${safeEscape(m.userId||'')}" data-created-at="${safeEscape(date.getTime())}">${reply}${body}<div class="msg-time">${safeEscape(date.toLocaleTimeString('ar-SA',{hour:'2-digit',minute:'2-digit'}))}</div>${actions}</div>`;
+            return wrapper.firstElementChild;
+        }
+        function ensureProfileData(allDocs){
+            const ids=[...new Set(allDocs.map(d=>String(d.data()?.userId||'')).filter(Boolean))];
+            return Promise.all(ids.map(async uid=>{
+                if(profileCache[uid])return;
+                try{
+                    const snap=await db.collection('users').doc(uid).get();
+                    const p=snap.exists?(snap.data()||{}):{};
+                    profileCache[uid]={name:p.displayName||p.name||'مستخدم',photo:p.photoURL||p.photoUrl||p.photo||''};
+                }catch(_){profileCache[uid]={name:'مستخدم',photo:''};}
+            }));
+        }
+        function orderedVisibleDocs(allDocs){
+            return allDocs.filter(d=>!session.hiddenIds.has(String(d.id)));
+        }
+        function fullInitialRender(visibleDocs,allDocs){
+            let html='',lastDate='',previousUserId=null,previousWasReceived=false;
+            for(const doc of visibleDocs){
+                const m=doc.data()||{},date=dateFromDoc(doc),dateLabel=formatDateLabel(date);
+                if(dateLabel!==lastDate){
+                    html+=`<div class="chat-date-divider" role="separator">${safeEscape(dateLabel)}</div>`;
+                    lastDate=dateLabel; previousUserId=null; previousWasReceived=false;
+                }
+                const isMine=m.userId===(currentUser?.uid||null),profileUid=String(m.userId||''),profile=profileCache[profileUid]||{name:m.userName||'مستخدم',photo:''};
+                const node=buildMessageNode(doc,allDocs);
+                if(!isMine&&previousWasReceived&&previousUserId===profileUid)node.classList.add('chat-msg-grouped');
+                if(!isMine&&(!previousWasReceived||previousUserId!==profileUid)){
+                    const avatar=document.createElement('div');
+                    avatar.className='chat-profile-avatar chat-profile-avatar-outside'; avatar.dataset.profileUid=profileUid;
+                    avatar.innerHTML=profile.photo?`<img src="${safeEscape(profile.photo)}" alt="">`:safeEscape((profile.name||'مستخدم').slice(0,1));
+                    const header=document.createElement('div'); header.className='msg-header';
+                    header.innerHTML=`<span class="chat-profile-name chat-profile-name-trigger" data-profile-uid="${safeEscape(profileUid)}">${safeEscape(profile.name||m.userName||'مستخدم')}</span>`;
+                    node.prepend(header); node.prepend(avatar);
+                }
+                html+=node.outerHTML;
+                previousUserId=profileUid; previousWasReceived=!isMine;
+            }
+            container.innerHTML=html||'<p style="color:var(--text-muted);text-align:center;padding:30px;">لا توجد رسائل.</p>';
+        }
+        function refreshGroupingAround(targetIds){
+            const nodes=[...container.querySelectorAll('.chat-msg')];
+            const idxs=[];
+            targetIds.forEach(id=>{
+                const i=nodes.findIndex(n=>n.dataset.messageId===String(id)); if(i>=0){idxs.push(i-1,i,i+1);}
+            });
+            [...new Set(idxs)].filter(i=>i>=0&&i<nodes.length).forEach(i=>{
+                const node=nodes[i],mMine=node.classList.contains('sent');
+                if(mMine)return;
+                const prev=nodes[i-1],same=prev&&!prev.classList.contains('sent')&&prev.dataset.userId===node.dataset.userId;
+                node.classList.toggle('chat-msg-grouped',!!same);
+                const avatar=node.querySelector('.chat-profile-avatar-outside'),header=node.querySelector('.msg-header');
+                if(same){avatar?.remove();header?.remove();}
+                else if(!avatar&&!header){
+                    const uid=String(node.dataset.userId||''),p=profileCache[uid]||{name:'مستخدم',photo:''};
+                    const av=document.createElement('div');av.className='chat-profile-avatar chat-profile-avatar-outside';av.dataset.profileUid=uid;av.innerHTML=p.photo?`<img src="${safeEscape(p.photo)}" alt="">`:safeEscape((p.name||'مستخدم').slice(0,1));
+                    const h=document.createElement('div');h.className='msg-header';h.innerHTML=`<span class="chat-profile-name chat-profile-name-trigger" data-profile-uid="${safeEscape(uid)}">${safeEscape(p.name||'مستخدم')}</span>`;
+                    node.prepend(h);node.prepend(av);
+                }
+            });
+        }
+        function replaceNode(doc,allDocsMap){
+            const old=container.querySelector(`[data-message-id="${CSS.escape(String(doc.id))}"]`); if(!old)return false;
+            const newNode=buildMessageNode(doc,allDocsMap);
+            old.replaceWith(newNode);
+            return true;
+        }
+        function insertNode(doc,visibleDocs,allDocsMap){
+            const newNode=buildMessageNode(doc,allDocsMap);
+            const ms=tsMs(doc.data()?.createdAt)||Date.now();
+            const nodes=[...container.querySelectorAll('.chat-msg')];
+            let before=null;
+            for(const n of nodes){if(Number(n.dataset.createdAt||0)>ms){before=n;break;}}
+            if(before)before.before(newNode);else{
+                /* Normal chat sends are chronological: add only the new bubble. */
+                const last=container.querySelector('.chat-msg:last-of-type');
+                if(last)last.after(newNode);else container.appendChild(newNode);
+            }
+            const prev=newNode.previousElementSibling;
+            if(prev?.classList.contains('chat-date-divider')||!prev){
+                const dateLabel=formatDateLabel(dateFromDoc(doc));
+                const previousMsg=[...container.querySelectorAll('.chat-msg')].find(n=>n===newNode)?.previousElementSibling;
+                if(!previousMsg || previousMsg.classList.contains('chat-date-divider')){
+                    const divider=document.createElement('div');divider.className='chat-date-divider';divider.setAttribute('role','separator');divider.textContent=dateLabel;
+                    newNode.before(divider);
+                }
+            }
+            refreshGroupingAround([doc.id]);
+        }
+        function removeNode(id){
+            const node=container.querySelector(`[data-message-id="${CSS.escape(String(id))}"]`); if(node)node.remove();
+        }
+        function applySnapshotIncrementally(snapshot){
+            const allDocs=snapshot.docs;
+            const visibleDocs=orderedVisibleDocs(allDocs);
+            const newMap=new Map(visibleDocs.map(d=>[String(d.id),d]));
+            const oldMap=session.docs;
+            const changedIds=[];
+            oldMap.forEach((oldDoc,id)=>{if(!newMap.has(id))removeNode(id);});
+            newMap.forEach((doc,id)=>{
+                const old=oldMap.get(id);
+                if(!old){insertNode(doc,visibleDocs,new Map(allDocs.map(d=>[String(d.id),d])));changedIds.push(id);return;}
+                if(docContentSignature(old)!==docContentSignature(doc)){
+                    replaceNode(doc,new Map(allDocs.map(d=>[String(d.id),d])));changedIds.push(id);
+                }else{
+                    const oldMs=tsMs(old.data()?.createdAt),newMs=tsMs(doc.data()?.createdAt);
+                    if(oldMs!==newMs){
+                        const node=container.querySelector(`[data-message-id="${CSS.escape(String(id))}"]`);
+                        if(node){
+                            node.dataset.createdAt=String(newMs||0);
+                            const timeEl=node.querySelector('.msg-time');
+                            if(timeEl){timeEl.textContent=dateFromDoc(doc).toLocaleTimeString('ar-SA',{hour:'2-digit',minute:'2-digit'});}
+                        }
+                    }
+                }
+            });
+            session.docs=newMap;session.allDocs=new Map(allDocs.map(d=>[String(d.id),d]));session.lastId=visibleDocs[visibleDocs.length-1]?.id||null;
+            if(changedIds.length)refreshGroupingAround(changedIds);
+            return changedIds;
+        }
+
+        window.__aaRefreshHiddenChat=async function(refreshCourseId){
+            const sid=String(refreshCourseId||courseId||'');
+            const ss=sessions.get(sid);
+            if(!ss)return;
+            try{
+                const next=await (window.__aaLoadHiddenChatIds?.(sid)||Promise.resolve(new Set()));
+                ss.hiddenIds=next instanceof Set?next:new Set(next||[]);
+                ss.hiddenLoaded=true;
+                if(!container||String(window.activeCourseId||courseId)!==sid)return;
+                ss.docs.forEach((doc,id)=>{if(ss.hiddenIds.has(String(id)))removeNode(id);});
+                ss.docs=new Map([...ss.docs].filter(([id])=>!ss.hiddenIds.has(String(id))));
+                ss.lastId=[...ss.docs.keys()].at(-1)||null;
+                updateScrollButton();
+            }catch(err){console.warn('hidden chat refresh',err);}
+        };
+        try{
+            if(!session.hiddenLoaded){
+                session.hiddenIds=await (window.__aaLoadHiddenChatIds?.(courseId)||Promise.resolve(new Set()));
+                session.hiddenLoaded=true;
+            }
+            const attachSnapshot=()=>{
+                let firstForSubscription=!session.initialized;
+                const realUnsub=db.collection('courses').doc(courseId).collection('chat').orderBy('createdAt','asc').onSnapshot(async snapshot=>{
+                    try{
+                        const allDocs=snapshot.docs;
+                        await ensureProfileData(allDocs);
+                        if(!session.initialized){
+                            if(snapshot.empty){
+                                container.innerHTML='<p style="color:var(--text-muted);text-align:center;padding:30px;">لا توجد رسائل.</p>';
+                                session.docs=new Map();session.allDocs=new Map();session.initialized=true;session.lastId=null;
+                            }else{
+                                const visibleDocs=orderedVisibleDocs(allDocs);
+                                fullInitialRender(visibleDocs,new Map(allDocs.map(d=>[String(d.id),d])));
+                                session.docs=new Map(visibleDocs.map(d=>[String(d.id),d]));
+                                session.allDocs=new Map(allDocs.map(d=>[String(d.id),d]));
+                                session.initialized=true;session.lastId=visibleDocs[visibleDocs.length-1]?.id||null;
+                            }
+                            chatInitialized=true;chatLastMessageId=session.lastId;
+                            requestAnimationFrame(()=>{if(chatUserAtBottom||!firstForSubscription)scrollToBottom('auto');});
+                        }else{
+                            const wasBottom=chatUserAtBottom;
+                            applySnapshotIncrementally(snapshot);
+                            chatLastMessageId=session.lastId;
+                            if(wasBottom){requestAnimationFrame(()=>scrollToBottom('auto'));}
+                        }
+                        updateScrollButton();
+                    }catch(err){console.error('chat incremental render',err);}
+                },err=>{
+                    console.error(err);
+                    if(!session.initialized)container.innerHTML='<p style="color:#e74c3c;text-align:center;padding:30px;">حدث خطأ في تحميل الدردشة.</p>';
+                    updateScrollButton();
+                });
+                const wrappedUnsub=()=>{try{realUnsub?.();}finally{session.unsubscribe=null;if(chatUnsubscribe===wrappedUnsub)chatUnsubscribe=null;}};
+                session.unsubscribe=wrappedUnsub;chatUnsubscribe=wrappedUnsub;
+            };
+            if(session.unsubscribe){
+                chatUnsubscribe=session.unsubscribe;
+                chatInitialized=session.initialized;
+                chatLastMessageId=session.lastId;
+                return;
+            }
+            attachSnapshot();
         }catch(e){
             console.error(e);
-            container.innerHTML='<p style="color:#e74c3c;text-align:center;padding:30px;">خطأ في الاتصال بالدردشة.</p>';
+            if(!session.initialized)container.innerHTML='<p style="color:#e74c3c;text-align:center;padding:30px;">خطأ في الاتصال بالدردشة.</p>';
         }
     };
-
     // Re-render the admin-only top-bar control whenever the auth state changes.
     const observeAuthState=()=>{ renderAdminMenu(); };
     if(typeof auth!=='undefined' && auth?.onAuthStateChanged){ auth.onAuthStateChanged(observeAuthState); }
@@ -16879,7 +17085,7 @@ function copyComputedStyles(source,target){const cs=getComputedStyle(source);for
 function b(id,label,icon,danger){const x=document.createElement('button');x.type='button';x.dataset.ctxAction=id;x.dataset.danger=danger?'1':'0';x.innerHTML='<i class="fas '+icon+'"></i><span>'+label+'</span>';return x}
 function showFor(el,x,y){ensureUI();close();selected=el;const r=el.getBoundingClientRect(),cs=getComputedStyle(el),c=el.cloneNode(true);c.querySelectorAll('button,input,textarea,select').forEach(q=>q.remove());c.querySelectorAll('[onclick]').forEach(q=>q.removeAttribute('onclick'));copyComputedStyles(el,c);c.style.position='relative';c.style.left='auto';c.style.top='auto';c.style.width=r.width+'px';c.style.height='auto';c.style.maxWidth='none';c.style.margin='0';c.style.boxSizing='border-box';c.style.transform='none';c.style.animation='none';c.style.transition='none';highlight.innerHTML='';highlight.appendChild(c);Object.assign(highlight.style,{left:r.left+'px',top:r.top+'px',width:r.width+'px',height:r.height+'px',borderRadius:cs.borderRadius,boxSizing:'border-box',background:'transparent',color:'inherit',border:'0',padding:'0',zIndex:'2147483602',overflow:'visible'});const mine=String(el.dataset.userId||'')===String(uid()),admin=currentAdmin();const canEdit=mine&&!!window.__aaChatCanEditMessage?.({createdAt:Number(el.dataset.createdAt||0)});const arr=[b('copy','نسخ','fa-copy',false),b(mine?'delete':'local',mine?'حذف من الجميع':'حذف من حسابي',mine?'fa-trash':'fa-eye-slash',true)];if(canEdit)arr.push(b('edit','تعديل','fa-pen',false));arr.push(b('reply','رد','fa-reply',false));menu.innerHTML='';arr.forEach(x=>menu.appendChild(x));menu.classList.add('open');overlay.classList.add('open');document.body.classList.add('aa-chat-context-open');const mw=menu.offsetWidth,mh=menu.offsetHeight,vw=innerWidth,vh=innerHeight;let left=x||r.left,top=y||r.bottom+8;if(left+mw>vw-10)left=vw-mw-10;if(left<10)left=10;if(top+mh>vh-10)top=Math.max(10,r.top-mh-8);if(top<10)top=10;menu.style.left=Math.round(left)+'px';menu.style.top=Math.round(top)+'px'}
 async function copyText(t){if(!t)return window.showCustomAlert?.('نسخ','لا يوجد نص لنسخه.');let copied=false;try{if(navigator.clipboard?.writeText){await navigator.clipboard.writeText(t);copied=true}}catch(_){}if(!copied){const ta=document.createElement('textarea');ta.value=t;ta.style.position='fixed';ta.style.left='-9999px';ta.style.top='0';ta.style.opacity='0';document.body.appendChild(ta);ta.focus();ta.select();try{copied=document.execCommand('copy')}catch(__){}ta.remove()}showCopyToast(copied?'تم النسخ':'تعذر النسخ');}
-const handleContextMenuClick=async e=>{const x=e.target.closest?.('[data-ctx-action]');if(!x||!selected)return;e.preventDefault();e.stopPropagation();const el=selected,cid=currentCourse(),id=el.dataset.messageId||'',text=el.querySelector('.t')?.innerText?.trim()||'',name=el.querySelector('.chat-profile-name')?.textContent?.trim()||el.querySelector('.u')?.textContent?.trim()||'مستخدم',action=x.dataset.ctxAction;const mine=String(el.dataset.userId||'')===String(uid());close();if(action==='copy')return copyText(text);if(action==='reply')return window.replyTo?.(id,name,text.slice(0,120));if(action==='edit'){if(!mine)return window.showCustomAlert?.('غير مسموح','يمكنك تعديل رسائلك فقط.');if(!window.__aaChatCanEditMessage?.({createdAt:Number(el.dataset.createdAt||0)}))return window.showCustomAlert?.('انتهى وقت التعديل','يمكن تعديل الرسالة خلال 15 دقيقة فقط من إرسالها.');return window.editChatMessage?.(cid,id);}if(action==='delete'){if(mine){const ok=typeof window.showCustomConfirm==='function'?await new Promise(r=>window.showCustomConfirm('حذف من الجميع','سيتم حذف هذه الرسالة من جميع المشاركين في الدردشة، وستظهر للمشرف كرسالة محذوفة. هل تريد المتابعة؟',()=>r(true),()=>r(false))):window.confirm('حذف الرسالة من الجميع؟');if(ok)return window.deleteChatMessage?.(cid,id,true);return;}const set=hidden(cid),ok=typeof window.showCustomConfirm==='function'?await new Promise(r=>window.showCustomConfirm('حذف من حسابك','سيتم إخفاء هذه الرسالة من حسابك على جميع أجهزتك، ولن تُحذف من بقية الحسابات. هل تريد المتابعة؟',()=>r(true),()=>r(false))):window.confirm('إخفاء الرسالة من حسابك على جميع أجهزتك؟');if(ok){set.add(String(id));saveHiddenLocal(cid,set);try{await window.__aaSaveHiddenChatIds?.(cid,set);return window.loadChatPage?.(cid)}catch(err){set.delete(String(id));saveHiddenLocal(cid,set);window.showCustomAlert?.('خطأ','تعذر حفظ إخفاء الرسالة على حسابك.');}}}if(action==='local'){const set=hidden(cid),ok=typeof window.showCustomConfirm==='function'?await new Promise(r=>window.showCustomConfirm('حذف من حسابك','سيتم إخفاء هذه الرسالة من حسابك على جميع أجهزتك، ولن تُحذف من بقية الحسابات. هل تريد المتابعة؟',()=>r(true),()=>r(false))):window.confirm('إخفاء الرسالة من حسابك على جميع أجهزتك؟');if(ok){set.add(String(id));saveHiddenLocal(cid,set);try{await window.__aaSaveHiddenChatIds?.(cid,set);return window.loadChatPage?.(cid)}catch(err){set.delete(String(id));saveHiddenLocal(cid,set);window.showCustomAlert?.('خطأ','تعذر حفظ إخفاء الرسالة على حسابك.');}}}};
+const handleContextMenuClick=async e=>{const x=e.target.closest?.('[data-ctx-action]');if(!x||!selected)return;e.preventDefault();e.stopPropagation();const el=selected,cid=currentCourse(),id=el.dataset.messageId||'',text=el.querySelector('.t')?.innerText?.trim()||'',name=el.querySelector('.chat-profile-name')?.textContent?.trim()||el.querySelector('.u')?.textContent?.trim()||'مستخدم',action=x.dataset.ctxAction;const mine=String(el.dataset.userId||'')===String(uid());close();if(action==='copy')return copyText(text);if(action==='reply')return window.replyTo?.(id,name,text.slice(0,120));if(action==='edit'){if(!mine)return window.showCustomAlert?.('غير مسموح','يمكنك تعديل رسائلك فقط.');if(!window.__aaChatCanEditMessage?.({createdAt:Number(el.dataset.createdAt||0)}))return window.showCustomAlert?.('انتهى وقت التعديل','يمكن تعديل الرسالة خلال 15 دقيقة فقط من إرسالها.');return window.editChatMessage?.(cid,id);}if(action==='delete'){if(mine){const ok=typeof window.showCustomConfirm==='function'?await new Promise(r=>window.showCustomConfirm('حذف من الجميع','سيتم حذف هذه الرسالة من جميع المشاركين في الدردشة، وستظهر للمشرف كرسالة محذوفة. هل تريد المتابعة؟',()=>r(true),()=>r(false))):window.confirm('حذف الرسالة من الجميع؟');if(ok)return window.deleteChatMessage?.(cid,id,true);return;}const set=hidden(cid),ok=typeof window.showCustomConfirm==='function'?await new Promise(r=>window.showCustomConfirm('حذف من حسابك','سيتم إخفاء هذه الرسالة من حسابك على جميع أجهزتك، ولن تُحذف من بقية الحسابات. هل تريد المتابعة؟',()=>r(true),()=>r(false))):window.confirm('إخفاء الرسالة من حسابك على جميع أجهزتك؟');if(ok){set.add(String(id));saveHiddenLocal(cid,set);try{await window.__aaSaveHiddenChatIds?.(cid,set);await window.__aaRefreshHiddenChat?.(cid);return}catch(err){set.delete(String(id));saveHiddenLocal(cid,set);window.showCustomAlert?.('خطأ','تعذر حفظ إخفاء الرسالة على حسابك.');}}}if(action==='local'){const set=hidden(cid),ok=typeof window.showCustomConfirm==='function'?await new Promise(r=>window.showCustomConfirm('حذف من حسابك','سيتم إخفاء هذه الرسالة من حسابك على جميع أجهزتك، ولن تُحذف من بقية الحسابات. هل تريد المتابعة؟',()=>r(true),()=>r(false))):window.confirm('إخفاء الرسالة من حسابك على جميع أجهزتك؟');if(ok){set.add(String(id));saveHiddenLocal(cid,set);try{await window.__aaSaveHiddenChatIds?.(cid,set);await window.__aaRefreshHiddenChat?.(cid);return}catch(err){set.delete(String(id));saveHiddenLocal(cid,set);window.showCustomAlert?.('خطأ','تعذر حفظ إخفاء الرسالة على حسابك.');}}}};
 document.addEventListener('contextmenu',e=>{const el=e.target.closest?.('#courseChatPage .chat-msg');if(!el)return;e.preventDefault();e.stopImmediatePropagation();suppressClickUntil=Date.now()+700;showFor(el,e.clientX,e.clientY)},true);
 document.addEventListener('click',e=>{if(Date.now()<suppressClickUntil&&e.target.closest?.('#courseChatPage .chat-msg')){e.preventDefault();e.stopImmediatePropagation()}},true);
 document.addEventListener('keydown',e=>{if(e.key==='Escape'&&menu?.classList.contains('open')){e.preventDefault();close()}},true);
