@@ -7945,15 +7945,14 @@ label[for*="En"], input[id*="En"], textarea[id*="En"] { display:none !important;
           const dateKey=date.toLocaleDateString('ar-SA',{year:'numeric',month:'long',day:'numeric'});
           const mine=m.userId===uid,profileUid=String(m.userId||''),profile=profileCache[profileUid]||{name:m.userName||'مستخدم',photo:''};
           const lastEl=container.querySelector('.chat-msg:last-of-type');
-          const sameGroup=!!lastEl&&lastEl.classList.contains(mine?'sent':'received')&&lastEl.dataset.userId===profileUid;
-          const showHeader=!mine&&!sameGroup;
+          const showHeader=!mine&&!(lastEl?.classList.contains('received')&&lastEl?.dataset.userId===profileUid);
           const images=Array.isArray(m.imageUrls)?m.imageUrls:(m.imageUrl?[m.imageUrl]:[]),deleted=!!m.deleted;
           const reply=m.replyToText?`<div class=\"reply-block\" data-reply-to-id=\"${escapeHtml(m.replyToId||'')}\"><div class=\"ru\">${escapeHtml(m.replyToName||'زائر')}</div><div class=\"rt\">${escapeHtml(m.replyToText)}</div></div>`:'';
           const gallery=(!deleted&&images.length)?`<div class=\"message-gallery\">${images.map(u=>`<img src=\"${escapeHtml(u)}\" alt=\"صورة\" onclick=\"openChatMessageGallery('${courseId}','${newDoc.id}')\">`).join('')}</div>`:'';
           const body=deleted&&!isAdmin?'<div class=\"t\" style=\"color:var(--text-muted);font-style:italic;\"><i class=\"fas fa-ban\"></i> هذه الرسالة محذوفة</div>':`${deleted?'<div style=\"color:#e74c3c;font-size:.78rem;font-weight:800;margin-bottom:5px;\"><i class=\"fas fa-trash\"></i> تم حذف هذه الرسالة</div>':''}<div class=\"t\">${escapeHtml(m.message||'')}${m.edited?'<span class=\"edited-label\">(معدلة)</span>':''}</div>${gallery}`;
           const actions=deleted?'':`<div class=\"msg-actions\"><button onclick='replyTo(${JSON.stringify(newDoc.id)},${JSON.stringify(profile.name||m.userName||'زائر')},${JSON.stringify((m.message||'').slice(0,120))})' title=\"رد\"><i class=\"fas fa-reply\"></i></button>${mine?`<button onclick=\"editChatMessage('${courseId}','${newDoc.id}')\" title=\"تعديل\"><i class=\"fas fa-edit\"></i></button>`:''}${(mine||isAdmin)?`<button onclick=\"deleteChatMessage('${courseId}','${newDoc.id}')\" title=\"حذف\"><i class=\"fas fa-trash\"></i></button>`:''}</div>`;
           if(dateKey!==courseCache.lastDate){const divider=document.createElement('div');divider.className='chat-date-divider';divider.setAttribute('role','separator');divider.textContent=dateKey;container.appendChild(divider);}
-          const wrap=document.createElement('div');wrap.className=`chat-msg ${mine?'sent':'received'} ${deleted?'deleted-message':''} ${sameGroup?'chat-msg-grouped':''}`;wrap.dataset.messageId=String(newDoc.id);wrap.dataset.userId=String(m.userId||'');wrap.innerHTML=`${showHeader?`<div class=\"chat-profile-avatar chat-profile-avatar-outside\" data-profile-uid=\"${escapeHtml(profileUid)}\">${profile.photo?`<img src=\"${escapeHtml(profile.photo)}\" alt=\"\">`:escapeHtml((profile.name||'مستخدم').slice(0,1))}</div><div class=\"msg-header\"><span class=\"chat-profile-name chat-profile-name-trigger\" data-profile-uid=\"${escapeHtml(profileUid)}\">${escapeHtml(profile.name||m.userName||'مستخدم')}</span></div>`:''}${reply}${body}<div class=\"msg-time\">${escapeHtml(date.toLocaleTimeString('ar-SA',{hour:'2-digit',minute:'2-digit'}))}</div>${actions}`;container.appendChild(wrap);
+          const wrap=document.createElement('div');wrap.className=`chat-msg ${mine?'sent':'received'} ${deleted?'deleted-message':''} ${(!mine&&!showHeader)?'chat-msg-grouped':''}`;wrap.dataset.messageId=String(newDoc.id);wrap.dataset.userId=String(m.userId||'');wrap.innerHTML=`${showHeader?`<div class=\"chat-profile-avatar chat-profile-avatar-outside\" data-profile-uid=\"${escapeHtml(profileUid)}\">${profile.photo?`<img src=\"${escapeHtml(profile.photo)}\" alt=\"\">`:escapeHtml((profile.name||'مستخدم').slice(0,1))}</div><div class=\"msg-header\"><span class=\"chat-profile-name chat-profile-name-trigger\" data-profile-uid=\"${escapeHtml(profileUid)}\">${escapeHtml(profile.name||m.userName||'مستخدم')}</span></div>`:''}${reply}${body}<div class=\"msg-time\">${escapeHtml(date.toLocaleTimeString('ar-SA',{hour:'2-digit',minute:'2-digit'}))}</div>${actions}`;container.appendChild(wrap);
           const atBottom=(container.scrollHeight-container.clientHeight-container.scrollTop)<80;if(atBottom)container.scrollTop=container.scrollHeight;
           courseCache.signature=signature;courseCache.ids=visibleIds;courseCache.lastDate=dateKey;courseCache.lastUserId=String(m.userId||'');courseCache.lastWasReceived=!mine;
           return;
@@ -7982,8 +7981,7 @@ label[for*="En"], input[id*="En"], textarea[id*="En"] { display:none !important;
             name:m.userName||'مستخدم',
             photo:''
           };
-          const sameGroup=previousUserId===profileUid&&previousWasReceived===!mine;
-          const showHeader=!mine&&!sameGroup;
+          const showHeader=!mine&&(!previousWasReceived||previousUserId!==profileUid);
 
           const images=Array.isArray(m.imageUrls)?m.imageUrls:(m.imageUrl?[m.imageUrl]:[]);
           const time=date.toLocaleTimeString('ar-SA',{hour:'2-digit',minute:'2-digit'});
@@ -15827,16 +15825,6 @@ body.light-mode #courseChatPage .chat-msg.received{
     max-width:min(78%,760px);
 }
 #courseChatPage .chat-msg-grouped{margin-top:-1px;}
-<style id="chat-stage7-smart-grouping-final-css">
-#courseChatPage .chat-msg.chat-msg-grouped{
-    margin-top:-4px!important;
-    padding-top:4px!important;
-    padding-bottom:4px!important;
-}
-#courseChatPage .chat-msg.chat-msg-grouped .t{font-size:.90rem!important;}
-#courseChatPage .chat-msg.chat-msg-grouped .msg-time{margin-top:1px!important;}
-</style>
-
 #courseChatPage .chat-msg.deleted-message{opacity:.92;}
 #courseChatPage .chat-composer-shell{
     position:relative;
@@ -16229,9 +16217,8 @@ body.light-mode #courseChatPage .chat-msg.received{
                 }
                 const isMine=m.userId===(currentUser?.uid||null),profileUid=String(m.userId||''),profile=profileCache[profileUid]||{name:m.userName||'مستخدم',photo:''};
                 const node=buildMessageNode(doc,allDocs);
-                const sameGroup=previousUserId===profileUid&&previousWasReceived===!isMine;
-                if(sameGroup)node.classList.add('chat-msg-grouped');
-                if(!isMine&&!sameGroup){
+                if(!isMine&&previousWasReceived&&previousUserId===profileUid)node.classList.add('chat-msg-grouped');
+                if(!isMine&&(!previousWasReceived||previousUserId!==profileUid)){
                     const avatar=document.createElement('div');
                     avatar.className='chat-profile-avatar chat-profile-avatar-outside'; avatar.dataset.profileUid=profileUid;
                     avatar.innerHTML=profile.photo?`<img src="${safeEscape(profile.photo)}" alt="">`:safeEscape((profile.name||'مستخدم').slice(0,1));
@@ -16251,12 +16238,12 @@ body.light-mode #courseChatPage .chat-msg.received{
                 const i=nodes.findIndex(n=>n.dataset.messageId===String(id)); if(i>=0){idxs.push(i-1,i,i+1);}
             });
             [...new Set(idxs)].filter(i=>i>=0&&i<nodes.length).forEach(i=>{
-                const node=nodes[i],isMine=node.classList.contains('sent');
-                const prev=nodes[i-1];
-                const same=!!prev&&prev.classList.contains(isMine?'sent':'received')&&prev.dataset.userId===node.dataset.userId;
+                const node=nodes[i],mMine=node.classList.contains('sent');
+                if(mMine)return;
+                const prev=nodes[i-1],same=prev&&!prev.classList.contains('sent')&&prev.dataset.userId===node.dataset.userId;
                 node.classList.toggle('chat-msg-grouped',!!same);
                 const avatar=node.querySelector('.chat-profile-avatar-outside'),header=node.querySelector('.msg-header');
-                if(isMine||same){avatar?.remove();header?.remove();}
+                if(same){avatar?.remove();header?.remove();}
                 else if(!avatar&&!header){
                     const uid=String(node.dataset.userId||''),p=profileCache[uid]||{name:'مستخدم',photo:''};
                     const av=document.createElement('div');av.className='chat-profile-avatar chat-profile-avatar-outside';av.dataset.profileUid=uid;av.innerHTML=p.photo?`<img src="${safeEscape(p.photo)}" alt="">`:safeEscape((p.name||'مستخدم').slice(0,1));
