@@ -9681,8 +9681,8 @@ window.applyChatLockNow=function(){
  const ids=['fullChatPageInput','fullChatInput'];ids.forEach(id=>{const el=$(id);if(el){el.disabled=locked&&!isAdmin;el.placeholder=locked&&!isAdmin?'الدردشة مقفلة حاليًا':'اكتب رسالتك هنا...';}});
  ['fullChatPageSendBtn','fullSendChatBtn','fullChatPageFileInput','fullChatFileInput','chatEmojiBtnPage'].forEach(id=>{const el=$(id);if(el)el.disabled=locked&&!isAdmin});
  const banner=$('chatLockBannerPage');if(banner){banner.classList.toggle('active',locked);banner.innerHTML=locked?`<strong><i class="fas fa-lock"></i> الدردشة مقفلة للطلاب</strong><div style="margin-top:4px">${esc(d.reason||'تم قفل الدردشة.')}</div>`:''}
- $('chatLockBtn')?.style.setProperty('display',isAdmin&&!locked?'inline-flex':'none');
- $('chatUnlockBtn')?.style.setProperty('display',isAdmin&&locked?'inline-flex':'none');
+ $('chatLockBtn')?.style.setProperty('display',isAdmin?'inline-flex':'none');
+ window.__aaSyncChatLockMenu?.();
 };
 
 /* Ensure admin can inspect every part of another account without exposing the directory to students. */
@@ -15949,9 +15949,19 @@ body.light-mode #courseChatPage .chat-msg.received{
         menu.setAttribute('role','menu');
         menu.innerHTML=`
             <button type="button" id="clearChatPageBtn" role="menuitem"><i class="fas fa-trash" aria-hidden="true"></i><span>حذف المحادثة كلها</span></button>
-            <button type="button" id="chatLockBtn" role="menuitem"><i class="fas fa-lock" aria-hidden="true"></i><span>قفل الدردشة</span></button>
-            <button type="button" id="chatUnlockBtn" role="menuitem"><i class="fas fa-lock-open" aria-hidden="true"></i><span>فتح الدردشة</span></button>`;
-        const syncChatLockMenu=()=>{const locked=!!currentChatLock?.locked;const lock=$('chatLockBtn'),unlock=$('chatUnlockBtn');if(lock)lock.style.display=locked?'none':'flex';if(unlock)unlock.style.display=locked?'flex':'none';};
+            <button type="button" id="chatLockBtn" role="menuitem"><i class="fas fa-lock" aria-hidden="true"></i><span>قفل الدردشة</span></button>`;
+        const syncChatLockMenu=()=>{
+            const locked=!!currentChatLock?.locked;
+            const lock=$('chatLockBtn');
+            if(lock){
+                lock.style.display='flex';
+                lock.innerHTML=locked
+                    ? '<i class="fas fa-lock-open" aria-hidden="true"></i><span>فتح الدردشة</span>'
+                    : '<i class="fas fa-lock" aria-hidden="true"></i><span>قفل الدردشة</span>';
+                lock.setAttribute('aria-label',locked?'فتح الدردشة':'قفل الدردشة');
+            }
+        };
+        window.__aaSyncChatLockMenu=syncChatLockMenu;
         syncChatLockMenu();
         adminRoot.append(menuButton,menu);
 
@@ -15972,17 +15982,17 @@ body.light-mode #courseChatPage .chat-msg.received{
                 scrollToBottom('auto');
             });
         });
-        $('chatLockBtn')?.addEventListener('click',e=>{
+        $('chatLockBtn')?.addEventListener('click',async e=>{
             e.preventDefault(); e.stopPropagation();
             menu.classList.remove('open'); chatAdminMenuOpen=false;
-            if(typeof window.openChatLockDialog==='function') window.openChatLockDialog();
-        });
-        $('chatUnlockBtn')?.addEventListener('click',async e=>{
-            e.preventDefault(); e.stopPropagation();
-            menu.classList.remove('open'); chatAdminMenuOpen=false;
-            if(typeof window.unlockCourseChat==='function') return window.unlockCourseChat();
             if(!isAdminUser()||!activeCourseId)return;
-            await db.collection('courses').doc(activeCourseId).collection('settings').doc('chat').set({locked:false,startAt:null,endAt:null,reason:'',updatedAt:firebase.firestore.FieldValue.serverTimestamp()},{merge:true});
+            if(currentChatLock?.locked){
+                if(typeof window.unlockCourseChat==='function') await window.unlockCourseChat();
+                else await db.collection('courses').doc(activeCourseId).collection('settings').doc('chat').set({locked:false,startAt:null,endAt:null,reason:'',autoExpire:false,updatedAt:firebase.firestore.FieldValue.serverTimestamp()},{merge:true});
+            }else{
+                if(typeof window.openChatLockDialog==='function') window.openChatLockDialog();
+            }
+            window.__aaSyncChatLockMenu?.();
         });
     }
     function closeAdminMenu(){
@@ -16844,7 +16854,6 @@ const originalEdit=window.editChatMessage;
 if(typeof originalEdit==='function'&&!originalEdit.__aaStage6Wrapped){const wrapped=async function(courseId,msgId){try{const snap=await db.collection('courses').doc(courseId).collection('chat').doc(msgId).get();if(!snap.exists)return;const data=snap.data()||{};if(data.userId!==currentUser?.uid)return window.showCustomAlert?.('غير مسموح','يمكنك تعديل رسائلك فقط.');if(!window.__aaChatCanEditMessage?.(data))return window.showCustomAlert?.('انتهت مدة التعديل','يمكن تعديل الرسالة خلال 15 دقيقة فقط من وقت إرسالها.');return originalEdit.apply(this,arguments);}catch(err){console.error(err);window.showCustomAlert?.('خطأ','تعذر فتح تعديل الرسالة.');}};wrapped.__aaStage6Wrapped=true;wrapped.__original=originalEdit;window.editChatMessage=wrapped;}
 })();
 </script>
-</body>
 
 <style id="aa-chat-stage7-smart-reply-css">
 #courseChatPage .reply-block[data-reply-to-id]{cursor:pointer;position:relative;transition:filter .16s ease,box-shadow .16s ease;}
@@ -16880,4 +16889,5 @@ list.addEventListener('touchend',e=>{if(!target)return;const p=e.changedTouches[
 window.__aaChatStage7FlashOriginal=flashOriginal;
 })();
 </script>
+</body>
 </html>
