@@ -9794,17 +9794,28 @@ function buildChatLockV12(){
         <button type="button" class="suspend-duration-choice" data-chat-lock-duration="custom"><i class="fas fa-calendar-check"></i><span>وقت مخصص</span></button>
         <button type="button" class="suspend-duration-choice" data-chat-lock-duration="manual"><i class="fas fa-hand"></i><span>حتى الفتح اليدوي</span></button>
       </div>
-      <input id="chatV12End" type="datetime-local" disabled style="margin-top:10px">
-      <small style="display:block;color:var(--text-muted);margin-top:6px">عند اختيار مدة جاهزة يُحسب وقت الانتهاء من بداية القفل. خيار الوقت المخصص يتيح تحديد التاريخ والوقت يدويًا.</small>
+      <div id="chatV12CustomEndWrap" style="display:none;margin-top:10px">
+        <label style="display:block;font-size:.84rem;font-weight:800;color:var(--text-primary);margin-bottom:7px">تاريخ ووقت انتهاء القفل</label>
+        <input id="chatV12End" type="datetime-local" style="width:100%">
+        <small style="display:block;color:var(--text-muted);margin-top:6px">حدد التاريخ والوقت الذي تريد عنده فتح الدردشة تلقائيًا.</small>
+      </div>
+      <small style="display:block;color:var(--text-muted);margin-top:8px">عند اختيار مدة جاهزة يُحسب وقت الانتهاء من بداية القفل. «حتى الفتح اليدوي» يبقي الدردشة مقفلة حتى يفتحها المشرف.</small>
     </div>
     <label class="v11-field"><span>سبب القفل <small>(اختياري)</small></span><textarea id="chatV12Reason" rows="4" placeholder="يمكنك كتابة سبب القفل أو ترك الحقل فارغًا"></textarea></label>
     <div style="padding:11px 13px;border-radius:14px;background:rgba(108,92,231,.07);border:1px solid rgba(108,92,231,.14);color:var(--text-muted);font-size:.8rem"><i class="fas fa-circle-info" style="color:var(--accent1)"></i> المشرف يستطيع إرسال الرسائل حتى أثناء القفل.</div>
     <div style="display:flex;gap:10px;margin-top:17px"><button type="button" id="chatV12Cancel" class="ananas-secondary-btn" style="flex:1">إلغاء</button><button type="button" id="chatV12Save" class="ananas-primary-btn" style="flex:1"><i class="fas fa-lock"></i> حفظ القفل</button></div>
   </div>`;
   const choices=[...m.querySelectorAll('[data-chat-lock-duration]')];
+  const syncCustomEnd=()=>{
+    const mode=m.querySelector('[data-chat-lock-duration].active')?.dataset.chatLockDuration||'1d';
+    const wrap=$('chatV12CustomEndWrap'),end=$('chatV12End');
+    const custom=mode==='custom';
+    if(wrap)wrap.style.display=custom?'block':'none';
+    if(end)end.disabled=!custom;
+  };
   choices.forEach(btn=>btn.addEventListener('click',()=>{
     choices.forEach(x=>x.classList.toggle('active',x===btn));
-    $('chatV12End').disabled=btn.dataset.chatLockDuration!=='custom';
+    syncCustomEnd();
   }));
   $('chatV12Close').onclick=()=>m.classList.remove('active');
   $('chatV12Cancel').onclick=()=>m.classList.remove('active');
@@ -9839,13 +9850,20 @@ function openChatLockV12(){
   $('chatV12Start').value=`${n.getFullYear()}-${p(n.getMonth()+1)}-${p(n.getDate())}T${p(n.getHours())}:${p(n.getMinutes())}`;
   $('chatV12End').value='';$('chatV12Reason').value='';
   m.querySelectorAll('[data-chat-lock-duration]').forEach(b=>b.classList.toggle('active',b.dataset.chatLockDuration==='1d'));
-  $('chatV12End').disabled=true;
+  const customWrap=$('chatV12CustomEndWrap');
+  const customEnd=$('chatV12End');
+  if(customWrap)customWrap.style.display='none';
+  if(customEnd)customEnd.disabled=true;
   m.classList.add('active');
 }
 document.addEventListener('click',e=>{
-  const lock=e.target.closest?.('#chatLockBtn'),unlock=e.target.closest?.('#chatUnlockBtn');
-  if(lock){e.preventDefault();e.stopImmediatePropagation();openChatLockV12()}
-  if(unlock){e.preventDefault();e.stopImmediatePropagation();window.unlockCourseChat?.()}
+  const lock=e.target.closest?.('#chatLockBtn');
+  if(lock){
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    if(currentChatLock?.locked){window.unlockCourseChat?.();}
+    else{openChatLockV12();}
+  }
 },true);
 
 /* 3) Avoid stale quiz timers / "no open quiz" from an already closed quiz. */
