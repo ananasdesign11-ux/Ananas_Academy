@@ -16216,8 +16216,9 @@ body.light-mode #courseChatPage .chat-msg.received{
                 }
                 const isMine=m.userId===(currentUser?.uid||null),profileUid=String(m.userId||''),profile=profileCache[profileUid]||{name:m.userName||'مستخدم',photo:''};
                 const node=buildMessageNode(doc,allDocs);
-                if(!isMine&&previousWasReceived&&previousUserId===profileUid)node.classList.add('chat-msg-grouped');
-                if(!isMine&&(!previousWasReceived||previousUserId!==profileUid)){
+                const sameGroup=!!previousUserId&&previousUserId===profileUid&&previousWasReceived===!isMine;
+                if(sameGroup)node.classList.add('chat-msg-grouped');
+                if(!isMine&&!sameGroup){
                     const avatar=document.createElement('div');
                     avatar.className='chat-profile-avatar chat-profile-avatar-outside'; avatar.dataset.profileUid=profileUid;
                     avatar.innerHTML=profile.photo?`<img src="${safeEscape(profile.photo)}" alt="">`:safeEscape((profile.name||'مستخدم').slice(0,1));
@@ -16238,11 +16239,10 @@ body.light-mode #courseChatPage .chat-msg.received{
             });
             [...new Set(idxs)].filter(i=>i>=0&&i<nodes.length).forEach(i=>{
                 const node=nodes[i],mMine=node.classList.contains('sent');
-                if(mMine)return;
-                const prev=nodes[i-1],same=prev&&!prev.classList.contains('sent')&&prev.dataset.userId===node.dataset.userId;
+                const prev=nodes[i-1],same=!!prev&&prev.classList.contains('chat-msg')&&mMine===prev.classList.contains('sent')&&String(prev.dataset.userId||'')===String(node.dataset.userId||'');
                 node.classList.toggle('chat-msg-grouped',!!same);
                 const avatar=node.querySelector('.chat-profile-avatar-outside'),header=node.querySelector('.msg-header');
-                if(same){avatar?.remove();header?.remove();}
+                if(mMine||same){avatar?.remove();header?.remove();}
                 else if(!avatar&&!header){
                     const uid=String(node.dataset.userId||''),p=profileCache[uid]||{name:'مستخدم',photo:''};
                     const av=document.createElement('div');av.className='chat-profile-avatar chat-profile-avatar-outside';av.dataset.profileUid=uid;av.innerHTML=p.photo?`<img src="${safeEscape(p.photo)}" alt="">`:safeEscape((p.name||'مستخدم').slice(0,1));
@@ -16288,7 +16288,16 @@ body.light-mode #courseChatPage .chat-msg.received{
             const newMap=new Map(visibleDocs.map(d=>[String(d.id),d]));
             const oldMap=session.docs;
             const changedIds=[];
-            oldMap.forEach((oldDoc,id)=>{if(!newMap.has(id))removeNode(id);});
+            oldMap.forEach((oldDoc,id)=>{
+                if(!newMap.has(id)){
+                    const oldNode=container.querySelector(`[data-message-id="${CSS.escape(String(id))}"]`);
+                    const prevId=oldNode?.previousElementSibling?.classList.contains('chat-msg')?oldNode.previousElementSibling.dataset.messageId:null;
+                    const nextId=oldNode?.nextElementSibling?.classList.contains('chat-msg')?oldNode.nextElementSibling.dataset.messageId:null;
+                    removeNode(id);
+                    if(prevId)changedIds.push(prevId);
+                    if(nextId)changedIds.push(nextId);
+                }
+            });
             newMap.forEach((doc,id)=>{
                 const old=oldMap.get(id);
                 if(!old){insertNode(doc,visibleDocs,new Map(allDocs.map(d=>[String(d.id),d])));changedIds.push(id);return;}
@@ -17189,113 +17198,39 @@ setTimeout(()=>{syncLockUI();scheduleLockClock()},0);
 })();
 </script>
 
-<!-- FINAL: Smart message grouping + requested LTR visual distribution -->
-<style id="aa-smart-grouping-direction-final">
-#courseChatPage .chat-messages-rebuilt > .chat-msg.sent{
-  align-self:flex-end!important;
-  margin-inline-start:0!important;
-  margin-inline-end:0!important;
-}
-#courseChatPage .chat-messages-rebuilt > .chat-msg.received{
-  align-self:flex-start!important;
-  margin-inline-start:0!important;
-  margin-inline-end:0!important;
-}
-/* Profile identity for received messages is always on the LEFT of the bubble. */
-#courseChatPage .chat-msg.received .chat-profile-avatar-outside{
-  left:-34px!important;
-  right:auto!important;
-  inset-inline-start:auto!important;
-  inset-inline-end:auto!important;
-}
-#courseChatPage .chat-msg.received .msg-header{
-  text-align:left!important;
-  direction:rtl!important;
-}
-#courseChatPage .chat-msg.received .msg-header .chat-profile-name{
-  display:block!important;
-  width:100%!important;
-  text-align:left!important;
-}
-/* Follow-up bubbles in a group are slightly smaller and nearly touching. */
-#courseChatPage .chat-msg.chat-msg-grouped{
-  margin-top:-4px!important;
-  padding-top:7px!important;
-  padding-bottom:7px!important;
-  min-height:0!important;
-}
-#courseChatPage .chat-msg.chat-msg-grouped .msg-time{margin-top:1px!important;}
-#courseChatPage .chat-msg.chat-msg-grouped .t{font-size:.92rem!important;}
-#courseChatPage .chat-msg.chat-msg-grouped .reply-block{margin-top:1px!important;margin-bottom:3px!important;}
-@media(max-width:768px){
-  #courseChatPage .chat-msg.received .chat-profile-avatar-outside{
-    left:-31px!important;width:26px!important;height:26px!important;
-  }
-}
-</style>
-<script id="aa-smart-grouping-direction-final-js">
+<script id="aa-immediate-logout-fix">
 (function(){
   'use strict';
-  if(window.__aaSmartGroupingDirectionFinal)return;
-  window.__aaSmartGroupingDirectionFinal=true;
-  const list=document.getElementById('chatPageMessagesList');
-  if(!list)return;
-  let queued=false;
-  function esc(v){
-    if(typeof escapeHtml==='function')return escapeHtml(String(v??''));
-    return String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-  }
-  function profileFor(uid){
-    return (window.__chatProfileCache||{})[String(uid)]||{name:'مستخدم',photo:''};
-  }
-  function removeIdentity(node){
-    node.querySelector(':scope > .chat-profile-avatar-outside')?.remove();
-    node.querySelector(':scope > .msg-header')?.remove();
-  }
-  function addIdentity(node){
-    const uid=String(node.dataset.userId||'');
-    if(!uid)return;
-    const p=profileFor(uid);
-    let avatar=node.querySelector(':scope > .chat-profile-avatar-outside');
-    let header=node.querySelector(':scope > .msg-header');
-    if(!avatar){
-      avatar=document.createElement('div');
-      avatar.className='chat-profile-avatar chat-profile-avatar-outside';
-      avatar.dataset.profileUid=uid;
-      node.prepend(avatar);
-    }
-    avatar.innerHTML=p.photo?`<img src="${esc(p.photo)}" alt="">`:esc((p.name||'مستخدم').slice(0,1));
-    if(!header){
-      header=document.createElement('div');
-      header.className='msg-header';
-      node.insertBefore(header,avatar.nextSibling);
-    }
-    header.innerHTML=`<span class="chat-profile-name chat-profile-name-trigger" data-profile-uid="${esc(uid)}">${esc(p.name||'مستخدم')}</span>`;
-  }
-  function regroup(){
-    queued=false;
-    const children=[...list.children];
-    let prevMsg=null;
-    for(const node of children){
-      if(!node.classList.contains('chat-msg')){
-        if(node.classList.contains('chat-date-divider'))prevMsg=null;
-        continue;
-      }
-      const mine=node.classList.contains('sent');
-      const uid=String(node.dataset.userId||'');
-      const same=!!prevMsg && mine===prevMsg.classList.contains('sent') && uid && uid===String(prevMsg.dataset.userId||'');
-      node.classList.toggle('chat-msg-grouped',same);
-      if(mine){removeIdentity(node);}else if(same){removeIdentity(node);}else{addIdentity(node);}
-      prevMsg=node;
+  if(window.__aaImmediateLogoutFix)return;
+  window.__aaImmediateLogoutFix=true;
+  async function logoutNow(e){
+    if(e){e.preventDefault();e.stopImmediatePropagation();}
+    const user=(typeof currentUser!=='undefined'&&currentUser)?currentUser:window.currentUser;
+    if(!user||!auth?.signOut)return;
+    const btn=document.getElementById('aaProfileLogout');
+    if(btn?.disabled)return;
+    try{
+      if(btn)btn.disabled=true;
+      document.querySelectorAll('#aaRebuiltProfilePage,#ananasV10ProfilePage,#ananasPrivateProfileOverlay,#ananasCanonicalProfilePage,#userProfilePage').forEach(el=>{el.classList.remove('active');el.style.removeProperty('display');});
+      window.__aaViewedProfileUid='';
+      if(window.profileState)Object.assign(window.profileState,{uid:null,isSelf:false,source:null,returnPoint:null,busy:false});
+      try{window.mobileNavigate?.('courses')}catch(_){}
+      document.querySelectorAll('.nav-btn,.auth-btn').forEach(x=>x.classList.remove('active'));
+      document.querySelector('#coursesNavBtn')?.classList.add('active');
+      await auth.signOut();
+    }catch(err){
+      console.error('immediate profile logout',err);
+      showCustomAlert?.('خطأ','تعذر تسجيل الخروج حاليًا.');
+      if(btn)btn.disabled=false;
     }
   }
-  function schedule(){if(queued)return;queued=true;requestAnimationFrame(regroup);}
-  const mo=new MutationObserver(records=>{
-    if(records.some(r=>r.addedNodes.length||r.removedNodes.length))schedule();
-  });
-  mo.observe(list,{childList:true});
-  schedule();
+  window.__aaImmediateLogout=logoutNow;
+  document.addEventListener('click',e=>{
+    const btn=e.target?.closest?.('#aaProfileLogout');
+    if(btn)logoutNow(e);
+  },true);
 })();
 </script>
+
 </body>
 </html>
