@@ -16109,7 +16109,8 @@ body.light-mode #courseChatPage .chat-msg.received{
                 hiddenLoaded:false,
                 docs:new Map(),
                 allDocs:new Map(),
-                lastId:null
+                lastId:null,
+                html:''
             };
             sessions.set(courseKey,session);
         }
@@ -16121,16 +16122,17 @@ body.light-mode #courseChatPage .chat-msg.received{
         /* Keep the existing DOM alive while navigating around the site.
            A session may have no active listener after leaving the course, but its
            already-rendered messages remain visible and are reused immediately. */
-        if(session.initialized && container.querySelector('.chat-msg')){
-            if(!session.unsubscribe){
-                /* Reconnect silently in the background; never replace the visible DOM. */
-            }else{
+        if(session.initialized){
+            /* Reuse the already rendered chat immediately; never blank it on navigation. */
+            if(!container.querySelector('.chat-msg') && session.html) container.innerHTML=session.html;
+            if(session.unsubscribe){
                 chatUnsubscribe=session.unsubscribe;
                 chatInitialized=true;
                 chatLastMessageId=session.lastId;
                 return;
             }
-        }else if(!container.querySelector('.chat-msg')){
+        }
+        if(!session.initialized && !container.querySelector('.chat-msg')){
             container.innerHTML='<p style="color:var(--text-muted);text-align:center;padding:30px;">جاري تحميل الرسائل...</p>';
         }
 
@@ -16341,10 +16343,12 @@ body.light-mode #courseChatPage .chat-msg.received{
                         if(!session.initialized){
                             if(snapshot.empty){
                                 container.innerHTML='<p style="color:var(--text-muted);text-align:center;padding:30px;">لا توجد رسائل.</p>';
+                                session.html=container.innerHTML;
                                 session.docs=new Map();session.allDocs=new Map();session.initialized=true;session.lastId=null;
                             }else{
                                 const visibleDocs=orderedVisibleDocs(allDocs);
                                 fullInitialRender(visibleDocs,new Map(allDocs.map(d=>[String(d.id),d])));
+                                session.html=container.innerHTML;
                                 session.docs=new Map(visibleDocs.map(d=>[String(d.id),d]));
                                 session.allDocs=new Map(allDocs.map(d=>[String(d.id),d]));
                                 session.initialized=true;session.lastId=visibleDocs[visibleDocs.length-1]?.id||null;
@@ -16353,7 +16357,8 @@ body.light-mode #courseChatPage .chat-msg.received{
                             requestAnimationFrame(()=>{if(chatUserAtBottom||!firstForSubscription)scrollToBottom('auto');});
                         }else{
                             const wasBottom=chatUserAtBottom;
-                            applySnapshotIncrementally(snapshot);
+                            const changedIds=applySnapshotIncrementally(snapshot);
+                            if(changedIds.length) session.html=container.innerHTML;
                             chatLastMessageId=session.lastId;
                             if(wasBottom){requestAnimationFrame(()=>scrollToBottom('auto'));}
                         }
