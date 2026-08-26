@@ -16109,8 +16109,7 @@ body.light-mode #courseChatPage .chat-msg.received{
                 hiddenLoaded:false,
                 docs:new Map(),
                 allDocs:new Map(),
-                lastId:null,
-                html:''
+                lastId:null
             };
             sessions.set(courseKey,session);
         }
@@ -16122,17 +16121,16 @@ body.light-mode #courseChatPage .chat-msg.received{
         /* Keep the existing DOM alive while navigating around the site.
            A session may have no active listener after leaving the course, but its
            already-rendered messages remain visible and are reused immediately. */
-        if(session.initialized){
-            /* Reuse the already rendered chat immediately; never blank it on navigation. */
-            if(!container.querySelector('.chat-msg') && session.html) container.innerHTML=session.html;
-            if(session.unsubscribe){
+        if(session.initialized && container.querySelector('.chat-msg')){
+            if(!session.unsubscribe){
+                /* Reconnect silently in the background; never replace the visible DOM. */
+            }else{
                 chatUnsubscribe=session.unsubscribe;
                 chatInitialized=true;
                 chatLastMessageId=session.lastId;
                 return;
             }
-        }
-        if(!session.initialized && !container.querySelector('.chat-msg')){
+        }else if(!container.querySelector('.chat-msg')){
             container.innerHTML='<p style="color:var(--text-muted);text-align:center;padding:30px;">جاري تحميل الرسائل...</p>';
         }
 
@@ -16343,12 +16341,10 @@ body.light-mode #courseChatPage .chat-msg.received{
                         if(!session.initialized){
                             if(snapshot.empty){
                                 container.innerHTML='<p style="color:var(--text-muted);text-align:center;padding:30px;">لا توجد رسائل.</p>';
-                                session.html=container.innerHTML;
                                 session.docs=new Map();session.allDocs=new Map();session.initialized=true;session.lastId=null;
                             }else{
                                 const visibleDocs=orderedVisibleDocs(allDocs);
                                 fullInitialRender(visibleDocs,new Map(allDocs.map(d=>[String(d.id),d])));
-                                session.html=container.innerHTML;
                                 session.docs=new Map(visibleDocs.map(d=>[String(d.id),d]));
                                 session.allDocs=new Map(allDocs.map(d=>[String(d.id),d]));
                                 session.initialized=true;session.lastId=visibleDocs[visibleDocs.length-1]?.id||null;
@@ -16357,8 +16353,7 @@ body.light-mode #courseChatPage .chat-msg.received{
                             requestAnimationFrame(()=>{if(chatUserAtBottom||!firstForSubscription)scrollToBottom('auto');});
                         }else{
                             const wasBottom=chatUserAtBottom;
-                            const changedIds=applySnapshotIncrementally(snapshot);
-                            if(changedIds.length) session.html=container.innerHTML;
+                            applySnapshotIncrementally(snapshot);
                             chatLastMessageId=session.lastId;
                             if(wasBottom){requestAnimationFrame(()=>scrollToBottom('auto'));}
                         }
@@ -17088,7 +17083,7 @@ function ensureUI(){if(overlay)return;overlay=document.createElement('div');over
 function close(){selected=null;menu?.classList.remove('open');overlay?.classList.remove('open');if(highlight)highlight.innerHTML='';document.body.classList.remove('aa-chat-context-open')}
 function copyComputedStyles(source,target){const cs=getComputedStyle(source);for(let i=0;i<cs.length;i++){const prop=cs[i];try{target.style.setProperty(prop,cs.getPropertyValue(prop),cs.getPropertyPriority(prop))}catch(_){}}const sc=source.children,tc=target.children;for(let i=0;i<sc.length&&i<tc.length;i++)copyComputedStyles(sc[i],tc[i])}
 function b(id,label,icon,danger){const x=document.createElement('button');x.type='button';x.dataset.ctxAction=id;x.dataset.danger=danger?'1':'0';x.innerHTML='<i class="fas '+icon+'"></i><span>'+label+'</span>';return x}
-function showFor(el,x,y){ensureUI();close();selected=el;const r=el.getBoundingClientRect(),cs=getComputedStyle(el),c=el.cloneNode(true);c.querySelectorAll('button,input,textarea,select').forEach(q=>q.remove());c.querySelectorAll('[onclick]').forEach(q=>q.removeAttribute('onclick'));copyComputedStyles(el,c);c.style.position='relative';c.style.left='auto';c.style.top='auto';c.style.width=r.width+'px';c.style.height='auto';c.style.maxWidth='none';c.style.margin='0';c.style.boxSizing='border-box';c.style.transform='none';c.style.animation='none';c.style.transition='none';highlight.innerHTML='';highlight.appendChild(c);Object.assign(highlight.style,{left:r.left+'px',top:r.top+'px',width:r.width+'px',height:r.height+'px',borderRadius:cs.borderRadius,boxSizing:'border-box',background:'transparent',color:'inherit',border:'0',padding:'0',zIndex:'2147483602',overflow:'visible'});const mine=String(el.dataset.userId||'')===String(uid()),admin=currentAdmin();const canEdit=mine&&!!window.__aaChatCanEditMessage?.({createdAt:Number(el.dataset.createdAt||0)});const arr=[b('copy','نسخ','fa-copy',false),b(mine?'delete':'local',mine?'حذف من الجميع':'حذف من حسابي',mine?'fa-trash':'fa-eye-slash',true)];if(canEdit)arr.push(b('edit','تعديل','fa-pen',false));arr.push(b('reply','رد','fa-reply',false));menu.innerHTML='';arr.forEach(x=>menu.appendChild(x));menu.classList.add('open');overlay.classList.add('open');document.body.classList.add('aa-chat-context-open');const mw=menu.offsetWidth,mh=menu.offsetHeight,vw=innerWidth,vh=innerHeight;let left=x||r.left,top=y||r.bottom+8;if(left+mw>vw-10)left=vw-mw-10;if(left<10)left=10;if(top+mh>vh-10)top=Math.max(10,r.top-mh-8);if(top<10)top=10;menu.style.left=Math.round(left)+'px';menu.style.top=Math.round(top)+'px'}
+function showFor(el,x,y){ensureUI();close();selected=el;const r=el.getBoundingClientRect(),cs=getComputedStyle(el),c=el.cloneNode(true);c.querySelectorAll('button,input,textarea,select').forEach(q=>q.remove());c.querySelectorAll('[onclick]').forEach(q=>q.removeAttribute('onclick'));copyComputedStyles(el,c);c.style.position='relative';c.style.left='auto';c.style.top='auto';c.style.width=r.width+'px';c.style.height='auto';c.style.maxWidth='none';c.style.margin='0';c.style.boxSizing='border-box';c.style.transform='none';c.style.animation='none';c.style.transition='none';highlight.innerHTML='';highlight.appendChild(c);Object.assign(highlight.style,{left:r.left+'px',top:r.top+'px',width:r.width+'px',height:r.height+'px',borderRadius:cs.borderRadius,boxSizing:'border-box',background:'transparent',color:'inherit',border:'0',padding:'0',zIndex:'2147483602',overflow:'visible'});const mine=String(el.dataset.userId||'')===String(uid()),admin=currentAdmin();const canEdit=mine&&!!window.__aaChatCanEditMessage?.({createdAt:Number(el.dataset.createdAt||0)});const arr=[b('copy','نسخ','fa-copy',false),b(mine?'delete':'local',mine?'حذف من الجميع':'حذف من حسابي',mine?'fa-trash':'fa-eye-slash',true)];if(canEdit)arr.push(b('edit','تعديل','fa-pen',false));if(!el.classList.contains('deleted-message'))arr.push(b('reply','رد','fa-reply',false));menu.innerHTML='';arr.forEach(x=>menu.appendChild(x));menu.classList.add('open');overlay.classList.add('open');document.body.classList.add('aa-chat-context-open');const mw=menu.offsetWidth,mh=menu.offsetHeight,vw=innerWidth,vh=innerHeight;let left=x||r.left,top=y||r.bottom+8;if(left+mw>vw-10)left=vw-mw-10;if(left<10)left=10;if(top+mh>vh-10)top=Math.max(10,r.top-mh-8);if(top<10)top=10;menu.style.left=Math.round(left)+'px';menu.style.top=Math.round(top)+'px'}
 async function copyText(t){if(!t)return window.showCustomAlert?.('نسخ','لا يوجد نص لنسخه.');let copied=false;try{if(navigator.clipboard?.writeText){await navigator.clipboard.writeText(t);copied=true}}catch(_){}if(!copied){const ta=document.createElement('textarea');ta.value=t;ta.style.position='fixed';ta.style.left='-9999px';ta.style.top='0';ta.style.opacity='0';document.body.appendChild(ta);ta.focus();ta.select();try{copied=document.execCommand('copy')}catch(__){}ta.remove()}showCopyToast(copied?'تم النسخ':'تعذر النسخ');}
 const handleContextMenuClick=async e=>{const x=e.target.closest?.('[data-ctx-action]');if(!x||!selected)return;e.preventDefault();e.stopPropagation();const el=selected,cid=currentCourse(),id=el.dataset.messageId||'',text=el.querySelector('.t')?.innerText?.trim()||'',name=el.querySelector('.chat-profile-name')?.textContent?.trim()||el.querySelector('.u')?.textContent?.trim()||'مستخدم',action=x.dataset.ctxAction;const mine=String(el.dataset.userId||'')===String(uid());close();if(action==='copy')return copyText(text);if(action==='reply')return window.replyTo?.(id,name,text.slice(0,120));if(action==='edit'){if(!mine)return window.showCustomAlert?.('غير مسموح','يمكنك تعديل رسائلك فقط.');if(!window.__aaChatCanEditMessage?.({createdAt:Number(el.dataset.createdAt||0)}))return window.showCustomAlert?.('انتهى وقت التعديل','يمكن تعديل الرسالة خلال 15 دقيقة فقط من إرسالها.');return window.editChatMessage?.(cid,id);}if(action==='delete'){if(mine){const ok=typeof window.showCustomConfirm==='function'?await new Promise(r=>window.showCustomConfirm('حذف من الجميع','سيتم حذف هذه الرسالة من جميع المشاركين في الدردشة، وستظهر للمشرف كرسالة محذوفة. هل تريد المتابعة؟',()=>r(true),()=>r(false))):window.confirm('حذف الرسالة من الجميع؟');if(ok)return window.deleteChatMessage?.(cid,id,true);return;}const set=hidden(cid),ok=typeof window.showCustomConfirm==='function'?await new Promise(r=>window.showCustomConfirm('حذف من حسابك','سيتم إخفاء هذه الرسالة من حسابك على جميع أجهزتك، ولن تُحذف من بقية الحسابات. هل تريد المتابعة؟',()=>r(true),()=>r(false))):window.confirm('إخفاء الرسالة من حسابك على جميع أجهزتك؟');if(ok){set.add(String(id));saveHiddenLocal(cid,set);try{await window.__aaSaveHiddenChatIds?.(cid,set);await window.__aaRefreshHiddenChat?.(cid);return}catch(err){set.delete(String(id));saveHiddenLocal(cid,set);window.showCustomAlert?.('خطأ','تعذر حفظ إخفاء الرسالة على حسابك.');}}}if(action==='local'){const set=hidden(cid),ok=typeof window.showCustomConfirm==='function'?await new Promise(r=>window.showCustomConfirm('حذف من حسابك','سيتم إخفاء هذه الرسالة من حسابك على جميع أجهزتك، ولن تُحذف من بقية الحسابات. هل تريد المتابعة؟',()=>r(true),()=>r(false))):window.confirm('إخفاء الرسالة من حسابك على جميع أجهزتك؟');if(ok){set.add(String(id));saveHiddenLocal(cid,set);try{await window.__aaSaveHiddenChatIds?.(cid,set);await window.__aaRefreshHiddenChat?.(cid);return}catch(err){set.delete(String(id));saveHiddenLocal(cid,set);window.showCustomAlert?.('خطأ','تعذر حفظ إخفاء الرسالة على حسابك.');}}}};
 document.addEventListener('contextmenu',e=>{const el=e.target.closest?.('#courseChatPage .chat-msg');if(!el)return;e.preventDefault();e.stopImmediatePropagation();suppressClickUntil=Date.now()+700;showFor(el,e.clientX,e.clientY)},true);
@@ -17155,7 +17150,7 @@ function getMsg(id){if(!id)return null;try{return page.querySelector('.chat-msg[
 function getReplyData(el){if(!el)return null;const name=el.querySelector('.chat-profile-name')?.textContent?.trim()||el.querySelector('.u')?.textContent?.trim()||'مستخدم';const text=el.querySelector('.t')?.innerText?.trim()||'';const img=el.querySelector('.message-gallery img,.chat-msg > img');return{id:el.dataset.messageId||'',name,text,thumb:img?.src||''};}
 function renderReplyPreview(name,text,thumb){const box=document.getElementById('chatReplyIndicatorPage');if(!box)return;let wrap=box.querySelector('.aa-reply-preview');let close=box.querySelector('.close-reply');if(!wrap){wrap=document.createElement('div');wrap.className='aa-reply-preview';const copy=document.createElement('div');copy.className='aa-reply-preview-copy';copy.innerHTML='<strong></strong><span></span>';wrap.appendChild(copy);box.innerHTML='';box.appendChild(wrap);if(close)box.appendChild(close);}const old=wrap.querySelector('.aa-reply-preview-thumb');if(old)old.remove();if(thumb){const im=document.createElement('img');im.className='aa-reply-preview-thumb';im.src=thumb;im.alt='';wrap.insertBefore(im,wrap.firstChild);}const n=wrap.querySelector('strong'),t=wrap.querySelector('span');if(n)n.textContent=name||'مستخدم';if(t)t.textContent=text||'صورة';}
 const baseReply=window.replyTo||function(){};window.replyTo=function(msgId,userName,msgText,replyThumb){baseReply.apply(this,arguments);renderReplyPreview(userName,msgText,replyThumb||'');};
-function setReplyFromElement(el){const d=getReplyData(el);if(d?.id)window.replyTo?.(d.id,d.name,d.text.slice(0,120),d.thumb);}
+function setReplyFromElement(el){if(!el||el.classList.contains('deleted-message'))return;const d=getReplyData(el);if(d?.id)window.replyTo?.(d.id,d.name,d.text.slice(0,120),d.thumb);}
 function flashOriginal(id){const el=getMsg(id);if(!el)return;el.scrollIntoView({behavior:'smooth',block:'center'});clearTimeout(el.__aaReplyFlashTimer);el.classList.add('aa-reply-flash');el.__aaReplyFlashTimer=setTimeout(()=>el.classList.remove('aa-reply-flash'),720);}
 document.addEventListener('click',e=>{const block=e.target.closest?.('#courseChatPage .reply-block[data-reply-to-id]');if(!block)return;e.preventDefault();e.stopPropagation();flashOriginal(block.getAttribute('data-reply-to-id'));},true);
 let sx=0,sy=0,st=0,target=null;list.addEventListener('touchstart',e=>{if(e.touches.length!==1)return;const t=e.target.closest?.('.chat-msg');if(!t||e.target.closest('button,input,textarea,select,.msg-actions,.message-gallery,.chat-profile-avatar-outside,.chat-profile-name-trigger,.reply-block')){target=null;return;}const p=e.touches[0];sx=p.clientX;sy=p.clientY;st=Date.now();target=t;},{passive:true,capture:true});
@@ -17183,6 +17178,147 @@ const originalOpen=window.openChatLockDialog;window.openChatLockDialog=function(
 document.addEventListener('click',e=>{const btn=e.target.closest?.('#chatLockBtn');if(!btn)return;e.preventDefault();e.stopImmediatePropagation();if(lockTimes(currentChatLock||{}).active)window.unlockCourseChat?.();else window.openChatLockDialog?.()},true);
 window.unlockCourseChat=async function(){if(!isAdmin||!activeCourseId)return;clearTimeout(lockTimer);lockTimer=null;const prev=currentChatLock||{};currentChatLock={...prev,locked:false,startAt:null,endAt:null,autoExpire:false,reason:''};syncLockUI();try{await db.collection('courses').doc(activeCourseId).collection('settings').doc('chat').set({locked:false,startAt:null,endAt:null,reason:'',autoExpire:false,updatedAt:firebase.firestore.FieldValue.serverTimestamp()},{merge:true});showCustomAlert('تم الفتح','الدردشة مفتوحة الآن ويمكن للطلاب المشاركة.')}catch(err){console.error(err);currentChatLock=prev;syncLockUI();scheduleLockClock();showCustomAlert('خطأ','تعذر فتح الدردشة.');throw err}};
 setTimeout(()=>{syncLockUI();scheduleLockClock()},0);
+})();
+</script>
+
+
+<!-- ===== CHAT STAGE 8: smart grouping + deleted replies + smooth chat modals ===== -->
+<style id="aa-chat-stage8-smart-grouping-modal-css">
+#courseChatPage .chat-msg.chat-msg-grouped{
+  margin-top:-4px!important;
+  margin-bottom:1px!important;
+  padding-top:4px!important;
+  padding-bottom:4px!important;
+}
+#courseChatPage .chat-msg.chat-msg-grouped .msg-time{margin-top:1px!important;}
+#courseChatPage .reply-block.aa-reply-deleted{
+  cursor:default!important;
+  opacity:.72!important;
+  filter:none!important;
+  box-shadow:none!important;
+}
+#courseChatPage .reply-block.aa-reply-deleted .rt{font-style:italic!important;}
+
+/* Smooth centered entrance for chat-related dialogs only. */
+#chatLockModal,
+#chatEditMessageModal{
+  display:block!important;
+  opacity:0!important;
+  visibility:hidden!important;
+  pointer-events:none!important;
+  transform:translate(-50%,-50%) scale(.96)!important;
+  transition:opacity .22s ease,transform .28s cubic-bezier(.22,.8,.24,1),visibility 0s linear .28s!important;
+}
+#chatLockModal.active,
+#chatEditMessageModal.active{
+  opacity:1!important;
+  visibility:visible!important;
+  pointer-events:auto!important;
+  transform:translate(-50%,-50%) scale(1)!important;
+  transition:opacity .22s ease,transform .28s cubic-bezier(.22,.8,.24,1),visibility 0s linear 0s!important;
+}
+#customAlertModal,
+#customConfirmModal,
+#userProfileModal{
+  display:flex!important;
+  opacity:0!important;
+  visibility:hidden!important;
+  pointer-events:none!important;
+  transition:opacity .18s ease,visibility 0s linear .22s!important;
+}
+#customAlertModal .custom-alert-box,
+#customConfirmModal .custom-alert-box,
+#userProfileModal .custom-alert-box{
+  opacity:0;
+  transform:translateY(8px) scale(.965);
+  transition:opacity .22s ease,transform .28s cubic-bezier(.22,.8,.24,1)!important;
+}
+#customAlertModal.active,
+#customConfirmModal.active,
+#userProfileModal.active{
+  opacity:1!important;
+  visibility:visible!important;
+  pointer-events:auto!important;
+  transition:opacity .18s ease,visibility 0s linear 0s!important;
+}
+#customAlertModal.active .custom-alert-box,
+#customConfirmModal.active .custom-alert-box,
+#userProfileModal.active .custom-alert-box{
+  opacity:1;
+  transform:translateY(0) scale(1);
+}
+@media(max-width:768px){
+  #chatLockModal,
+  #chatEditMessageModal{transition:opacity .2s ease,transform .26s cubic-bezier(.22,.8,.24,1),visibility 0s linear .26s!important;}
+}
+</style>
+<script id="aa-chat-stage8-smart-grouping-modal-js">
+(function(){
+'use strict';
+if(window.__aaChatStage8)return;window.__aaChatStage8=true;
+const page=document.getElementById('courseChatPage'),list=document.getElementById('chatPageMessagesList');
+if(!page||!list)return;
+function safeText(el){return el?.textContent?.trim()||'';}
+function esc(v){return typeof escapeHtml==='function'?escapeHtml(String(v??'')):String(v??'').replace(/[&<>\"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',"'":'&#39;'}[m]));}
+function ensureReceivedHeader(node){
+  if(!node||node.classList.contains('sent'))return;
+  if(node.querySelector('.chat-profile-avatar-outside')||node.querySelector('.msg-header'))return;
+  const uid=String(node.dataset.userId||''),p=(window.__chatProfileCache||{})[uid]||{};
+  const name=p.name||safeText(node.querySelector('.u'))||'مستخدم',photo=p.photo||'';
+  const av=document.createElement('div');av.className='chat-profile-avatar chat-profile-avatar-outside';av.dataset.profileUid=uid;
+  av.innerHTML=photo?`<img src="${esc(photo)}" alt="">`:esc(String(name).slice(0,1));
+  const h=document.createElement('div');h.className='msg-header';
+  h.innerHTML=`<span class="chat-profile-name chat-profile-name-trigger" data-profile-uid="${esc(uid)}">${esc(name)}</span>`;
+  node.prepend(h);node.prepend(av);
+}
+function applySmartGrouping(){
+  const nodes=[...list.querySelectorAll('.chat-msg')];let prev=null;
+  for(const node of nodes){
+    const mine=node.classList.contains('sent'),uid=String(node.dataset.userId||'');
+    const same=!!prev&&prev.mine===mine&&prev.uid===uid;
+    node.classList.toggle('chat-msg-grouped',same);
+    if(!mine){
+      if(same){node.querySelector('.chat-profile-avatar-outside')?.remove();node.querySelector('.msg-header')?.remove();}
+      else ensureReceivedHeader(node);
+    }
+    prev={mine,uid};
+  }
+}
+function normalizeDeletedReplies(){
+  const sessions=window.__aaChatSessions,cid=String(window.activeCourseId||''),session=sessions?.get?.(cid),map=session?.allDocs;
+  list.querySelectorAll('.reply-block[data-reply-to-id]').forEach(block=>{
+    const id=String(block.getAttribute('data-reply-to-id')||''),original=map?.get?.(id),deleted=!!original?.data?.()?.deleted;
+    if(deleted){
+      const rt=block.querySelector('.rt');if(rt)rt.textContent='رسالة محذوفة';
+      block.classList.add('aa-reply-deleted');block.removeAttribute('data-reply-to-id');block.style.pointerEvents='none';
+    }
+  });
+}
+function sync(){applySmartGrouping();normalizeDeletedReplies();}
+const originalLoad=window.loadChatPage;
+if(typeof originalLoad==='function'&&!originalLoad.__aaStage8Wrapped){
+  const wrapped=async function(){const r=await originalLoad.apply(this,arguments);requestAnimationFrame(sync);return r;};
+  wrapped.__aaStage8Wrapped=true;wrapped.__aaStage8Original=originalLoad;window.loadChatPage=wrapped;
+}
+const mo=new MutationObserver(m=>{if(m.some(x=>x.addedNodes.length||x.removedNodes.length))requestAnimationFrame(sync);});
+mo.observe(list,{childList:true,subtree:true});
+
+/* Close only chat-related popups by clicking their backdrop / outside frame. */
+const modalIds=['chatLockModal','chatEditMessageModal','customAlertModal','customConfirmModal','userProfileModal'];
+document.addEventListener('click',e=>{
+  if(!page.classList.contains('active'))return;
+  for(const id of modalIds){
+    const modal=document.getElementById(id);if(!modal||!modal.classList.contains('active'))continue;
+    if(modal.classList.contains('custom-alert-modal')){
+      if(e.target===modal){if(id==='customConfirmModal')document.getElementById('customConfirmNoBtn')?.click();else modal.classList.remove('active');}
+    }else if(!modal.contains(e.target)){
+      modal.classList.remove('active');
+      if(id==='chatEditMessageModal')window.closeChatEditModal?.();
+      if(id==='chatLockModal')window.closeChatLockModal?.();
+    }
+  }
+},true);
+requestAnimationFrame(sync);
 })();
 </script>
 </body>
