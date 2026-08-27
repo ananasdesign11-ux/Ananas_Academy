@@ -16657,7 +16657,7 @@ body.light-mode #chatEmojiPickerPage.chat-emoji-rebuilt::-webkit-scrollbar-thumb
 }
 </style>
 <style id="chat-image-preview-interaction-fix">
-#aaChatImagePreviewModal .aa-chat-preview-nav{transform:translateY(-50%)!important;transition:background .14s ease,color .14s ease,box-shadow .14s ease!important;}
+#aaChatImagePreviewModal .aa-chat-preview-nav{transform:translateY(-50%)!important;transition:background .14s ease,color .14s ease,box-shadow .14s ease,transform .08s ease!important;will-change:transform;}
 #aaChatImagePreviewModal .aa-chat-preview-nav:hover{transform:translateY(-50%)!important;}
 #aaChatImagePreviewModal .aa-chat-preview-nav:active{transform:translateY(-50%) scale(.96)!important;}
 #aaChatImagePreviewModal .aa-chat-preview-thumb{transform:none!important;}
@@ -16759,11 +16759,12 @@ function ensureModal(){
  const stopDrag=e=>{if(!dragging)return;dragging=false;try{thumbs.releasePointerCapture?.(e.pointerId)}catch(_){}if(!dragMoved)suppressThumbScrollSyncUntil=Date.now()+500;};
  thumbs.addEventListener('pointerup',stopDrag);thumbs.addEventListener('pointercancel',stopDrag);
  thumbs.addEventListener('click',e=>{const add=e.target.closest?.('.aa-chat-preview-add');if(add){e.preventDefault();e.stopPropagation();openAddFilesPicker();return;}const thumb=e.target.closest?.('.aa-chat-preview-thumb[data-index]');if(!thumb)return;if(dragMoved){dragMoved=false;return;}const index=Number(thumb.dataset.index);if(!Number.isInteger(index)||index<0||index>=files.length||sending)return;e.preventDefault();e.stopPropagation();suppressThumbScrollSyncUntil=Date.now()+700;const dir=index>currentIndex?'left':index<currentIndex?'right':'none';showIndex(index,dir);});
+ thumbs.addEventListener('pointerup',e=>{const add=e.target.closest?.('.aa-chat-preview-add');if(!add||sending||!modal?.classList.contains('open'))return;e.preventDefault();e.stopPropagation();openAddFilesPicker();},{capture:true});
  ensureAddFilesInput();
  return modal;
 }
 function ensureAddFilesInput(){if(addInput?.isConnected)return addInput;addInput=document.getElementById('aaChatPreviewAddFilesInput')||document.createElement('input');addInput.type='file';addInput.id='aaChatPreviewAddFilesInput';addInput.accept='image/*';addInput.multiple=true;addInput.tabIndex=-1;addInput.setAttribute('aria-hidden','true');addInput.style.cssText='position:fixed;left:-10000px;top:-10000px;width:1px;height:1px;opacity:0;';if(!addInput.isConnected)document.body.appendChild(addInput);if(addInput.dataset.bound!=='1'){addInput.dataset.bound='1';addInput.addEventListener('change',e=>{const chosen=[...(e.target.files||[])].filter(f=>/^image\//i.test(f.type));e.target.value='';if(!chosen.length||!modal?.classList.contains('open')||sending)return;const firstNewIndex=files.length;files.push(...chosen);urls.push(...chosen.map(f=>URL.createObjectURL(f)));renderThumbs();updateNav();showIndex(firstNewIndex,'left');requestAnimationFrame(()=>centerThumb(currentIndex,'smooth'));});}return addInput;}
-function openAddFilesPicker(){if(sending||!modal?.classList.contains('open'))return;const i=ensureAddFilesInput();i.value='';try{i.click();}catch(e){console.error('chat preview add files picker',e);}}
+function openAddFilesPicker(){if(sending||!modal?.classList.contains('open'))return;const i=ensureAddFilesInput();if(!i)return;i.value='';try{if(typeof i.showPicker==='function')i.showPicker();else i.click();}catch(e){try{i.click();}catch(err){console.error('chat preview add files picker',err);}}}
 function renderThumbs(){if(!thumbs)return;thumbs.innerHTML='';files.forEach((file,index)=>{const url=urls[index],b=document.createElement('button');b.type='button';b.className='aa-chat-preview-thumb';b.dataset.index=String(index);b.innerHTML='<img alt="">';b.querySelector('img').src=url;thumbs.appendChild(b);});const add=document.createElement('button');add.type='button';add.className='aa-chat-preview-thumb aa-chat-preview-add';add.setAttribute('aria-label','إضافة صور أخرى');add.title='إضافة صور أخرى';add.innerHTML='<span aria-hidden="true">+</span>';thumbs.appendChild(add);}
 function setLoading(v){modal?.querySelector('.aa-chat-preview-loading')?.classList.toggle('open',!!v);stageImage?.classList.toggle('is-loading',!!v);}
 function updateNav(){const many=files.length>1;if(prevBtn)prevBtn.disabled=!many;if(nextBtn)nextBtn.disabled=!many;if(prevBtn)prevBtn.style.opacity=many?'1':'0';if(nextBtn)nextBtn.style.opacity=many?'1':'0';if(counter)counter.textContent=many?`${currentIndex+1} / ${files.length}`:'';}
