@@ -2341,6 +2341,85 @@ body.aa-chat-fullscreen-open.aa-v9-modal-locked::before{
 }
 </style>
 
+
+<style id="chat-lightbox-stage9-ui-fix-v2">
+/* Fix the legacy absolute positioning that caused the close button to overlap the tool row. */
+#chatImageLightbox .chat-image-lightbox-topbar{direction:rtl;}
+#chatImageLightbox .chat-image-lightbox-sender{direction:rtl;}
+#chatImageLightbox .chat-image-lightbox-tools{direction:ltr;}
+#chatImageLightbox .chat-image-lightbox-close{
+    position:relative!important;
+    top:auto!important;
+    right:auto!important;
+    left:auto!important;
+    inset-inline-end:auto!important;
+    flex:0 0 auto!important;
+}
+#chatImageLightbox .chat-image-lightbox-tool,
+#chatImageLightbox .chat-image-lightbox-close{
+    min-width:44px;
+    width:44px;
+    height:44px;
+}
+#chatImageLightbox .chat-image-lightbox-sender{
+    cursor:pointer;
+    border-radius:14px;
+    padding:5px 8px;
+    transition:background .16s ease,transform .16s ease;
+}
+#chatImageLightbox .chat-image-lightbox-sender:hover{background:rgba(255,255,255,.07);}
+#chatImageLightbox .chat-image-lightbox-sender:active{transform:scale(.98);}
+#chatImageLightbox .chat-image-lightbox-sender:focus-visible{
+    outline:2px solid var(--accent1);
+    outline-offset:3px;
+}
+#chatImageLightbox .chat-image-lightbox-avatar{
+    cursor:pointer;
+    transition:transform .18s cubic-bezier(.2,.8,.2,1),box-shadow .18s ease;
+}
+#chatImageLightbox .chat-image-lightbox-sender:hover .chat-image-lightbox-avatar{
+    transform:scale(1.04);
+    box-shadow:0 10px 26px rgba(108,92,231,.22);
+}
+/* Smoothly hide the bottom strip when the media is zoomed in, then restore it at scale 1. */
+#chatImageLightbox .chat-image-lightbox-thumbs-bar{
+    transform:translate3d(0,0,0);
+    opacity:1;
+    visibility:visible;
+    transition:transform .28s cubic-bezier(.2,.8,.2,1),opacity .22s ease,visibility 0s linear 0s;
+    will-change:transform,opacity;
+}
+#chatImageLightbox.is-zoomed .chat-image-lightbox-thumbs-bar{
+    transform:translate3d(0,125%,0);
+    opacity:0;
+    visibility:hidden;
+    pointer-events:none;
+    transition:transform .32s cubic-bezier(.2,.8,.2,1),opacity .20s ease,visibility 0s linear .32s;
+}
+/* The caption exits smoothly to the physical right while zoomed. */
+#chatImageLightbox .chat-image-lightbox-caption{
+    transition:opacity .22s ease,transform .30s cubic-bezier(.2,.8,.2,1),visibility 0s linear 0s;
+    will-change:transform,opacity;
+}
+#chatImageLightbox.is-zoomed .chat-image-lightbox-caption{
+    transform:translate3d(calc(-50% + 110vw),0,0)!important;
+    opacity:0!important;
+    visibility:hidden;
+    pointer-events:none;
+    transition:opacity .18s ease,transform .30s cubic-bezier(.2,.8,.2,1),visibility 0s linear .30s;
+}
+/* Keep the active thumbnail precisely centered in the strip. */
+#chatImageLightbox .chat-image-lightbox-thumb.active{scroll-snap-align:center;}
+@media(max-width:768px){
+    #chatImageLightbox .chat-image-lightbox-topbar{height:68px;}
+    #chatImageLightbox .chat-image-lightbox-tool,
+    #chatImageLightbox .chat-image-lightbox-close{min-width:40px;width:40px;height:40px;}
+    #chatImageLightbox .chat-image-lightbox-sender{padding:4px 6px;}
+    #chatImageLightbox.is-zoomed .chat-image-lightbox-thumbs-bar{transform:translate3d(0,135%,0);}
+    #chatImageLightbox.is-zoomed .chat-image-lightbox-caption{transform:translate3d(calc(-50% + 120vw),0,0)!important;}
+}
+</style>
+
 </head>
 <body class="light-mode">
     
@@ -4463,8 +4542,10 @@ body.aa-chat-fullscreen-open.aa-v9-modal-locked::before{
             chatLightboxApply();
         }
         function chatLightboxScale(next,cx=null,cy=null){
-            const stage=document.querySelector('#chatImageLightbox .chat-image-lightbox-stage');if(!stage)return;
-            const old=chatLightboxState.scale,scale=Math.max(1,Math.min(5,next));if(scale===old){chatLightboxClamp();return;}
+            const stage=document.querySelector('#chatImageLightbox .chat-image-lightbox-stage'),viewer=document.getElementById('chatImageLightbox');if(!stage)return;
+            const old=chatLightboxState.scale,scale=Math.max(1,Math.min(5,next));
+            viewer?.classList.toggle('is-zoomed',scale>1.001);
+            if(scale===old){chatLightboxClamp();return;}
             if(cx!=null&&cy!=null){const sr=stage.getBoundingClientRect(),dx=cx-sr.left-sr.width/2,dy=cy-sr.top-sr.height/2,ratio=scale/old;chatLightboxState.x=(chatLightboxState.x-dx)*ratio+dx;chatLightboxState.y=(chatLightboxState.y-dy)*ratio+dy;}
             chatLightboxState.scale=scale;if(scale===1){chatLightboxState.x=0;chatLightboxState.y=0;}chatLightboxClamp();
         }
@@ -4502,7 +4583,7 @@ body.aa-chat-fullscreen-open.aa-v9-modal-locked::before{
         }
         function renderChatLightbox(){
             const viewer=document.getElementById('chatImageLightbox'),content=viewer?.querySelector('.chat-image-lightbox-content');if(!viewer||!content||!chatLightboxState.items.length)return;
-            const n=chatLightboxState.items.length;chatLightboxState.index=((chatLightboxState.index%n)+n)%n;chatLightboxState.scale=1;chatLightboxState.x=0;chatLightboxState.y=0;chatLightboxState.dragging=false;chatLightboxState.moved=false;chatLightboxState.pointers.clear();
+            const n=chatLightboxState.items.length;chatLightboxState.index=((chatLightboxState.index%n)+n)%n;document.getElementById('chatImageLightbox')?.classList.remove('is-zoomed');chatLightboxState.scale=1;chatLightboxState.x=0;chatLightboxState.y=0;chatLightboxState.dragging=false;chatLightboxState.moved=false;chatLightboxState.pointers.clear();
             const item=chatLightboxCurrent(),i=chatLightboxState.index,caption=item?.caption||'',name=item?.mine?'أنت':(item?.userName||'مستخدم'),photo=item?.photo||'';
             const media=item?.type==='video'
                 ? `<video class="chat-image-lightbox-media chat-image-lightbox-video" src="${escapeHtml(item.url)}" ${item.poster?`poster="${escapeHtml(item.poster)}"`:''} controls playsinline preload="metadata"></video>`
@@ -4512,15 +4593,15 @@ body.aa-chat-fullscreen-open.aa-v9-modal-locked::before{
                 : `<button type="button" class="chat-image-lightbox-thumb${idx===i?' active':''}" data-index="${idx}" aria-label="الصورة ${idx+1}"><img src="${escapeHtml(x.url)}" alt=""></button>`).join('');
             content.innerHTML=`
                 <div class="chat-image-lightbox-topbar">
-                    <div class="chat-image-lightbox-sender">
+                    <div class="chat-image-lightbox-sender" data-profile-uid="${escapeHtml(item?.userId||'')}" role="button" tabindex="0" aria-label="فتح ملف المرسل">
                         <div class="chat-image-lightbox-avatar">${photo?`<img src="${escapeHtml(photo)}" alt="">`:'<i class="fas fa-user"></i>'}</div>
                         <div class="chat-image-lightbox-sender-copy"><strong>${escapeHtml(name)}</strong><span>${escapeHtml(chatLightboxFormatDate(item?.createdAt))}</span></div>
                     </div>
                     <div class="chat-image-lightbox-tools">
-                        <button type="button" class="chat-image-lightbox-tool" data-lightbox-action="zoom-out" aria-label="تصغير"><i class="fas fa-minus"></i></button>
-                        <button type="button" class="chat-image-lightbox-tool" data-lightbox-action="zoom-in" aria-label="تكبير"><i class="fas fa-plus"></i></button>
-                        <button type="button" class="chat-image-lightbox-tool" data-lightbox-action="goto-message" aria-label="الانتقال للرسالة"><i class="fas fa-comment-alt"></i><span>الرسالة</span></button>
                         <button type="button" class="chat-image-lightbox-close" aria-label="إغلاق">&times;</button>
+                        <button type="button" class="chat-image-lightbox-tool" data-lightbox-action="goto-message" aria-label="الانتقال للرسالة"><i class="fas fa-comment-alt"></i><span>الرسالة</span></button>
+                        <button type="button" class="chat-image-lightbox-tool" data-lightbox-action="zoom-in" aria-label="تكبير"><i class="fas fa-plus"></i></button>
+                        <button type="button" class="chat-image-lightbox-tool" data-lightbox-action="zoom-out" aria-label="تصغير"><i class="fas fa-minus"></i></button>
                     </div>
                 </div>
                 <div class="chat-image-lightbox-stage">
@@ -4537,6 +4618,10 @@ body.aa-chat-fullscreen-open.aa-v9-modal-locked::before{
             prev.disabled=n<2;next.disabled=n<2;
             prev.addEventListener('click',e=>{e.preventDefault();e.stopPropagation();show(1);});next.addEventListener('click',e=>{e.preventDefault();e.stopPropagation();show(-1);});
             close.addEventListener('click',e=>{e.preventDefault();e.stopPropagation();window.closeChatImageLightbox();});
+            const sender=content.querySelector('.chat-image-lightbox-sender');
+            const openSenderProfile=()=>{const uid=sender?.getAttribute('data-profile-uid');if(uid)window.openChatProfileV12?.(uid);};
+            sender?.addEventListener('click',e=>{if(e.target.closest?.('.chat-image-lightbox-tool,.chat-image-lightbox-close'))return;e.preventDefault();e.stopPropagation();openSenderProfile();});
+            sender?.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();openSenderProfile();}});
             content.querySelector('[data-lightbox-action="zoom-out"]').addEventListener('click',()=>chatLightboxScale(chatLightboxState.scale-.4));
             content.querySelector('[data-lightbox-action="zoom-in"]').addEventListener('click',()=>chatLightboxScale(chatLightboxState.scale+.4));
             content.querySelector('[data-lightbox-action="goto-message"]').addEventListener('click',()=>window.__aaChatLightboxGotoMessage?.(item?.messageId));
@@ -4571,7 +4656,7 @@ body.aa-chat-fullscreen-open.aa-v9-modal-locked::before{
                 if(el){el.scrollIntoView({behavior:'smooth',block:'center'});el.classList.add('aa-reply-flash');clearTimeout(el.__aaLightboxGotoTimer);el.__aaLightboxGotoTimer=setTimeout(()=>el.classList.remove('aa-reply-flash'),900);}
             });
         };
-        window.closeChatImageLightbox=function(){const viewer=document.getElementById('chatImageLightbox');if(!viewer)return;viewer.classList.remove('active');viewer.setAttribute('aria-hidden','true');document.body.classList.remove('aa-chat-lightbox-open');chatLightboxState.pointers.clear();chatLightboxState.items=[];chatLightboxState.index=0;chatLightboxState.scale=1;chatLightboxState.x=0;chatLightboxState.y=0;const content=viewer.querySelector('.chat-image-lightbox-content');if(content)content.innerHTML='';};
+        window.closeChatImageLightbox=function(){const viewer=document.getElementById('chatImageLightbox');if(!viewer)return;viewer.classList.remove('active','is-zoomed');viewer.setAttribute('aria-hidden','true');document.body.classList.remove('aa-chat-lightbox-open');chatLightboxState.pointers.clear();chatLightboxState.items=[];chatLightboxState.index=0;chatLightboxState.scale=1;chatLightboxState.x=0;chatLightboxState.y=0;const content=viewer.querySelector('.chat-image-lightbox-content');if(content)content.innerHTML='';};
         document.addEventListener('keydown',e=>{const viewer=document.getElementById('chatImageLightbox');if(!viewer?.classList.contains('active'))return;if(e.key==='Escape'){e.preventDefault();window.closeChatImageLightbox();}else if(e.key==='ArrowLeft'){e.preventDefault();chatLightboxState.index=(chatLightboxState.index+1)%chatLightboxState.items.length;renderChatLightbox();}else if(e.key==='ArrowRight'){e.preventDefault();chatLightboxState.index=(chatLightboxState.index-1+chatLightboxState.items.length)%chatLightboxState.items.length;renderChatLightbox();}});
 
         function switchCoursePage(page) {
