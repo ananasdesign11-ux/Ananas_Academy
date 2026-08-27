@@ -7334,7 +7334,6 @@ label[for*="En"], input[id*="En"], textarea[id*="En"] { display:none !important;
             document.getElementById('courseQuizzesPage').style.display = 'none';
             document.getElementById('courseAssignmentsPage').style.display = 'none';
             document.getElementById('courseChatPage').style.display = 'none';
-            if(window.__aaDisposeChatSession) window.__aaDisposeChatSession(activeCourseId);
             if(chatUnsubscribe) {
                 chatUnsubscribe();
                 chatUnsubscribe = null;
@@ -7496,9 +7495,6 @@ label[for*="En"], input[id*="En"], textarea[id*="En"] { display:none !important;
                 if (coursesGrid) coursesGrid.style.display = 'grid';
                 const coursesHeader = document.getElementById('coursesListPageHeader');
                 if (coursesHeader) coursesHeader.classList.remove('course-list-header-hidden');
-                if(window.__aaChatSessions){
-                    try{ for(const [cid,ss] of window.__aaChatSessions){ if(ss?.unsubscribe){try{ss.unsubscribe()}catch(_){}} } window.__aaChatSessions.clear(); }catch(_){}
-                }
                 activeCourseId = null; activeLessonId = null;
                 if (ytPlayer) { try { ytPlayer.destroy(); } catch(e) {} ytPlayer = null; ytPlayerReady = false; }
                 if (typeof destroyLessonVideo === 'function') { try { destroyLessonVideo(); } catch(e) {} }
@@ -10195,7 +10191,7 @@ function profileReturnPoint(){
 }
 window.profileReturnPoint=profileReturnPoint;
 function ensureProfilePage(){
- hideLegacy();let page=$('aaRebuiltProfilePage');if(page)return page;
+ hideLegacy();let page=$('aaRebuiltProfilePage');if(page){const b=$('aaProfileLogout');if(b){b.disabled=false;b.removeAttribute('aria-busy');}return page;}
  page=document.createElement('div');page.id='aaRebuiltProfilePage';
  page.innerHTML=`<div class="aa-profile-shell">
  <div class="aa-profile-hero">
@@ -10221,8 +10217,10 @@ function ensureProfilePage(){
   e?.preventDefault();
   e?.stopPropagation?.();
   if(!currentUser||!auth?.signOut)return;
+  let aaLogoutBusy=false;
+  if(aaLogoutBusy)return;
+  aaLogoutBusy=true;
   try{
-    $('aaProfileLogout').disabled=true;
     // إغلاق الواجهة فورًا قبل انتظار استجابة Firebase.
     document.querySelectorAll('#aaRebuiltProfilePage,#ananasV10ProfilePage,#ananasPrivateProfileOverlay,#ananasCanonicalProfilePage,#userProfilePage').forEach(el=>{el.classList.remove('active');el.style.removeProperty('display');});
     window.__aaViewedProfileUid='';
@@ -10231,9 +10229,11 @@ function ensureProfilePage(){
     document.querySelectorAll('.nav-btn,.auth-btn').forEach(x=>x.classList.remove('active'));
     document.querySelector('#coursesNavBtn')?.classList.add('active');
     await auth.signOut();
+    aaLogoutBusy=false;
   }catch(err){
     console.error('profile logout',err);
     showCustomAlert?.('خطأ','تعذر تسجيل الخروج حاليًا.');
+    aaLogoutBusy=false;
     const b=$('aaProfileLogout');if(b)b.disabled=false;
   }
 };
@@ -11018,6 +11018,7 @@ async function renderAuthoritativeProfile(uid,isSelf){
     $id('aaProfileEdit').style.display=isSelf?'inline-flex':'none';
     $id('aaProfileAddWork').style.display=isSelf?'inline-flex':'none';
     $id('aaProfileLogout').style.display=isSelf?'inline-flex':'none';
+    if(isSelf){$id('aaProfileLogout').disabled=false;$id('aaProfileLogout').removeAttribute('aria-busy');}
     $id('aaProfileXP').textContent=privateProfile?'—':Number(live.xp||0).toLocaleString('ar-SA');
     $id('aaProfileLessons').textContent=privateProfile?'—':live.lessons.length;
     $id('aaProfileQuizzes').textContent=privateProfile?'—':Number(live.availableQuizzes||0);
@@ -16126,18 +16127,23 @@ body.light-mode #courseChatPage .chat-msg.received{
            A session may have no active listener after leaving the course, but its
            already-rendered messages remain visible and are reused immediately. */
         if(session.initialized && container.querySelector('.chat-msg')){
-            if(session.unsubscribe){
-                /* The modern chat session owns its own listener; do not let legacy chat state tear it down. */
+            if(!session.unsubscribe){
+                /* Reconnect silently in the background; never replace the visible DOM. */
+            }else{
+                chatUnsubscribe=session.unsubscribe;
                 chatInitialized=true;
                 chatLastMessageId=session.lastId;
                 return;
             }
-            /* Reconnect silently in the background; never replace the visible DOM. */
         }else if(!container.querySelector('.chat-msg')){
             container.innerHTML='<p style="color:var(--text-muted);text-align:center;padding:30px;">جاري تحميل الرسائل...</p>';
         }
 
-        /* The final chat page session is independent from the legacy full-chat listener. */
+        if(chatUnsubscribe && chatUnsubscribe!==session.unsubscribe){
+            try{chatUnsubscribe();}catch(_){ }
+            chatUnsubscribe=null;
+        }
+
         chatUnread=0; chatUserAtBottom=true; updateScrollButton();
         const profileCache=window.__chatProfileCache=window.__chatProfileCache||{};
 
@@ -16216,9 +16222,8 @@ body.light-mode #courseChatPage .chat-msg.received{
                 }
                 const isMine=m.userId===(currentUser?.uid||null),profileUid=String(m.userId||''),profile=profileCache[profileUid]||{name:m.userName||'مستخدم',photo:''};
                 const node=buildMessageNode(doc,allDocs);
-                const sameGroup=!!previousUserId&&previousUserId===profileUid&&previousWasReceived===!isMine;
-                if(sameGroup)node.classList.add('chat-msg-grouped');
-                if(!isMine&&!sameGroup){
+                if(!isMine&&previousWasReceived&&previousUserId===profileUid)node.classList.add('chat-msg-grouped');
+                if(!isMine&&(!previousWasReceived||previousUserId!==profileUid)){
                     const avatar=document.createElement('div');
                     avatar.className='chat-profile-avatar chat-profile-avatar-outside'; avatar.dataset.profileUid=profileUid;
                     avatar.innerHTML=profile.photo?`<img src="${safeEscape(profile.photo)}" alt="">`:safeEscape((profile.name||'مستخدم').slice(0,1));
@@ -16239,10 +16244,11 @@ body.light-mode #courseChatPage .chat-msg.received{
             });
             [...new Set(idxs)].filter(i=>i>=0&&i<nodes.length).forEach(i=>{
                 const node=nodes[i],mMine=node.classList.contains('sent');
-                const prev=nodes[i-1],same=!!prev&&prev.classList.contains('chat-msg')&&mMine===prev.classList.contains('sent')&&String(prev.dataset.userId||'')===String(node.dataset.userId||'');
+                if(mMine)return;
+                const prev=nodes[i-1],same=prev&&!prev.classList.contains('sent')&&prev.dataset.userId===node.dataset.userId;
                 node.classList.toggle('chat-msg-grouped',!!same);
                 const avatar=node.querySelector('.chat-profile-avatar-outside'),header=node.querySelector('.msg-header');
-                if(mMine||same){avatar?.remove();header?.remove();}
+                if(same){avatar?.remove();header?.remove();}
                 else if(!avatar&&!header){
                     const uid=String(node.dataset.userId||''),p=profileCache[uid]||{name:'مستخدم',photo:''};
                     const av=document.createElement('div');av.className='chat-profile-avatar chat-profile-avatar-outside';av.dataset.profileUid=uid;av.innerHTML=p.photo?`<img src="${safeEscape(p.photo)}" alt="">`:safeEscape((p.name||'مستخدم').slice(0,1));
@@ -16288,16 +16294,7 @@ body.light-mode #courseChatPage .chat-msg.received{
             const newMap=new Map(visibleDocs.map(d=>[String(d.id),d]));
             const oldMap=session.docs;
             const changedIds=[];
-            oldMap.forEach((oldDoc,id)=>{
-                if(!newMap.has(id)){
-                    const oldNode=container.querySelector(`[data-message-id="${CSS.escape(String(id))}"]`);
-                    const prevId=oldNode?.previousElementSibling?.classList.contains('chat-msg')?oldNode.previousElementSibling.dataset.messageId:null;
-                    const nextId=oldNode?.nextElementSibling?.classList.contains('chat-msg')?oldNode.nextElementSibling.dataset.messageId:null;
-                    removeNode(id);
-                    if(prevId)changedIds.push(prevId);
-                    if(nextId)changedIds.push(nextId);
-                }
-            });
+            oldMap.forEach((oldDoc,id)=>{if(!newMap.has(id))removeNode(id);});
             newMap.forEach((doc,id)=>{
                 const old=oldMap.get(id);
                 if(!old){insertNode(doc,visibleDocs,new Map(allDocs.map(d=>[String(d.id),d])));changedIds.push(id);return;}
@@ -16372,8 +16369,8 @@ body.light-mode #courseChatPage .chat-msg.received{
                     if(!session.initialized)container.innerHTML='<p style="color:#e74c3c;text-align:center;padding:30px;">حدث خطأ في تحميل الدردشة.</p>';
                     updateScrollButton();
                 });
-                const wrappedUnsub=()=>{try{realUnsub?.();}finally{session.unsubscribe=null;}};
-                session.unsubscribe=wrappedUnsub;
+                const wrappedUnsub=()=>{try{realUnsub?.();}finally{session.unsubscribe=null;if(chatUnsubscribe===wrappedUnsub)chatUnsubscribe=null;}};
+                session.unsubscribe=wrappedUnsub;chatUnsubscribe=wrappedUnsub;
             };
             if(session.unsubscribe){
                 chatUnsubscribe=session.unsubscribe;
@@ -16386,15 +16383,6 @@ body.light-mode #courseChatPage .chat-msg.received{
             console.error(e);
             if(!session.initialized)container.innerHTML='<p style="color:#e74c3c;text-align:center;padding:30px;">خطأ في الاتصال بالدردشة.</p>';
         }
-    };
-    window.__aaDisposeChatSession=function(courseId){
-        try{
-            const sessions=window.__aaChatSessions;
-            const key=String(courseId||'');
-            const session=sessions?.get(key);
-            if(session?.unsubscribe){session.unsubscribe();session.unsubscribe=null;}
-            sessions?.delete(key);
-        }catch(_){}
     };
     // Re-render the admin-only top-bar control whenever the auth state changes.
     const observeAuthState=()=>{ renderAdminMenu(); };
@@ -17195,101 +17183,6 @@ const originalOpen=window.openChatLockDialog;window.openChatLockDialog=function(
 document.addEventListener('click',e=>{const btn=e.target.closest?.('#chatLockBtn');if(!btn)return;e.preventDefault();e.stopImmediatePropagation();if(lockTimes(currentChatLock||{}).active)window.unlockCourseChat?.();else window.openChatLockDialog?.()},true);
 window.unlockCourseChat=async function(){if(!isAdmin||!activeCourseId)return;clearTimeout(lockTimer);lockTimer=null;const prev=currentChatLock||{};currentChatLock={...prev,locked:false,startAt:null,endAt:null,autoExpire:false,reason:''};syncLockUI();try{await db.collection('courses').doc(activeCourseId).collection('settings').doc('chat').set({locked:false,startAt:null,endAt:null,reason:'',autoExpire:false,updatedAt:firebase.firestore.FieldValue.serverTimestamp()},{merge:true});showCustomAlert('تم الفتح','الدردشة مفتوحة الآن ويمكن للطلاب المشاركة.')}catch(err){console.error(err);currentChatLock=prev;syncLockUI();scheduleLockClock();showCustomAlert('خطأ','تعذر فتح الدردشة.');throw err}};
 setTimeout(()=>{syncLockUI();scheduleLockClock()},0);
-})();
-</script>
-
-<script id="aa-immediate-logout-fix">
-(function(){
-  'use strict';
-  if(window.__aaImmediateLogoutFix)return;
-  window.__aaImmediateLogoutFix=true;
-  async function logoutNow(e){
-    if(e){e.preventDefault();e.stopImmediatePropagation();}
-    const user=(typeof currentUser!=='undefined'&&currentUser)?currentUser:window.currentUser;
-    if(!user||!auth?.signOut)return;
-    const btn=document.getElementById('aaProfileLogout');
-    if(btn?.disabled)return;
-    try{
-      if(btn)btn.disabled=true;
-      document.querySelectorAll('#aaRebuiltProfilePage,#ananasV10ProfilePage,#ananasPrivateProfileOverlay,#ananasCanonicalProfilePage,#userProfilePage').forEach(el=>{el.classList.remove('active');el.style.removeProperty('display');});
-      window.__aaViewedProfileUid='';
-      if(window.profileState)Object.assign(window.profileState,{uid:null,isSelf:false,source:null,returnPoint:null,busy:false});
-      try{window.mobileNavigate?.('courses')}catch(_){}
-      document.querySelectorAll('.nav-btn,.auth-btn').forEach(x=>x.classList.remove('active'));
-      document.querySelector('#coursesNavBtn')?.classList.add('active');
-      await auth.signOut();
-    }catch(err){
-      console.error('immediate profile logout',err);
-      showCustomAlert?.('خطأ','تعذر تسجيل الخروج حاليًا.');
-      if(btn)btn.disabled=false;
-    }
-  }
-  window.__aaImmediateLogout=logoutNow;
-  document.addEventListener('click',e=>{
-    const btn=e.target?.closest?.('#aaProfileLogout');
-    if(btn)logoutNow(e);
-  },true);
-})();
-</script>
-<!-- Final profile access guard + self-profile action reliability -->
-<script id="ananas-final-profile-access-guard">
-(function(){
-  'use strict';
-  const $=id=>document.getElementById(id);
-  const isSelfUid=uid=>!!currentUser&&String(uid)===String(currentUser.uid);
-
-  async function isProtectedAdminUid(uid){
-    if(!uid || isSelfUid(uid) || !!isAdmin) return false;
-    try{
-      const [adminDoc,userDoc]=await Promise.all([
-        db.collection('admins').doc('main').get(),
-        db.collection('users').doc(String(uid)).get()
-      ]);
-      if(!adminDoc.exists || !userDoc.exists) return false;
-      const emails=Array.isArray(adminDoc.data()?.adminEmails)?adminDoc.data().adminEmails:[];
-      const email=String(userDoc.data()?.email||'').trim().toLowerCase();
-      return !!email && emails.some(x=>String(x||'').trim().toLowerCase()===email);
-    }catch(err){
-      console.warn('profile access guard',err);
-      return false;
-    }
-  }
-
-  const oldOpen=window.aaOpenProfile;
-  if(oldOpen && !window.__aaAdminProfileGuard){
-    window.__aaAdminProfileGuard=true;
-    window.aaOpenProfile=async function(uid,opts={}){
-      if(await isProtectedAdminUid(uid)){
-        try{ document.querySelectorAll('#aaRebuiltProfilePage,#userProfilePage,#ananasV10ProfilePage,#ananasPrivateProfileOverlay,#ananasCanonicalProfilePage').forEach(el=>el?.classList.remove('active')); }catch(_){ }
-        showCustomAlert?.('غير قابل للعرض','حساب المشرف غير قابل للعرض من الحسابات الأخرى.');
-        return false;
-      }
-      return oldOpen.apply(this,arguments);
-    };
-  }
-
-  /* Reliable self-profile logout regardless of the page from which it was opened. */
-  document.addEventListener('click',async e=>{
-    const btn=e.target.closest?.('#aaRebuiltProfilePage #aaProfileLogout');
-    if(!btn || !currentUser || !auth?.signOut) return;
-    if(btn.dataset.aaLogoutHandled==='1') return;
-    btn.dataset.aaLogoutHandled='1';
-    e.preventDefault();
-    e.stopImmediatePropagation();
-    try{
-      btn.disabled=true;
-      document.querySelectorAll('#aaRebuiltProfilePage,#userProfilePage,#ananasV10ProfilePage,#ananasPrivateProfileOverlay,#ananasCanonicalProfilePage').forEach(el=>{el?.classList.remove('active');el?.style.removeProperty('display');});
-      document.body.classList.remove('aa-profile-open');
-      try{window.mobileNavigate?.('courses')}catch(_){ }
-      await auth.signOut();
-    }catch(err){
-      console.error('profile logout direct',err);
-      btn.disabled=false;
-      btn.dataset.aaLogoutHandled='';
-      showCustomAlert?.('خطأ','تعذر تسجيل الخروج حاليًا.');
-    }
-  },true);
-
 })();
 </script>
 </body>
