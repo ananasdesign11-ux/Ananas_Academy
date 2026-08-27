@@ -1842,6 +1842,36 @@ label[for*="En"], input[id*="En"], textarea[id*="En"] { display:none !important;
   .chat-msg.received{margin-inline-start:31px!important;}
 }
 </style>
+<style id="aa-chat-modal-final-fixes">
+/* Chat-only modal backdrop: blur without recoloring the page beneath it. */
+body.aa-chat-fullscreen-open.aa-v9-modal-locked::before{
+    content:"";position:fixed;inset:0;z-index:4999;pointer-events:none;
+    background:transparent;
+    backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);
+}
+/* Confirmation/alert cards are already centered by their flex wrapper; animate only scale/opacity. */
+#customConfirmModal .custom-alert-box,
+#customAlertModal .custom-alert-box,
+#xpDeletionChoiceModal .custom-alert-box{
+    animation:aaChatCenteredModalIn .24s cubic-bezier(.2,.8,.2,1)!important;
+    transform:none;
+}
+@keyframes aaChatCenteredModalIn{
+    from{opacity:0;transform:scale(.965)!important;}
+    to{opacity:1;transform:scale(1)!important;}
+}
+/* Keep chat edit/lock dialogs scrollable but remove the visible scrollbar. */
+#chatEditMessageModal,#chatLockModal{
+    scrollbar-width:none;
+}
+#chatEditMessageModal::-webkit-scrollbar,#chatLockModal::-webkit-scrollbar{
+    width:0!important;height:0!important;display:none!important;
+}
+/* A reply preview is intentionally one compact line. Newline-based multi-line messages get an explicit ellipsis. */
+#courseChatPage .reply-block .rt{
+    display:block;max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+</style>
 </head>
 <body class="light-mode">
     
@@ -16240,7 +16270,9 @@ body.light-mode #courseChatPage .chat-msg.received{
             }
             const originalReplyDoc=m.replyToId?allDocsMap.get(String(m.replyToId)):null;
             const replyTargetDeleted=!!originalReplyDoc?.data()?.deleted;
-            const replyText=replyTargetDeleted?'هذه الرسالة محذوفة':(m.replyToText||'');
+            const rawReplyText=replyTargetDeleted?'هذه الرسالة محذوفة':(m.replyToText||'');
+            const replyLines=String(rawReplyText).replace(/\r/g,'').split('\n');
+            const replyText=replyLines.length>1?`${replyLines[0]}…`:replyLines[0];
             const reply=m.replyToId?`<div class="reply-block ${replyTargetDeleted?'reply-to-deleted':''}" data-reply-to-id="${safeEscape(m.replyToId||'')}" data-reply-deleted="${replyTargetDeleted?'1':'0'}"><div class="ru">${safeEscape(replyAuthorName)}</div><div class="rt">${safeEscape(replyText)}</div></div>`:'';
             const gallery=(!deleted&&images.length)?`<div class="message-gallery">${images.map(u=>`<img src="${safeEscape(u)}" alt="صورة" onclick="openChatMessageGallery('${safeEscape(courseId)}','${safeEscape(doc.id)}')">`).join('')}</div>`:'';
             let body='';
@@ -17160,7 +17192,7 @@ function showFor(el,x,y){ensureUI();close();selected=el;const r=el.getBoundingCl
 ?[b('local','حذف من حسابي','fa-trash',true)]
 :[b('copy','نسخ','fa-copy',false),b(mine?'delete':'local',mine?'حذف من الجميع':'حذف من حسابي',mine?'fa-trash':'fa-eye-slash',true)];if(canEdit&&!deleted)arr.push(b('edit','تعديل','fa-pen',false));if(!deleted)arr.push(b('reply','رد','fa-reply',false));menu.innerHTML='';arr.forEach(x=>menu.appendChild(x));menu.classList.add('open');overlay.classList.add('open');document.body.classList.add('aa-chat-context-open');const mw=menu.offsetWidth,mh=menu.offsetHeight,vw=innerWidth,vh=innerHeight;let left=x||r.left,top=y||r.bottom+8;if(left+mw>vw-10)left=vw-mw-10;if(left<10)left=10;if(top+mh>vh-10)top=Math.max(10,r.top-mh-8);if(top<10)top=10;menu.style.left=Math.round(left)+'px';menu.style.top=Math.round(top)+'px'}
 async function copyText(t){if(!t)return window.showCustomAlert?.('نسخ','لا يوجد نص لنسخه.');let copied=false;try{if(navigator.clipboard?.writeText){await navigator.clipboard.writeText(t);copied=true}}catch(_){}if(!copied){const ta=document.createElement('textarea');ta.value=t;ta.style.position='fixed';ta.style.left='-9999px';ta.style.top='0';ta.style.opacity='0';document.body.appendChild(ta);ta.focus();ta.select();try{copied=document.execCommand('copy')}catch(__){}ta.remove()}showCopyToast(copied?'تم النسخ':'تعذر النسخ');}
-const handleContextMenuClick=async e=>{const x=e.target.closest?.('[data-ctx-action]');if(!x||!selected)return;e.preventDefault();e.stopPropagation();const el=selected,cid=currentCourse(),id=el.dataset.messageId||'',text=el.querySelector('.t')?.innerText?.trim()||'',name=el.querySelector('.chat-profile-name')?.textContent?.trim()||el.querySelector('.u')?.textContent?.trim()||'مستخدم',action=x.dataset.ctxAction;const mine=String(el.dataset.userId||'')===String(uid());close();if(action==='copy')return copyText(text);if(action==='reply'){if(el.classList.contains('deleted-message'))return window.showCopyToast?.('هذه الرسالة حُذفت ولا يمكن الرد على رسالة حُذفت سابقًا');return window.replyTo?.(id,name,text.slice(0,120));}if(action==='edit'){if(!mine)return window.showCustomAlert?.('غير مسموح','يمكنك تعديل رسائلك فقط.');if(!window.__aaChatCanEditMessage?.({createdAt:Number(el.dataset.createdAt||0)}))return window.showCustomAlert?.('انتهى وقت التعديل','يمكن تعديل الرسالة خلال 15 دقيقة فقط من إرسالها.');return window.editChatMessage?.(cid,id);}if(action==='delete'){if(mine){const ok=typeof window.showCustomConfirm==='function'?await new Promise(r=>window.showCustomConfirm('حذف من الجميع','سيتم حذف هذه الرسالة من جميع المشاركين في الدردشة، وستظهر للمشرف كرسالة محذوفة. هل تريد المتابعة؟',()=>r(true),()=>r(false))):window.confirm('حذف الرسالة من الجميع؟');if(ok)return window.deleteChatMessage?.(cid,id,true);return;}const set=hidden(cid),ok=typeof window.showCustomConfirm==='function'?await new Promise(r=>window.showCustomConfirm('حذف من حسابك','سيتم إخفاء هذه الرسالة من حسابك على جميع أجهزتك، ولن تُحذف من بقية الحسابات. هل تريد المتابعة؟',()=>r(true),()=>r(false))):window.confirm('إخفاء الرسالة من حسابك على جميع أجهزتك؟');if(ok){set.add(String(id));saveHiddenLocal(cid,set);try{await window.__aaSaveHiddenChatIds?.(cid,set);await window.__aaRefreshHiddenChat?.(cid);return}catch(err){set.delete(String(id));saveHiddenLocal(cid,set);window.showCustomAlert?.('خطأ','تعذر حفظ إخفاء الرسالة على حسابك.');}}}if(action==='local'){const set=hidden(cid),ok=typeof window.showCustomConfirm==='function'?await new Promise(r=>window.showCustomConfirm('حذف من حسابك','سيتم إخفاء هذه الرسالة من حسابك على جميع أجهزتك، ولن تُحذف من بقية الحسابات. هل تريد المتابعة؟',()=>r(true),()=>r(false))):window.confirm('إخفاء الرسالة من حسابك على جميع أجهزتك؟');if(ok){set.add(String(id));saveHiddenLocal(cid,set);try{await window.__aaSaveHiddenChatIds?.(cid,set);await window.__aaRefreshHiddenChat?.(cid);return}catch(err){set.delete(String(id));saveHiddenLocal(cid,set);window.showCustomAlert?.('خطأ','تعذر حفظ إخفاء الرسالة على حسابك.');}}}};
+const handleContextMenuClick=async e=>{const x=e.target.closest?.('[data-ctx-action]');if(!x||!selected)return;e.preventDefault();e.stopPropagation();const el=selected,cid=currentCourse(),id=el.dataset.messageId||'',text=el.querySelector('.t')?.innerText?.trim()||'',name=el.querySelector('.chat-profile-name')?.textContent?.trim()||el.querySelector('.u')?.textContent?.trim()||'مستخدم',action=x.dataset.ctxAction;const mine=String(el.dataset.userId||'')===String(uid());close();if(action==='copy')return copyText(text);if(action==='reply'){if(el.classList.contains('deleted-message'))return window.showCopyToast?.('هذه الرسالة محذوفة');return window.replyTo?.(id,name,text.slice(0,120));}if(action==='edit'){if(!mine)return window.showCustomAlert?.('غير مسموح','يمكنك تعديل رسائلك فقط.');if(!window.__aaChatCanEditMessage?.({createdAt:Number(el.dataset.createdAt||0)}))return window.showCustomAlert?.('انتهى وقت التعديل','يمكن تعديل الرسالة خلال 15 دقيقة فقط من إرسالها.');return window.editChatMessage?.(cid,id);}if(action==='delete'){if(mine){const ok=typeof window.showCustomConfirm==='function'?await new Promise(r=>window.showCustomConfirm('حذف من الجميع','سيتم حذف هذه الرسالة من جميع المشاركين في الدردشة، وستظهر للمشرف كرسالة محذوفة. هل تريد المتابعة؟',()=>r(true),()=>r(false))):window.confirm('حذف الرسالة من الجميع؟');if(ok)return window.deleteChatMessage?.(cid,id,true);return;}const set=hidden(cid),ok=typeof window.showCustomConfirm==='function'?await new Promise(r=>window.showCustomConfirm('حذف من حسابك','سيتم إخفاء هذه الرسالة من حسابك على جميع أجهزتك، ولن تُحذف من بقية الحسابات. هل تريد المتابعة؟',()=>r(true),()=>r(false))):window.confirm('إخفاء الرسالة من حسابك على جميع أجهزتك؟');if(ok){set.add(String(id));saveHiddenLocal(cid,set);try{await window.__aaSaveHiddenChatIds?.(cid,set);await window.__aaRefreshHiddenChat?.(cid);return}catch(err){set.delete(String(id));saveHiddenLocal(cid,set);window.showCustomAlert?.('خطأ','تعذر حفظ إخفاء الرسالة على حسابك.');}}}if(action==='local'){const set=hidden(cid),ok=typeof window.showCustomConfirm==='function'?await new Promise(r=>window.showCustomConfirm('حذف من حسابك','سيتم إخفاء هذه الرسالة من حسابك على جميع أجهزتك، ولن تُحذف من بقية الحسابات. هل تريد المتابعة؟',()=>r(true),()=>r(false))):window.confirm('إخفاء الرسالة من حسابك على جميع أجهزتك؟');if(ok){set.add(String(id));saveHiddenLocal(cid,set);try{await window.__aaSaveHiddenChatIds?.(cid,set);await window.__aaRefreshHiddenChat?.(cid);return}catch(err){set.delete(String(id));saveHiddenLocal(cid,set);window.showCustomAlert?.('خطأ','تعذر حفظ إخفاء الرسالة على حسابك.');}}}};
 document.addEventListener('contextmenu',e=>{const el=e.target.closest?.('#courseChatPage .chat-msg');if(!el)return;e.preventDefault();e.stopImmediatePropagation();suppressClickUntil=Date.now()+700;showFor(el,e.clientX,e.clientY)},true);
 document.addEventListener('click',e=>{if(Date.now()<suppressClickUntil&&e.target.closest?.('#courseChatPage .chat-msg')){e.preventDefault();e.stopImmediatePropagation()}},true);
 document.addEventListener('keydown',e=>{if(e.key==='Escape'&&menu?.classList.contains('open')){e.preventDefault();close()}},true);
@@ -17307,7 +17339,7 @@ setTimeout(()=>{syncLockUI();scheduleLockClock()},0);
         if(replyBlock?.dataset.replyDeleted==='1'){
             e.preventDefault();
             e.stopImmediatePropagation();
-            window.showCopyToast?.('هذه الرسالة حُذفت ولا يمكن الرد على رسالة حُذفت سابقًا');
+            window.showCopyToast?.('هذه الرسالة محذوفة');
             return;
         }
 
