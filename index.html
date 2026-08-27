@@ -10324,7 +10324,7 @@ hideLegacy();
       m.innerHTML=`<div class="profile-self-card" role="dialog" aria-modal="true" aria-labelledby="aaProfileEditTitle">
         <div class="profile-self-head"><div class="profile-self-icon"><i class="fas fa-user-pen"></i></div><div><h3 id="aaProfileEditTitle">تعديل الملف الشخصي</h3><div class="aa-profile-subtle">يمكنك تغيير الصورة والاسم ورقم الهاتف.</div></div><button type="button" class="profile-self-close" id="aaProfileEditClose"><i class="fas fa-xmark"></i></button></div>
         <div class="profile-self-avatar-editor"><div class="profile-self-avatar-preview" id="aaProfileEditPreview">م</div><label class="aa-profile-btn primary" style="min-height:42px" for="aaProfileEditPhoto"><i class="fas fa-camera"></i> تغيير الصورة</label><input id="aaProfileEditPhoto" type="file" accept="image/*" hidden></div>
-        <div class="profile-self-grid"><label class="profile-self-field"><span>الاسم</span><input id="aaProfileEditName" class="aa-profile-self-input" type="text"></label><label class="profile-self-field"><span>رقم الهاتف</span><input id="aaProfileEditPhone" class="aa-profile-self-input" type="text"></label>
+        <div class="profile-self-grid"><label class="profile-self-field"><span>الاسم</span><input id="aaProfileEditName" class="aa-profile-self-input" type="text" maxlength="20" minlength="1" autocomplete="name"></label><label class="profile-self-field"><span>رقم الهاتف</span><input id="aaProfileEditPhone" class="aa-profile-self-input" type="text"></label>
           <div class="profile-self-field aa-profile-self-full"><span>خصوصية الحساب</span><label class="profile-privacy-toggle" for="aaProfileEditPrivate"><input id="aaProfileEditPrivate" type="checkbox"><span class="profile-privacy-track"><span class="profile-privacy-knob"></span></span><span class="profile-privacy-copy"><strong id="aaProfilePrivacyTitle">الحساب عام</strong><small id="aaProfilePrivacyHint">يمكن للجميع رؤية الملف الشخصي.</small></span></label></div>
         </div>
         <div class="profile-self-status" id="aaProfileEditStatus"></div>
@@ -10370,7 +10370,7 @@ hideLegacy();
     $p('aaProfileEditName').value=name;$p('aaProfileEditPhone').value=phone;$p('aaProfileEditPrivate').checked=p.profilePublic===false;updatePrivacyCopy();$p('aaProfileEditPhoto').value='';workEdit.photoFile=null;$p('aaProfileEditStatus').textContent='';$p('aaProfileEditPreview').innerHTML=photo?`<img src="${esc2(photo)}" alt="">`:esc2(name.slice(0,1)||'م');$p('aaProfileSelfEditModal').classList.add('active');
   }
   async function saveSelfProfile(){
-    if(!currentUser)return;const btn=$p('aaProfileEditSave');const status=$p('aaProfileEditStatus');const name=$p('aaProfileEditName').value.trim(),phone=$p('aaProfileEditPhone').value.trim();if(!name){status.textContent='اكتب الاسم أولًا.';return;}btn.disabled=true;status.textContent='جاري حفظ التعديلات...';
+    if(!currentUser)return;const btn=$p('aaProfileEditSave');const status=$p('aaProfileEditStatus');const name=$p('aaProfileEditName').value.trim(),phone=$p('aaProfileEditPhone').value.trim();if(!name){status.textContent='اكتب الاسم أولًا.';return;}if(Array.from(name).length>20){status.textContent='الاسم يجب ألا يتجاوز 20 حرفًا، والمسافة تُحسب حرفًا.';return;}btn.disabled=true;status.textContent='جاري حفظ التعديلات...';
     try{let photo=currentUser.photoURL||currentUserProfile?.photoURL||currentUserProfile?.photoUrl||currentUserProfile?.photo||'';if(workEdit.photoFile){photo=await uploadImage(workEdit.photoFile);if(!photo)throw Error('upload');}const profilePublic=!$p('aaProfileEditPrivate').checked;await currentUser.updateProfile({displayName:name,photoURL:photo||null});await db.collection('users').doc(currentUser.uid).set({uid:currentUser.uid,email:currentUser.email||'',displayName:name,phone,photoURL:photo||'',photoUrl:photo||'',profilePublic,updatedAt:firebase.firestore.FieldValue.serverTimestamp()},{merge:true});currentUserProfile={...(currentUserProfile||{}),displayName:name,phone,photoURL:photo||'',photoUrl:photo||'',profilePublic};
       const avatar=$p('authToggleBtn')?.querySelector('.auth-user-avatar img');if(avatar&&photo)avatar.src=photo;const label=$p('authLabel');if(label)label.textContent=name;const nameNode=$p('aaProfileName');if(nameNode)nameNode.textContent=name;const emailNode=$p('aaProfileEmail');if(emailNode)emailNode.textContent=currentUser.email||'—';
       $p('aaProfileSelfEditModal').classList.remove('active');status.textContent='';if(window.openUserProfilePage)await window.openUserProfilePage();showCustomAlert?.('تم الحفظ',profilePublic?'تم تحديث بياناتك وإظهار الحساب للعامة.':'تم تحديث بياناتك وتفعيل خصوصية الحساب.');
@@ -17424,6 +17424,120 @@ setTimeout(()=>{syncLockUI();scheduleLockClock()},0);
             el.dataset.courseId=String(cid);
         });
     }).observe(chatList,{childList:true,subtree:true});
+})();
+</script>
+
+
+<style id="aa-chat-direction-name-final-fix">
+/* Final requested direction: sent right, received left. Keep text Arabic/RTL inside bubbles. */
+#courseChatPage .chat-messages-rebuilt{
+    direction:ltr!important;
+}
+#courseChatPage .chat-messages-rebuilt .chat-msg{
+    direction:rtl!important;
+}
+#courseChatPage .chat-msg.sent{
+    align-self:flex-end!important;
+    margin-inline:0!important;
+}
+#courseChatPage .chat-msg.received{
+    align-self:flex-start!important;
+    margin-left:34px!important;
+    margin-right:0!important;
+}
+/* Avatar stays immediately to the physical left of the received bubble. */
+#courseChatPage .chat-msg.received .chat-profile-avatar-outside{
+    left:-34px!important;
+    right:auto!important;
+    inset-inline-start:auto!important;
+}
+/* Show the complete sender name; do not ellipsize it. */
+#courseChatPage .chat-msg.received .msg-header{
+    position:absolute!important;
+    left:6px!important;
+    right:auto!important;
+    top:4px!important;
+    width:max-content!important;
+    max-width:none!important;
+    margin:0!important;
+    justify-content:flex-start!important;
+    overflow:visible!important;
+    direction:ltr!important;
+    z-index:3!important;
+    pointer-events:auto!important;
+}
+#courseChatPage .chat-msg.received .chat-profile-name-trigger{
+    display:block!important;
+    width:max-content!important;
+    max-width:none!important;
+    overflow:visible!important;
+    text-overflow:clip!important;
+    white-space:nowrap!important;
+    direction:rtl!important;
+    text-align:left!important;
+}
+@media(max-width:768px){
+    #courseChatPage .chat-msg.received{margin-left:31px!important;margin-right:0!important;}
+    #courseChatPage .chat-msg.received .chat-profile-avatar-outside{left:-31px!important;}
+    #courseChatPage .chat-msg.received .msg-header{left:5px!important;max-width:none!important;}
+}
+#courseChatPage #aaChatCopyToast,
+#aaChatCopyToast{direction:rtl!important;}
+</style>
+<script id="aa-chat-self-reply-name-final-fix">
+(function(){
+'use strict';
+const chat=document.getElementById('courseChatPage');
+function targetForReply(block){
+  const id=block?.dataset?.replyToId;
+  if(!id||!chat)return null;
+  try{return chat.querySelector(`.chat-msg[data-message-id="${CSS.escape(String(id))}"]`);}catch(_){
+    return [...chat.querySelectorAll('.chat-msg')].find(n=>String(n.dataset.messageId)===String(id))||null;
+  }
+}
+function syncReplyNames(){
+  if(!chat)return;
+  chat.querySelectorAll('.reply-block[data-reply-to-id]').forEach(block=>{
+    const target=targetForReply(block);
+    const name=block.querySelector('.ru');
+    if(!name||!target)return;
+    if(target.classList.contains('sent')) name.textContent='أنت';
+    else{
+      const targetName=target.querySelector('.chat-profile-name')?.textContent?.trim();
+      if(targetName) name.textContent=targetName;
+    }
+  });
+}
+const oldReplyTo=window.replyTo;
+if(typeof oldReplyTo==='function'&&!oldReplyTo.__aaSelfReplyNameFix){
+  const wrapped=function(msgId,userName,msgText){
+    let effectiveName=userName;
+    try{
+      const target=targetForReply({dataset:{replyToId:msgId}});
+      if(target?.classList.contains('sent')) effectiveName='أنت';
+    }catch(_){ }
+    return oldReplyTo.call(this,msgId,effectiveName,msgText);
+  };
+  wrapped.__aaSelfReplyNameFix=true;
+  wrapped.__original=oldReplyTo;
+  window.replyTo=wrapped;
+}
+if(chat){
+  const observer=new MutationObserver(()=>requestAnimationFrame(syncReplyNames));
+  observer.observe(chat,{childList:true,subtree:true});
+  requestAnimationFrame(syncReplyNames);
+  window.addEventListener('load',syncReplyNames,{once:true});
+}
+const nameInput=document.getElementById('aaProfileEditName');
+if(nameInput&&!nameInput.dataset.aaNameLimitBound){
+  nameInput.dataset.aaNameLimitBound='1';
+  nameInput.addEventListener('input',()=>{
+    const chars=Array.from(nameInput.value);
+    if(chars.length>20){
+      nameInput.value=chars.slice(0,20).join('');
+    }
+  });
+}
 })();
 </script>
 
