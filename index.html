@@ -18715,5 +18715,114 @@ body.aa-chat-signing-out .auth-popup{display:none!important;pointer-events:none!
   },true);
 })();
 </script>
+
+<!-- FINAL COURSE OVERVIEW/DASHBOARD EXCLUSIVITY FIX -->
+<style id="final-course-overview-dashboard-exclusive-fix">
+  #courseDetailView[data-aa-course-view="overview"] #courseDashboard,
+  #courseDetailView[data-aa-course-view="dashboard"] #courseOverviewContainer{
+    display:none !important;
+    visibility:hidden !important;
+    pointer-events:none !important;
+  }
+  #courseDetailView[data-aa-course-view="overview"] #courseOverviewContainer{
+    display:block !important;
+    visibility:visible !important;
+    pointer-events:auto !important;
+  }
+  #courseDetailView[data-aa-course-view="dashboard"] #courseDashboard{
+    display:flex !important;
+    visibility:visible !important;
+    pointer-events:auto !important;
+  }
+</style>
+<script id="final-course-overview-dashboard-exclusive-fix-script">
+(function(){
+  'use strict';
+  if(window.__aaFinalCourseOverviewDashboardExclusiveFix)return;
+  window.__aaFinalCourseOverviewDashboardExclusiveFix=true;
+
+  const $=id=>document.getElementById(id);
+
+  function applyCourseView(page){
+    const detail=$('courseDetailView');
+    const overview=$('courseOverviewContainer');
+    const dashboard=$('courseDashboard');
+    if(!detail||!overview||!dashboard)return;
+    if(page!=='overview'&&page!=='dashboard')return;
+
+    detail.style.display='flex';
+    detail.setAttribute('data-aa-course-view',page);
+
+    if(page==='overview'){
+      overview.classList.add('active');
+      overview.style.setProperty('display','block','important');
+      overview.style.setProperty('visibility','visible','important');
+      overview.style.setProperty('pointer-events','auto','important');
+
+      dashboard.classList.remove('active');
+      dashboard.style.setProperty('display','none','important');
+      dashboard.style.setProperty('visibility','hidden','important');
+      dashboard.style.setProperty('pointer-events','none','important');
+    }else{
+      overview.classList.remove('active');
+      overview.style.setProperty('display','none','important');
+      overview.style.setProperty('visibility','hidden','important');
+      overview.style.setProperty('pointer-events','none','important');
+
+      dashboard.classList.add('active');
+      dashboard.style.setProperty('display','flex','important');
+      dashboard.style.setProperty('visibility','visible','important');
+      dashboard.style.setProperty('pointer-events','auto','important');
+    }
+  }
+
+  window.__aaApplyCourseOverviewDashboardView=applyCourseView;
+
+  const oldSwitch=window.switchCoursePage;
+  if(typeof oldSwitch==='function'&&!oldSwitch.__aaFinalCourseViewWrapped){
+    const wrapped=function(page){
+      const result=oldSwitch.apply(this,arguments);
+      if(page==='overview'||page==='dashboard'){
+        applyCourseView(page);
+        setTimeout(()=>applyCourseView(page),0);
+        setTimeout(()=>applyCourseView(page),50);
+        setTimeout(()=>applyCourseView(page),150);
+      }
+      return result;
+    };
+    wrapped.__aaFinalCourseViewWrapped=true;
+    wrapped.__original=oldSwitch;
+    window.switchCoursePage=wrapped;
+  }
+
+  const oldOpenCourse=window.openCourse;
+  if(typeof oldOpenCourse==='function'&&!oldOpenCourse.__aaFinalCourseEntryWrapped){
+    const wrapped=async function(courseId){
+      const result=await oldOpenCourse.apply(this,arguments);
+      if(String(window.activeCourseId||activeCourseId||'')===String(courseId||'')){
+        /* Explicitly opening a course always starts on its Overview. */
+        currentCoursePage='overview';
+        applyCourseView('overview');
+        setTimeout(()=>applyCourseView('overview'),0);
+        setTimeout(()=>applyCourseView('overview'),80);
+        try{window.persistCourseState?.();}catch(_){ }
+      }
+      return result;
+    };
+    wrapped.__aaFinalCourseEntryWrapped=true;
+    wrapped.__original=oldOpenCourse;
+    window.openCourse=wrapped;
+  }
+
+  /* Repair the current DOM once at startup in case an older wrapper left both layers visible. */
+  try{
+    const detail=$('courseDetailView');
+    if(detail?.getAttribute('data-aa-course-view')){
+      applyCourseView(detail.getAttribute('data-aa-course-view'));
+    }
+  }catch(_){ }
+})();
+</script>
+
 </body>
 </html>
