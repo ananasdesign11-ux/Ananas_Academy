@@ -2292,57 +2292,6 @@ body.aa-chat-fullscreen-open.aa-v9-modal-locked::before{
 }
 </style>
 
-<style id="chat-lightbox-stage9-final-ux-v3">
-/* Final Stage 9 UX: icon-only message action, true fullscreen zoom space, clean thumbnails. */
-#chatImageLightbox .chat-image-lightbox-tools .chat-image-lightbox-tool span{display:none!important;}
-#chatImageLightbox .chat-image-lightbox-tool{width:44px!important;min-width:44px!important;padding:0!important;}
-#chatImageLightbox .chat-image-lightbox-thumbs-bar{
-    background:transparent!important;
-    box-shadow:none!important;
-    filter:none!important;
-    padding-top:4px!important;
-}
-#chatImageLightbox .chat-image-lightbox-thumbs{
-    background:transparent!important;
-    box-shadow:none!important;
-    justify-content:center;
-}
-#chatImageLightbox .chat-image-lightbox-stage{
-    transition:inset .30s cubic-bezier(.2,.8,.2,1);
-}
-#chatImageLightbox .chat-image-lightbox-media{
-    transition:transform .14s linear!important;
-}
-#chatImageLightbox .chat-image-lightbox-media.is-dragging{
-    transition:none!important;
-}
-/* Once zoomed, the UI chrome leaves the layout and the stage claims the freed space. */
-#chatImageLightbox.is-zoomed .chat-image-lightbox-stage{
-    inset:78px 0 0 0!important;
-}
-#chatImageLightbox.is-zoomed .chat-image-lightbox-media{
-    max-width:calc(100vw - 72px)!important;
-    max-height:calc(100vh - 96px)!important;
-}
-#chatImageLightbox .chat-image-lightbox-counter{
-    display:inline-flex!important;
-    align-items:center;
-    gap:8px;
-    min-width:104px;
-    justify-content:center;
-}
-#chatImageLightbox .chat-image-lightbox-counter-sep{opacity:.42;}
-#chatImageLightbox .chat-image-lightbox-zoom-level{font-variant-numeric:tabular-nums;font-weight:900;}
-@media(max-width:768px){
-    #chatImageLightbox .chat-image-lightbox-stage{transition:inset .28s cubic-bezier(.2,.8,.2,1);}
-    #chatImageLightbox.is-zoomed .chat-image-lightbox-stage{inset:68px 0 0 0!important;}
-    #chatImageLightbox.is-zoomed .chat-image-lightbox-media{
-        max-width:calc(100vw - 34px)!important;
-        max-height:calc(100vh - 74px)!important;
-    }
-    #chatImageLightbox .chat-image-lightbox-thumbs{justify-content:flex-start;}
-}
-</style>
 
 <style id="chat-lightbox-media-browser-stage9">
 #chatImageLightbox .chat-image-lightbox-content{display:block!important;position:relative!important;}
@@ -2468,6 +2417,70 @@ body.aa-chat-fullscreen-open.aa-v9-modal-locked::before{
     #chatImageLightbox .chat-image-lightbox-sender{padding:4px 6px;}
     #chatImageLightbox.is-zoomed .chat-image-lightbox-thumbs-bar{transform:translate3d(0,135%,0);}
     #chatImageLightbox.is-zoomed .chat-image-lightbox-caption{transform:translate3d(calc(-50% + 120vw),0,0)!important;}
+}
+</style>
+
+
+<style id="chat-lightbox-final-space-zoom-ui-v3">
+/* The lightbox gains the space freed by the bottom UI instead of merely hiding it. */
+#chatImageLightbox .chat-image-lightbox-thumbs-bar{
+    background:transparent!important;
+    box-shadow:none!important;
+    filter:none!important;
+}
+#chatImageLightbox.is-zoomed .chat-image-lightbox-stage{
+    inset:0!important;
+}
+#chatImageLightbox.is-zoomed .chat-image-lightbox-media{
+    max-width:96vw!important;
+    max-height:94vh!important;
+}
+#chatImageLightbox .chat-image-lightbox-tools{
+    gap:7px;
+}
+#chatImageLightbox .chat-image-lightbox-zoom-percent{
+    min-width:58px;
+    height:42px;
+    padding:0 9px;
+    display:inline-flex;
+    align-items:center;
+    justify-content:center;
+    border:1px solid rgba(255,255,255,.13);
+    border-radius:13px;
+    background:linear-gradient(180deg,rgba(18,21,31,.76),rgba(7,9,15,.60));
+    color:#fff;
+    font-size:.76rem;
+    font-weight:900;
+    font-variant-numeric:tabular-nums;
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.06);
+    backdrop-filter:blur(12px);
+    -webkit-backdrop-filter:blur(12px);
+    user-select:none;
+    pointer-events:none;
+}
+#chatImageLightbox .chat-image-lightbox-tool,
+#chatImageLightbox .chat-image-lightbox-close{
+    transform:translateZ(0) scale(1)!important;
+    transform-origin:center center!important;
+}
+#chatImageLightbox .chat-image-lightbox-tool:hover,
+#chatImageLightbox .chat-image-lightbox-close:hover{
+    transform:translateZ(0) scale(1.04)!important;
+}
+#chatImageLightbox .chat-image-lightbox-tool:active,
+#chatImageLightbox .chat-image-lightbox-close:active{
+    transform:translateZ(0) scale(.93)!important;
+}
+@media(max-width:768px){
+    #chatImageLightbox .chat-image-lightbox-zoom-percent{
+        min-width:52px;
+        height:40px;
+        font-size:.72rem;
+    }
+    #chatImageLightbox.is-zoomed .chat-image-lightbox-media{
+        max-width:98vw!important;
+        max-height:96vh!important;
+    }
 }
 </style>
 
@@ -4592,17 +4605,22 @@ body.aa-chat-fullscreen-open.aa-v9-modal-locked::before{
             chatLightboxState.y=Math.max(-oy,Math.min(oy,chatLightboxState.y));
             chatLightboxApply();
         }
-        function chatLightboxUpdateZoomUI(){
-            const level=document.querySelector('#chatImageLightbox .chat-image-lightbox-zoom-level');
-            if(level)level.textContent=`${Math.round(chatLightboxState.scale*100)}%`;
-        }
         function chatLightboxScale(next,cx=null,cy=null){
             const stage=document.querySelector('#chatImageLightbox .chat-image-lightbox-stage'),viewer=document.getElementById('chatImageLightbox');if(!stage)return;
-            const old=chatLightboxState.scale,scale=Math.max(1,Math.min(5,Math.round(next*1000)/1000));
+            const old=chatLightboxState.scale;
+            const scale=Math.max(1,Math.min(5,Math.round(Number(next)*100)/100));
             viewer?.classList.toggle('is-zoomed',scale>1.001);
-            if(scale===old){chatLightboxUpdateZoomUI();chatLightboxClamp();return;}
-            if(cx!=null&&cy!=null){const sr=stage.getBoundingClientRect(),dx=cx-sr.left-sr.width/2,dy=cy-sr.top-sr.height/2,ratio=scale/old;chatLightboxState.x=(chatLightboxState.x-dx)*ratio+dx;chatLightboxState.y=(chatLightboxState.y-dy)*ratio+dy;}
-            chatLightboxState.scale=scale;if(scale===1){chatLightboxState.x=0;chatLightboxState.y=0;}chatLightboxUpdateZoomUI();chatLightboxClamp();
+            if(scale===old){chatLightboxClamp();return;}
+            if(cx!=null&&cy!=null){
+                const sr=stage.getBoundingClientRect(),dx=cx-sr.left-sr.width/2,dy=cy-sr.top-sr.height/2,ratio=scale/old;
+                chatLightboxState.x=(chatLightboxState.x-dx)*ratio+dx;
+                chatLightboxState.y=(chatLightboxState.y-dy)*ratio+dy;
+            }
+            chatLightboxState.scale=scale;
+            const pct=document.querySelector('#chatImageLightbox .chat-image-lightbox-zoom-percent');
+            if(pct)pct.textContent=`${Math.round(scale*100)}%`;
+            if(scale===1){chatLightboxState.x=0;chatLightboxState.y=0;}
+            chatLightboxClamp();
         }
         function chatLightboxCaption(visible){const c=document.querySelector('#chatImageLightbox .chat-image-lightbox-caption');if(c)c.classList.toggle('is-hidden',!visible);}
         function chatLightboxFormatDate(value){
@@ -4655,7 +4673,7 @@ body.aa-chat-fullscreen-open.aa-v9-modal-locked::before{
                     <div class="chat-image-lightbox-tools">
                         <button type="button" class="chat-image-lightbox-close" aria-label="إغلاق">&times;</button>
                         <button type="button" class="chat-image-lightbox-tool" data-lightbox-action="goto-message" aria-label="الانتقال للرسالة" title="الانتقال للرسالة"><i class="fas fa-comment-alt"></i></button>
-                        <button type="button" class="chat-image-lightbox-tool" data-lightbox-action="zoom-in" aria-label="تكبير"><i class="fas fa-plus"></i></button>
+                        <span class="chat-image-lightbox-zoom-percent" aria-live="polite">100%</span><button type="button" class="chat-image-lightbox-tool" data-lightbox-action="zoom-in" aria-label="تكبير" title="تكبير"><i class="fas fa-plus"></i></button>
                         <button type="button" class="chat-image-lightbox-tool" data-lightbox-action="zoom-out" aria-label="تصغير"><i class="fas fa-minus"></i></button>
                     </div>
                 </div>
@@ -4663,7 +4681,7 @@ body.aa-chat-fullscreen-open.aa-v9-modal-locked::before{
                     <button type="button" class="chat-image-lightbox-nav prev" aria-label="الوسيط التالي"><i class="fas fa-chevron-left"></i></button>
                     ${media}
                     <button type="button" class="chat-image-lightbox-nav next" aria-label="الوسيط السابق"><i class="fas fa-chevron-right"></i></button>
-                    <div class="chat-image-lightbox-counter"><span class="chat-image-lightbox-counter-media">${i+1} / ${n}</span><span class="chat-image-lightbox-counter-sep" aria-hidden="true">•</span><span class="chat-image-lightbox-zoom-level">100%</span></div>
+                    <div class="chat-image-lightbox-counter">${i+1} / ${n}</div>
                 </div>
                 <div class="chat-image-lightbox-caption${caption?'':' is-hidden'}">${escapeHtml(caption)}</div>
                 <div class="chat-image-lightbox-thumbs-bar"><div class="chat-image-lightbox-thumbs">${thumbHtml}</div></div>`;
@@ -4681,7 +4699,7 @@ body.aa-chat-fullscreen-open.aa-v9-modal-locked::before{
             content.querySelector('[data-lightbox-action="zoom-in"]').addEventListener('click',()=>chatLightboxScale(chatLightboxState.scale+.1));
             content.querySelector('[data-lightbox-action="goto-message"]').addEventListener('click',()=>window.__aaChatLightboxGotoMessage?.(item?.messageId));
             content.querySelectorAll('.chat-image-lightbox-thumb').forEach(b=>b.addEventListener('click',()=>{const idx=Number(b.dataset.index);if(Number.isFinite(idx)){chatLightboxState.index=idx;renderChatLightbox();}}));
-            stage.addEventListener('wheel',e=>{e.preventDefault();const step=Math.max(.012,Math.min(.055,Math.abs(e.deltaY)*.00055));chatLightboxScale(chatLightboxState.scale+(e.deltaY<0?step:-step),e.clientX,e.clientY);},{passive:false});
+            stage.addEventListener('wheel',e=>{e.preventDefault();const delta=Math.max(-0.14,Math.min(0.14,-e.deltaY*0.00125));if(Math.abs(delta)>0.001)chatLightboxScale(chatLightboxState.scale+delta,e.clientX,e.clientY);},{passive:false});
             stage.addEventListener('pointerdown',e=>{
                     if(e.target.closest?.('.chat-image-lightbox-nav,.chat-image-lightbox-tool,.chat-image-lightbox-close'))return;if(e.pointerType==='mouse'&&e.button!==0)return;
                     chatLightboxState.pointers.set(e.pointerId,e);try{stage.setPointerCapture(e.pointerId)}catch(_){ }
@@ -4692,7 +4710,7 @@ body.aa-chat-fullscreen-open.aa-v9-modal-locked::before{
             const end=e=>{const hadTwo=chatLightboxState.pointers.size===2;chatLightboxState.pointers.delete(e.pointerId);if(hadTwo)return;if(!chatLightboxState.dragging)return;const dx=e.clientX-chatLightboxState.startX,dy=e.clientY-chatLightboxState.startY,duration=Date.now()-chatLightboxState.startTime,wasTouch=chatLightboxState.touchTapTarget,moved=chatLightboxState.moved;chatLightboxState.dragging=false;if(wasTouch&&!moved&&duration<280&&e.target?.closest?.('video')===null){const c=document.querySelector('#chatImageLightbox .chat-image-lightbox-caption');chatLightboxCaption(c?.classList.contains('is-hidden')===true);chatLightboxState.x=0;chatLightboxState.y=0;chatLightboxApply();return;}if(wasTouch&&chatLightboxState.scale===1&&Math.abs(dy)>72&&Math.abs(dy)>Math.abs(dx)*1.15&&duration<900){window.closeChatImageLightbox();return;}if(wasTouch&&chatLightboxState.scale===1&&Math.abs(dx)>64&&Math.abs(dx)>Math.abs(dy)*1.2&&duration<900){chatLightboxState.x=0;chatLightboxState.y=0;show(dx<0?1:-1);return;}if(chatLightboxState.scale===1){chatLightboxState.x=0;chatLightboxState.y=0;chatLightboxApply();}else chatLightboxClamp();};
             stage.addEventListener('pointerup',end);stage.addEventListener('pointercancel',end);stage.addEventListener('pointerleave',e=>{if(e.pointerType==='mouse'&&e.buttons===0)end(e);});stage.addEventListener('dblclick',e=>{if(mediaEl?.tagName!=='IMG')return;if(e.target.closest?.('.chat-image-lightbox-nav'))return;chatLightboxScale(chatLightboxState.scale===1?2.25:1,e.clientX,e.clientY);});
             requestAnimationFrame(()=>content.querySelector(`.chat-image-lightbox-thumb[data-index="${i}"]`)?.scrollIntoView({behavior:'smooth',block:'nearest',inline:'center'}));
-            chatLightboxCaption(!!caption);chatLightboxUpdateZoomUI();
+            chatLightboxCaption(!!caption);
         }
         window.openChatImageLightbox=async function(urls,caption='',startIndex=0,meta=null){
             const viewer=document.getElementById('chatImageLightbox');if(!viewer)return;
@@ -4711,7 +4729,7 @@ body.aa-chat-fullscreen-open.aa-v9-modal-locked::before{
                 if(el){el.scrollIntoView({behavior:'smooth',block:'center'});el.classList.add('aa-reply-flash');clearTimeout(el.__aaLightboxGotoTimer);el.__aaLightboxGotoTimer=setTimeout(()=>el.classList.remove('aa-reply-flash'),900);}
             });
         };
-        window.closeChatImageLightbox=function(){const viewer=document.getElementById('chatImageLightbox');if(!viewer)return;viewer.classList.remove('active','is-zoomed');viewer.setAttribute('aria-hidden','true');document.body.classList.remove('aa-chat-lightbox-open');chatLightboxState.pointers.clear();chatLightboxState.items=[];chatLightboxState.index=0;chatLightboxState.scale=1;chatLightboxState.x=0;chatLightboxState.y=0;const content=viewer.querySelector('.chat-image-lightbox-content');if(content)content.innerHTML='';};
+        window.closeChatImageLightbox=function(){const viewer=document.getElementById('chatImageLightbox');if(!viewer)return;viewer.classList.remove('active','is-zoomed');viewer.setAttribute('aria-hidden','true');document.body.classList.remove('aa-chat-lightbox-open');chatLightboxState.pointers.clear();chatLightboxState.items=[];chatLightboxState.index=0;chatLightboxState.scale=1;chatLightboxState.x=0;chatLightboxState.y=0;const pct=viewer.querySelector('.chat-image-lightbox-zoom-percent');if(pct)pct.textContent='100%';const content=viewer.querySelector('.chat-image-lightbox-content');if(content)content.innerHTML='';};
         document.addEventListener('keydown',e=>{const viewer=document.getElementById('chatImageLightbox');if(!viewer?.classList.contains('active'))return;if(e.key==='Escape'){e.preventDefault();window.closeChatImageLightbox();}else if(e.key==='ArrowLeft'){e.preventDefault();chatLightboxState.index=(chatLightboxState.index+1)%chatLightboxState.items.length;renderChatLightbox();}else if(e.key==='ArrowRight'){e.preventDefault();chatLightboxState.index=(chatLightboxState.index-1+chatLightboxState.items.length)%chatLightboxState.items.length;renderChatLightbox();}});
 
         function switchCoursePage(page) {
