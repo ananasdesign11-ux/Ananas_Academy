@@ -7334,10 +7334,9 @@ label[for*="En"], input[id*="En"], textarea[id*="En"] { display:none !important;
             document.getElementById('courseQuizzesPage').style.display = 'none';
             document.getElementById('courseAssignmentsPage').style.display = 'none';
             document.getElementById('courseChatPage').style.display = 'none';
-            if(chatUnsubscribe) {
-                chatUnsubscribe();
-                chatUnsubscribe = null;
-            }
+            /* Keep the chat session/listener alive so returning to the same course
+               reuses the already-rendered messages instead of rebuilding them. */
+            chatUnsubscribe = null;
             cancelReply();
             renderCourses();
         });
@@ -7498,7 +7497,8 @@ label[for*="En"], input[id*="En"], textarea[id*="En"] { display:none !important;
                 activeCourseId = null; activeLessonId = null;
                 if (ytPlayer) { try { ytPlayer.destroy(); } catch(e) {} ytPlayer = null; ytPlayerReady = false; }
                 if (typeof destroyLessonVideo === 'function') { try { destroyLessonVideo(); } catch(e) {} }
-                if (chatUnsubscribe) { chatUnsubscribe(); chatUnsubscribe = null; }
+                /* Do not tear down the cached live chat session when leaving the course. */
+                chatUnsubscribe = null;
                 if (chatLockUnsubscribe) { chatLockUnsubscribe(); chatLockUnsubscribe = null; }
                 if (typeof cancelReply === 'function') cancelReply();
                 try { localStorage.removeItem('ananas_last_course_route'); localStorage.removeItem('lastCourseRoute'); localStorage.removeItem('activeCourseRoute'); } catch(e) {}
@@ -16103,33 +16103,40 @@ body.light-mode #courseChatPage .chat-msg.received{
     window.loadChatPage=async function(courseId){
         const container=$('chatPageMessagesList'); if(!container)return;
         const courseKey=String(courseId||'');
+        const accountKey=String(currentUser?.uid||'guest');
+        const sessionKey=accountKey+'::'+courseKey;
         const sessions=window.__aaChatSessions||(window.__aaChatSessions=new Map());
-        let session=sessions.get(courseKey);
+        let session=sessions.get(sessionKey);
         if(!session){
             session={
                 courseId:courseKey,
+                accountKey,
                 unsubscribe:null,
                 initialized:false,
                 hiddenIds:new Set(),
                 hiddenLoaded:false,
                 docs:new Map(),
                 allDocs:new Map(),
-                lastId:null
+                lastId:null,
+                markup:'',
+                emptyRendered:false
             };
-            sessions.set(courseKey,session);
+            sessions.set(sessionKey,session);
         }
 
         renderAdminMenu();
         loadChatLockState?.(courseId);
         updateScrollButton();
 
-        /* Keep the existing DOM alive while navigating around the site.
-           A session may have no active listener after leaving the course, but its
-           already-rendered messages remain visible and are reused immediately. */
-        if(session.initialized && container.querySelector('.chat-msg')){
-            if(!session.unsubscribe){
-                /* Reconnect silently in the background; never replace the visible DOM. */
-            }else{
+        /* Keep the existing DOM alive throughout the site session. If another route
+           temporarily cleared the chat container, restore the last rendered markup
+           synchronously before any Firestore work touches the UI. */
+        if(session.initialized && !container.querySelector('.chat-msg') && session.markup){
+            container.innerHTML=session.markup;
+            container.querySelectorAll('.chat-msg').forEach(node=>node.classList.add('aa-chat-cached'));
+        }
+        if(session.initialized && (container.querySelector('.chat-msg') || session.emptyRendered)){
+            if(session.unsubscribe){
                 chatUnsubscribe=session.unsubscribe;
                 chatInitialized=true;
                 chatLastMessageId=session.lastId;
@@ -16260,11 +16267,22 @@ body.light-mode #courseChatPage .chat-msg.received{
         function replaceNode(doc,allDocsMap){
             const old=container.querySelector(`[data-message-id="${CSS.escape(String(doc.id))}"]`); if(!old)return false;
             const newNode=buildMessageNode(doc,allDocsMap);
-            old.replaceWith(newNode);
+            /* Update the existing bubble in place. Replacing the DOM node would
+               retrigger the message-entry animation and make the whole chat feel
+               like it has reloaded. */
+            old.className=newNode.className;
+            for(const name of [...old.attributes].map(a=>a.name)){
+                if(name!=='class')old.removeAttribute(name);
+            }
+            for(const attr of [...newNode.attributes]){
+                if(attr.name!=='class')old.setAttribute(attr.name,attr.value);
+            }
+            old.innerHTML=newNode.innerHTML;
             return true;
         }
         function insertNode(doc,visibleDocs,allDocsMap){
             const newNode=buildMessageNode(doc,allDocsMap);
+            newNode.classList.remove('aa-chat-cached');
             const ms=tsMs(doc.data()?.createdAt)||Date.now();
             const nodes=[...container.querySelectorAll('.chat-msg')];
             let before=null;
@@ -16313,7 +16331,10 @@ body.light-mode #courseChatPage .chat-msg.received{
                 }
             });
             session.docs=newMap;session.allDocs=new Map(allDocs.map(d=>[String(d.id),d]));session.lastId=visibleDocs[visibleDocs.length-1]?.id||null;
+            session.emptyRendered=!visibleDocs.length;
+            session.markup=container.innerHTML;
             if(changedIds.length)refreshGroupingAround(changedIds);
+            session.markup=container.innerHTML;
             return changedIds;
         }
 
@@ -16346,19 +16367,22 @@ body.light-mode #courseChatPage .chat-msg.received{
                         if(!session.initialized){
                             if(snapshot.empty){
                                 container.innerHTML='<p style="color:var(--text-muted);text-align:center;padding:30px;">لا توجد رسائل.</p>';
-                                session.docs=new Map();session.allDocs=new Map();session.initialized=true;session.lastId=null;
+                                session.docs=new Map();session.allDocs=new Map();session.initialized=true;session.lastId=null;session.emptyRendered=true;session.markup=container.innerHTML;
                             }else{
                                 const visibleDocs=orderedVisibleDocs(allDocs);
                                 fullInitialRender(visibleDocs,new Map(allDocs.map(d=>[String(d.id),d])));
                                 session.docs=new Map(visibleDocs.map(d=>[String(d.id),d]));
                                 session.allDocs=new Map(allDocs.map(d=>[String(d.id),d]));
-                                session.initialized=true;session.lastId=visibleDocs[visibleDocs.length-1]?.id||null;
+                                session.initialized=true;session.lastId=visibleDocs[visibleDocs.length-1]?.id||null;session.emptyRendered=!visibleDocs.length;session.markup=container.innerHTML;
                             }
                             chatInitialized=true;chatLastMessageId=session.lastId;
                             requestAnimationFrame(()=>{if(chatUserAtBottom||!firstForSubscription)scrollToBottom('auto');});
                         }else{
+                            const changes=snapshot.docChanges();
+                            if(!changes.length)return updateScrollButton();
                             const wasBottom=chatUserAtBottom;
                             applySnapshotIncrementally(snapshot);
+                            session.markup=container.innerHTML;
                             chatLastMessageId=session.lastId;
                             if(wasBottom){requestAnimationFrame(()=>scrollToBottom('auto'));}
                         }
@@ -16388,6 +16412,25 @@ body.light-mode #courseChatPage .chat-msg.received{
     const observeAuthState=()=>{ renderAdminMenu(); };
     if(typeof auth!=='undefined' && auth?.onAuthStateChanged){ auth.onAuthStateChanged(observeAuthState); }
     else if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',observeAuthState,{once:true}); else observeAuthState();
+})();
+</script>
+
+<script id="chat-session-cache-auth-cleanup-js">
+(function(){
+  'use strict';
+  if(window.__aaChatSessionAuthCleanup)return;
+  window.__aaChatSessionAuthCleanup=true;
+  try{
+    if(typeof auth!=='undefined' && auth?.onAuthStateChanged){
+      auth.onAuthStateChanged(user=>{
+        if(user)return;
+        try{
+          const sessions=window.__aaChatSessions;
+          if(sessions?.forEach){sessions.forEach(session=>{try{session.unsubscribe?.();}catch(_){}});sessions.clear?.();}
+        }catch(_){}
+      });
+    }
+  }catch(_){}
 })();
 </script>
 
@@ -16429,6 +16472,13 @@ body.chat-document-locked::-webkit-scrollbar,
     height:0 !important;
     display:none !important;
     background:transparent !important;
+}
+</style>
+
+<style id="chat-session-cache-visual-stability-css">
+/* Cached/restored chat bubbles must return instantly without replaying their entry animation. */
+#courseChatPage .chat-msg.aa-chat-cached{
+    animation:none!important;
 }
 </style>
 
@@ -17183,6 +17233,36 @@ const originalOpen=window.openChatLockDialog;window.openChatLockDialog=function(
 document.addEventListener('click',e=>{const btn=e.target.closest?.('#chatLockBtn');if(!btn)return;e.preventDefault();e.stopImmediatePropagation();if(lockTimes(currentChatLock||{}).active)window.unlockCourseChat?.();else window.openChatLockDialog?.()},true);
 window.unlockCourseChat=async function(){if(!isAdmin||!activeCourseId)return;clearTimeout(lockTimer);lockTimer=null;const prev=currentChatLock||{};currentChatLock={...prev,locked:false,startAt:null,endAt:null,autoExpire:false,reason:''};syncLockUI();try{await db.collection('courses').doc(activeCourseId).collection('settings').doc('chat').set({locked:false,startAt:null,endAt:null,reason:'',autoExpire:false,updatedAt:firebase.firestore.FieldValue.serverTimestamp()},{merge:true});showCustomAlert('تم الفتح','الدردشة مفتوحة الآن ويمكن للطلاب المشاركة.')}catch(err){console.error(err);currentChatLock=prev;syncLockUI();scheduleLockClock();showCustomAlert('خطأ','تعذر فتح الدردشة.');throw err}};
 setTimeout(()=>{syncLockUI();scheduleLockClock()},0);
+})();
+</script>
+
+<!-- FINAL PATCH: keep the rebuilt profile logout control reliably clickable. -->
+<style id="aa-logout-reliability-css">
+#aaRebuiltProfilePage #aaProfileLogout{pointer-events:auto!important;cursor:pointer!important;}
+#aaRebuiltProfilePage #aaProfileLogout:disabled{opacity:1!important;cursor:pointer!important;pointer-events:auto!important;}
+#userProfileModal #userProfileLogoutBtn{pointer-events:auto!important;cursor:pointer!important;}
+</style>
+<script id="aa-logout-reliability-js">
+(function(){
+  'use strict';
+  let logoutGuardTimer=0;
+  function resetLogoutControls(){
+    const ids=['aaProfileLogout','userProfileLogoutBtn'];
+    ids.forEach(id=>{
+      const b=document.getElementById(id);
+      if(b && window.currentUser){
+        b.disabled=false;
+        b.removeAttribute('aria-disabled');
+        b.removeAttribute('aria-busy');
+      }
+    });
+  }
+  function run(){resetLogoutControls();}
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',run,{once:true});else run();
+  const mo=new MutationObserver(()=>run());
+  mo.observe(document.body,{childList:true,subtree:true,attributes:true,attributeFilter:['disabled','aria-disabled','aria-busy']});
+  logoutGuardTimer=setInterval(run,1000);
+  window.addEventListener('focus',run,{passive:true});
 })();
 </script>
 </body>
