@@ -16742,15 +16742,32 @@ function ensureModal(){
  modal.addEventListener('click',e=>{if(e.target===modal&&!sending)closeModal();});closeBtn.addEventListener('click',()=>{if(!sending)closeModal();});sendBtn.addEventListener('click',sendImages);prevBtn.addEventListener('click',()=>showIndex(currentIndex-1,true));nextBtn.addEventListener('click',()=>showIndex(currentIndex+1,true));emojiBtn.addEventListener('click',e=>{e.preventDefault();e.stopPropagation();emojiPopover.classList.toggle('open');emojiPopover.setAttribute('aria-hidden',emojiPopover.classList.contains('open')?'false':'true');});
  document.addEventListener('click',e=>{if(!modal?.classList.contains('open')||!emojiPopover?.classList.contains('open'))return;if(!emojiPopover.contains(e.target)&&!emojiBtn.contains(e.target)){emojiPopover.classList.remove('open');emojiPopover.setAttribute('aria-hidden','true');}});
  thumbs.addEventListener('scroll',syncIndexFromThumbs,{passive:true});
- thumbs.addEventListener('pointerdown',e=>{if(e.target.closest?.('.aa-chat-preview-add'))return;dragging=true;dragMoved=false;dragStartX=e.clientX;dragScrollLeft=thumbs.scrollLeft;thumbs.setPointerCapture?.(e.pointerId);});
+ /* A thumbnail is always a click target; only empty rail space can start mouse-dragging. */
+ thumbs.addEventListener('pointerdown',e=>{
+   if(e.target.closest?.('.aa-chat-preview-add') || e.target.closest?.('.aa-chat-preview-thumb'))return;
+   dragging=true;dragMoved=false;dragStartX=e.clientX;dragScrollLeft=thumbs.scrollLeft;
+   thumbs.setPointerCapture?.(e.pointerId);
+ });
  thumbs.addEventListener('pointermove',e=>{if(!dragging)return;const dx=e.clientX-dragStartX;if(Math.abs(dx)>5)dragMoved=true;thumbs.scrollLeft=dragScrollLeft-dx;syncIndexFromThumbs();});
  const stopDrag=e=>{if(!dragging)return;dragging=false;try{thumbs.releasePointerCapture?.(e.pointerId)}catch(_){}snapThumbsToIndex();setTimeout(()=>{dragMoved=false;},0);};
  thumbs.addEventListener('pointerup',stopDrag);thumbs.addEventListener('pointercancel',stopDrag);thumbs.addEventListener('pointerleave',e=>{if(e.buttons===0)stopDrag(e);});
+ /* Delegate thumbnail clicks so re-rendering the rail can never lose the handler. */
+ thumbs.addEventListener('click',e=>{
+   const add=e.target.closest?.('.aa-chat-preview-add');
+   if(add){e.preventDefault();e.stopPropagation();openAddFilesPicker();return;}
+   const thumb=e.target.closest?.('.aa-chat-preview-thumb[data-index]');
+   if(!thumb)return;
+   const index=Number(thumb.dataset.index);
+   if(!Number.isInteger(index)||index<0||index>=files.length)return;
+   e.preventDefault();e.stopPropagation();dragging=false;dragMoved=false;
+   suppressThumbScrollSyncUntil=Date.now()+700;
+   showIndex(index,true);
+ });
  return modal;
 }
 function ensureAddFilesInput(){let addInput=document.getElementById('aaChatPreviewAddFilesInput');if(addInput)return addInput;addInput=document.createElement('input');addInput.type='file';addInput.id='aaChatPreviewAddFilesInput';addInput.accept='image/*';addInput.multiple=true;addInput.tabIndex=-1;addInput.setAttribute('aria-hidden','true');addInput.style.cssText='position:fixed;left:-10000px;top:-10000px;width:1px;height:1px;opacity:0;';document.body.appendChild(addInput);addInput.addEventListener('change',e=>{const chosen=[...(e.target.files||[])].filter(f=>/^image\//i.test(f.type));e.target.value='';if(!chosen.length||!modal?.classList.contains('open')||sending)return;const firstNewIndex=files.length;files.push(...chosen);urls.push(...chosen.map(f=>URL.createObjectURL(f)));renderThumbs();updateNav();showIndex(firstNewIndex,true);requestAnimationFrame(()=>centerThumb(currentIndex,'smooth'));});return addInput;}
 function openAddFilesPicker(){if(sending||!modal?.classList.contains('open'))return;const addInput=ensureAddFilesInput();try{if(typeof addInput.showPicker==='function')addInput.showPicker();else addInput.click();}catch(_){try{addInput.click();}catch(e){console.error('chat preview add files picker',e);}}}
-function renderThumbs(){if(!thumbs)return;thumbs.innerHTML='';files.forEach((file,index)=>{const url=urls[index];const b=document.createElement('button');b.type='button';b.className='aa-chat-preview-thumb';b.dataset.index=String(index);b.innerHTML='<img alt="">';b.querySelector('img').src=url;b.addEventListener('click',e=>{e.preventDefault();e.stopPropagation();if(dragMoved)return;suppressThumbScrollSyncUntil=Date.now()+650;showIndex(index,true);});thumbs.appendChild(b);});const add=document.createElement('button');add.type='button';add.className='aa-chat-preview-thumb aa-chat-preview-add';add.setAttribute('aria-label','إضافة صور أخرى');add.title='إضافة صور أخرى';add.innerHTML='<span aria-hidden="true">+</span>';add.addEventListener('pointerdown',e=>{e.stopPropagation();});add.addEventListener('click',e=>{e.preventDefault();e.stopPropagation();openAddFilesPicker();});thumbs.appendChild(add);}
+function renderThumbs(){if(!thumbs)return;thumbs.innerHTML='';files.forEach((file,index)=>{const url=urls[index];const b=document.createElement('button');b.type='button';b.className='aa-chat-preview-thumb';b.dataset.index=String(index);b.innerHTML='<img alt="">';b.querySelector('img').src=url;thumbs.appendChild(b);});const add=document.createElement('button');add.type='button';add.className='aa-chat-preview-thumb aa-chat-preview-add';add.setAttribute('aria-label','إضافة صور أخرى');add.title='إضافة صور أخرى';add.innerHTML='<span aria-hidden="true">+</span>';add.addEventListener('pointerdown',e=>{e.stopPropagation();});add.addEventListener('click',e=>{e.preventDefault();e.stopPropagation();openAddFilesPicker();});thumbs.appendChild(add);}
 function setLoading(v){modal?.querySelector('.aa-chat-preview-loading')?.classList.toggle('open',!!v);stageImage?.classList.toggle('is-loading',!!v);}
 function updateNav(){const many=files.length>1;if(prevBtn)prevBtn.disabled=!many;if(nextBtn)nextBtn.disabled=!many;if(prevBtn)prevBtn.style.opacity=many?'1':'0';if(nextBtn)nextBtn.style.opacity=many?'1':'0';if(counter)counter.textContent=many?`${currentIndex+1} / ${files.length}`:'';}
 function centerThumb(index,behavior='smooth'){const b=thumbs?.querySelector(`[data-index="${index}"]`);if(!b||!thumbs)return;const left=b.offsetLeft-(thumbs.clientWidth-b.offsetWidth)/2;if(behavior==='smooth')suppressThumbScrollSyncUntil=Date.now()+500;else suppressThumbScrollSyncUntil=Date.now()+80;thumbs.scrollTo({left:Math.max(0,left),behavior});}
