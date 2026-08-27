@@ -15481,7 +15481,7 @@ body.light-mode #courseChatPage .chat-rebuilt-shell{
     padding:18px var(--chat-safe-right) 22px var(--chat-safe-left)!important;
     gap:7px!important;
     overscroll-behavior:contain!important;
-    scroll-behavior:smooth;
+    scroll-behavior:auto!important;
     background:
         radial-gradient(45% 22% at 78% 8%,rgba(108,92,231,.05),transparent 70%),
         transparent;
@@ -15496,7 +15496,7 @@ body.light-mode #courseChatPage .chat-messages-rebuilt{
     border:1px solid transparent!important;
     box-shadow:0 7px 20px rgba(0,0,0,.07);
     transition:transform .22s ease,box-shadow .22s ease,border-color .22s ease,filter .22s ease!important;
-    animation:chatMessageIn .28s cubic-bezier(.2,.8,.2,1) both;
+    animation:none!important;
 }
 #courseChatPage .chat-msg:hover{
     transform:translateY(-1px);
@@ -15524,6 +15524,13 @@ body.light-mode #courseChatPage .chat-msg.received{
 #courseChatPage .chat-msg .msg-time{font-variant-numeric:tabular-nums;}
 #courseChatPage .chat-msg .msg-actions{transition:opacity .2s ease,transform .2s ease!important;}
 #courseChatPage .chat-msg:hover .msg-actions{transform:translateY(-1px);}
+#courseChatPage .chat-messages-rebuilt.is-scrolling .chat-msg:hover{
+    transform:none!important;
+    box-shadow:inherit!important;
+}
+#courseChatPage .chat-messages-rebuilt.is-scrolling .chat-msg{
+    transition:none!important;
+}
 @keyframes chatMessageIn{
     from{opacity:0;transform:translateY(7px) scale(.988)}
     to{opacity:1;transform:translateY(0) scale(1)}
@@ -16060,12 +16067,17 @@ body.light-mode #courseChatPage .chat-msg.received{
         divider.textContent='رسائل غير مقروءة';
         target.before(divider);
     }
+    let unreadViewportRaf=0;
     function maybeClearUnreadByViewport(){
-        if(!chatUnread||!chatUnreadLastId)return;
-        const target=chatList.querySelector(`.chat-msg[data-message-id="${CSS.escape(String(chatUnreadLastId))}"]`);
-        if(!target){clearUnreadMessages();updateScrollButton();return;}
-        const listRect=chatList.getBoundingClientRect(),targetRect=target.getBoundingClientRect();
-        if(targetRect.bottom<=listRect.bottom+4)clearUnreadMessages();
+        if(unreadViewportRaf||!chatUnread||!chatUnreadLastId)return;
+        unreadViewportRaf=requestAnimationFrame(()=>{
+            unreadViewportRaf=0;
+            if(!chatUnread||!chatUnreadLastId)return;
+            const target=chatList.querySelector(`.chat-msg[data-message-id="${CSS.escape(String(chatUnreadLastId))}"]`);
+            if(!target){clearUnreadMessages();updateScrollButton();return;}
+            const listRect=chatList.getBoundingClientRect(),targetRect=target.getBoundingClientRect();
+            if(targetRect.bottom<=listRect.bottom+4)clearUnreadMessages();
+        });
     }
     function scrollToBottom(behavior='smooth'){
         chatList.scrollTo({top:chatList.scrollHeight,left:0,behavior});
@@ -16490,6 +16502,30 @@ body.light-mode #courseChatPage .chat-msg.received{
     const observeAuthState=()=>{ renderAdminMenu(); };
     if(typeof auth!=='undefined' && auth?.onAuthStateChanged){ auth.onAuthStateChanged(observeAuthState); }
     else if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',observeAuthState,{once:true}); else observeAuthState();
+})();
+</script>
+
+<script id="chat-performance-v1">
+(function(){
+    'use strict';
+    const list=document.getElementById('chatPageMessagesList');
+    if(!list||list.dataset.chatPerformanceBound==='1')return;
+    list.dataset.chatPerformanceBound='1';
+    let endTimer=0,scrolling=false;
+    const stop=()=>{
+        clearTimeout(endTimer);
+        endTimer=setTimeout(()=>{
+            scrolling=false;
+            list.classList.remove('is-scrolling');
+        },90);
+    };
+    list.addEventListener('scroll',()=>{
+        if(!scrolling){
+            scrolling=true;
+            list.classList.add('is-scrolling');
+        }
+        stop();
+    },{passive:true});
 })();
 </script>
 
