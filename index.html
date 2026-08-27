@@ -17231,6 +17231,66 @@ setTimeout(()=>{syncLockUI();scheduleLockClock()},0);
   },true);
 })();
 </script>
+<!-- Final profile access guard + self-profile action reliability -->
+<script id="ananas-final-profile-access-guard">
+(function(){
+  'use strict';
+  const $=id=>document.getElementById(id);
+  const isSelfUid=uid=>!!currentUser&&String(uid)===String(currentUser.uid);
 
+  async function isProtectedAdminUid(uid){
+    if(!uid || isSelfUid(uid) || !!isAdmin) return false;
+    try{
+      const [adminDoc,userDoc]=await Promise.all([
+        db.collection('admins').doc('main').get(),
+        db.collection('users').doc(String(uid)).get()
+      ]);
+      if(!adminDoc.exists || !userDoc.exists) return false;
+      const emails=Array.isArray(adminDoc.data()?.adminEmails)?adminDoc.data().adminEmails:[];
+      const email=String(userDoc.data()?.email||'').trim().toLowerCase();
+      return !!email && emails.some(x=>String(x||'').trim().toLowerCase()===email);
+    }catch(err){
+      console.warn('profile access guard',err);
+      return false;
+    }
+  }
+
+  const oldOpen=window.aaOpenProfile;
+  if(oldOpen && !window.__aaAdminProfileGuard){
+    window.__aaAdminProfileGuard=true;
+    window.aaOpenProfile=async function(uid,opts={}){
+      if(await isProtectedAdminUid(uid)){
+        try{ document.querySelectorAll('#aaRebuiltProfilePage,#userProfilePage,#ananasV10ProfilePage,#ananasPrivateProfileOverlay,#ananasCanonicalProfilePage').forEach(el=>el?.classList.remove('active')); }catch(_){ }
+        showCustomAlert?.('غير قابل للعرض','حساب المشرف غير قابل للعرض من الحسابات الأخرى.');
+        return false;
+      }
+      return oldOpen.apply(this,arguments);
+    };
+  }
+
+  /* Reliable self-profile logout regardless of the page from which it was opened. */
+  document.addEventListener('click',async e=>{
+    const btn=e.target.closest?.('#aaRebuiltProfilePage #aaProfileLogout');
+    if(!btn || !currentUser || !auth?.signOut) return;
+    if(btn.dataset.aaLogoutHandled==='1') return;
+    btn.dataset.aaLogoutHandled='1';
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    try{
+      btn.disabled=true;
+      document.querySelectorAll('#aaRebuiltProfilePage,#userProfilePage,#ananasV10ProfilePage,#ananasPrivateProfileOverlay,#ananasCanonicalProfilePage').forEach(el=>{el?.classList.remove('active');el?.style.removeProperty('display');});
+      document.body.classList.remove('aa-profile-open');
+      try{window.mobileNavigate?.('courses')}catch(_){ }
+      await auth.signOut();
+    }catch(err){
+      console.error('profile logout direct',err);
+      btn.disabled=false;
+      btn.dataset.aaLogoutHandled='';
+      showCustomAlert?.('خطأ','تعذر تسجيل الخروج حاليًا.');
+    }
+  },true);
+
+})();
+</script>
 </body>
 </html>
