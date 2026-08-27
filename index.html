@@ -2423,28 +2423,7 @@ body.aa-chat-fullscreen-open.aa-v9-modal-locked::before{
 
 <style id="chat-lightbox-profile-over-v4">
 body.aa-chat-profile-over-lightbox #chatImageLightbox{z-index:2147483645!important;}
-body.aa-chat-profile-over-lightbox #aaRebuiltProfilePage{
-    position:fixed!important;
-    inset:0!important;
-    z-index:2147483647!important;
-    display:block!important;
-    visibility:visible!important;
-    opacity:1!important;
-    pointer-events:auto!important;
-    background:var(--bg-primary)!important;
-    overflow:auto!important;
-}
-body.aa-chat-profile-over-lightbox #aaRebuiltProfilePage::before{
-    content:"";
-    position:fixed;
-    inset:0;
-    z-index:-1;
-    background:color-mix(in srgb,var(--bg-primary) 96%,#000 4%);
-}
-body.aa-chat-profile-over-lightbox #aaRebuiltProfilePage .aa-profile-shell{
-    animation:aaChatProfileFromLightbox .22s cubic-bezier(.18,.86,.24,1) both;
-}
-@keyframes aaChatProfileFromLightbox{from{opacity:0;transform:translateY(-8px) scale(.988)}to{opacity:1;transform:none}}
+to{opacity:1;transform:none}}
 #chatImageLightbox.is-opening .chat-image-lightbox-topbar,
 #chatImageLightbox.is-opening .chat-image-lightbox-nav,
 #chatImageLightbox.is-opening .chat-image-lightbox-counter,
@@ -8272,6 +8251,7 @@ body.aa-chat-profile-over-lightbox #aaRebuiltProfilePage .aa-profile-shell{
 
         auth.onAuthStateChanged(async (user) => {
             if (user) {
+                document.body.classList.remove('aa-chat-signing-out');
                 const previousUid=String(currentUser?.uid||'');
                 currentUser = user;
                 if(previousUid && previousUid!==String(user.uid)) window.__aaResetChatForAccount?.();
@@ -8315,6 +8295,7 @@ body.aa-chat-profile-over-lightbox #aaRebuiltProfilePage .aa-profile-shell{
                 setTimeout(restoreLastCourseRoute, 350);
             } else {
                 // ===== LOGOUT LOGIC =====
+                try{window.__aaCleanupAllUiForSignOut?.();}catch(_){}
                 window.__aaResetChatForAccount?.();
                 currentUser = null; currentUserProfile = {}; isAdmin = false;
                 window.__aaViewedProfileUid = '';
@@ -10955,9 +10936,46 @@ function ensureProfilePage(){
 };
  return page;
 }
-function hideProfile(){const p=$('aaRebuiltProfilePage');if(p)p.classList.remove('active');document.body.classList.remove('aa-profile-open');}
+function hideProfile(){
+ const p=$('aaRebuiltProfilePage');
+ if(p){
+   p.classList.remove('active');
+   p.style.removeProperty('display');
+   p.style.removeProperty('position');
+   p.style.removeProperty('inset');
+   p.style.removeProperty('z-index');
+   p.style.removeProperty('padding');
+ }
+ document.body.classList.remove('aa-profile-open');
+ document.body.classList.remove('aa-chat-profile-over-lightbox');
+}
 function restorePoint(point){hideLegacy();hideProfile();if(!point||point.type==='courses'||!point.courseId){window.mobileNavigate?.('courses');$('coursesNavBtn')?.classList.add('active');return;}window.activeCourseId=point.courseId;try{if(point.type==='assignment-detail'&&point.assignmentId){window.openAssignmentDetail?.(point.courseId,point.assignmentId);return;}if(point.type==='chat'){window.switchCoursePage?.('chat');return;}if(point.type==='quizzes'){window.switchCoursePage?.('quizzes');return;}if(point.type==='assignments'){window.switchCoursePage?.('assignments');return;}if(point.type==='lessons'){window.switchCoursePage?.('learning');return;}if(point.type==='learning'){window.switchCoursePage?.('learning');if(point.lessonId&&window.openLessonPlayer)setTimeout(()=>window.openLessonPlayer(point.courseId,point.lessonId),80);return;}if(point.type==='dashboard'){window.switchCoursePage?.('dashboard');return;}window.switchCoursePage?.('overview');}catch(e){console.warn('profile restore',e);window.mobileNavigate?.('courses');}}
-async function profileBack(){const state=window.profileState||profileState;if(state.busy)return;window.profileState={...state,busy:true};try{if(state.source?.kind==='chat-lightbox'){hideProfile();document.body.classList.remove('aa-chat-profile-over-lightbox');const viewer=$('chatImageLightbox');if(viewer){viewer.classList.add('active');viewer.setAttribute('aria-hidden','false');}return;}if(state.source?.kind==='admin-directory'){window.profileState={uid:currentUser.uid,isSelf:true,source:{kind:'self'},returnPoint:null,busy:false};await window.__renderAuthoritativeProfile?.(currentUser.uid,true);return;}restorePoint(state.returnPoint);}finally{window.profileState={...(window.profileState||state),busy:false};}}
+async function profileBack(){
+ const state=window.profileState||profileState;
+ if(state.busy)return;
+ window.profileState={...state,busy:true};
+ try{
+   if(state.source?.kind==='chat-lightbox'){
+     hideProfile();
+     const viewer=$('chatImageLightbox');
+     if(viewer){
+       viewer.classList.add('active');
+       viewer.classList.remove('is-opening');
+       viewer.setAttribute('aria-hidden','false');
+     }
+     document.body.classList.add('aa-chat-lightbox-open');
+     return;
+   }
+   if(state.source?.kind==='admin-directory'){
+     window.profileState={uid:currentUser.uid,isSelf:true,source:{kind:'self'},returnPoint:null,busy:false};
+     await window.__renderAuthoritativeProfile?.(currentUser.uid,true);
+     return;
+   }
+   restorePoint(state.returnPoint);
+ }finally{
+   window.profileState={...(window.profileState||state),busy:false};
+ }
+}
 function ensurePortfolioModal(){let m=$('aaCoursePortfolioModal');if(m)return m;m=document.createElement('div');m.id='aaCoursePortfolioModal';m.innerHTML=`<div class="aa-portfolio-modal-card"><div class="aa-portfolio-modal-head"><div class="aa-portfolio-modal-icon"><i class="fas fa-images"></i></div><div><h3>إضافة عمل إلى معرضي</h3><p>سيظهر العمل في ملفك الشخصي ومعرض أعمالك.</p></div><button type="button" class="aa-portfolio-close" id="aaPortfolioClose"><i class="fas fa-xmark"></i></button></div><div class="aa-portfolio-form"><label class="aa-portfolio-field"><span>عنوان العمل</span><input id="aaPortfolioTitle" type="text" placeholder="مثال: تصميم هوية بصرية"></label><label class="aa-portfolio-field"><span>نوع العمل</span><input id="aaPortfolioType" type="text" placeholder="مثال: شعار، واجهة، هوية"></label><label class="aa-portfolio-field full"><span>وصف العمل</span><textarea id="aaPortfolioDescription" placeholder="اكتب وصفًا مختصرًا عن العمل"></textarea></label><div class="aa-portfolio-field full"><span>صور العمل</span><label class="aa-portfolio-drop" for="aaPortfolioFiles"><i class="fas fa-cloud-arrow-up"></i><strong>اختر صور العمل</strong><span>يمكنك اختيار صورة أو عدة صور</span><div class="aa-portfolio-files" id="aaPortfolioFilesNames">لم يتم اختيار صور بعد</div></label><input id="aaPortfolioFiles" type="file" accept="image/*" multiple hidden></div></div><div id="aaPortfolioStatus" class="aa-portfolio-status"></div><div class="aa-portfolio-actions"><button type="button" class="aa-portfolio-cancel" id="aaPortfolioCancel">إلغاء</button><button type="button" class="aa-portfolio-save" id="aaPortfolioSave"><i class="fas fa-check"></i> إضافة إلى المعرض</button></div></div>`;document.body.appendChild(m);$('aaPortfolioClose').onclick=closePortfolioModal;$('aaPortfolioCancel').onclick=closePortfolioModal;$('aaPortfolioFiles').onchange=()=>{$('aaPortfolioFilesNames').textContent=[...($('aaPortfolioFiles').files||[])].map(f=>f.name).join(' • ')||'لم يتم اختيار صور بعد'};$('aaPortfolioSave').onclick=savePortfolioModal;m.addEventListener('click',e=>{if(e.target===m)closePortfolioModal()});return m;}
 function closePortfolioModal(){const m=$('aaCoursePortfolioModal');if(m)m.classList.remove('active');}
 function openPortfolioFromCourses(){if(!currentUser)return triggerAuth?.();hideLegacy();hideProfile();window.mobileNavigate?.('courses');$('coursesNavBtn')?.classList.add('active');const m=ensurePortfolioModal();['aaPortfolioTitle','aaPortfolioType','aaPortfolioDescription'].forEach(id=>$(id).value='');$('aaPortfolioFiles').value='';$('aaPortfolioFilesNames').textContent='لم يتم اختيار صور بعد';$('aaPortfolioStatus').textContent='';$('aaPortfolioSave').disabled=false;m.classList.add('active');}
@@ -18533,20 +18551,7 @@ body.aa-chat-profile-over-lightbox #aaRebuiltProfilePage .aa-profile-hero{
 }
 @keyframes aaChatProfileOverlayIn{from{opacity:0;transform:translateY(8px) scale(.995)}to{opacity:1;transform:none}}
 </style>
-<script id="chat-lightbox-v3-profile-cleanup">
-(function(){
-  'use strict';
-  if(window.__aaChatLightboxV3Cleanup)return;
-  window.__aaChatLightboxV3Cleanup=true;
-  const originalClose=window.closeChatImageLightbox;
-  if(typeof originalClose==='function'){
-    window.closeChatImageLightbox=function(){
-      document.body.classList.remove('aa-chat-profile-over-lightbox');
-      return originalClose.apply(this,arguments);
-    };
-  }
-})();
-</script>
+
 
 
 <script id="chat-lightbox-open-finish-v4">
@@ -18572,269 +18577,84 @@ body.aa-chat-profile-over-lightbox #aaRebuiltProfilePage .aa-profile-hero{
 </script>
 
 
-<style id="chat-lightbox-profile-overlay-v7">
-body.aa-chat-profile-over-lightbox #aaRebuiltProfilePage{
-    position:fixed!important;
-    inset:0!important;
-    z-index:2147483647!important;
-    display:block!important;
-    padding:18px!important;
-    background:var(--bg-primary)!important;
-    overflow:auto!important;
-}
-body.aa-chat-profile-over-lightbox #aaRebuiltProfilePage .aa-profile-shell{
-    padding-top:max(8px,env(safe-area-inset-top));
-    padding-bottom:max(18px,env(safe-area-inset-bottom));
-}
-body.aa-chat-profile-over-lightbox #aaRebuiltProfilePage .aa-profile-hero{
-    animation:aaChatProfileOverlayInV7 .18s cubic-bezier(.2,.8,.2,1);
-}
-@keyframes aaChatProfileOverlayInV7{
-    from{opacity:0;transform:translateY(6px) scale(.996)}
-    to{opacity:1;transform:none}
-}
+
+
+<style id="chat-global-signout-cleanup-v8">
+body.aa-chat-signing-out #chatImageLightbox,
+body.aa-chat-signing-out #aaRebuiltProfilePage,
+body.aa-chat-signing-out .platform-image-viewer,
+body.aa-chat-signing-out .gallery-viewer,
+body.aa-chat-signing-out .file-viewer-overlay,
+body.aa-chat-signing-out .ananas-modal-overlay,
+body.aa-chat-signing-out .custom-alert-modal,
+body.aa-chat-signing-out .edit-modal,
+body.aa-chat-signing-out .auth-popup{display:none!important;pointer-events:none!important;}
 </style>
-<script id="chat-lightbox-profile-overlay-v7">
+<script id="chat-global-signout-cleanup-v8">
+(function(){
+ 'use strict';
+ if(window.__aaChatGlobalSignoutCleanupV8)return;
+ window.__aaChatGlobalSignoutCleanupV8=true;
+ function hideEl(el){
+   if(!el)return;
+   el.classList.remove('active','open','is-zoomed','is-opening');
+   el.setAttribute?.('aria-hidden','true');
+   ['display','position','inset','z-index','visibility','opacity','pointer-events'].forEach(p=>el.style.removeProperty(p));
+ }
+ function cleanup(){
+   document.body.classList.add('aa-chat-signing-out');
+   document.body.classList.remove('aa-chat-profile-over-lightbox','aa-chat-lightbox-open','aa-chat-image-modal-open','aa-profile-open');
+   document.querySelectorAll('#chatImageLightbox,#aaRebuiltProfilePage,#platformImageViewer,#platformGalleryViewer,.gallery-viewer.active,.platform-image-viewer.active,.file-viewer-overlay.active,.ananas-modal-overlay.active,.custom-alert-modal.active,.edit-modal.active,.auth-popup.active').forEach(hideEl);
+   try{window.closeChatImageLightbox?.();}catch(_){}
+   try{window.closePlatformImageViewer?.();}catch(_){}
+   try{window.closePlatformGalleryViewer?.();}catch(_){}
+   try{if(window.profileState){window.profileState.uid=null;window.profileState.isSelf=false;window.profileState.source=null;window.profileState.returnPoint=null;window.profileState.busy=false;}}catch(_){}
+   window.__aaViewedProfileUid='';
+ }
+ function finishCleanup(){cleanup();requestAnimationFrame(cleanup);setTimeout(cleanup,0);}
+ window.__aaCleanupAllUiForSignOut=finishCleanup;
+ const currentSignOut=auth?.signOut?.bind(auth);
+ if(currentSignOut&&!auth.signOut.__aaChatSignOutV8){
+   const wrapped=async function(){
+     finishCleanup();
+     try{window.mobileNavigate?.('courses');}catch(_){}
+     try{document.querySelectorAll('.nav-btn,.auth-btn').forEach(x=>x.classList.remove('active'));}catch(_){}
+     try{document.querySelector('#coursesNavBtn')?.classList.add('active');}catch(_){}
+     try{return await currentSignOut();}
+     finally{finishCleanup();try{activeCourseId=null;activeLessonId=null;}catch(_){};try{window.mobileNavigate?.('courses');}catch(_){} }
+   };
+   wrapped.__aaChatSignOutV8=true;
+   wrapped.__original=currentSignOut;
+   auth.signOut=wrapped;
+ }
+ document.addEventListener('click',e=>{const btn=e.target?.closest?.('#aaProfileLogout');if(btn)setTimeout(finishCleanup,0);},true);
+})();
+</script>\n\n<script id="chat-profile-lightbox-return-final-v8">
 (function(){
   'use strict';
-  if(window.__aaChatLightboxProfileOverlayV7)return;
-  window.__aaChatLightboxProfileOverlayV7=true;
-  const baseOpen=window.aaOpenProfile;
-  if(typeof baseOpen!=='function')return;
-  function lift(){
+  if(window.__aaChatProfileLightboxReturnFinalV8)return;
+  window.__aaChatProfileLightboxReturnFinalV8=true;
+  document.addEventListener('click',function(e){
+    const back=e.target?.closest?.('#aaProfileBack');
+    const state=window.profileState;
+    if(!back||state?.source?.kind!=='chat-lightbox')return;
+    e.preventDefault();
+    e.stopImmediatePropagation();
     const page=document.getElementById('aaRebuiltProfilePage');
-    if(!page)return;
-    document.body.classList.add('aa-chat-profile-over-lightbox');
-    page.classList.add('active');
-    page.style.setProperty('position','fixed','important');
-    page.style.setProperty('inset','0','important');
-    page.style.setProperty('z-index','2147483647','important');
-    page.style.setProperty('display','block','important');
-    page.style.setProperty('padding','18px','important');
-  }
-  const wrapped=async function(uid,opts={}){
-    if(opts&&opts.kind==='chat-lightbox'&&uid){
-      lift();
-      requestAnimationFrame(lift);
-      const r=await baseOpen.apply(this,arguments);
-      requestAnimationFrame(lift);
-      return r;
+    if(page){
+      page.classList.remove('active');
+      ['display','position','inset','z-index','padding'].forEach(p=>page.style.removeProperty(p));
     }
-    return baseOpen.apply(this,arguments);
-  };
-  wrapped.__aaChatLightboxProfileOverlayV7=true;
-  wrapped.__original=baseOpen;
-  window.aaOpenProfile=wrapped;
-})();
-</script>
-
-
-<!-- ===== FINAL CHAT LIGHTBOX PROFILE + LOGOUT STATE GUARD ===== -->
-<style id="chat-lightbox-profile-logout-v8">
-body.aa-chat-profile-over-lightbox #aaRebuiltProfilePage{
-  z-index:2147483647!important;
-}
-</style>
-<script id="chat-lightbox-profile-logout-v8">
-(function(){
-'use strict';
-if(window.__aaChatLightboxProfileLogoutV8)return;
-window.__aaChatLightboxProfileLogoutV8=true;
-const $=id=>document.getElementById(id);
-
-/* Return from a profile opened by the Lightbox without rebuilding the chat page. */
-function returnFromLightboxProfile(){
-  const state=window.profileState||{};
-  if(state.source?.kind!=='chat-lightbox')return false;
-  const profile=$('aaRebuiltProfilePage');
-  if(profile){
-    profile.classList.remove('active');
-    profile.setAttribute('aria-hidden','true');
-    profile.style.removeProperty('position');
-    profile.style.removeProperty('inset');
-    profile.style.removeProperty('z-index');
-    profile.style.removeProperty('display');
-    profile.style.removeProperty('padding');
-  }
-  document.body.classList.remove('aa-chat-profile-over-lightbox');
-  document.body.classList.remove('aa-profile-open');
-  const viewer=$('chatImageLightbox');
-  if(viewer){
-    viewer.classList.add('active');
-    viewer.setAttribute('aria-hidden','false');
-    viewer.style.removeProperty('display');
-  }
-  if(typeof window.__aaChatLightboxRestoreFocus==='function'){
-    try{window.__aaChatLightboxRestoreFocus();}catch(_){ }
-  }
-  window.profileState={...state,busy:false};
-  return true;
-}
-window.__aaReturnFromChatLightboxProfile=returnFromLightboxProfile;
-
-/* Capture the Back button before generic profile/admin listeners can consume it. */
-document.addEventListener('click',function(e){
-  const btn=e.target?.closest?.('#aaProfileBack');
-  if(!btn)return;
-  if((window.profileState||{}).source?.kind!=='chat-lightbox')return;
-  e.preventDefault();
-  e.stopPropagation();
-  if(typeof e.stopImmediatePropagation==='function')e.stopImmediatePropagation();
-  returnFromLightboxProfile();
-},true);
-
-/* One authoritative cleanup used by every sign-out path. */
-function closeEverythingForLogout(){
-  try{window.__aaResetChatForAccount?.();}catch(_){ }
-  /* Close profile-over-lightbox first, then the lightbox itself. */
-  document.body.classList.remove('aa-chat-profile-over-lightbox','aa-profile-open','aa-chat-lightbox-open','aa-chat-image-modal-open');
-  document.documentElement.classList.remove('aa-chat-lightbox-open','aa-profile-open');
-
-  const classSelectors=[
-    '.edit-modal.active','.auth-popup.active','.custom-alert-modal.active',
-    '.gallery-viewer.active','.platform-image-viewer.active','.file-viewer-overlay.active',
-    '.ananas-modal-overlay.active','.profile-self-modal.active',
-    '.course-access-modal.active','#quizOverlay.active','#courseFileViewer.active',
-    '#enrollTermsPreviewModal.active','#courseAccessSuspendModal.active',
-    '#manageCodesModal.active','#codeDetailModalV12.active','#codeExpiryEditModalV12.active',
-    '#ananasQuizBuilderV2.active','#chatLockModal.active','#ananasProfileEditor.active',
-    '#aaCoursePortfolioModal.active','#aaChatImagePreviewModal.open'
-  ];
-  document.querySelectorAll(classSelectors.join(',')).forEach(el=>{
-    el.classList.remove('active','open');
-    if(el.id==='aaChatImagePreviewModal')el.setAttribute('aria-hidden','true');
-  });
-
-  const directIds=[
-    'aaRebuiltProfilePage','ananasV10ProfilePage','ananasPrivateProfileOverlay',
-    'ananasCanonicalProfilePage','userProfilePage','chatImageLightbox',
-    'platformImageViewer','platformGalleryViewer','aaChatImagePreviewModal'
-  ];
-  directIds.forEach(id=>{
-    const el=$(id);if(!el)return;
-    el.classList.remove('active','open','is-zoomed','is-opening');
-    el.setAttribute('aria-hidden','true');
-    el.style.removeProperty('display');
-  });
-
-  /* Stop transient media and clear Lightbox state without touching stored chat data. */
-  try{window.closeChatImageLightbox?.();}catch(_){ }
-  try{window.closePlatformImageViewer?.();}catch(_){ }
-  try{window.closePlatformGalleryViewer?.();}catch(_){ }
-  try{window.__aaChatLightboxRestoreFocus=null;}catch(_){ }
-
-  try{
-    if(window.profileState){
-      window.profileState.uid=null;
-      window.profileState.isSelf=false;
-      window.profileState.source=null;
-      window.profileState.returnPoint=null;
-      window.profileState.busy=false;
+    document.body.classList.remove('aa-profile-open','aa-chat-profile-over-lightbox');
+    const viewer=document.getElementById('chatImageLightbox');
+    if(viewer){
+      viewer.classList.add('active');
+      viewer.classList.remove('is-opening');
+      viewer.setAttribute('aria-hidden','false');
     }
-    window.__aaViewedProfileUid='';
-  }catch(_){ }
-
-  /* Disable any scheduled profile/lightbox restoration from the old route state. */
-  try{
-    localStorage.removeItem('ananas_last_course_route');
-    localStorage.removeItem('lastCourseRoute');
-    localStorage.removeItem('activeCourseRoute');
-  }catch(_){ }
-}
-window.__aaCloseEverythingForLogout=closeEverythingForLogout;
-
-/* Wrap the final auth.signOut so cleanup happens BEFORE Firebase changes auth state. */
-if(window.auth?.signOut && !window.auth.signOut.__aaLogoutFinalV8){
-  const original=window.auth.signOut.bind(window.auth);
-  const wrapped=async function(){
-    closeEverythingForLogout();
-    return original();
-  };
-  wrapped.__aaLogoutFinalV8=true;
-  wrapped.__original=original;
-  window.auth.signOut=wrapped;
-}
-
-/* Also guard named logout entry points when they exist. */
-['signOutUser','logoutUser','handleLogout'].forEach(name=>{
-  const fn=window[name];
-  if(typeof fn!=='function'||fn.__aaLogoutFinalV8)return;
-  const wrapped=async function(){
-    closeEverythingForLogout();
-    return fn.apply(this,arguments);
-  };
-  wrapped.__aaLogoutFinalV8=true;
-  wrapped.__original=fn;
-  window[name]=wrapped;
-});
-
-/* Auth-state logout is the final safety net, even when another code path calls Firebase directly. */
-if(window.auth?.onAuthStateChanged){
-  window.auth.onAuthStateChanged(function(user){
-    if(!user)closeEverythingForLogout();
-  });
-}
+    document.body.classList.add('aa-chat-lightbox-open');
+    if(window.profileState)window.profileState={...window.profileState,busy:false};
+  },true);
 })();
-</script>
-
-
-<!-- ===== FINAL PROFILE-LOGOUT FIX V9 ===== -->
-<script id="chat-lightbox-profile-logout-v9">
-(function(){
-'use strict';
-if(window.__aaChatLightboxProfileLogoutV9)return;
-window.__aaChatLightboxProfileLogoutV9=true;
-let busy=false;
-const $=id=>document.getElementById(id);
-function clearAfterSuccessfulLogout(){
-  try{window.__aaCloseEverythingForLogout?.();}catch(_){ }
-  try{document.body.classList.remove('aa-chat-profile-over-lightbox','aa-profile-open','aa-chat-lightbox-open','aa-chat-image-modal-open');}catch(_){ }
-  try{document.documentElement.classList.remove('aa-chat-lightbox-open','aa-profile-open');}catch(_){ }
-  try{
-    if(window.profileState){
-      window.profileState={...window.profileState,uid:null,isSelf:false,source:null,returnPoint:null,busy:false};
-    }
-    window.__aaViewedProfileUid='';
-  }catch(_){ }
-  try{
-    window.activeCourseId=null;
-    window.activeLessonId=null;
-    window.currentCoursePage='courses';
-  }catch(_){ }
-  try{window.mobileNavigate?.('courses');}catch(_){ }
-  try{document.querySelectorAll('.nav-btn,.auth-btn').forEach(x=>x.classList.remove('active'));document.querySelector('#coursesNavBtn')?.classList.add('active');}catch(_){ }
-}
-async function handleProfileLogout(e){
-  e?.preventDefault();
-  e?.stopPropagation?.();
-  e?.stopImmediatePropagation?.();
-  if(busy)return;
-  const authObj=window.auth;
-  if(!window.currentUser||!authObj?.signOut)return;
-  busy=true;
-  const btn=$('aaProfileLogout');
-  if(btn){btn.disabled=true;btn.setAttribute('aria-busy','true');}
-  try{
-    /* Keep profileState intact until Firebase confirms sign-out.
-       This prevents the Back button from losing its return context if sign-out fails. */
-    await authObj.signOut();
-    clearAfterSuccessfulLogout();
-  }catch(err){
-    console.error('profile logout v9',err);
-    try{showCustomAlert?.('خطأ','تعذر تسجيل الخروج حاليًا. حاول مرة أخرى.');}catch(_){ }
-    if(btn){btn.disabled=false;btn.removeAttribute('aria-busy');}
-  }finally{
-    busy=false;
-  }
-}
-document.addEventListener('click',function(e){
-  const btn=e.target?.closest?.('#aaProfileLogout');
-  if(!btn)return;
-  handleProfileLogout(e);
-},true);
-window.__aaHandleChatLightboxProfileLogoutV9=handleProfileLogout;
-})();
-</script>
-
-</body>
+</script>\n</body>
 </html>
