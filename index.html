@@ -2420,6 +2420,55 @@ body.aa-chat-fullscreen-open.aa-v9-modal-locked::before{
 }
 </style>
 
+
+<style id="chat-lightbox-profile-over-v4">
+body.aa-chat-profile-over-lightbox #chatImageLightbox{z-index:2147483645!important;}
+body.aa-chat-profile-over-lightbox #aaRebuiltProfilePage{
+    position:fixed!important;
+    inset:0!important;
+    z-index:2147483647!important;
+    display:block!important;
+    visibility:visible!important;
+    opacity:1!important;
+    pointer-events:auto!important;
+    background:var(--bg-primary)!important;
+    overflow:auto!important;
+}
+body.aa-chat-profile-over-lightbox #aaRebuiltProfilePage::before{
+    content:"";
+    position:fixed;
+    inset:0;
+    z-index:-1;
+    background:color-mix(in srgb,var(--bg-primary) 96%,#000 4%);
+}
+body.aa-chat-profile-over-lightbox #aaRebuiltProfilePage .aa-profile-shell{
+    animation:aaChatProfileFromLightbox .22s cubic-bezier(.18,.86,.24,1) both;
+}
+@keyframes aaChatProfileFromLightbox{from{opacity:0;transform:translateY(-8px) scale(.988)}to{opacity:1;transform:none}}
+#chatImageLightbox.is-opening .chat-image-lightbox-topbar,
+#chatImageLightbox.is-opening .chat-image-lightbox-nav,
+#chatImageLightbox.is-opening .chat-image-lightbox-counter,
+#chatImageLightbox.is-opening .chat-image-lightbox-caption,
+#chatImageLightbox.is-opening .chat-image-lightbox-thumbs-bar,
+#chatImageLightbox.is-opening .chat-image-lightbox-tool,
+#chatImageLightbox.is-opening .chat-image-lightbox-close{
+    animation:aaChatLightboxChromeIn .24s cubic-bezier(.18,.86,.24,1) both;
+}
+#chatImageLightbox.is-opening .chat-image-lightbox-topbar{animation-delay:.035s;}
+#chatImageLightbox.is-opening .chat-image-lightbox-counter{animation-delay:.045s;}
+#chatImageLightbox.is-opening .chat-image-lightbox-nav{animation-delay:.055s;}
+#chatImageLightbox.is-opening .chat-image-lightbox-caption{animation-delay:.085s;}
+#chatImageLightbox.is-opening .chat-image-lightbox-thumbs-bar{animation-delay:.105s;}
+#chatImageLightbox.is-opening .chat-image-lightbox-tool,
+#chatImageLightbox.is-opening .chat-image-lightbox-close{animation-delay:.065s;}
+@keyframes aaChatLightboxChromeIn{
+    from{opacity:0;transform:translate3d(0,10px,0) scale(.96);}
+    to{opacity:1;transform:translate3d(0,0,0) scale(1);}
+}
+#chatImageLightbox.is-opening .chat-image-lightbox-nav.prev{transform:translateY(-50%) scale(.96);}
+#chatImageLightbox.is-opening .chat-image-lightbox-nav.next{transform:translateY(-50%) scale(.96);}
+</style>
+
 </head>
 <body class="light-mode">
     
@@ -4615,7 +4664,7 @@ body.aa-chat-fullscreen-open.aa-v9-modal-locked::before{
                 return docs.flatMap(d=>{const m=d.data()||{},items=chatLightboxMediaFromMessage(m,d.id),profile=cache[String(m.userId||'')];items.forEach(x=>{x.userName=profile?.name||x.userName||'مستخدم';x.photo=profile?.photo||'';x.mine=m.userId===currentUser?.uid;});return items;});
             }catch(err){console.warn('chat lightbox media load',err);return []}
         }
-        function renderChatLightbox(){
+        function renderChatLightbox(sourceRect=null){
             const viewer=document.getElementById('chatImageLightbox'),content=viewer?.querySelector('.chat-image-lightbox-content');if(!viewer||!content||!chatLightboxState.items.length)return;
             const n=chatLightboxState.items.length;cancelAnimationFrame(chatLightboxState.zoomRaf||0);chatLightboxState.zoomRaf=0;chatLightboxState.index=((chatLightboxState.index%n)+n)%n;document.getElementById('chatImageLightbox')?.classList.remove('is-zoomed');chatLightboxState.scale=1;chatLightboxState.x=0;chatLightboxState.y=0;chatLightboxState.dragging=false;chatLightboxState.moved=false;chatLightboxState.pointers.clear();
             const item=chatLightboxCurrent(),i=chatLightboxState.index,caption=item?.caption||'',name=item?.mine?'أنت':(item?.userName||'مستخدم'),photo=item?.photo||'';
@@ -4672,20 +4721,59 @@ body.aa-chat-fullscreen-open.aa-v9-modal-locked::before{
             stage.addEventListener('pointermove',e=>{if(!chatLightboxState.pointers.has(e.pointerId))return;chatLightboxState.pointers.set(e.pointerId,e);if(mediaEl?.tagName==='IMG'&&chatLightboxState.pointers.size===2){const pts=[...chatLightboxState.pointers.values()],d=chatLightboxDistance(pts[0],pts[1]);if(chatLightboxState.startDistance)chatLightboxScale(chatLightboxState.startScale*(d/chatLightboxState.startDistance));chatLightboxState.moved=true;return;}if(!chatLightboxState.dragging)return;const dx=e.clientX-chatLightboxState.startX,dy=e.clientY-chatLightboxState.startY;if(Math.hypot(dx,dy)>7)chatLightboxState.moved=true;if(mediaEl?.tagName==='IMG'&&(e.pointerType==='mouse'||chatLightboxState.scale>1)){chatLightboxState.x+=e.clientX-chatLightboxState.lastX;chatLightboxState.y+=e.clientY-chatLightboxState.lastY;chatLightboxClamp();}else if(e.pointerType==='touch'&&mediaEl?.tagName==='IMG'){chatLightboxState.x=dx;chatLightboxState.y=dy;chatLightboxApply();}chatLightboxState.lastX=e.clientX;chatLightboxState.lastY=e.clientY;});
             const end=e=>{const hadTwo=chatLightboxState.pointers.size===2;chatLightboxState.pointers.delete(e.pointerId);if(hadTwo)return;if(!chatLightboxState.dragging)return;const dx=e.clientX-chatLightboxState.startX,dy=e.clientY-chatLightboxState.startY,duration=Date.now()-chatLightboxState.startTime,wasTouch=chatLightboxState.touchTapTarget,moved=chatLightboxState.moved;chatLightboxState.dragging=false;if(wasTouch&&!moved&&duration<280&&e.target?.closest?.('video')===null){const c=document.querySelector('#chatImageLightbox .chat-image-lightbox-caption');chatLightboxCaption(c?.classList.contains('is-hidden')===true);chatLightboxState.x=0;chatLightboxState.y=0;chatLightboxApply();return;}if(wasTouch&&chatLightboxState.scale===1&&Math.abs(dy)>72&&Math.abs(dy)>Math.abs(dx)*1.15&&duration<900){window.closeChatImageLightbox();return;}if(wasTouch&&chatLightboxState.scale===1&&Math.abs(dx)>64&&Math.abs(dx)>Math.abs(dy)*1.2&&duration<900){chatLightboxState.x=0;chatLightboxState.y=0;show(dx<0?1:-1);return;}if(chatLightboxState.scale===1){chatLightboxState.x=0;chatLightboxState.y=0;chatLightboxApply();}else chatLightboxClamp();};
             stage.addEventListener('pointerup',end);stage.addEventListener('pointercancel',end);stage.addEventListener('pointerleave',e=>{if(e.pointerType==='mouse'&&e.buttons===0)end(e);});stage.addEventListener('dblclick',e=>{if(mediaEl?.tagName!=='IMG')return;if(e.target.closest?.('.chat-image-lightbox-nav'))return;chatLightboxScale(chatLightboxState.scale===1?2.25:1,e.clientX,e.clientY);});
-            requestAnimationFrame(()=>content.querySelector(`.chat-image-lightbox-thumb[data-index="${i}"]`)?.scrollIntoView({behavior:'smooth',block:'nearest',inline:'center'}));
+            requestAnimationFrame(()=>content.querySelector(`.chat-image-lightbox-thumb[data-index="${i}"]`)?.scrollIntoView({behavior:'auto',block:'nearest',inline:'center'}));
+            const openingRect=sourceRect;
+            if(openingRect&&mediaEl){
+                requestAnimationFrame(()=>{
+                    const targetRect=mediaEl.getBoundingClientRect();
+                    const sx=openingRect.width/Math.max(1,targetRect.width), sy=openingRect.height/Math.max(1,targetRect.height);
+                    const scale=Math.max(.08,Math.min(1.05,Math.min(sx,sy)));
+                    const dx=(openingRect.left+openingRect.width/2)-(targetRect.left+targetRect.width/2);
+                    const dy=(openingRect.top+openingRect.height/2)-(targetRect.top+targetRect.height/2);
+                    mediaEl.style.transformOrigin='center center';
+                    mediaEl.style.transition='none';
+                    mediaEl.style.transform=`translate3d(${dx}px,${dy}px,0) scale(${scale})`;
+                    mediaEl.style.opacity='0.92';
+                    requestAnimationFrame(()=>{
+                        mediaEl.style.transition='transform .23s cubic-bezier(.18,.86,.24,1),opacity .18s ease';
+                        mediaEl.style.transform='translate3d(0,0,0) scale(1)';
+                        mediaEl.style.opacity='1';
+                        setTimeout(()=>{try{mediaEl.style.removeProperty('transition');}catch(_){ }},250);
+                    });
+                });
+            }
             chatLightboxSyncZoomUI();
             chatLightboxCaption(!!caption);
         }
         window.openChatImageLightbox=async function(urls,caption='',startIndex=0,meta=null){
             const viewer=document.getElementById('chatImageLightbox');if(!viewer)return;
             let items=[];
-            if(Array.isArray(urls)&&urls.length){items=urls.filter(Boolean).map(u=>({url:u,type:'image',messageId:meta?.messageId||'',userId:meta?.userId||'',userName:meta?.userName||'مستخدم',caption:caption||'',createdAt:meta?.createdAt,photo:meta?.photo||'',mine:meta?.mine===true}));}
-            else if(meta?.courseId)items=await chatLightboxLoadConversation(meta.courseId);
+            if(Array.isArray(urls)&&urls.length){
+                items=urls.filter(Boolean).map(u=>({url:u,type:'image',messageId:meta?.messageId||'',userId:meta?.userId||'',userName:meta?.userName||'مستخدم',caption:caption||'',createdAt:meta?.createdAt,photo:meta?.photo||'',mine:meta?.mine===true}));
+            }else if(meta?.courseId){
+                // Fallback for callers that do not already know the media list.
+                items=await chatLightboxLoadConversation(meta.courseId);
+            }
             if(!items.length)return;
             const targetUrl=Array.isArray(urls)&&urls[startIndex]?urls[startIndex]:'';
             const found=targetUrl?items.findIndex(x=>x.url===targetUrl&&(!meta?.messageId||x.messageId===meta.messageId)): -1;
-            chatLightboxState.items=items;chatLightboxState.index=found>=0?found:Math.max(0,Math.min(Number(startIndex)||0,items.length-1));viewer.classList.add('active');viewer.setAttribute('aria-hidden','false');document.body.classList.add('aa-chat-lightbox-open');renderChatLightbox();
+            chatLightboxState.items=items;
+            chatLightboxState.index=found>=0?found:Math.max(0,Math.min(Number(startIndex)||0,items.length-1));
+            viewer.classList.add('active','is-opening');viewer.setAttribute('aria-hidden','false');document.body.classList.add('aa-chat-lightbox-open');
+            renderChatLightbox(meta?.sourceRect||null);
             if(!chatLightboxBound){chatLightboxBound=true;viewer.addEventListener('click',e=>{if(e.target===viewer)window.closeChatImageLightbox();});}
+            // Enrich the current view in the background. The viewer is already visible, so there is no perceived wait.
+            if(meta?.courseId){
+                chatLightboxLoadConversation(meta.courseId).then(allItems=>{
+                    if(!allItems.length||!viewer.classList.contains('active'))return;
+                    const current=chatLightboxCurrent();
+                    const currentKey=current?`${current.messageId}|${current.url}`:'';
+                    chatLightboxState.items=allItems;
+                    const enrichedIndex=Math.max(0,allItems.findIndex(x=>`${x.messageId}|${x.url}`===currentKey));
+                    chatLightboxState.index=enrichedIndex>=0?enrichedIndex:Math.min(chatLightboxState.index,allItems.length-1);
+                    renderChatLightbox(null);
+                }).catch(()=>{});
+            }
         };
         window.__aaChatLightboxGotoMessage=function(msgId){
             if(!msgId)return;window.closeChatImageLightbox();requestAnimationFrame(()=>{
@@ -5089,14 +5177,34 @@ body.aa-chat-fullscreen-open.aa-v9-modal-locked::before{
         let chatSelectedFiles=[];
         let editingChatMessageId=null;
 
-        window.openChatMessageGallery=async function(courseId,msgId,startIndex=0){
+        window.openChatMessageGallery=async function(courseId,msgId,startIndex=0,clickedEl=null){
+            const sourceRect=clickedEl?.getBoundingClientRect?.()||null;
+            const quickUrl=clickedEl?.currentSrc||clickedEl?.src||'';
+            /* Open immediately from the URL already painted in the chat. Do not wait for Firestore. */
+            if(quickUrl){
+                window.openChatImageLightbox([quickUrl],'',0,{courseId,messageId:msgId,sourceRect});
+            }
             const snap=await db.collection('courses').doc(courseId).collection('chat').doc(msgId).get(); if(!snap.exists)return;
             const m=snap.data()||{},images=Array.isArray(m.imageUrls)?m.imageUrls:(m.imageUrl?[m.imageUrl]:[]);
+            if(!images.length)return;
             const caption=String(m.imageCaption||m.caption||(images.length?m.message:'')).trim();
             const profile=window.__chatProfileCache?.[String(m.userId||'')];
-            await openChatImageLightbox(null,caption,0,{courseId,messageId:msgId,userId:m.userId,userName:m.userId===currentUser?.uid?'أنت':(profile?.name||m.userName||'مستخدم'),photo:profile?.photo||'',createdAt:m.createdAt,mine:m.userId===currentUser?.uid});
-            if(Array.isArray(window.__chatLightboxLastUrls)&&window.__chatLightboxLastUrls.length){}
-            if(images.length){const target=images[startIndex]||images[0];const idx=chatLightboxState.items.findIndex(x=>x.url===target&&x.messageId===String(msgId));if(idx>=0){chatLightboxState.index=idx;renderChatLightbox();}}
+            const meta={courseId,messageId:msgId,userId:m.userId,userName:m.userId===currentUser?.uid?'أنت':(profile?.name||m.userName||'مستخدم'),photo:profile?.photo||'',createdAt:m.createdAt,mine:m.userId===currentUser?.uid,sourceRect};
+            const current=chatLightboxState.items?.find?.(x=>x.messageId===String(msgId));
+            if(current){
+                current.userId=m.userId||current.userId;current.userName=meta.userName;current.photo=meta.photo;current.caption=caption;current.createdAt=m.createdAt;current.mine=meta.mine;
+                if(document.getElementById('chatImageLightbox')?.classList.contains('active')){
+                    const nameEl=document.querySelector('#chatImageLightbox .chat-image-lightbox-sender-copy strong');
+                    const dateEl=document.querySelector('#chatImageLightbox .chat-image-lightbox-sender-copy span');
+                    const capEl=document.querySelector('#chatImageLightbox .chat-image-lightbox-caption');
+                    const avatarEl=document.querySelector('#chatImageLightbox .chat-image-lightbox-avatar');
+                    if(nameEl)nameEl.textContent=meta.userName||'مستخدم';
+                    if(dateEl)dateEl.textContent=chatLightboxFormatDate(m.createdAt);
+                    if(capEl){capEl.textContent=caption;capEl.classList.toggle('is-hidden',!caption);}
+                    if(avatarEl&&meta.photo)avatarEl.innerHTML=`<img src="${escapeHtml(meta.photo)}" alt="">`;
+                }
+            }
+            /* The background conversation loader will replace the temporary one-item state with the full media set. */
         };
         window.editChatMessage=async function(courseId,msgId){
             if(!currentUser)return triggerAuth(); const snap=await db.collection('courses').doc(courseId).collection('chat').doc(msgId).get(); if(!snap.exists)return;
@@ -16857,7 +16965,7 @@ body.light-mode #courseChatPage .chat-msg.received{
             const messageText=String(m.message||'').trim();
             // New messages store image text in imageCaption/caption; legacy image messages stored it in message.
             const imageCaption=String(m.imageCaption||m.caption||(images.length?messageText:'')).trim();
-            const gallery=(!deleted&&images.length)?`<div class="message-gallery" data-image-count="${images.length}">${images.slice(0,4).map((u,i)=>`<figure class="chat-media-item"><div class="chat-media-frame"><img src="${safeEscape(u)}" alt="صورة" loading="lazy" decoding="async" onclick="openChatMessageGallery('${safeEscape(courseId)}','${safeEscape(doc.id)}',${i})">${images.length>4&&i===3?`<span class="chat-media-more">+${images.length-4}</span>`:''}</div></figure>`).join('')}</div>`:'';
+            const gallery=(!deleted&&images.length)?`<div class="message-gallery" data-image-count="${images.length}">${images.slice(0,4).map((u,i)=>`<figure class="chat-media-item"><div class="chat-media-frame"><img src="${safeEscape(u)}" alt="صورة" loading="lazy" decoding="async" onclick="openChatMessageGallery('${safeEscape(courseId)}','${safeEscape(doc.id)}',${i},this)">${images.length>4&&i===3?`<span class="chat-media-more">+${images.length-4}</span>`:''}</div></figure>`).join('')}</div>`:'';
             const captionHtml=(!deleted&&images.length&&imageCaption)?`<div class="chat-image-caption">${safeEscape(imageCaption)}</div>`:'';
             let body='';
             if(deleted&&!isAdmin){
@@ -18436,6 +18544,29 @@ body.aa-chat-profile-over-lightbox #aaRebuiltProfilePage .aa-profile-hero{
       document.body.classList.remove('aa-chat-profile-over-lightbox');
       return originalClose.apply(this,arguments);
     };
+  }
+})();
+</script>
+
+
+<script id="chat-lightbox-open-finish-v4">
+(function(){
+  'use strict';
+  if(window.__aaChatLightboxOpenFinishV4)return;
+  window.__aaChatLightboxOpenFinishV4=true;
+  const originalOpen=window.openChatImageLightbox;
+  if(typeof originalOpen==='function'&&!originalOpen.__aaOpenFinishV4){
+    const wrapped=async function(){
+      const r=await originalOpen.apply(this,arguments);
+      requestAnimationFrame(()=>{
+        const viewer=document.getElementById('chatImageLightbox');
+        if(viewer){setTimeout(()=>viewer.classList.remove('is-opening'),310);}
+      });
+      return r;
+    };
+    wrapped.__aaOpenFinishV4=true;
+    wrapped.__original=originalOpen;
+    window.openChatImageLightbox=wrapped;
   }
 })();
 </script>
