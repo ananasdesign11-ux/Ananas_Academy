@@ -18627,5 +18627,155 @@ body.aa-chat-profile-over-lightbox #aaRebuiltProfilePage .aa-profile-hero{
   window.aaOpenProfile=wrapped;
 })();
 </script>
+
+
+<!-- ===== FINAL CHAT LIGHTBOX PROFILE + LOGOUT STATE GUARD ===== -->
+<style id="chat-lightbox-profile-logout-v8">
+body.aa-chat-profile-over-lightbox #aaRebuiltProfilePage{
+  z-index:2147483647!important;
+}
+</style>
+<script id="chat-lightbox-profile-logout-v8">
+(function(){
+'use strict';
+if(window.__aaChatLightboxProfileLogoutV8)return;
+window.__aaChatLightboxProfileLogoutV8=true;
+const $=id=>document.getElementById(id);
+
+/* Return from a profile opened by the Lightbox without rebuilding the chat page. */
+function returnFromLightboxProfile(){
+  const state=window.profileState||{};
+  if(state.source?.kind!=='chat-lightbox')return false;
+  const profile=$('aaRebuiltProfilePage');
+  if(profile){
+    profile.classList.remove('active');
+    profile.setAttribute('aria-hidden','true');
+    profile.style.removeProperty('position');
+    profile.style.removeProperty('inset');
+    profile.style.removeProperty('z-index');
+    profile.style.removeProperty('display');
+    profile.style.removeProperty('padding');
+  }
+  document.body.classList.remove('aa-chat-profile-over-lightbox');
+  document.body.classList.remove('aa-profile-open');
+  const viewer=$('chatImageLightbox');
+  if(viewer){
+    viewer.classList.add('active');
+    viewer.setAttribute('aria-hidden','false');
+    viewer.style.removeProperty('display');
+  }
+  if(typeof window.__aaChatLightboxRestoreFocus==='function'){
+    try{window.__aaChatLightboxRestoreFocus();}catch(_){ }
+  }
+  window.profileState={...state,busy:false};
+  return true;
+}
+window.__aaReturnFromChatLightboxProfile=returnFromLightboxProfile;
+
+/* Capture the Back button before generic profile/admin listeners can consume it. */
+document.addEventListener('click',function(e){
+  const btn=e.target?.closest?.('#aaProfileBack');
+  if(!btn)return;
+  if((window.profileState||{}).source?.kind!=='chat-lightbox')return;
+  e.preventDefault();
+  e.stopPropagation();
+  if(typeof e.stopImmediatePropagation==='function')e.stopImmediatePropagation();
+  returnFromLightboxProfile();
+},true);
+
+/* One authoritative cleanup used by every sign-out path. */
+function closeEverythingForLogout(){
+  try{window.__aaResetChatForAccount?.();}catch(_){ }
+  /* Close profile-over-lightbox first, then the lightbox itself. */
+  document.body.classList.remove('aa-chat-profile-over-lightbox','aa-profile-open','aa-chat-lightbox-open','aa-chat-image-modal-open');
+  document.documentElement.classList.remove('aa-chat-lightbox-open','aa-profile-open');
+
+  const classSelectors=[
+    '.edit-modal.active','.auth-popup.active','.custom-alert-modal.active',
+    '.gallery-viewer.active','.platform-image-viewer.active','.file-viewer-overlay.active',
+    '.ananas-modal-overlay.active','.profile-self-modal.active',
+    '.course-access-modal.active','#quizOverlay.active','#courseFileViewer.active',
+    '#enrollTermsPreviewModal.active','#courseAccessSuspendModal.active',
+    '#manageCodesModal.active','#codeDetailModalV12.active','#codeExpiryEditModalV12.active',
+    '#ananasQuizBuilderV2.active','#chatLockModal.active','#ananasProfileEditor.active',
+    '#aaCoursePortfolioModal.active','#aaChatImagePreviewModal.open'
+  ];
+  document.querySelectorAll(classSelectors.join(',')).forEach(el=>{
+    el.classList.remove('active','open');
+    if(el.id==='aaChatImagePreviewModal')el.setAttribute('aria-hidden','true');
+  });
+
+  const directIds=[
+    'aaRebuiltProfilePage','ananasV10ProfilePage','ananasPrivateProfileOverlay',
+    'ananasCanonicalProfilePage','userProfilePage','chatImageLightbox',
+    'platformImageViewer','platformGalleryViewer','aaChatImagePreviewModal'
+  ];
+  directIds.forEach(id=>{
+    const el=$(id);if(!el)return;
+    el.classList.remove('active','open','is-zoomed','is-opening');
+    el.setAttribute('aria-hidden','true');
+    el.style.removeProperty('display');
+  });
+
+  /* Stop transient media and clear Lightbox state without touching stored chat data. */
+  try{window.closeChatImageLightbox?.();}catch(_){ }
+  try{window.closePlatformImageViewer?.();}catch(_){ }
+  try{window.closePlatformGalleryViewer?.();}catch(_){ }
+  try{window.__aaChatLightboxRestoreFocus=null;}catch(_){ }
+
+  try{
+    if(window.profileState){
+      window.profileState.uid=null;
+      window.profileState.isSelf=false;
+      window.profileState.source=null;
+      window.profileState.returnPoint=null;
+      window.profileState.busy=false;
+    }
+    window.__aaViewedProfileUid='';
+  }catch(_){ }
+
+  /* Disable any scheduled profile/lightbox restoration from the old route state. */
+  try{
+    localStorage.removeItem('ananas_last_course_route');
+    localStorage.removeItem('lastCourseRoute');
+    localStorage.removeItem('activeCourseRoute');
+  }catch(_){ }
+}
+window.__aaCloseEverythingForLogout=closeEverythingForLogout;
+
+/* Wrap the final auth.signOut so cleanup happens BEFORE Firebase changes auth state. */
+if(window.auth?.signOut && !window.auth.signOut.__aaLogoutFinalV8){
+  const original=window.auth.signOut.bind(window.auth);
+  const wrapped=async function(){
+    closeEverythingForLogout();
+    return original();
+  };
+  wrapped.__aaLogoutFinalV8=true;
+  wrapped.__original=original;
+  window.auth.signOut=wrapped;
+}
+
+/* Also guard named logout entry points when they exist. */
+['signOutUser','logoutUser','handleLogout'].forEach(name=>{
+  const fn=window[name];
+  if(typeof fn!=='function'||fn.__aaLogoutFinalV8)return;
+  const wrapped=async function(){
+    closeEverythingForLogout();
+    return fn.apply(this,arguments);
+  };
+  wrapped.__aaLogoutFinalV8=true;
+  wrapped.__original=fn;
+  window[name]=wrapped;
+});
+
+/* Auth-state logout is the final safety net, even when another code path calls Firebase directly. */
+if(window.auth?.onAuthStateChanged){
+  window.auth.onAuthStateChanged(function(user){
+    if(!user)closeEverythingForLogout();
+  });
+}
+})();
+</script>
+
 </body>
 </html>
