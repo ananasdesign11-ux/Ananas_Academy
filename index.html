@@ -2799,8 +2799,8 @@ to{opacity:1;transform:none}}
                                 </button>
                                 <button id="chatImageBtnPage" class="btn-upload chat-composer-btn" type="button" aria-label="إرفاق صورة">
                                     <i class="fas fa-image" aria-hidden="true"></i>
-                                    <input type="file" id="fullChatPageFileInput" accept="image/*" multiple>
                                 </button>
+                                <input type="file" id="fullChatPageFileInput" accept="image/*" multiple>
                                 <div class="chat-input-wrap">
                                     <textarea id="fullChatPageInput" rows="1" placeholder="اكتب رسالتك هنا..." aria-label="نص الرسالة"></textarea>
                                 </div>
@@ -3371,10 +3371,20 @@ to{opacity:1;transform:none}}
                     method: 'POST',
                     body: formData
                 });
-                if (!response.ok) throw new Error('فشل رفع الصورة');
+                if (!response.ok) {
+                    let detail = '';
+                    try {
+                        const errorData = await response.json();
+                        detail = errorData?.error?.message || '';
+                    } catch (_) {}
+                    throw new Error(detail || `فشل رفع الصورة (${response.status})`);
+                }
                 const data = await response.json();
-                return data.secure_url;
-            } catch (error) { console.error('خطأ في الرفع:', error); alert('حدث خطأ أثناء رفع الصورة: ' + error.message); return null; }
+                return data.secure_url || null;
+            } catch (error) {
+                console.error('خطأ في الرفع:', error);
+                return null;
+            }
         }
 
         // ================================================================
@@ -17414,7 +17424,7 @@ body.light-mode #courseChatPage .chat-msg.received .reply-block .rt{
 #courseChatPage #fullChatPageInput::-webkit-scrollbar{display:none!important;width:0!important;height:0!important;}
 #courseChatPage #chatImageBtnPage{overflow:visible!important; cursor:pointer!important;}
 #courseChatPage #chatImageBtnPage i{position:relative!important;z-index:5!important;pointer-events:none!important;}
-#courseChatPage #chatImageBtnPage #fullChatPageFileInput{
+#courseChatPage #fullChatPageFileInput{
   position:absolute!important; top:50%!important; left:50%!important; width:1px!important; height:1px!important;
   min-width:1px!important; min-height:1px!important; margin:0!important; padding:0!important;
   transform:translate(-50%,-50%)!important; opacity:0!important; pointer-events:none!important; cursor:pointer!important; z-index:-1!important;
@@ -17586,7 +17596,7 @@ function centerThumb(index,behavior='smooth'){const b=thumbs?.querySelector(`[da
 function snapThumbsToIndex(){centerThumb(currentIndex,'smooth');}
 function syncIndexFromThumbs(){if(!files.length||!thumbs)return;const center=thumbs.scrollLeft+thumbs.clientWidth/2;let best=0,bestDist=Infinity;[...thumbs.children].forEach((b,i)=>{const c=b.offsetLeft+b.offsetWidth/2,d=Math.abs(c-center);if(d<bestDist){bestDist=d;best=i;}});if(best!==currentIndex){currentIndex=best;updateMainImage(false);}}
 function showIndex(index,focusThumb=true){if(!files.length)return;currentIndex=(index+files.length)%files.length;updateMainImage(true);if(focusThumb)centerThumb(currentIndex,'smooth');}
-function updateMainImage(withLoading=true){const file=files[currentIndex],url=urls[currentIndex];if(!file||!url)return;setLoading(!!withLoading);stageImage.src=url;stageImage.alt=file.name||'معاينة الصورة';stageImage.onload=()=>setLoading(false);stageImage.onerror=()=>setLoading(false);updateNav();[...thumbs?.children||[]].forEach((b,i)=>b.classList.toggle('active',i===currentIndex));}
+function updateMainImage(withLoading=true){const file=files[currentIndex],url=urls[currentIndex];if(!file||!url)return;setLoading(!!withLoading);stageImage.alt=file.name||'معاينة الصورة';stageImage.onload=()=>setLoading(false);stageImage.onerror=()=>setLoading(false);stageImage.src='';requestAnimationFrame(()=>{stageImage.src=url;});updateNav();[...thumbs?.children||[]].forEach((b,i)=>b.classList.toggle('active',i===currentIndex));}
 function openModal(list){
  ensureModal(); files=[...list]; cleanupUrls(); urls=files.map(f=>URL.createObjectURL(f));currentIndex=0;renderThumbs();captionEl.value='';modal.classList.add('open');modal.setAttribute('aria-hidden','false');document.body.classList.add('aa-chat-image-modal-open');showIndex(0,false);requestAnimationFrame(()=>{centerThumb(0,'auto');captionEl?.focus();});
 }
@@ -17600,10 +17610,19 @@ function addImages(list){
 }
 function loadImage(file){return new Promise((resolve,reject)=>{const src=URL.createObjectURL(file),img=new Image();img.onload=()=>{URL.revokeObjectURL(src);resolve(img);};img.onerror=()=>{URL.revokeObjectURL(src);reject(new Error('image-load'));};img.src=src;});}
 async function processImage(file){
- const img=await loadImage(file),w=img.naturalWidth||img.width,h=img.naturalHeight||img.height;const ratio=w/Math.max(1,h);let targetRatio=ratio;
- if(ratio<.62)targetRatio=.75;else if(ratio>1.9)targetRatio=16/9;
- let sx=0,sy=0,sw=w,sh=h;if(Math.abs(targetRatio-ratio)>.02){if(ratio>targetRatio){sw=Math.round(h*targetRatio);sx=Math.round((w-sw)/2);}else{sh=Math.round(w/targetRatio);sy=Math.round((h-sh)/2);}}
- const maxSide=1800,scale=Math.min(1,maxSide/Math.max(sw,sh)),cw=Math.max(1,Math.round(sw*scale)),ch=Math.max(1,Math.round(sh*scale));const canvas=document.createElement('canvas');canvas.width=cw;canvas.height=ch;const ctx=canvas.getContext('2d',{alpha:false});ctx.drawImage(img,sx,sy,sw,sh,0,0,cw,ch);const blob=await new Promise((resolve,reject)=>canvas.toBlob(b=>b?resolve(b):reject(new Error('image-encode')),'image/jpeg',.9));return new File([blob],(file.name||'image').replace(/\.[^.]+$/,'')+'.jpg',{type:'image/jpeg',lastModified:Date.now()});
+ try{
+  const img=await loadImage(file),w=img.naturalWidth||img.width,h=img.naturalHeight||img.height;const ratio=w/Math.max(1,h);let targetRatio=ratio;
+  if(ratio<.62)targetRatio=.75;else if(ratio>1.9)targetRatio=16/9;
+  let sx=0,sy=0,sw=w,sh=h;if(Math.abs(targetRatio-ratio)>.02){if(ratio>targetRatio){sw=Math.round(h*targetRatio);sx=Math.round((w-sw)/2);}else{sh=Math.round(w/targetRatio);sy=Math.round((h-sh)/2);}}
+  const maxSide=1800,scale=Math.min(1,maxSide/Math.max(sw,sh)),cw=Math.max(1,Math.round(sw*scale)),ch=Math.max(1,Math.round(sh*scale));const canvas=document.createElement('canvas');canvas.width=cw;canvas.height=ch;const ctx=canvas.getContext('2d',{alpha:false});
+  if(!ctx)throw new Error('canvas-context');
+  ctx.drawImage(img,sx,sy,sw,sh,0,0,cw,ch);
+  const blob=await new Promise((resolve,reject)=>canvas.toBlob(b=>b?resolve(b):reject(new Error('image-encode')),'image/jpeg',.9));
+  return new File([blob],(file.name||'image').replace(/\.[^.]+$/,'')+'.jpg',{type:'image/jpeg',lastModified:Date.now()});
+ }catch(error){
+  console.warn('تعذر تجهيز الصورة محلياً، سيتم رفع الملف الأصلي:',error);
+  return file;
+ }
 }
 async function sendImages(){
  if(sending||!files.length||!activeCourseId||!currentUser)return;if(currentChatLock?.locked&&!isAdmin)return showCustomAlert('الدردشة مقفلة',currentChatLock.reason||'الدردشة مقفلة حالياً.');sending=true;sendBtn.disabled=true;closeBtn.disabled=true;captionEl.disabled=true;prevBtn.disabled=true;nextBtn.disabled=true;emojiBtn.disabled=true;setLoading(true);
