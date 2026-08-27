@@ -18777,5 +18777,64 @@ if(window.auth?.onAuthStateChanged){
 })();
 </script>
 
+
+<!-- ===== FINAL PROFILE-LOGOUT FIX V9 ===== -->
+<script id="chat-lightbox-profile-logout-v9">
+(function(){
+'use strict';
+if(window.__aaChatLightboxProfileLogoutV9)return;
+window.__aaChatLightboxProfileLogoutV9=true;
+let busy=false;
+const $=id=>document.getElementById(id);
+function clearAfterSuccessfulLogout(){
+  try{window.__aaCloseEverythingForLogout?.();}catch(_){ }
+  try{document.body.classList.remove('aa-chat-profile-over-lightbox','aa-profile-open','aa-chat-lightbox-open','aa-chat-image-modal-open');}catch(_){ }
+  try{document.documentElement.classList.remove('aa-chat-lightbox-open','aa-profile-open');}catch(_){ }
+  try{
+    if(window.profileState){
+      window.profileState={...window.profileState,uid:null,isSelf:false,source:null,returnPoint:null,busy:false};
+    }
+    window.__aaViewedProfileUid='';
+  }catch(_){ }
+  try{
+    window.activeCourseId=null;
+    window.activeLessonId=null;
+    window.currentCoursePage='courses';
+  }catch(_){ }
+  try{window.mobileNavigate?.('courses');}catch(_){ }
+  try{document.querySelectorAll('.nav-btn,.auth-btn').forEach(x=>x.classList.remove('active'));document.querySelector('#coursesNavBtn')?.classList.add('active');}catch(_){ }
+}
+async function handleProfileLogout(e){
+  e?.preventDefault();
+  e?.stopPropagation?.();
+  e?.stopImmediatePropagation?.();
+  if(busy)return;
+  const authObj=window.auth;
+  if(!window.currentUser||!authObj?.signOut)return;
+  busy=true;
+  const btn=$('aaProfileLogout');
+  if(btn){btn.disabled=true;btn.setAttribute('aria-busy','true');}
+  try{
+    /* Keep profileState intact until Firebase confirms sign-out.
+       This prevents the Back button from losing its return context if sign-out fails. */
+    await authObj.signOut();
+    clearAfterSuccessfulLogout();
+  }catch(err){
+    console.error('profile logout v9',err);
+    try{showCustomAlert?.('خطأ','تعذر تسجيل الخروج حاليًا. حاول مرة أخرى.');}catch(_){ }
+    if(btn){btn.disabled=false;btn.removeAttribute('aria-busy');}
+  }finally{
+    busy=false;
+  }
+}
+document.addEventListener('click',function(e){
+  const btn=e.target?.closest?.('#aaProfileLogout');
+  if(!btn)return;
+  handleProfileLogout(e);
+},true);
+window.__aaHandleChatLightboxProfileLogoutV9=handleProfileLogout;
+})();
+</script>
+
 </body>
 </html>
