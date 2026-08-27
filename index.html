@@ -2001,6 +2001,77 @@ body.aa-chat-fullscreen-open.aa-v9-modal-locked::before{
 #courseChatPage .chat-msg .reply-block{order:0!important;}
 </style>
 
+
+<style id="chat-gallery-orientation-layout-final">
+/* Orientation-aware layout for 1–3 images only. 4+ stays exactly on the existing grid. */
+#courseChatPage .chat-msg .message-gallery[data-image-layout^="single-"]{
+  display:block!important;
+  aspect-ratio:var(--chat-gallery-ratio,1)!important;
+}
+#courseChatPage .chat-msg .message-gallery[data-image-layout^="single-"] .chat-media-item{
+  width:100%!important;height:100%!important;
+}
+#courseChatPage .chat-msg .message-gallery[data-image-layout^="single-"] .chat-media-frame{
+  width:100%!important;height:100%!important;aspect-ratio:var(--chat-gallery-ratio,1)!important;
+}
+
+#courseChatPage .chat-msg .message-gallery[data-image-layout="two-portrait"]{
+  grid-template-columns:repeat(2,minmax(0,1fr))!important;
+  grid-template-rows:1fr!important;
+  aspect-ratio:3/2!important;
+  grid-auto-rows:auto!important;
+}
+#courseChatPage .chat-msg .message-gallery[data-image-layout="two-landscape"]{
+  grid-template-columns:1fr!important;
+  grid-template-rows:repeat(2,minmax(0,1fr))!important;
+  aspect-ratio:2/3!important;
+  grid-auto-rows:auto!important;
+}
+#courseChatPage .chat-msg .message-gallery[data-image-layout="two-mixed"]{
+  grid-template-columns:repeat(2,minmax(0,1fr))!important;
+  grid-template-rows:1fr!important;
+  aspect-ratio:3/2!important;
+  grid-auto-rows:auto!important;
+}
+
+#courseChatPage .chat-msg .message-gallery[data-image-layout="three-first-portrait"]{
+  grid-template-columns:repeat(2,minmax(0,1fr))!important;
+  grid-template-rows:repeat(2,minmax(0,1fr))!important;
+  aspect-ratio:3/2!important;
+  grid-auto-rows:auto!important;
+}
+#courseChatPage .chat-msg .message-gallery[data-image-layout="three-first-portrait"] .chat-media-item:first-child{
+  grid-column:1!important;grid-row:1 / span 2!important;
+}
+#courseChatPage .chat-msg .message-gallery[data-image-layout="three-first-portrait"] .chat-media-item:nth-child(2),
+#courseChatPage .chat-msg .message-gallery[data-image-layout="three-first-portrait"] .chat-media-item:nth-child(3){
+  grid-column:2!important;
+}
+
+#courseChatPage .chat-msg .message-gallery[data-image-layout="three-first-landscape"]{
+  grid-template-columns:repeat(2,minmax(0,1fr))!important;
+  grid-template-rows:repeat(2,minmax(0,1fr))!important;
+  aspect-ratio:8/9!important;
+  grid-auto-rows:auto!important;
+}
+#courseChatPage .chat-msg .message-gallery[data-image-layout="three-first-landscape"] .chat-media-item:first-child{
+  grid-column:1 / -1!important;grid-row:1!important;
+}
+#courseChatPage .chat-msg .message-gallery[data-image-layout="three-first-landscape"] .chat-media-item:nth-child(2),
+#courseChatPage .chat-msg .message-gallery[data-image-layout="three-first-landscape"] .chat-media-item:nth-child(3){
+  grid-row:2!important;
+}
+
+@media(max-width:768px){
+  #courseChatPage .chat-msg .message-gallery[data-image-layout^="single-"]{max-width:272px!important;}
+  #courseChatPage .chat-msg .message-gallery[data-image-layout="two-portrait"]{aspect-ratio:3/2!important;}
+  #courseChatPage .chat-msg .message-gallery[data-image-layout="two-landscape"]{aspect-ratio:2/3!important;}
+  #courseChatPage .chat-msg .message-gallery[data-image-layout="two-mixed"]{aspect-ratio:3/2!important;}
+  #courseChatPage .chat-msg .message-gallery[data-image-layout="three-first-portrait"]{aspect-ratio:3/2!important;}
+  #courseChatPage .chat-msg .message-gallery[data-image-layout="three-first-landscape"]{aspect-ratio:8/9!important;}
+}
+</style>
+
 </head>
 <body class="light-mode">
     
@@ -17696,6 +17767,72 @@ if(nameInput&&!nameInput.dataset.aaNameLimitBound){
     }
   });
 }
+})();
+</script>
+
+
+<script id="chat-gallery-orientation-layout-final-js">
+(function(){
+  'use strict';
+  const root=document.getElementById('courseChatPage');
+  if(!root || root.dataset.chatGalleryOrientationBound==='1') return;
+  root.dataset.chatGalleryOrientationBound='1';
+
+  function kind(img){
+    const w=Number(img?.naturalWidth||0), h=Number(img?.naturalHeight||0);
+    if(!w||!h) return 'unknown';
+    const r=w/h;
+    if(Math.abs(r-1)<0.12) return 'square';
+    return r>1.12 ? 'landscape' : (r<0.89 ? 'portrait' : 'square');
+  }
+
+  function applyGallery(g){
+    if(!g || g.dataset.imageCount==='4' || Number(g.dataset.imageCount||0)>4) return;
+    const imgs=[...g.querySelectorAll('.chat-media-item img')];
+    if(!imgs.length) return;
+    const ready=imgs.every(img=>img.complete && img.naturalWidth && img.naturalHeight);
+    if(!ready) return;
+    const count=imgs.length;
+    const kinds=imgs.map(kind);
+    g.removeAttribute('data-image-layout');
+    if(count===1){
+      let k=kinds[0];
+      if(k==='unknown') return;
+      if(k==='square') k='square';
+      const ratio=Math.min(1.8,Math.max(.56,imgs[0].naturalWidth/imgs[0].naturalHeight));
+      g.dataset.imageLayout='single-'+k;
+      g.style.setProperty('--chat-gallery-ratio',String(ratio));
+    }else if(count===2){
+      if(kinds[0]==='portrait' && kinds[1]==='portrait') g.dataset.imageLayout='two-portrait';
+      else if(kinds[0]==='landscape' && kinds[1]==='landscape') g.dataset.imageLayout='two-landscape';
+      else g.dataset.imageLayout='two-mixed';
+    }else if(count===3){
+      g.dataset.imageLayout=(kinds[0]==='portrait')?'three-first-portrait':'three-first-landscape';
+    }
+  }
+
+  function watchGallery(g){
+    if(!g || g.dataset.orientationBound==='1') return;
+    g.dataset.orientationBound='1';
+    g.querySelectorAll('img').forEach(img=>{
+      if(img.complete && img.naturalWidth) requestAnimationFrame(()=>applyGallery(g));
+      else img.addEventListener('load',()=>applyGallery(g),{once:true,passive:true});
+      img.addEventListener('error',()=>{}, {once:true,passive:true});
+    });
+    requestAnimationFrame(()=>applyGallery(g));
+  }
+
+  root.querySelectorAll('.message-gallery').forEach(watchGallery);
+  const observer=new MutationObserver(mutations=>{
+    for(const m of mutations){
+      m.addedNodes.forEach(node=>{
+        if(node.nodeType!==1) return;
+        if(node.matches?.('.message-gallery')) watchGallery(node);
+        node.querySelectorAll?.('.message-gallery').forEach(watchGallery);
+      });
+    }
+  });
+  observer.observe(root,{subtree:true,childList:true});
 })();
 </script>
 
