@@ -4101,14 +4101,22 @@ to{opacity:1;transform:none}}
         window.openCourse = async function(courseId) {
             // Allow only if user is logged in
             if (!currentUser) { triggerAuth(); return; }
+
+            // Explicitly entering a course from the Courses page always starts at Overview.
+            // The persisted-route restoration is reserved for application/session restore.
+            window.__openingCourseFromCourses = true;
             
             // ===== Skip code for Admin =====
             if (isAdmin) {
-                return await openCourseContent(courseId);
+                try {
+                    return await openCourseContent(courseId);
+                } finally {
+                    window.__openingCourseFromCourses = false;
+                }
             }
 
             const course = coursesData.find(c => c.id === courseId);
-            if (!course) return;
+            if (!course) { window.__openingCourseFromCourses = false; return; }
 
             // ===== Course access suspension check (linked to the CODE used for this enrollment) =====
             const enrollmentRef = db.collection('users').doc(currentUser.uid).collection('enrolledCourses').doc(courseId);
@@ -4335,7 +4343,9 @@ to{opacity:1;transform:none}}
                             await renderCourses();
                             showCustomAlert('تم الاشتراك', t.enrollSuccess || 'تم الاشتراك بنجاح! يمكنك الآن بدء التعلم.');
                             await openCourseContent(courseId);
+                            window.__openingCourseFromCourses = false;
                         } catch (error) {
+                            window.__openingCourseFromCourses = false;
                             showCustomAlert('خطأ', 'حدث خطأ أثناء التحقق من الكود: ' + error.message);
                         }
                     };
@@ -4349,7 +4359,11 @@ to{opacity:1;transform:none}}
             }
 
             // Already enrolled, open content
-            await openCourseContent(courseId);
+            try {
+                await openCourseContent(courseId);
+            } finally {
+                window.__openingCourseFromCourses = false;
+            }
         };
 
         // Helper function to actually open the course content (Overview)
@@ -4805,11 +4819,15 @@ to{opacity:1;transform:none}}
             document.getElementById('courseChatPage').style.display = 'none';
 
             if(page === 'overview') {
-                document.getElementById('courseOverviewContainer').style.display='block';
-                document.getElementById('courseDashboard').style.display='none';
+                const overview = document.getElementById('courseOverviewContainer');
+                const dashboard = document.getElementById('courseDashboard');
+                if (dashboard) { dashboard.classList.remove('active'); dashboard.style.display='none'; }
+                if (overview) { overview.classList.add('active'); overview.style.display='block'; }
             } else if(page === 'dashboard') {
-                document.getElementById('courseOverviewContainer').style.display='none';
-                document.getElementById('courseDashboard').style.display = 'flex';
+                const overview = document.getElementById('courseOverviewContainer');
+                const dashboard = document.getElementById('courseDashboard');
+                if (overview) { overview.classList.remove('active'); overview.style.display='none'; }
+                if (dashboard) { dashboard.classList.add('active'); dashboard.style.display='flex'; }
             } else if(page === 'learning') {
                 document.getElementById('courseLessonsPage').classList.add('active');
                 loadLessonsForCourse(activeCourseId);
@@ -8649,7 +8667,8 @@ to{opacity:1;transform:none}}
   const __origOpenCourseContent=window.openCourseContent||openCourseContent;
   window.openCourseContent=async function(courseId){
     await __origOpenCourseContent(courseId);
-    if(window.__restoringCourseRoute) return;
+    // Do not restore an old in-course route after an explicit course selection.
+    if(window.__openingCourseFromCourses || window.__restoringCourseRoute) return;
     const raw=localStorage.getItem('ananas.lastCourseState'); if(!raw||!currentUser)return;
     let st; try{st=JSON.parse(raw);}catch(e){return;}
     if(st.uid!==currentUser.uid || st.courseId!==courseId || !st.page || st.page==='overview') return;
