@@ -7433,7 +7433,9 @@ body.aa-chat-fullscreen-open.aa-v9-modal-locked::before{
 
         auth.onAuthStateChanged(async (user) => {
             if (user) {
+                const previousUid=String(currentUser?.uid||'');
                 currentUser = user;
+                if(previousUid && previousUid!==String(user.uid)) window.__aaResetChatForAccount?.();
                 updateAuthAccountButton(user, currentUserProfile);
                 
                 try {
@@ -7474,6 +7476,7 @@ body.aa-chat-fullscreen-open.aa-v9-modal-locked::before{
                 setTimeout(restoreLastCourseRoute, 350);
             } else {
                 // ===== LOGOUT LOGIC =====
+                window.__aaResetChatForAccount?.();
                 currentUser = null; currentUserProfile = {}; isAdmin = false;
                 window.__aaViewedProfileUid = '';
                 if (window.profileState) { window.profileState.uid = null; window.profileState.isSelf = false; window.profileState.source = null; window.profileState.returnPoint = null; window.profileState.busy = false; }
@@ -16042,10 +16045,18 @@ body.light-mode #courseChatPage .chat-msg.received{
         const container=$('chatPageMessagesList'); if(!container)return;
         const courseKey=String(courseId||'');
         const sessions=window.__aaChatSessions||(window.__aaChatSessions=new Map());
+        const accountUid=String(currentUser?.uid||'guest');
         let session=sessions.get(courseKey);
+        if(session && session.accountUid!==accountUid){
+            try{session.unsubscribe?.();}catch(_){}
+            if(chatUnsubscribe===session.unsubscribe) chatUnsubscribe=null;
+            sessions.delete(courseKey);
+            session=null;
+        }
         if(!session){
             session={
                 courseId:courseKey,
+                accountUid,
                 unsubscribe:null,
                 initialized:false,
                 hiddenIds:new Set(),
@@ -16270,10 +16281,8 @@ body.light-mode #courseChatPage .chat-msg.received{
                 if(!chatUnreadBoundaryId)chatUnreadBoundaryId=newIds[0];
                 chatUnreadLastId=newIds[newIds.length-1];
                 chatUnread+=newIds.length;
-                ensureUnreadDivider();
             }
             if(changedIds.length)refreshGroupingAround(changedIds);
-            ensureUnreadDivider();
             window.__chatStage23ScheduleUnreadMarker?.();
             return changedIds;
         }
@@ -16316,12 +16325,14 @@ body.light-mode #courseChatPage .chat-msg.received{
                                 session.allDocs=new Map(allDocs.map(d=>[String(d.id),d]));
                                 session.initialized=true;session.lastId=visibleDocs[visibleDocs.length-1]?.id||null;
                             }
+                            window.__chatStage23SyncFromDocs?.(allDocs,courseId);
                             chatInitialized=true;chatLastMessageId=session.lastId;
-                            clearUnreadMessages();
                             requestAnimationFrame(()=>{if(chatUserAtBottom||!firstForSubscription)scrollToBottom('auto');});
                         }else{
                             const wasBottom=chatUserAtBottom;
                             applySnapshotIncrementally(snapshot);
+                            session.allDocs=new Map(allDocs.map(d=>[String(d.id),d]));
+                            window.__chatStage23SyncFromDocs?.(allDocs,courseId);
                             chatLastMessageId=session.lastId;
                             if(wasBottom){requestAnimationFrame(()=>scrollToBottom('auto'));}
                         }
@@ -16752,6 +16763,16 @@ syncHeight();
   function currentOpenChat(){return chatPage.classList.contains('active')||getComputedStyle(chatPage).display!=='none';}
   function formatCount(n){return n>99?'99+':String(Math.max(0,n));}
 
+  window.__aaResetChatForAccount=function(){
+    stopWatcher();
+    try{window.__chatUnreadMarkerRaf&&cancelAnimationFrame(window.__chatUnreadMarkerRaf);}catch(_){}
+    unreadFirstId=null; unreadCount=0; lastStateSignature='';
+    renderFloatingBadge(); renderDashboardBadge(0);
+    chatList.querySelector('.chat-unread-divider')?.remove();
+    chatList.querySelectorAll('.chat-msg').forEach(n=>n.remove());
+    try{window.__aaChatSessions?.clear();}catch(_){}
+  };
+
   function dashboardChatButton(){
     if(!dashboard)return null;
     const btn=dashboard.querySelector('button.dashboard-btn[onclick*="chat"]');
@@ -16824,15 +16845,21 @@ syncHeight();
       target.parentNode.insertBefore(marker,target);
     }
     clearTimeout(observerTimer);
-    observerTimer=setTimeout(()=>{
-      if(!target.isConnected)return;
-      chatList.scrollTo({top:Math.max(0,target.offsetTop-12),behavior:'auto'});
-      const distance=chatList.scrollHeight-chatList.clientHeight-chatList.scrollTop;
-      if(distance>80){
-        try{window.__chatStage23ForceUnreadView?.();}catch(_){}
-      }
-    },30);
+    observerTimer=null;
   }
+
+  window.__chatStage23SyncFromDocs=function(docs,courseId){
+    if(!courseId || !Array.isArray(docs)) return;
+    const baseline=readState(courseId);
+    if(!baseline){ setUnreadState(0,null); return; }
+    const me=String(currentUser?.uid||'guest');
+    const incoming=docs
+      .map(doc=>({doc,ms:tsMs(doc.data()?.createdAt)}))
+      .filter(x=>x.ms>baseline && String(x.doc.data()?.userId||'')!==me)
+      .sort((a,b)=>a.ms-b.ms);
+    setUnreadState(incoming.length,incoming[0]?.doc?.id||null);
+    if(currentOpenChat()) requestAnimationFrame(()=>applyUnreadMarker());
+  };
 
   function startWatcher(courseId){
     if(!courseId||currentOpenChat()||watchedCourseId===courseId)return;
