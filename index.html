@@ -2208,25 +2208,6 @@ body.aa-chat-fullscreen-open.aa-v9-modal-locked::before{
                     </div>
                 </div>
 
-                <!-- ===== CHAT IMAGE SEND PREVIEW ===== -->
-                <div id="chatImageSendModal" class="chat-image-send-modal" aria-hidden="true">
-                    <div class="chat-image-send-backdrop" data-chat-image-close></div>
-                    <section class="chat-image-send-box" role="dialog" aria-modal="true" aria-labelledby="chatImageSendTitle">
-                        <div class="chat-image-send-header">
-                            <h3 id="chatImageSendTitle">معاينة الصورة</h3>
-                            <button type="button" class="chat-image-send-close" data-chat-image-close aria-label="إغلاق">&times;</button>
-                        </div>
-                        <div id="chatImageSendStage" class="chat-image-send-stage"></div>
-                        <div class="chat-image-send-caption-wrap">
-                            <textarea id="chatImageSendCaption" rows="2" placeholder="أضف رسالة مرفقة (اختياري)"></textarea>
-                        </div>
-                        <div class="chat-image-send-actions">
-                            <button type="button" id="chatImageSendCancel">إلغاء</button>
-                            <button type="button" id="chatImageSendConfirm"><i class="fas fa-paper-plane" aria-hidden="true"></i> إرسال</button>
-                        </div>
-                    </section>
-                </div>
-
                 <!-- ===== ORIGINAL LEARNING SPLIT VIEW ===== -->
                 <div class="course-split-body" id="courseLearningView">
                     <!-- MAIN CONTENT AREA (VIDEO + ACTIVE QUIZ) -->
@@ -4428,169 +4409,32 @@ body.aa-chat-fullscreen-open.aa-v9-modal-locked::before{
             });
         }
 
-        let chatImagePreviewObjectUrls=[];
-        let chatImageModalFiles=[];
-        let chatImageModalOpen=false;
-        let chatImageUploadBusy=false;
-
-        function revokeChatImagePreviewUrls(){
-            chatImagePreviewObjectUrls.forEach(u=>{try{URL.revokeObjectURL(u)}catch(_){}});
-            chatImagePreviewObjectUrls=[];
-        }
-
-        function closeChatImageSendModal(clearFiles=true){
-            const modal=document.getElementById('chatImageSendModal');
-            if(!modal)return;
-            chatImageModalOpen=false;
-            chatImageUploadBusy=false;
-            modal.classList.remove('active');
-            modal.setAttribute('aria-hidden','true');
-            revokeChatImagePreviewUrls();
-            const stage=document.getElementById('chatImageSendStage');
-            if(stage)stage.innerHTML='';
-            const cap=document.getElementById('chatImageSendCaption');
-            if(clearFiles){
-                chatImageModalFiles=[];
-                if(cap)cap.value='';
-                const input=document.getElementById('fullChatPageFileInput');
-                if(input)input.value='';
-                chatSelectedFiles=[];
-                renderChatImagePreview();
-            }
-        }
-
-        function openChatImageSendModal(files){
-            const modal=document.getElementById('chatImageSendModal'),stage=document.getElementById('chatImageSendStage'),cap=document.getElementById('chatImageSendCaption');
-            if(!modal||!stage)return;
-            chatImageModalFiles=[...(files||[])];
-            if(!chatImageModalFiles.length)return;
-            chatImageModalOpen=true;
-            modal.classList.add('active');
-            modal.setAttribute('aria-hidden','false');
-            revokeChatImagePreviewUrls();
-            stage.innerHTML='';
-            chatImageModalFiles.forEach((file,index)=>{
-                const url=URL.createObjectURL(file);chatImagePreviewObjectUrls.push(url);
-                const item=document.createElement('div');item.className='chat-image-send-item';
-                item.innerHTML=`<img src="${escapeHtml(url)}" alt="معاينة الصورة"><button type="button" class="chat-image-remove" data-index="${index}" aria-label="إزالة الصورة">&times;</button>`;
-                stage.appendChild(item);
-            });
-            if(cap && !cap.value) cap.value=document.getElementById('fullChatPageInput')?.value||'';
-            requestAnimationFrame(()=>cap?.focus());
-        }
-
-        function renderChatImagePreview(){
-            const box=document.getElementById('chatImagePreviewPage');if(!box)return;box.innerHTML='';
-            // The send-preview modal is now the only pre-send image preview UI.
-            box.style.display='none';
-        }
-
-        function removeChatImageFromModal(index){
-            if(index<0||index>=chatImageModalFiles.length)return;
-            chatImageModalFiles.splice(index,1);
-            if(!chatImageModalFiles.length){closeChatImageSendModal();return;}
-            const cap=document.getElementById('chatImageSendCaption')?.value||'';
-            openChatImageSendModal(chatImageModalFiles);const c=document.getElementById('chatImageSendCaption');if(c)c.value=cap;
-        }
-
-        window.removeChatSelectedImage=function(index){removeChatImageFromModal(index);};
-
-        function processChatImage(file){
-            return new Promise((resolve,reject)=>{
-                if(!file)return reject(new Error('ملف غير صالح'));
-                const reader=new FileReader();
-                reader.onload=()=>{
-                    const img=new Image();
-                    img.onload=()=>{
-                        const w=img.naturalWidth||img.width,h=img.naturalHeight||img.height;
-                        if(!w||!h)return reject(new Error('تعذر قراءة الصورة'));
-                        const ratio=w/h;
-                        const targetRatio=ratio>1.65?1.6:(ratio<0.72?0.8:ratio);
-                        let cropW=w,cropH=h;
-                        if(ratio>targetRatio)cropW=Math.round(h*targetRatio);else if(ratio<targetRatio)cropH=Math.round(w/targetRatio);
-                        const sx=Math.max(0,Math.round((w-cropW)/2));
-                        const sy=Math.max(0,Math.round((h-cropH)/2));
-                        const maxSide=1800,scale=Math.min(1,maxSide/Math.max(cropW,cropH));
-                        const canvas=document.createElement('canvas');
-                        canvas.width=Math.max(1,Math.round(cropW*scale));canvas.height=Math.max(1,Math.round(cropH*scale));
-                        const ctx=canvas.getContext('2d',{alpha:false});
-                        if(!ctx)return reject(new Error('تعذر معالجة الصورة'));
-                        ctx.imageSmoothingEnabled=true;ctx.imageSmoothingQuality='high';
-                        ctx.drawImage(img,sx,sy,cropW,cropH,0,0,canvas.width,canvas.height);
-                        canvas.toBlob(blob=>{
-                            if(!blob)return reject(new Error('تعذر إنشاء الصورة'));
-                            resolve(new File([blob],(file.name||'image').replace(/\.[^.]+$/,'')+'.jpg',{type:'image/jpeg',lastModified:Date.now()}));
-                        },'image/jpeg',.9);
-                    };
-                    img.onerror=()=>reject(new Error('تعذر فتح الصورة'));img.src=reader.result;
-                };
-                reader.onerror=()=>reject(new Error('تعذر قراءة الصورة'));reader.readAsDataURL(file);
-            });
-        }
-
         async function sendFullPageChatMessage(){
             const input=document.getElementById('fullChatPageInput'),fileInput=document.getElementById('fullChatPageFileInput');
             if(!activeCourseId||!currentUser)return triggerAuth();
             if(currentChatLock?.locked&&!isAdmin)return showCustomAlert('الدردشة مقفلة',currentChatLock.reason||'الدردشة مقفلة حالياً.');
-            const message=input?.value.trim()||'';
-            const files=chatImageModalOpen?chatImageModalFiles:(chatSelectedFiles.length?chatSelectedFiles:Array.from(fileInput?.files||[]));
+            const message=input?.value.trim()||''; const files=chatSelectedFiles.length?chatSelectedFiles:Array.from(fileInput?.files||[]);
             if(!message&&!files.length)return;
-            const caption=chatImageModalOpen?(document.getElementById('chatImageSendCaption')?.value.trim()||''):message;
-            const imageUrls=[];
-            if(files.length){
-                const modal=document.getElementById('chatImageSendModal'),stage=document.getElementById('chatImageSendStage'),confirm=document.getElementById('chatImageSendConfirm');
-                chatImageUploadBusy=true;
-                if(modal){modal.classList.add('uploading');}
-                if(stage){stage.querySelectorAll('.chat-image-send-item').forEach(item=>item.classList.add('is-uploading'));}
-                if(confirm){confirm.disabled=true;confirm.innerHTML='<span class="chat-image-spinner" aria-hidden="true"></span> جاري الإرسال...';}
-                try{
-                    for(const file of files){const processed=await processChatImage(file);const url=await uploadImage(processed);if(!url)throw new Error('فشل رفع إحدى الصور');imageUrls.push(url);}
-                }catch(err){
-                    chatImageUploadBusy=false;if(modal)modal.classList.remove('uploading');if(confirm){confirm.disabled=false;confirm.innerHTML='<i class="fas fa-paper-plane" aria-hidden="true"></i> إرسال';}
-                    return showCustomAlert('خطأ',err?.message||'فشل رفع إحدى الصور.');
-                }
+            const imageUrls=[]; if(files.length){
+                for(const file of files){const url=await uploadImage(file);if(!url)return showCustomAlert('خطأ','فشل رفع إحدى الصور.');imageUrls.push(url);}
             }
-            const data={userId:currentUser.uid,userName:currentUser.displayName||'طالب',message:caption,createdAt:firebase.firestore.FieldValue.serverTimestamp()};
+            const data={userId:currentUser.uid,userName:currentUser.displayName||'طالب',message,createdAt:firebase.firestore.FieldValue.serverTimestamp()};
             if(imageUrls.length){data.imageUrls=imageUrls;data.imageUrl=imageUrls[0];}
             if(replyToMsgId){data.replyToId=replyToMsgId;data.replyToName=replyToUser;data.replyToText=replyToMsgText;}
-            try{
-                await db.collection('courses').doc(activeCourseId).collection('chat').add(data);
-                if(input)input.value='';
-                chatSelectedFiles=[];if(fileInput)fileInput.value='';renderChatImagePreview();cancelReply();
-                if(chatImageModalOpen)closeChatImageSendModal();
-            }catch(err){
-                const modal=document.getElementById('chatImageSendModal'),confirm=document.getElementById('chatImageSendConfirm');chatImageUploadBusy=false;
-                if(modal)modal.classList.remove('uploading');if(confirm){confirm.disabled=false;confirm.innerHTML='<i class="fas fa-paper-plane" aria-hidden="true"></i> إرسال';}
-                showCustomAlert('خطأ','تعذر إرسال الصورة.');console.error(err);
-            }
+            await db.collection('courses').doc(activeCourseId).collection('chat').add(data);
+            if(input)input.value=''; chatSelectedFiles=[]; if(fileInput)fileInput.value=''; renderChatImagePreview(); cancelReply();
         }
-
-        function bindChatImageSendModal(){
-            const input=document.getElementById('fullChatPageFileInput');
-            const send=document.getElementById('chatImageSendConfirm');
-            const cancel=document.getElementById('chatImageSendCancel');
-            const modal=document.getElementById('chatImageSendModal');
-            if(input&&!input.dataset.imageModalBound){input.dataset.imageModalBound='1';input.addEventListener('change',e=>{const files=Array.from(e.target.files||[]);if(files.length)openChatImageSendModal(files);});}
-            if(send&&!send.dataset.imageModalBound){send.dataset.imageModalBound='1';send.addEventListener('click',()=>sendFullPageChatMessage());}
-            if(cancel&&!cancel.dataset.imageModalBound){cancel.dataset.imageModalBound='1';cancel.addEventListener('click',()=>closeChatImageSendModal());}
-            if(modal&&!modal.dataset.imageModalBound){
-                modal.dataset.imageModalBound='1';
-                modal.addEventListener('click',e=>{
-                    if(e.target.closest('[data-chat-image-close]')&&!chatImageUploadBusy)closeChatImageSendModal();
-                    const remove=e.target.closest('.chat-image-remove');if(remove&&!chatImageUploadBusy)removeChatImageFromModal(Number(remove.dataset.index));
-                });
-            }
+        function renderChatImagePreview(){
+            const box=document.getElementById('chatImagePreviewPage');if(!box)return;box.innerHTML='';
+            chatSelectedFiles.forEach((file,index)=>{const url=URL.createObjectURL(file);const item=document.createElement('div');item.className='preview-item';item.innerHTML=`<img src="${url}" alt=""><button type="button" onclick="removeChatSelectedImage(${index})">&times;</button>`;box.appendChild(item);});
         }
-        bindChatImageSendModal();
-        if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',bindChatImageSendModal,{once:true});
+        window.removeChatSelectedImage=function(index){chatSelectedFiles.splice(index,1);renderChatImagePreview();const input=document.getElementById('fullChatPageFileInput');if(input)input.value='';};
 
         document.getElementById('fullPageCloseChatBtn')?.addEventListener('click',()=>switchCoursePage('dashboard'));
         document.getElementById('fullPageSendBtn')?.addEventListener('click',sendFullPageChatMessage);
-        document.getElementById('fullChatPageSendBtn')?.addEventListener('click',()=>{
-            if(chatImageModalOpen)sendFullPageChatMessage();else sendFullPageChatMessage();
-        });
+        document.getElementById('fullChatPageSendBtn')?.addEventListener('click',sendFullPageChatMessage);
         document.getElementById('fullChatPageInput')?.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendFullPageChatMessage();}});
-        document.getElementById('fullChatPageFileInput')?.addEventListener('click',e=>{e.stopPropagation();});
+        document.getElementById('fullChatPageFileInput')?.addEventListener('change',e=>{chatSelectedFiles=Array.from(e.target.files||[]);renderChatImagePreview();});
         const emojiList=['😀','😂','😍','🥰','😎','😭','😡','👍','👏','🔥','❤️','🎉','✨','💯','🙏','🤍','🤣','😅','🤔','👀','💪','🙌','🌟','🎯','📚','✏️','🚀','😊','😮','😢','❤️‍🔥','💙'];
         document.getElementById('clearChatPageBtn')?.addEventListener('click',async()=>{if(!isAdmin||!activeCourseId)return;showCustomConfirm('حذف المحادثة','سيتم حذف جميع الرسائل. هل أنت متأكد؟',async()=>{const snap=await db.collection('courses').doc(activeCourseId).collection('chat').get();const batch=db.batch();snap.forEach(d=>batch.delete(d.ref));await batch.commit();});});
         document.getElementById('chatLockBtn')?.addEventListener('click',()=>openChatLockDialog());
@@ -16279,23 +16123,21 @@ body.light-mode #courseChatPage .chat-msg.received{
             const firstReplyLine=(replyLines[0]||'').trim();
             const replyText=replyLines.length>1?`${firstReplyLine}…`:firstReplyLine;
             const reply=m.replyToId?`<div class="reply-block ${replyTargetDeleted?'reply-to-deleted':''}" data-reply-to-id="${safeEscape(m.replyToId||'')}" data-reply-deleted="${replyTargetDeleted?'1':'0'}"><div class="ru">${safeEscape(replyAuthorName)}</div><div class="rt">${safeEscape(replyText)}</div></div>`:'';
-            const timeText=safeEscape(date.toLocaleTimeString('ar-SA',{hour:'2-digit',minute:'2-digit'}));
-            const imageCaption=String(m.message||'').trim();
-            const gallery=(!deleted&&images.length)?`<div class="message-gallery">${images.map(u=>`<div class="chat-image-message-item"><img src="${safeEscape(u)}" alt="صورة" loading="lazy" onclick="openChatMessageGallery('${safeEscape(courseId)}','${safeEscape(doc.id)}')"><div class="chat-image-time">${timeText}</div></div>`).join('')}${imageCaption?`<div class="chat-image-caption">${safeEscape(imageCaption)}${m.edited?'<span class="edited-label">(معدلة)</span>':''}</div>`:''}</div>`:'';
+            const imageCaption=String(m.imageCaption||m.caption||'').trim();
+            const gallery=(!deleted&&images.length)?`<div class="message-gallery">${images.map(u=>`<figure class="chat-media-item"><div class="chat-media-frame"><img src="${safeEscape(u)}" alt="صورة" loading="lazy" decoding="async" onclick="openChatMessageGallery('${safeEscape(courseId)}','${safeEscape(doc.id)}')"><span class="chat-media-time">${safeEscape(date.toLocaleTimeString('ar-SA',{hour:'2-digit',minute:'2-digit'}))}</span></div></figure>`).join('')}${imageCaption?`<div class="chat-image-caption">${safeEscape(imageCaption)}</div>`:''}</div>`:'';
             let body='';
             if(deleted&&!isAdmin){
                 body='<div class="t" style="color:var(--text-muted);font-style:italic;"><i class="fas fa-ban"></i> هذه الرسالة محذوفة</div>';
             }else{
-                const textPart=images.length?'' : `<div class="t">${safeEscape(m.message||'')}${m.edited?'<span class="edited-label">(معدلة)</span>':''}</div>`;
-                body=`${deleted?'<div style="color:#e74c3c;font-size:.78rem;font-weight:800;margin-bottom:5px;"><i class="fas fa-trash"></i> تم حذف هذه الرسالة</div>':''}${textPart}${gallery}`;
+                const messageText=String(m.message||'').trim();
+                body=`${deleted?'<div style="color:#e74c3c;font-size:.78rem;font-weight:800;margin-bottom:5px;"><i class="fas fa-trash"></i> تم حذف هذه الرسالة</div>':''}${messageText?`<div class="t">${safeEscape(m.message||'')}${m.edited?'<span class="edited-label">(معدلة)</span>':''}</div>`:''}${gallery}`;
             }
             const canEdit=!!window.__aaChatCanEditMessage?.(m);
             const actions=deleted&&!isAdmin
                 ? `<div class="msg-actions deleted-message-actions"><button type="button" onclick="hideChatMessageFromAccount('${safeEscape(courseId)}','${safeEscape(doc.id)}')" title="حذف من حسابي" aria-label="حذف من حسابي"><i class="fas fa-trash"></i></button></div>`
                 : (deleted ? '' : `<div class="msg-actions"><button onclick='replyTo(${JSON.stringify(doc.id)},${JSON.stringify(replyAuthorName||m.userName||profile.name||'زائر')},${JSON.stringify(m.message||'')})' title="رد"><i class="fas fa-reply"></i></button>${isMine&&canEdit?`<button data-chat-action="edit" onclick="editChatMessage('${safeEscape(courseId)}','${safeEscape(doc.id)}')" title="تعديل"><i class="fas fa-edit"></i></button>`:''}${(isMine||isAdmin)?`<button onclick="deleteChatMessage('${safeEscape(courseId)}','${safeEscape(doc.id)}')" title="حذف"><i class="fas fa-trash"></i></button>`:''}</div>`);
             const wrapper=document.createElement('div');
-            const outerTime=images.length?'':`<div class="msg-time">${timeText}</div>`;
-            wrapper.innerHTML=`<div class="chat-msg ${isMine?'sent':'received'} ${deleted?'deleted-message':''}" data-message-id="${safeEscape(doc.id)}" data-user-id="${safeEscape(m.userId||'')}" data-created-at="${safeEscape(date.getTime())}">${reply}${body}${outerTime}${actions}</div>`;
+            wrapper.innerHTML=`<div class="chat-msg ${isMine?'sent':'received'} ${deleted?'deleted-message':''}" data-message-id="${safeEscape(doc.id)}" data-user-id="${safeEscape(m.userId||'')}" data-created-at="${safeEscape(date.getTime())}">${reply}${body}<div class="msg-time">${safeEscape(date.toLocaleTimeString('ar-SA',{hour:'2-digit',minute:'2-digit'}))}</div>${actions}</div>`;
             return wrapper.firstElementChild;
         }
         function ensureProfileData(allDocs){
@@ -16642,46 +16484,6 @@ body.light-mode #courseChatPage .chat-msg.received .reply-block .rt{
 
 
 
-<style id="chat-image-lifecycle-stage28">
-#chatImageSendModal{position:fixed;inset:0;z-index:2147483000;display:none;align-items:center;justify-content:center;padding:20px;}
-#chatImageSendModal.active{display:flex;}
-.chat-image-send-backdrop{position:absolute;inset:0;background:rgba(12,16,28,.58);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);}
-.chat-image-send-box{position:relative;z-index:1;width:min(760px,96vw);height:min(90vh,820px);display:flex;flex-direction:column;background:color-mix(in srgb,var(--bg-card) 96%,transparent);border:1px solid color-mix(in srgb,var(--border) 78%,var(--accent1) 22%);border-radius:24px;box-shadow:0 30px 90px rgba(0,0,0,.35);overflow:hidden;animation:chatImageModalIn .22s cubic-bezier(.2,.8,.2,1) both;}
-@keyframes chatImageModalIn{from{opacity:0;transform:translateY(18px) scale(.97)}to{opacity:1;transform:translateY(0) scale(1)}}
-.chat-image-send-header{height:58px;flex:0 0 58px;display:flex;align-items:center;justify-content:space-between;padding:0 18px;border-bottom:1px solid var(--border);}
-.chat-image-send-header h3{margin:0;color:var(--accent1);font-size:1.05rem;}
-.chat-image-send-close{width:38px;height:38px;border:0;border-radius:12px;background:transparent;color:var(--text-muted);font-size:1.5rem;cursor:pointer;}
-.chat-image-send-close:hover{background:rgba(108,92,231,.08);color:var(--accent1);}
-.chat-image-send-stage{flex:1;min-height:0;overflow:auto;padding:18px;display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px;align-content:center;background:radial-gradient(70% 90% at 50% 10%,rgba(108,92,231,.08),transparent 70%);}
-.chat-image-send-item{position:relative;min-height:220px;border-radius:18px;overflow:hidden;background:var(--bg-secondary);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;}
-.chat-image-send-item img{width:100%;height:min(52vh,520px);object-fit:contain;display:block;transition:filter .22s ease,transform .22s ease;}
-.chat-image-send-item.is-uploading img{filter:blur(12px);transform:scale(1.03);}
-.chat-image-send-item.is-uploading::after{content:"";position:absolute;inset:0;background:rgba(0,0,0,.18);}
-.chat-image-send-item.is-uploading::before{content:"";position:absolute;z-index:3;width:44px;height:44px;border-radius:50%;border:4px solid rgba(255,255,255,.34);border-top-color:#fff;animation:chatImageSpin .8s linear infinite;}
-.chat-image-send-item .chat-image-remove{position:absolute;z-index:4;top:10px;inset-inline-end:10px;width:34px;height:34px;border:0;border-radius:11px;background:rgba(0,0,0,.58);color:#fff;font-size:1.15rem;cursor:pointer;}
-@keyframes chatImageSpin{to{transform:rotate(360deg)}}
-.chat-image-send-caption-wrap{padding:12px 14px;border-top:1px solid var(--border);background:var(--bg-secondary);}
-.chat-image-send-caption-wrap textarea{width:100%;min-height:48px;max-height:120px;resize:vertical;padding:11px 13px;border:1px solid var(--border);border-radius:14px;background:var(--bg-card);color:var(--text-primary);font-family:inherit;font-size:.92rem;outline:none;}
-.chat-image-send-caption-wrap textarea:focus{border-color:var(--accent1);box-shadow:0 0 0 3px rgba(108,92,231,.08);}
-.chat-image-send-actions{display:flex;gap:10px;padding:12px 14px;background:var(--bg-secondary);border-top:1px solid var(--border);}
-.chat-image-send-actions button{flex:1;min-height:44px;border-radius:14px;border:1px solid var(--border);background:var(--bg-card);color:var(--text-primary);font-family:inherit;font-weight:800;cursor:pointer;}
-.chat-image-send-actions button:last-child{background:var(--accent-gradient);border-color:transparent;color:#fff;}
-.chat-image-send-actions button:disabled{opacity:.65;cursor:wait;}
-.chat-image-spinner{display:inline-block;width:18px;height:18px;border:3px solid rgba(255,255,255,.35);border-top-color:#fff;border-radius:50%;vertical-align:-4px;margin-inline-end:7px;animation:chatImageSpin .8s linear infinite;}
-.chat-image-message-item{position:relative;width:220px;max-width:100%;height:220px;border-radius:14px;overflow:hidden;background:var(--bg-secondary);cursor:zoom-in;}
-.chat-image-message-item img{width:100%!important;height:100%!important;max-height:none!important;object-fit:cover!important;border-radius:0!important;display:block!important;margin:0!important;}
-.chat-image-time{position:absolute;bottom:0;inset-inline:0;padding:24px 10px 7px;text-align:end;color:#fff;font-size:.7rem;font-weight:800;background:linear-gradient(to top,rgba(0,0,0,.72),rgba(0,0,0,0));pointer-events:none;}
-.chat-image-caption{padding:7px 8px 1px;color:inherit;font-size:.88rem;line-height:1.45;white-space:pre-wrap;overflow-wrap:anywhere;}
-.chat-msg:has(.message-gallery){padding-bottom:9px!important;}
-body.light-mode .chat-image-send-backdrop{background:rgba(74,82,101,.32);}
-@media(max-width:768px){
-  .chat-image-send-modal{padding:8px;}
-  .chat-image-send-box{width:100%;height:min(94vh,760px);border-radius:20px;}
-  .chat-image-send-stage{grid-template-columns:1fr;padding:12px;}
-  .chat-image-send-item img{height:min(49vh,430px);}
-  .chat-image-message-item{width:210px;height:210px;}
-}
-</style>
 <style id="chat-input-emoji-stage20-final">
 /* Stage 20: one clean composer system. */
 #courseChatPage .chat-composer-shell{
@@ -16803,6 +16605,96 @@ body.light-mode #chatEmojiPickerPage.chat-emoji-rebuilt::-webkit-scrollbar-thumb
   border-color:rgba(108,92,231,.10)!important;
 }
 </style>
+<style id="chat-image-lifecycle-stage28-css">
+#courseChatPage .chat-image-preview{display:none!important;}
+#aaChatImagePreviewModal{position:fixed;inset:0;z-index:2147483645;display:none;align-items:center;justify-content:center;padding:18px;background:rgba(5,7,15,.74);backdrop-filter:blur(12px) saturate(1.08);-webkit-backdrop-filter:blur(12px) saturate(1.08);}
+#aaChatImagePreviewModal.open{display:flex;}
+#aaChatImagePreviewModal .aa-chat-image-preview-panel{width:min(920px,96vw);height:min(94vh,900px);display:flex;flex-direction:column;gap:12px;padding:16px;border:1px solid rgba(255,255,255,.14);border-radius:26px;background:color-mix(in srgb,var(--bg-card) 92%,transparent);box-shadow:0 28px 100px rgba(0,0,0,.45);overflow:hidden;}
+#aaChatImagePreviewModal .aa-chat-image-preview-head{display:flex;align-items:center;justify-content:space-between;gap:10px;flex:0 0 auto;}
+#aaChatImagePreviewModal .aa-chat-image-preview-head strong{font-size:1rem;color:var(--text-primary);}
+#aaChatImagePreviewModal .aa-chat-image-preview-close{width:40px;height:40px;border:1px solid var(--border);border-radius:12px;background:var(--bg-secondary);color:var(--text-muted);font-size:1.2rem;cursor:pointer;}
+#aaChatImagePreviewModal .aa-chat-image-preview-gallery{flex:1 1 auto;min-height:0;display:flex;gap:12px;overflow:auto;align-items:center;justify-content:center;padding:4px 2px;scrollbar-width:none;}
+#aaChatImagePreviewModal .aa-chat-image-preview-gallery::-webkit-scrollbar{display:none;}
+#aaChatImagePreviewModal .aa-chat-preview-card{position:relative;flex:0 0 auto;width:min(78vw,520px);height:min(66vh,610px);display:flex;align-items:center;justify-content:center;border-radius:20px;overflow:hidden;background:rgba(0,0,0,.28);border:1px solid rgba(255,255,255,.10);}
+#aaChatImagePreviewModal .aa-chat-preview-card img{width:100%;height:100%;object-fit:contain;display:block;transition:filter .18s ease,opacity .18s ease;}
+#aaChatImagePreviewModal .aa-chat-preview-card.is-loading img{filter:blur(12px);opacity:.72;}
+#aaChatImagePreviewModal .aa-chat-preview-loading{position:absolute;inset:0;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,.10);} 
+#aaChatImagePreviewModal .aa-chat-preview-card.is-loading .aa-chat-preview-loading{display:flex;}
+#aaChatImagePreviewModal .aa-chat-preview-spinner{width:48px;height:48px;border-radius:50%;border:4px solid rgba(255,255,255,.24);border-top-color:#fff;animation:aaChatPreviewSpin .8s linear infinite;}
+@keyframes aaChatPreviewSpin{to{transform:rotate(360deg);}}
+#aaChatImagePreviewModal .aa-chat-preview-caption-wrap{flex:0 0 auto;display:flex;gap:8px;align-items:stretch;}
+#aaChatImagePreviewModal #aaChatImagePreviewCaption{width:100%;min-height:52px;max-height:120px;resize:none;padding:12px 14px;border:1px solid var(--border);border-radius:17px;background:var(--bg-secondary);color:var(--text-primary);font:inherit;outline:none;}
+#aaChatImagePreviewModal #aaChatImagePreviewCaption:focus{border-color:var(--accent1);box-shadow:0 0 0 3px rgba(108,92,231,.10);}
+#aaChatImagePreviewModal .aa-chat-image-preview-actions{display:flex;justify-content:flex-start;gap:8px;flex:0 0 auto;}
+#aaChatImagePreviewModal .aa-chat-image-preview-actions button{border:0;border-radius:999px;padding:10px 20px;font:inherit;font-weight:800;cursor:pointer;}
+#aaChatImagePreviewModal .aa-chat-image-preview-cancel{background:var(--bg-secondary);border:1px solid var(--border)!important;color:var(--text-muted);}
+#aaChatImagePreviewModal .aa-chat-image-preview-send{background:var(--accent-gradient);color:#fff;min-width:120px;}
+#aaChatImagePreviewModal .aa-chat-image-preview-send:disabled{opacity:.58;cursor:not-allowed;}
+@media(max-width:700px){#aaChatImagePreviewModal{padding:10px;}#aaChatImagePreviewModal .aa-chat-image-preview-panel{width:100%;height:96vh;padding:10px;border-radius:20px;}#aaChatImagePreviewModal .aa-chat-preview-card{width:84vw;height:59vh;max-height:520px;}#aaChatImagePreviewModal .aa-chat-image-preview-gallery{justify-content:flex-start;scroll-snap-type:x mandatory;}#aaChatImagePreviewModal .aa-chat-preview-card{scroll-snap-align:center;}#aaChatImagePreviewModal .aa-chat-image-preview-actions button{flex:1;}}
+#courseChatPage .chat-media-item{margin:0!important;padding:0!important;display:block!important;}
+#courseChatPage .chat-media-frame{position:relative;width:220px;height:min(220px,34vh);border-radius:12px;overflow:hidden;background:rgba(0,0,0,.08);} 
+#courseChatPage .chat-media-frame img{width:100%!important;height:100%!important;object-fit:cover!important;display:block!important;margin:0!important;}
+#courseChatPage .chat-media-time{position:absolute;inset-inline-end:7px;bottom:6px;padding:3px 7px;border-radius:999px;color:#fff;font-size:.66rem;font-weight:800;line-height:1;background:linear-gradient(90deg,rgba(0,0,0,.12),rgba(0,0,0,.78));text-shadow:0 1px 2px rgba(0,0,0,.5);pointer-events:none;}
+#courseChatPage .chat-image-caption{margin-top:6px;padding:0 2px;color:inherit;font-size:.92rem;line-height:1.45;white-space:pre-wrap;overflow-wrap:anywhere;}
+@media(max-width:768px){#courseChatPage .chat-media-frame{width:200px;height:min(200px,30vh);}}
+</style>
+<script id="chat-image-lifecycle-stage28-js">
+(function(){
+'use strict';
+if(window.__aaChatImageLifecycleStage28)return;window.__aaChatImageLifecycleStage28=true;
+const fileInput=document.getElementById('fullChatPageFileInput'),input=document.getElementById('fullChatPageInput');
+if(!fileInput||!input)return;
+let files=[];let urls=[];let modal=null;let captionEl=null;let sendBtn=null;let cancelBtn=null;let gallery=null;let sending=false;
+function cleanupUrls(){urls.forEach(u=>{try{URL.revokeObjectURL(u)}catch(_){}});urls=[];}
+function closeModal(clear=true){if(!modal)return;modal.classList.remove('open');document.body.classList.remove('aa-chat-image-modal-open');if(clear){files=[];cleanupUrls();if(fileInput)fileInput.value='';}}
+function ensureModal(){
+ if(modal?.isConnected)return modal;
+ modal=document.createElement('div');modal.id='aaChatImagePreviewModal';modal.setAttribute('aria-hidden','true');
+ modal.innerHTML='<div class="aa-chat-image-preview-panel" role="dialog" aria-modal="true" aria-label="معاينة الصورة"><div class="aa-chat-image-preview-head"><strong>معاينة الصورة قبل الإرسال</strong><button type="button" class="aa-chat-image-preview-close" aria-label="إغلاق">&times;</button></div><div class="aa-chat-image-preview-gallery"></div><div class="aa-chat-preview-caption-wrap"><textarea id="aaChatImagePreviewCaption" rows="2" placeholder="رسالة مرفقة (اختياري)"></textarea></div><div class="aa-chat-image-preview-actions"><button type="button" class="aa-chat-image-preview-cancel">إلغاء</button><button type="button" class="aa-chat-image-preview-send">إرسال</button></div></div>';
+ document.body.appendChild(modal);gallery=modal.querySelector('.aa-chat-image-preview-gallery');captionEl=modal.querySelector('#aaChatImagePreviewCaption');sendBtn=modal.querySelector('.aa-chat-image-preview-send');cancelBtn=modal.querySelector('.aa-chat-image-preview-cancel');
+ modal.addEventListener('click',e=>{if(e.target===modal&&!sending)closeModal();});modal.querySelector('.aa-chat-image-preview-close').addEventListener('click',()=>{if(!sending)closeModal();});cancelBtn.addEventListener('click',()=>{if(!sending)closeModal();});sendBtn.addEventListener('click',sendImages);
+ return modal;
+}
+function openModal(list){
+ ensureModal(); files=[...list]; cleanupUrls();gallery.innerHTML='';
+ files.forEach(file=>{const url=URL.createObjectURL(file);urls.push(url);const card=document.createElement('div');card.className='aa-chat-preview-card';card.innerHTML='<img alt="معاينة"><div class="aa-chat-preview-loading"><span class="aa-chat-preview-spinner"></span></div>';card.querySelector('img').src=url;gallery.appendChild(card);});
+ captionEl.value=(input?.value||'').trim();
+ modal.classList.add('open');modal.setAttribute('aria-hidden','false');document.body.classList.add('aa-chat-image-modal-open');
+ requestAnimationFrame(()=>captionEl?.focus());
+}
+function loadImage(file){return new Promise((resolve,reject)=>{const src=URL.createObjectURL(file),img=new Image();img.onload=()=>{URL.revokeObjectURL(src);resolve(img);};img.onerror=()=>{URL.revokeObjectURL(src);reject(new Error('image-load'));};img.src=src;});}
+async function processImage(file){
+ const img=await loadImage(file),w=img.naturalWidth||img.width,h=img.naturalHeight||img.height;
+ const ratio=w/Math.max(1,h);let targetRatio=ratio;
+ if(ratio<.62)targetRatio=.75;else if(ratio>1.9)targetRatio=16/9;
+ let sx=0,sy=0,sw=w,sh=h;
+ if(Math.abs(targetRatio-ratio)>.02){if(ratio>targetRatio){sw=Math.round(h*targetRatio);sx=Math.round((w-sw)/2);}else{sh=Math.round(w/targetRatio);sy=Math.round((h-sh)/2);}}
+ const maxSide=1800,scale=Math.min(1,maxSide/Math.max(sw,sh));const cw=Math.max(1,Math.round(sw*scale)),ch=Math.max(1,Math.round(sh*scale));
+ const canvas=document.createElement('canvas');canvas.width=cw;canvas.height=ch;const ctx=canvas.getContext('2d',{alpha:false});ctx.drawImage(img,sx,sy,sw,sh,0,0,cw,ch);
+ const blob=await new Promise((resolve,reject)=>canvas.toBlob(b=>b?resolve(b):reject(new Error('image-encode')),'image/jpeg',.9));
+ return new File([blob],(file.name||'image').replace(/\.[^.]+$/,'')+'.jpg',{type:'image/jpeg',lastModified:Date.now()});
+}
+async function sendImages(){
+ if(sending||!files.length||!activeCourseId||!currentUser)return;
+ if(currentChatLock?.locked&&!isAdmin)return showCustomAlert('الدردشة مقفلة',currentChatLock.reason||'الدردشة مقفلة حالياً.');
+ sending=true;sendBtn.disabled=true;cancelBtn.disabled=true;captionEl.disabled=true;
+ const cards=[...gallery.children];cards.forEach(c=>c.classList.add('is-loading'));
+ try{
+   const processed=[];for(let i=0;i<files.length;i++){const f=await processImage(files[i]);processed.push(f);cards[i]?.classList.add('is-loading');}
+   const imageUrls=[];for(let i=0;i<processed.length;i++){const url=await uploadImage(processed[i]);if(!url)throw new Error('upload');imageUrls.push(url);cards[i]?.classList.remove('is-loading');}
+   const caption=captionEl.value.trim();
+   const data={userId:currentUser.uid,userName:currentUser.displayName||'طالب',message:'',createdAt:firebase.firestore.FieldValue.serverTimestamp(),imageUrls,imageUrl:imageUrls[0]};
+   if(caption)data.imageCaption=caption;
+   if(replyToMsgId){data.replyToId=replyToMsgId;data.replyToName=replyToUser;data.replyToText=replyToMsgText;}
+   await db.collection('courses').doc(activeCourseId).collection('chat').add(data);
+   if(input)input.value='';chatSelectedFiles=[];fileInput.value='';cancelReply();closeModal();
+ }catch(err){console.error('chat image lifecycle',err);cards.forEach(c=>c.classList.remove('is-loading'));showCustomAlert('خطأ','فشل رفع إحدى الصور.');}finally{sending=false;if(sendBtn)sendBtn.disabled=false;if(cancelBtn)cancelBtn.disabled=false;if(captionEl)captionEl.disabled=false;}
+}
+fileInput.addEventListener('change',e=>{e.preventDefault();e.stopImmediatePropagation();const chosen=[...(e.target.files||[])].filter(f=>/^image\//i.test(f.type));if(!chosen.length){fileInput.value='';return;}openModal(chosen);},{capture:true});
+document.addEventListener('keydown',e=>{if(e.key==='Escape'&&modal?.classList.contains('open')&&!sending){e.preventDefault();closeModal();}});
+window.__aaOpenChatImagePreview=openModal;
+})();
+</script>
 <script id="chat-input-emoji-stage20-final-js">
 (function(){
 'use strict';
@@ -17637,309 +17529,5 @@ if(nameInput&&!nameInput.dataset.aaNameLimitBound){
 })();
 </script>
 
-
-<style id="chat-image-gallery-stage32-css">
-/* Stage 32: focused image preview + in-chat image grids. */
-#chatImageSendModal .chat-image-send-box{width:min(980px,96vw)!important;height:min(92vh,860px)!important;max-width:980px!important;background:var(--bg-card)!important;color:var(--text-primary)!important;}
-#chatImageSendModal .chat-image-send-header{background:color-mix(in srgb,var(--bg-secondary) 92%,transparent)!important;}
-#chatImageSendModal .chat-image-send-stage{position:relative!important;display:flex!important;flex-direction:column!important;justify-content:center!important;align-items:center!important;gap:0!important;overflow:hidden!important;padding:14px!important;background:radial-gradient(70% 90% at 50% 10%,rgba(108,92,231,.09),transparent 72%)!important;}
-#chatImageSendModal .chat-preview-main-shell{position:relative!important;width:100%!important;flex:1 1 auto!important;min-height:0!important;display:flex!important;align-items:center!important;justify-content:center!important;padding:8px 54px 10px!important;}
-#chatImageSendModal .chat-preview-main-item{position:relative!important;width:100%!important;height:100%!important;min-height:220px!important;border:0!important;background:transparent!important;display:flex!important;align-items:center!important;justify-content:center!important;overflow:hidden!important;border-radius:18px!important;}
-#chatImageSendModal .chat-preview-main-item img{width:100%!important;height:100%!important;max-width:100%!important;max-height:100%!important;object-fit:contain!important;display:block!important;border-radius:14px!important;transition:filter .18s ease,transform .18s ease!important;}
-#chatImageSendModal .chat-preview-main-item.is-uploading img{filter:blur(12px)!important;transform:scale(1.025)!important;}
-#chatImageSendModal .chat-preview-main-item.is-uploading::after{content:"";position:absolute;inset:0;background:rgba(0,0,0,.16);border-radius:18px;}
-#chatImageSendModal .chat-preview-main-item.is-uploading::before{content:"";position:absolute;z-index:6;width:52px;height:52px;border-radius:50%;border:5px solid rgba(255,255,255,.28);border-top-color:#fff;animation:chatImagePreviewSpin .75s linear infinite;}
-@keyframes chatImagePreviewSpin{to{transform:rotate(360deg)}}
-#chatImageSendModal .chat-preview-nav{position:absolute;z-index:8;top:50%;transform:translateY(-50%);width:46px;height:46px;border:1px solid color-mix(in srgb,var(--border) 55%,var(--accent1) 45%);border-radius:50%;background:color-mix(in srgb,var(--bg-secondary) 84%,transparent);color:var(--text-primary);display:grid;place-items:center;cursor:pointer;box-shadow:0 12px 28px rgba(0,0,0,.18);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);}
-#chatImageSendModal .chat-preview-nav:hover{color:var(--accent1);border-color:var(--accent1);transform:translateY(-50%) scale(1.04);}
-#chatImageSendModal .chat-preview-nav.prev{inset-inline-start:6px;}
-#chatImageSendModal .chat-preview-nav.next{inset-inline-end:6px;}
-#chatImageSendModal .chat-image-thumb-strip{width:100%;flex:0 0 94px;display:flex;align-items:center;gap:8px;overflow-x:auto;overflow-y:hidden;padding:8px 4px 4px;cursor:grab;scrollbar-width:none;overscroll-behavior-x:contain;}
-#chatImageSendModal .chat-image-thumb-strip:active{cursor:grabbing;}
-#chatImageSendModal .chat-image-thumb-strip::-webkit-scrollbar{display:none;width:0;height:0;}
-#chatImageSendModal .chat-image-thumb{position:relative;flex:0 0 76px;width:76px;height:70px;padding:0;border:2px solid transparent;border-radius:12px;overflow:hidden;background:var(--bg-secondary);cursor:pointer;opacity:.72;transition:border-color .16s ease,opacity .16s ease,transform .16s ease;}
-#chatImageSendModal .chat-image-thumb:hover{opacity:1;transform:translateY(-2px);}
-#chatImageSendModal .chat-image-thumb.active{opacity:1;border-color:var(--accent1);box-shadow:0 0 0 2px rgba(108,92,231,.15);transform:translateY(-1px);}
-#chatImageSendModal .chat-image-thumb img{width:100%;height:100%;object-fit:cover;display:block;}
-#chatImageSendModal .chat-image-count{position:absolute;inset-inline-start:50%;top:50%;transform:translate(-50%,-50%);padding:5px 10px;border-radius:999px;background:rgba(0,0,0,.62);color:#fff;font-weight:900;font-size:.76rem;direction:rtl;white-space:nowrap;pointer-events:none;}
-#chatImageSendModal .chat-image-send-caption-wrap{display:flex!important;align-items:center!important;gap:8px!important;padding:10px 14px!important;border-top:1px solid var(--border)!important;background:var(--bg-secondary)!important;}
-#chatImageSendModal .chat-image-send-caption-capsule{display:flex;align-items:center;gap:5px;flex:1;min-width:0;padding:4px 6px;border:1px solid color-mix(in srgb,var(--border) 58%,var(--accent1) 42%);border-radius:999px;background:var(--bg-card);box-shadow:0 8px 24px rgba(0,0,0,.08);}
-#chatImageSendModal #chatImageSendCaption{flex:1!important;width:100%!important;min-height:40px!important;max-height:92px!important;resize:none!important;border:0!important;background:transparent!important;box-shadow:none!important;outline:none!important;margin:0!important;padding:8px 10px!important;border-radius:999px!important;color:var(--text-primary)!important;font-family:inherit!important;}
-#chatImageSendModal #chatImageSendCaption:focus{border:0!important;box-shadow:none!important;}
-#chatImageSendModal #chatImageSendEmoji{width:38px;height:38px;flex:0 0 38px;border:0;border-radius:50%;display:grid;place-items:center;background:transparent;color:var(--text-muted);cursor:pointer;font-size:1.05rem;}
-#chatImageSendModal #chatImageSendEmoji:hover{background:rgba(108,92,231,.10);color:var(--accent1);}
-#chatImageSendModal #chatImageSendConfirm{width:42px!important;height:42px!important;min-height:42px!important;flex:0 0 42px!important;border:0!important;border-radius:50%!important;background:var(--accent-gradient)!important;color:#fff!important;padding:0!important;display:grid!important;place-items:center!important;}
-#chatImageSendModal #chatImageSendConfirm span.chat-image-spinner{margin:0!important;}
-#chatImageSendModal .chat-image-send-actions{display:none!important;}
-#chatImageSendModal .chat-image-send-caption-hint{display:none!important;}
-@media(max-width:768px){
-  #chatImageSendModal{padding:8px!important;}
-  #chatImageSendModal .chat-image-send-box{width:100%!important;height:min(95vh,820px)!important;border-radius:20px!important;}
-  #chatImageSendModal .chat-preview-main-shell{padding:8px 42px 8px!important;}
-  #chatImageSendModal .chat-preview-nav{width:40px;height:40px;}
-  #chatImageSendModal .chat-image-thumb-strip{flex-basis:82px;}
-  #chatImageSendModal .chat-image-thumb{width:66px;height:62px;flex-basis:66px;}
-}
-
-/* Multiple images in one chat message: compact 2-column grid. */
-#courseChatPage .chat-msg .message-gallery.chat-gallery-grid{display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:3px!important;width:min(320px,100%)!important;margin-top:6px!important;}
-#courseChatPage .chat-msg .message-gallery.chat-gallery-grid .chat-image-message-item{width:100%!important;height:150px!important;min-width:0!important;border-radius:10px!important;}
-#courseChatPage .chat-msg .message-gallery.chat-gallery-grid .chat-image-message-item img{width:100%!important;height:100%!important;object-fit:cover!important;}
-#courseChatPage .chat-msg .message-gallery.chat-gallery-grid .chat-image-caption{grid-column:1 / -1!important;}
-#courseChatPage .chat-image-more-overlay{position:absolute!important;inset:0!important;display:grid!important;place-items:center!important;background:rgba(0,0,0,.43)!important;color:#fff!important;font-weight:900!important;font-size:1rem!important;pointer-events:none!important;}
-
-/* Consecutive image-only messages from one sender become one visual grid. */
-#courseChatPage .chat-image-message-group{align-self:flex-start;display:flex;flex-direction:column;gap:4px;margin:3px 0;max-width:min(360px,86%);position:relative;}
-#courseChatPage .chat-image-message-group.sent{align-self:flex-end;}
-#courseChatPage .chat-image-message-group .chat-image-group-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:3px;width:100%;}
-#courseChatPage .chat-image-message-group .chat-image-group-source{display:contents!important;max-width:none!important;margin:0!important;padding:0!important;background:transparent!important;box-shadow:none!important;border:0!important;}
-#courseChatPage .chat-image-message-group .chat-image-group-source .msg-header,
-#courseChatPage .chat-image-message-group .chat-image-group-source .chat-profile-avatar-outside,
-#courseChatPage .chat-image-message-group .chat-image-group-source .reply-block,
-#courseChatPage .chat-image-message-group .chat-image-group-source .msg-actions{display:none!important;}
-#courseChatPage .chat-image-message-group .chat-image-group-source .message-gallery{display:contents!important;margin:0!important;width:auto!important;}
-#courseChatPage .chat-image-message-group .chat-image-group-source .chat-image-message-item{width:100%!important;height:150px!important;min-width:0!important;border-radius:10px!important;overflow:hidden!important;}
-#courseChatPage .chat-image-message-group .chat-image-group-source .chat-image-message-item img{width:100%!important;height:100%!important;object-fit:cover!important;}
-#courseChatPage .chat-image-message-group .chat-image-group-source .chat-image-caption,
-#courseChatPage .chat-image-message-group .chat-image-group-source .t{display:none!important;}
-#courseChatPage .chat-image-message-group .chat-image-group-source .msg-time{display:none!important;}
-#courseChatPage .chat-image-message-group > .chat-image-group-name{display:none;}
-@media(max-width:768px){
- #courseChatPage .chat-image-message-group{max-width:90%;}
- #courseChatPage .chat-image-message-group .chat-image-group-source .chat-image-message-item{height:125px!important;}
- #courseChatPage .chat-msg .message-gallery.chat-gallery-grid{width:min(280px,100%)!important;}
- #courseChatPage .chat-msg .message-gallery.chat-gallery-grid .chat-image-message-item{height:130px!important;}
-}
-</style>
-<script id="chat-image-gallery-stage32-js">
-(function(){
-'use strict';
-if(window.__chatImageGalleryStage32)return;window.__chatImageGalleryStage32=true;
-const modal=document.getElementById('chatImageSendModal');
-const input=document.getElementById('fullChatPageFileInput');
-const caption=document.getElementById('chatImageSendCaption');
-const stage=document.getElementById('chatImageSendStage');
-if(!modal||!input||!stage)return;
-let currentIndex=0,thumbStrip=null,thumbDrag=false,dragStartX=0,dragScrollLeft=0;
-function esc(v){return typeof escapeHtml==='function'?escapeHtml(String(v??'')):String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
-function filesArray(){return Array.from(input.files||[]);}
-function ensureCaptionControls(){
- const wrap=document.getElementById('chatImageSendCaption')?.parentElement;if(!wrap)return;
- wrap.classList.add('chat-image-send-caption-wrap');
- let cap=document.getElementById('chatImageSendCaptionCapsule');
- if(!cap){
-   cap=document.createElement('div');cap.id='chatImageSendCaptionCapsule';cap.className='chat-image-send-caption-capsule';
-   caption?.parentElement?.removeChild(caption);
-   cap.appendChild(caption);
-   const emo=document.createElement('button');emo.type='button';emo.id='chatImageSendEmoji';emo.setAttribute('aria-label','إضافة إيموجي');emo.innerHTML='<i class="far fa-smile"></i>';
-   cap.appendChild(emo);
-   const send=document.getElementById('chatImageSendConfirm');if(send)cap.appendChild(send);
-   wrap.innerHTML='';wrap.appendChild(cap);
-   document.getElementById('chatImageSendCancel')?.closest('.chat-image-send-actions')?.style.setProperty('display','none','important');
-   emo.addEventListener('click',e=>{
-      e.preventDefault();e.stopPropagation();
-      const picker=document.getElementById('chatEmojiPickerPage'),mainEmoji=document.getElementById('chatEmojiBtnPage');
-      if(mainEmoji)mainEmoji.click();
-      if(picker){picker.dataset.chatCaptionTarget='1';}
-   });
- }
-}
-function buildPreview(){
- const files=filesArray();if(!files.length||!stage)return;
- ensureCaptionControls();
- const urls=files.map(f=>URL.createObjectURL(f));
- stage.innerHTML='';
- const shell=document.createElement('div');shell.className='chat-preview-main-shell';
- const prev=document.createElement('button');prev.type='button';prev.className='chat-preview-nav prev';prev.setAttribute('aria-label','الصورة السابقة');prev.innerHTML='<i class="fas fa-chevron-right"></i>';
- const next=document.createElement('button');next.type='button';next.className='chat-preview-nav next';next.setAttribute('aria-label','الصورة التالية');next.innerHTML='<i class="fas fa-chevron-left"></i>';
- const main=document.createElement('div');main.className='chat-image-send-item chat-preview-main-item';
- const img=document.createElement('img');img.alt='معاينة الصورة';img.draggable=false;main.appendChild(img);
- shell.append(prev,main,next);stage.appendChild(shell);
- thumbStrip=document.createElement('div');thumbStrip.className='chat-image-thumb-strip';stage.appendChild(thumbStrip);
- files.forEach((file,i)=>{
-   const b=document.createElement('button');b.type='button';b.className='chat-image-thumb';b.dataset.index=String(i);b.innerHTML=`<img src="${esc(urls[i])}" alt="صورة ${i+1}">`;thumbStrip.appendChild(b);
- });
- function setIndex(i){currentIndex=(i+files.length)%files.length;img.src=urls[currentIndex];thumbStrip.querySelectorAll('.chat-image-thumb').forEach((b,j)=>b.classList.toggle('active',j===currentIndex));const active=thumbStrip.querySelector('.chat-image-thumb.active');if(active)active.scrollIntoView({inline:'center',block:'nearest'});}
- prev.addEventListener('click',e=>{e.preventDefault();setIndex(currentIndex-1);});
- next.addEventListener('click',e=>{e.preventDefault();setIndex(currentIndex+1);});
- thumbStrip.addEventListener('click',e=>{const b=e.target.closest('.chat-image-thumb');if(b)setIndex(Number(b.dataset.index)||0);});
- thumbStrip.addEventListener('wheel',e=>{if(Math.abs(e.deltaY)>Math.abs(e.deltaX)){e.preventDefault();thumbStrip.scrollLeft+=e.deltaY;}},{passive:false});
- thumbStrip.addEventListener('pointerdown',e=>{thumbDrag=true;dragStartX=e.clientX;dragScrollLeft=thumbStrip.scrollLeft;thumbStrip.setPointerCapture?.(e.pointerId);});
- thumbStrip.addEventListener('pointermove',e=>{if(!thumbDrag)return;thumbStrip.scrollLeft=dragScrollLeft-(e.clientX-dragStartX);});
- ['pointerup','pointercancel','pointerleave'].forEach(t=>thumbStrip.addEventListener(t,()=>{thumbDrag=false;}));
- setIndex(0);
- urls.forEach(u=>{setTimeout(()=>{try{URL.revokeObjectURL(u)}catch(_){}},600000)});
-}
-function openPreviewAfterFileEvent(){setTimeout(()=>{if(modal.classList.contains('active'))buildPreview();},0);}
-input.addEventListener('change',openPreviewAfterFileEvent);
-new MutationObserver(()=>{if(modal.classList.contains('active')&&input.files?.length)buildPreview();}).observe(modal,{attributes:true,attributeFilter:['class']});
-caption?.addEventListener('input',()=>{if(caption.value.length>0){}},{passive:true});
-
-document.addEventListener('click',e=>{
- if(!modal.classList.contains('active'))return;
- const item=e.target.closest?.('#chatEmojiPickerPage .emoji-item');
- if(!item||document.getElementById('chatEmojiPickerPage')?.dataset.chatCaptionTarget!=='1')return;
- const emoji=item.textContent||'';if(!emoji||!caption)return;
- e.preventDefault();e.stopPropagation();
- const start=caption.selectionStart??caption.value.length,end=caption.selectionEnd??caption.value.length;
- caption.value=caption.value.slice(0,start)+emoji+caption.value.slice(end);caption.focus();caption.selectionStart=caption.selectionEnd=start+emoji.length;
- document.getElementById('chatEmojiPickerPage')?.classList.remove('active');
-},{capture:true});
-
-function gridifyGallery(gallery){
- if(!gallery)return;
- const items=gallery.querySelectorAll('.chat-image-message-item');
- if(items.length>1){
-   gallery.classList.add('chat-gallery-grid');
-   gallery.querySelectorAll('.chat-image-more-overlay').forEach(x=>x.remove());
-   items.forEach((it,i)=>{it.style.display=i<4?'':'none';});
-   if(items.length>4){const fourth=items[3];let ov=fourth.querySelector('.chat-image-more-overlay');if(!ov){ov=document.createElement('div');ov.className='chat-image-more-overlay';fourth.appendChild(ov);}ov.textContent='+'+(items.length-4);}
- }
-}
-function isImageOnlyNode(node){
- if(!node?.matches?.('.chat-msg'))return false;
- if(!node.querySelector('.message-gallery'))return false;
- if(node.querySelector('.chat-image-caption,.reply-block'))return false;
- const t=node.querySelector('.t');return !t||!String(t.textContent||'').trim();
-}
-function groupConsecutiveImageMessages(){
- const list=document.getElementById('chatPageMessagesList');if(!list)return;
- list.querySelectorAll('.chat-msg .message-gallery').forEach(gridifyGallery);
- const children=[...list.children];
- for(let i=0;i<children.length;i++){
-   const first=children[i];if(!isImageOnlyNode(first)||first.parentElement!==list)continue;
-   const uid=String(first.dataset.userId||'');const run=[first];
-   for(let j=i+1;j<children.length;j++){const n=children[j];if(isImageOnlyNode(n)&&n.parentElement===list&&String(n.dataset.userId||'')===uid)run.push(n);else break;}
-   if(run.length<2){i+=run.length-1;continue;}
-   const group=document.createElement('div');group.className='chat-image-message-group '+(first.classList.contains('sent')?'sent':'received');group.dataset.userId=uid;
-   let header=null,avatar=null;
-   header=first.querySelector(':scope > .msg-header');avatar=first.querySelector(':scope > .chat-profile-avatar-outside');
-   if(header)group.appendChild(header);if(avatar)group.appendChild(avatar);
-   const grid=document.createElement('div');grid.className='chat-image-group-grid';group.appendChild(grid);
-   list.insertBefore(group,first);
-   run.forEach(n=>{n.classList.add('chat-image-group-source');grid.appendChild(n);});
-   const items=grid.querySelectorAll('.chat-image-message-item');items.forEach((it,k)=>{it.style.display=k<4?'':'none';});
-   if(items.length>4){const fourth=items[3];let ov=fourth.querySelector('.chat-image-more-overlay');if(!ov){ov=document.createElement('div');ov.className='chat-image-more-overlay';fourth.appendChild(ov);}ov.textContent='+'+(items.length-4);}
-   i+=run.length;
- }
-}
-const list=document.getElementById('chatPageMessagesList');
-if(list){
- let pending=0;
- const obs=new MutationObserver(()=>{cancelAnimationFrame(pending);pending=requestAnimationFrame(groupConsecutiveImageMessages);});
- obs.observe(list,{childList:true,subtree:false});
- requestAnimationFrame(groupConsecutiveImageMessages);
-}
-})();
-</script>
-
-<style id="chat-requested-precision-stage33-css">
-/* Requested chat image preview refinements — scoped to the image-send modal and in-chat image media. */
-#chatImageSendModal{padding:0!important;}
-#chatImageSendModal .chat-image-send-box{width:100vw!important;height:100vh!important;max-width:none!important;max-height:none!important;border:0!important;border-radius:0!important;box-shadow:none!important;}
-#chatImageSendModal .chat-image-send-stage{padding:12px 18px 8px!important;}
-#chatImageSendModal .chat-preview-main-shell{padding:8px 60px 8px!important;}
-#chatImageSendModal .chat-preview-nav{width:44px!important;height:44px!important;transform:translateY(-50%)!important;transition:color .16s ease,border-color .16s ease,background .16s ease,box-shadow .16s ease,transform .16s ease!important;}
-#chatImageSendModal .chat-preview-nav:hover{transform:translateY(-50%)!important;}
-#chatImageSendModal .chat-preview-nav:active{transform:translateY(-50%) scale(.95)!important;}
-#chatImageSendModal .chat-preview-nav.prev{inset-inline-start:8px!important;}
-#chatImageSendModal .chat-preview-nav.next{inset-inline-end:8px!important;}
-#chatImageSendModal .chat-image-send-caption-wrap{padding:10px 14px!important;gap:8px!important;direction:ltr!important;}
-#chatImageSendModal .chat-image-send-caption-capsule{width:100%!important;flex:1 1 auto!important;min-width:0!important;display:flex!important;flex-direction:row!important;align-items:flex-end!important;gap:8px!important;padding:4px 6px!important;border:1px solid color-mix(in srgb,var(--border) 78%,var(--chat-purple) 22%)!important;border-radius:999px!important;background:color-mix(in srgb,var(--bg-card) 94%,transparent)!important;box-shadow:inset 0 1px 0 rgba(255,255,255,.05),0 4px 16px rgba(0,0,0,.05)!important;box-sizing:border-box!important;}
-#chatImageSendModal #chatImageSendCaption{order:2!important;direction:rtl!important;text-align:start!important;flex:1 1 auto!important;min-width:0!important;min-height:42px!important;height:42px!important;max-height:140px!important;padding:10px 14px!important;border:0!important;border-radius:999px!important;background:transparent!important;box-shadow:none!important;outline:none!important;resize:none!important;overflow-y:hidden!important;box-sizing:border-box!important;line-height:22px!important;}
-#chatImageSendModal #chatImageSendEmoji{order:1!important;width:42px!important;height:42px!important;min-width:42px!important;min-height:42px!important;flex:0 0 42px!important;border-radius:14px!important;background:linear-gradient(145deg,var(--bg-card),color-mix(in srgb,var(--chat-purple) 8%,var(--bg-card)))!important;border:1px solid rgba(108,92,231,.18)!important;color:var(--text-primary)!important;box-shadow:0 5px 16px rgba(0,0,0,.07)!important;font-size:1.05rem!important;display:inline-flex!important;align-items:center!important;justify-content:center!important;}
-#chatImageSendModal #chatImageSendEmoji:hover{color:var(--chat-purple)!important;border-color:rgba(108,92,231,.38)!important;background:linear-gradient(145deg,var(--bg-card),color-mix(in srgb,var(--chat-purple) 8%,var(--bg-card)))!important;transform:none!important;box-shadow:0 9px 22px rgba(108,92,231,.14)!important;}
-#chatImageSendModal #chatImageSendEmoji:active{transform:scale(.97)!important;}
-#chatImageSendModal #chatImageSendConfirm{order:3!important;width:42px!important;height:42px!important;min-width:42px!important;min-height:42px!important;flex:0 0 42px!important;border-radius:14px!important;background:linear-gradient(145deg,#765ff0,#5c4bd2)!important;box-shadow:0 8px 22px rgba(108,92,231,.26)!important;}
-#chatImageSendModal #chatImageSendConfirm:hover{transform:translateY(-1px)!important;box-shadow:0 12px 28px rgba(108,92,231,.34)!important;}
-#chatImageSendModal #chatImageSendConfirm:active{transform:translateY(0) scale(.97)!important;}
-#chatImageSendModal .chat-image-send-actions{display:none!important;}
-#chatImageSendModal .chat-image-add{position:relative!important;flex:0 0 66px!important;width:66px!important;height:62px!important;min-width:66px!important;min-height:62px!important;padding:0!important;border:1px dashed color-mix(in srgb,var(--border) 55%,var(--accent1) 45%)!important;border-radius:12px!important;background:color-mix(in srgb,var(--bg-secondary) 92%,transparent)!important;color:var(--text-muted)!important;display:grid!important;place-items:center!important;font-size:1.15rem!important;cursor:pointer!important;transition:color .16s ease,border-color .16s ease,background .16s ease,transform .16s ease!important;}
-#chatImageSendModal .chat-image-add:hover{color:var(--accent1)!important;border-color:var(--accent1)!important;background:rgba(108,92,231,.08)!important;transform:translateY(-2px)!important;}
-#chatImageSendModal .chat-image-add:active{transform:scale(.97)!important;}
-#courseChatPage .chat-msg .message-gallery:not(.chat-gallery-grid) .chat-image-message-item{width:auto!important;height:auto!important;max-width:200px!important;aspect-ratio:auto!important;}
-#courseChatPage .chat-msg .message-gallery:not(.chat-gallery-grid) .chat-image-message-item img{width:auto!important;height:auto!important;max-width:200px!important;max-height:200px!important;object-fit:contain!important;}
-#courseChatPage .chat-msg .message-gallery.chat-gallery-grid{width:fit-content!important;max-width:min(280px,100%)!important;}
-#courseChatPage .chat-msg .message-gallery.chat-gallery-grid .chat-image-message-item{width:auto!important;height:auto!important;max-width:138px!important;aspect-ratio:auto!important;}
-#courseChatPage .chat-msg .message-gallery.chat-gallery-grid .chat-image-message-item img{width:auto!important;height:auto!important;max-width:100%!important;max-height:138px!important;object-fit:contain!important;}
-#courseChatPage .chat-image-message-group{max-width:min(300px,86%)!important;}
-#courseChatPage .chat-image-message-group .chat-image-group-grid{width:fit-content!important;max-width:100%!important;}
-#courseChatPage .chat-image-message-group .chat-image-group-source .chat-image-message-item{width:auto!important;height:auto!important;max-width:138px!important;aspect-ratio:auto!important;}
-#courseChatPage .chat-image-message-group .chat-image-group-source .chat-image-message-item img{width:auto!important;height:auto!important;max-width:100%!important;max-height:138px!important;object-fit:contain!important;}
-@media(max-width:768px){
-  #chatImageSendModal .chat-preview-main-shell{padding:8px 48px 8px!important;}
-  #chatImageSendModal .chat-preview-nav{width:40px!important;height:40px!important;}
-  #chatImageSendModal .chat-preview-nav.prev{inset-inline-start:5px!important;}
-  #chatImageSendModal .chat-preview-nav.next{inset-inline-end:5px!important;}
-  #chatImageSendModal .chat-image-send-caption-wrap{padding:8px 10px!important;}
-  #chatImageSendModal #chatImageSendEmoji,
-  #chatImageSendModal #chatImageSendConfirm{width:40px!important;height:40px!important;min-width:40px!important;min-height:40px!important;flex-basis:40px!important;}
-  #courseChatPage .chat-msg .message-gallery.chat-gallery-grid .chat-image-message-item,
-  #courseChatPage .chat-image-message-group .chat-image-group-source .chat-image-message-item{max-width:124px!important;}
-  #courseChatPage .chat-msg .message-gallery.chat-gallery-grid .chat-image-message-item img,
-  #courseChatPage .chat-image-message-group .chat-image-group-source .chat-image-message-item img{max-height:124px!important;}
-}
-</style>
-
-<script id="chat-requested-precision-stage33-js">
-(function(){
-'use strict';
-if(window.__chatRequestedPrecisionStage33)return;window.__chatRequestedPrecisionStage33=true;
-const modal=document.getElementById('chatImageSendModal');
-const input=document.getElementById('fullChatPageFileInput');
-const stage=document.getElementById('chatImageSendStage');
-const caption=document.getElementById('chatImageSendCaption');
-if(!modal||!input||!stage)return;
-function activeFiles(){
-  if(typeof chatImageModalFiles!=='undefined' && Array.isArray(chatImageModalFiles) && chatImageModalFiles.length)return chatImageModalFiles.slice();
-  return Array.from(input.files||[]);
-}
-function syncFileInput(files){
-  try{
-    const dt=new DataTransfer();
-    files.forEach(f=>dt.items.add(f));
-    input.files=dt.files;
-  }catch(_){ }
-}
-function addFilesToPreview(files){
-  const picked=Array.from(files||[]).filter(f=>f&&/^image\//i.test(f.type));
-  if(!picked.length)return;
-  const existing=(typeof chatImageModalFiles!=='undefined'&&Array.isArray(chatImageModalFiles))?chatImageModalFiles:[];
-  const merged=existing.concat(picked);
-  if(typeof chatImageModalFiles!=='undefined')chatImageModalFiles=merged;
-  syncFileInput(merged);
-  input.dispatchEvent(new Event('change',{bubbles:true}));
-}
-function buildAddButton(){
-  const strip=stage.querySelector('.chat-image-thumb-strip');
-  if(!strip||strip.querySelector('.chat-image-add'))return;
-  const add=document.createElement('button');
-  add.type='button';add.className='chat-image-add';add.setAttribute('aria-label','إضافة صور');add.title='إضافة صور';
-  add.innerHTML='<i class="fas fa-plus" aria-hidden="true"></i>';
-  add.addEventListener('click',e=>{
-    e.preventDefault();e.stopPropagation();
-    const picker=document.createElement('input');
-    picker.type='file';picker.accept='image/*';picker.multiple=true;
-    picker.addEventListener('change',()=>addFilesToPreview(picker.files));
-    picker.click();
-  });
-  strip.appendChild(add);
-}
-function patchPreview(){
-  if(!modal.classList.contains('active'))return;
-  const files=activeFiles();
-  if(!files.length)return;
-  buildAddButton();
-}
-modal.addEventListener('click',e=>{
-  const add=e.target.closest?.('.chat-image-add');
-  if(add)e.stopPropagation();
-});
-
-const observer=new MutationObserver(()=>setTimeout(patchPreview,0));
-observer.observe(modal,{attributes:true,attributeFilter:['class']});
-setTimeout(patchPreview,30);
-})();
-</script>
 </body>
 </html>
