@@ -1085,9 +1085,8 @@
         #chatImageLightbox .chat-image-lightbox-image.is-dragging{cursor:grabbing;}
         #chatImageLightbox .chat-image-lightbox-close{position:absolute;top:max(18px,env(safe-area-inset-top));inset-inline-end:max(18px,env(safe-area-inset-right));z-index:20;width:46px;height:46px;border-radius:50%;border:1px solid rgba(255,255,255,.18);background:rgba(8,10,16,.58);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);color:#fff;font-size:30px;line-height:1;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;transition:background .18s ease,color .18s ease,transform .18s ease;touch-action:manipulation;}
         #chatImageLightbox .chat-image-lightbox-close:hover{background:rgba(108,92,231,.76);transform:scale(1.04);}
-        #chatImageLightbox .chat-image-lightbox-nav{position:absolute;top:50%;z-index:20;width:50px;height:50px;margin:0;border-radius:50%;border:1px solid rgba(255,255,255,.16);background:rgba(8,10,16,.52);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);color:#fff;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;font-size:1rem;transform:translateY(-50%) translateZ(0) scale(1);transform-origin:center center;transition:background .16s ease,color .16s ease,transform .16s ease,opacity .16s ease;touch-action:manipulation;}
-        #chatImageLightbox .chat-image-lightbox-nav:hover{background:rgba(108,92,231,.78);color:#fff;transform:translateY(-50%) translateZ(0) scale(1);}
-        #chatImageLightbox .chat-image-lightbox-nav:active{transform:translateY(-50%) translateZ(0) scale(.93);background:rgba(108,92,231,.86);color:#fff;}
+        #chatImageLightbox .chat-image-lightbox-nav{position:absolute;top:50%;z-index:20;width:50px;height:50px;margin:0;border-radius:50%;border:1px solid rgba(255,255,255,.16);background:rgba(8,10,16,.52);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);color:#fff;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;font-size:1rem;transform:translateY(-50%);transition:background .16s ease,color .16s ease,transform .16s ease,opacity .16s ease;touch-action:manipulation;}
+        #chatImageLightbox .chat-image-lightbox-nav:hover{background:rgba(108,92,231,.78);color:#fff;transform:translateY(-50%) scale(1.04);}
         #chatImageLightbox .chat-image-lightbox-nav.prev{left:max(16px,env(safe-area-inset-left));}
         #chatImageLightbox .chat-image-lightbox-nav.next{right:max(16px,env(safe-area-inset-right));}
         #chatImageLightbox .chat-image-lightbox-nav[disabled]{opacity:0;pointer-events:none;}
@@ -2028,6 +2027,11 @@ body.aa-chat-fullscreen-open.aa-v9-modal-locked::before{
 #courseChatPage .chat-msg .reply-block{order:0!important;}
 </style>
 
+<style id="chat-image-caption-unification-stage9">
+/* Captions are siblings of the image grid so fixed gallery ratios cannot clip them. */
+#courseChatPage .chat-msg .chat-image-caption{order:2!important;width:min(300px,76vw)!important;margin-top:6px!important;padding:0 8px!important;color:var(--text-primary)!important;font-size:.8rem!important;line-height:1.45!important;overflow-wrap:anywhere!important;}
+@media(max-width:768px){#courseChatPage .chat-msg .chat-image-caption{width:min(272px,78vw)!important;}}
+</style>
 
 <style id="chat-gallery-orientation-layout-final">
 /* Orientation-aware layout for 1–3 images only. 4+ stays exactly on the existing grid. */
@@ -4664,7 +4668,7 @@ body.aa-chat-fullscreen-open.aa-v9-modal-locked::before{
         window.openChatMessageGallery=async function(courseId,msgId,startIndex=0){
             const snap=await db.collection('courses').doc(courseId).collection('chat').doc(msgId).get(); if(!snap.exists)return;
             const m=snap.data()||{},images=Array.isArray(m.imageUrls)?m.imageUrls:(m.imageUrl?[m.imageUrl]:[]);
-            const caption=String(m.imageCaption||m.caption||(images.length?m.message:'' )||'').trim();
+            const caption=String(m.imageCaption||m.caption||(images.length?m.message:'')).trim();
             if(images.length)openChatImageLightbox(images,caption,startIndex);
         };
         window.editChatMessage=async function(courseId,msgId){
@@ -7462,9 +7466,13 @@ body.aa-chat-fullscreen-open.aa-v9-modal-locked::before{
                                 msgHtml += `<div class="reply-block"><div class="ru">${escapeHtml(m.replyToName || 'زائر')}</div><div class="rt">${escapeHtml(m.replyToText)}</div></div>`;
                             }
 
-                            msgHtml += `<div class="t">${escapeHtml(m.message || '')}</div>`;
-                            if (m.imageUrl) {
-                                msgHtml += `<img src="${escapeHtml(m.imageUrl)}" alt="صورة">`;
+                            const legacyImages = Array.isArray(m.imageUrls) ? m.imageUrls.filter(Boolean) : (m.imageUrl ? [m.imageUrl] : []);
+                            const legacyCaption = String(m.imageCaption || m.caption || (legacyImages.length ? (m.message || '') : '')).trim();
+                            if (legacyImages.length) {
+                                msgHtml += `<div class="message-gallery legacy-chat-gallery" data-image-count="${legacyImages.length}">${legacyImages.map((u,i)=>`<figure class="chat-media-item"><div class="chat-media-frame"><img src="${escapeHtml(u)}" alt="صورة" loading="lazy" decoding="async" onclick="openChatMessageGallery('${escapeHtml(courseId)}','${doc.id}',${i})"></div></figure>`).join('')}</div>`;
+                                if (legacyCaption) msgHtml += `<div class="chat-image-caption">${escapeHtml(legacyCaption)}</div>`;
+                            } else if (m.message) {
+                                msgHtml += `<div class="t">${escapeHtml(m.message)}</div>`;
                             }
 
                             const timeStr = msgDate.toLocaleTimeString('ar-EG', {hour:'2-digit', minute:'2-digit'});
@@ -16419,14 +16427,17 @@ body.light-mode #courseChatPage .chat-msg.received{
             const firstReplyLine=(replyLines[0]||'').trim();
             const replyText=replyLines.length>1?`${firstReplyLine}…`:firstReplyLine;
             const reply=m.replyToId?`<div class="reply-block ${replyTargetDeleted?'reply-to-deleted':''}" data-reply-to-id="${safeEscape(m.replyToId||'')}" data-reply-deleted="${replyTargetDeleted?'1':'0'}"><div class="ru">${safeEscape(replyAuthorName)}</div><div class="rt">${safeEscape(replyText)}</div></div>`:'';
-            const imageCaption=String(m.imageCaption||m.caption||(images.length?m.message:'')||'').trim();
-            const gallery=(!deleted&&images.length)?`<div class="message-gallery" data-image-count="${images.length}">${images.slice(0,4).map((u,i)=>`<figure class="chat-media-item"><div class="chat-media-frame"><img src="${safeEscape(u)}" alt="صورة" loading="lazy" decoding="async" onclick="openChatMessageGallery('${safeEscape(courseId)}','${safeEscape(doc.id)}',${i})">${images.length>4&&i===3?`<span class="chat-media-more">+${images.length-4}</span>`:''}</div></figure>`).join('')}${imageCaption?`<div class="chat-image-caption">${safeEscape(imageCaption)}</div>`:''}</div>`:'';
+            const messageText=String(m.message||'').trim();
+            // New messages store image text in imageCaption/caption; legacy image messages stored it in message.
+            const imageCaption=String(m.imageCaption||m.caption||(images.length?messageText:'')).trim();
+            const gallery=(!deleted&&images.length)?`<div class="message-gallery" data-image-count="${images.length}">${images.slice(0,4).map((u,i)=>`<figure class="chat-media-item"><div class="chat-media-frame"><img src="${safeEscape(u)}" alt="صورة" loading="lazy" decoding="async" onclick="openChatMessageGallery('${safeEscape(courseId)}','${safeEscape(doc.id)}',${i})">${images.length>4&&i===3?`<span class="chat-media-more">+${images.length-4}</span>`:''}</div></figure>`).join('')}</div>`:'';
+            const captionHtml=(!deleted&&images.length&&imageCaption)?`<div class="chat-image-caption">${safeEscape(imageCaption)}</div>`:'';
             let body='';
             if(deleted&&!isAdmin){
                 body='<div class="t" style="color:var(--text-muted);font-style:italic;"><i class="fas fa-ban"></i> هذه الرسالة محذوفة</div>';
             }else{
-                const messageText=images.length?'':String(m.message||'').trim();
-                body=`${deleted?'<div style="color:#e74c3c;font-size:.78rem;font-weight:800;margin-bottom:5px;"><i class="fas fa-trash"></i> تم حذف هذه الرسالة</div>':''}${messageText?`<div class="t">${safeEscape(m.message||'')}${m.edited?'<span class="edited-label">(معدلة)</span>':''}</div>`:''}${gallery}`;
+                const textHtml=(!images.length&&messageText)?`<div class="t">${safeEscape(messageText)}${m.edited?'<span class="edited-label">(معدلة)</span>':''}</div>`:'';
+                body=`${deleted?'<div style="color:#e74c3c;font-size:.78rem;font-weight:800;margin-bottom:5px;"><i class="fas fa-trash"></i> تم حذف هذه الرسالة</div>':''}${gallery}${captionHtml}${textHtml}`;
             }
             const canEdit=!!window.__aaChatCanEditMessage?.(m);
             const actions=deleted&&!isAdmin
