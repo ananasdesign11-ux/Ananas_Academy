@@ -4404,7 +4404,7 @@ body.aa-chat-fullscreen-open.aa-v9-modal-locked::before{
             const text=document.getElementById('chatEditMessageInput').value.trim(); if(!text)return showCustomAlert('تنبيه','اكتب نص الرسالة.');
             const ref=db.collection('courses').doc(activeCourseId).collection('chat').doc(editingChatMessageId); const snap=await ref.get(); if(!snap.exists||snap.data().userId!==currentUser.uid)return showCustomAlert('غير مسموح','لا يمكنك تعديل هذه الرسالة.');
             if(!window.__aaChatCanEditMessage?.(snap.data()||{})){closeChatEditModal();return showCustomAlert('انتهت مدة التعديل','يمكن تعديل الرسالة خلال 15 دقيقة فقط من وقت إرسالها.');}
-            await ref.update({message:text,edited:true,editedAt:firebase.firestore.FieldValue.serverTimestamp()}); closeChatEditModal();
+            await ref.update({message:text,edited:true,editedAt:firebase.firestore.FieldValue.serverTimestamp()}); closeChatEditModal(); window.showCopyToast?.('تم التعديل');
         };
 
         async function loadChatLockState(courseId){
@@ -7980,7 +7980,7 @@ body.aa-chat-fullscreen-open.aa-v9-modal-locked::before{
           const reply=m.replyToText?`<div class=\"reply-block\" data-reply-to-id=\"${escapeHtml(m.replyToId||'')}\"><div class=\"ru\">${escapeHtml(m.replyToName||'زائر')}</div><div class=\"rt\">${escapeHtml(m.replyToText)}</div></div>`:'';
           const gallery=(!deleted&&images.length)?`<div class=\"message-gallery\">${images.map(u=>`<img src=\"${escapeHtml(u)}\" alt=\"صورة\" onclick=\"openChatMessageGallery('${courseId}','${newDoc.id}')\">`).join('')}</div>`:'';
           const body=deleted&&!isAdmin?'<div class=\"t\" style=\"color:var(--text-muted);font-style:italic;\"><i class=\"fas fa-ban\"></i> هذه الرسالة محذوفة</div>':`${deleted?'<div style=\"color:#e74c3c;font-size:.78rem;font-weight:800;margin-bottom:5px;\"><i class=\"fas fa-trash\"></i> تم حذف هذه الرسالة</div>':''}<div class=\"t\">${escapeHtml(m.message||'')}${m.edited?'<span class=\"edited-label\">(معدلة)</span>':''}</div>${gallery}`;
-          const actions=deleted?'':`<div class=\"msg-actions\"><button onclick='replyTo(${JSON.stringify(newDoc.id)},${JSON.stringify(profile.name||m.userName||'زائر')},${JSON.stringify((m.message||'').slice(0,120))})' title=\"رد\"><i class=\"fas fa-reply\"></i></button>${mine?`<button onclick=\"editChatMessage('${courseId}','${newDoc.id}')\" title=\"تعديل\"><i class=\"fas fa-edit\"></i></button>`:''}${(mine||isAdmin)?`<button onclick=\"deleteChatMessage('${courseId}','${newDoc.id}')\" title=\"حذف\"><i class=\"fas fa-trash\"></i></button>`:''}</div>`;
+          const actions=deleted?'':`<div class=\"msg-actions\"><button onclick='replyTo(${JSON.stringify(newDoc.id)},${JSON.stringify(profile.name||m.userName||'زائر')},${JSON.stringify(m.message||'')})' title=\"رد\"><i class=\"fas fa-reply\"></i></button>${mine?`<button onclick=\"editChatMessage('${courseId}','${newDoc.id}')\" title=\"تعديل\"><i class=\"fas fa-edit\"></i></button>`:''}${(mine||isAdmin)?`<button onclick=\"deleteChatMessage('${courseId}','${newDoc.id}')\" title=\"حذف\"><i class=\"fas fa-trash\"></i></button>`:''}</div>`;
           if(dateKey!==courseCache.lastDate){const divider=document.createElement('div');divider.className='chat-date-divider';divider.setAttribute('role','separator');divider.textContent=dateKey;container.appendChild(divider);}
           const wrap=document.createElement('div');wrap.className=`chat-msg ${mine?'sent':'received'} ${deleted?'deleted-message':''} ${(!mine&&!showHeader)?'chat-msg-grouped':''}`;wrap.dataset.messageId=String(newDoc.id);wrap.dataset.userId=String(m.userId||'');wrap.innerHTML=`${showHeader?`<div class=\"chat-profile-avatar chat-profile-avatar-outside\" data-profile-uid=\"${escapeHtml(profileUid)}\">${profile.photo?`<img src=\"${escapeHtml(profile.photo)}\" alt=\"\">`:escapeHtml((profile.name||'مستخدم').slice(0,1))}</div><div class=\"msg-header\"><span class=\"chat-profile-name chat-profile-name-trigger\" data-profile-uid=\"${escapeHtml(profileUid)}\">${escapeHtml(profile.name||m.userName||'مستخدم')}</span></div>`:''}${reply}${body}<div class=\"msg-time\">${escapeHtml(date.toLocaleTimeString('ar-SA',{hour:'2-digit',minute:'2-digit'}))}</div>${actions}`;container.appendChild(wrap);
           const atBottom=(container.scrollHeight-container.clientHeight-container.scrollTop)<80;if(atBottom)container.scrollTop=container.scrollHeight;
@@ -8026,7 +8026,7 @@ body.aa-chat-fullscreen-open.aa-v9-modal-locked::before{
             body=`${deleted?'<div style="color:#e74c3c;font-size:.78rem;font-weight:800;margin-bottom:5px;"><i class="fas fa-trash"></i> تم حذف هذه الرسالة</div>':''}<div class="t">${escapeHtml(m.message||'')}${m.edited?'<span class="edited-label">(معدلة)</span>':''}</div>${gallery}`;
           }
 
-          const actions=deleted?'':`<div class="msg-actions"><button onclick='replyTo(${JSON.stringify(doc.id)},${JSON.stringify(profile.name||m.userName||'زائر')},${JSON.stringify((m.message||'').slice(0,120))})' title="رد"><i class="fas fa-reply"></i></button>${mine?`<button onclick="editChatMessage('${courseId}','${doc.id}')" title="تعديل"><i class="fas fa-edit"></i></button>`:''}${(mine||isAdmin)?`<button onclick="deleteChatMessage('${courseId}','${doc.id}')" title="حذف"><i class="fas fa-trash"></i></button>`:''}</div>`;
+          const actions=deleted?'':`<div class="msg-actions"><button onclick='replyTo(${JSON.stringify(doc.id)},${JSON.stringify(profile.name||m.userName||'زائر')},${JSON.stringify(m.message||'')})' title="رد"><i class="fas fa-reply"></i></button>${mine?`<button onclick="editChatMessage('${courseId}','${doc.id}')" title="تعديل"><i class="fas fa-edit"></i></button>`:''}${(mine||isAdmin)?`<button onclick="deleteChatMessage('${courseId}','${doc.id}')" title="حذف"><i class="fas fa-trash"></i></button>`:''}</div>`;
 
           html+=`<div class="chat-msg ${mine?'sent':'received'} ${deleted?'deleted-message':''} ${(!mine&&!showHeader)?'chat-msg-grouped':''}" data-message-id="${doc.id}" data-user-id="${escapeHtml(m.userId||'')}" data-created-at="${escapeHtml(date.getTime())}">${showHeader?`<div class="chat-profile-avatar chat-profile-avatar-outside" data-profile-uid="${escapeHtml(profileUid)}">${profile.photo?`<img src="${escapeHtml(profile.photo)}" alt="">`:escapeHtml((profile.name||'مستخدم').slice(0,1))}</div><div class="msg-header"><span class="chat-profile-name chat-profile-name-trigger" data-profile-uid="${escapeHtml(profileUid)}">${escapeHtml(profile.name||m.userName||'مستخدم')}</span></div>`:''}${reply}${body}<div class="msg-time">${time}</div>${actions}</div>`;
 
@@ -16270,9 +16270,11 @@ body.light-mode #courseChatPage .chat-msg.received{
             }
             const originalReplyDoc=m.replyToId?allDocsMap.get(String(m.replyToId)):null;
             const replyTargetDeleted=!!originalReplyDoc?.data()?.deleted;
-            const rawReplyText=replyTargetDeleted?'هذه الرسالة محذوفة':(m.replyToText||'');
+            const originalReplyData=originalReplyDoc?.data()||{};
+            const rawReplyText=replyTargetDeleted?'هذه الرسالة محذوفة':(m.replyToText||originalReplyData.message||'');
             const replyLines=String(rawReplyText).replace(/\r/g,'').split('\n');
-            const replyText=replyLines.length>1?`${replyLines[0]}…`:replyLines[0];
+            const firstReplyLine=(replyLines[0]||'').trim();
+            const replyText=replyLines.length>1?`${firstReplyLine}…`:firstReplyLine;
             const reply=m.replyToId?`<div class="reply-block ${replyTargetDeleted?'reply-to-deleted':''}" data-reply-to-id="${safeEscape(m.replyToId||'')}" data-reply-deleted="${replyTargetDeleted?'1':'0'}"><div class="ru">${safeEscape(replyAuthorName)}</div><div class="rt">${safeEscape(replyText)}</div></div>`:'';
             const gallery=(!deleted&&images.length)?`<div class="message-gallery">${images.map(u=>`<img src="${safeEscape(u)}" alt="صورة" onclick="openChatMessageGallery('${safeEscape(courseId)}','${safeEscape(doc.id)}')">`).join('')}</div>`:'';
             let body='';
@@ -16284,7 +16286,7 @@ body.light-mode #courseChatPage .chat-msg.received{
             const canEdit=!!window.__aaChatCanEditMessage?.(m);
             const actions=deleted&&!isAdmin
                 ? `<div class="msg-actions deleted-message-actions"><button type="button" onclick="hideChatMessageFromAccount('${safeEscape(courseId)}','${safeEscape(doc.id)}')" title="حذف من حسابي" aria-label="حذف من حسابي"><i class="fas fa-trash"></i></button></div>`
-                : (deleted ? '' : `<div class="msg-actions"><button onclick='replyTo(${JSON.stringify(doc.id)},${JSON.stringify(replyAuthorName||m.userName||profile.name||'زائر')},${JSON.stringify((m.message||'').slice(0,120))})' title="رد"><i class="fas fa-reply"></i></button>${isMine&&canEdit?`<button data-chat-action="edit" onclick="editChatMessage('${safeEscape(courseId)}','${safeEscape(doc.id)}')" title="تعديل"><i class="fas fa-edit"></i></button>`:''}${(isMine||isAdmin)?`<button onclick="deleteChatMessage('${safeEscape(courseId)}','${safeEscape(doc.id)}')" title="حذف"><i class="fas fa-trash"></i></button>`:''}</div>`);
+                : (deleted ? '' : `<div class="msg-actions"><button onclick='replyTo(${JSON.stringify(doc.id)},${JSON.stringify(replyAuthorName||m.userName||profile.name||'زائر')},${JSON.stringify(m.message||'')})' title="رد"><i class="fas fa-reply"></i></button>${isMine&&canEdit?`<button data-chat-action="edit" onclick="editChatMessage('${safeEscape(courseId)}','${safeEscape(doc.id)}')" title="تعديل"><i class="fas fa-edit"></i></button>`:''}${(isMine||isAdmin)?`<button onclick="deleteChatMessage('${safeEscape(courseId)}','${safeEscape(doc.id)}')" title="حذف"><i class="fas fa-trash"></i></button>`:''}</div>`);
             const wrapper=document.createElement('div');
             wrapper.innerHTML=`<div class="chat-msg ${isMine?'sent':'received'} ${deleted?'deleted-message':''}" data-message-id="${safeEscape(doc.id)}" data-user-id="${safeEscape(m.userId||'')}" data-created-at="${safeEscape(date.getTime())}">${reply}${body}<div class="msg-time">${safeEscape(date.toLocaleTimeString('ar-SA',{hour:'2-digit',minute:'2-digit'}))}</div>${actions}</div>`;
             return wrapper.firstElementChild;
@@ -17206,8 +17208,8 @@ new MutationObserver(sync).observe(page,{attributes:true,attributeFilter:['style
 </script>
 
 <style id="aa-chat-stage6-user-fixes-css">
-#aaChatCopyToast{position:fixed;left:50%;bottom:calc(env(safe-area-inset-bottom) + 26px);transform:translate(-50%,12px);z-index:2147483647;display:none;min-width:150px;max-width:min(320px,calc(100vw - 28px));padding:11px 16px;border-radius:14px;background:color-mix(in srgb,var(--bg-secondary) 96%,transparent);border:1px solid color-mix(in srgb,var(--border) 68%,var(--accent1) 32%);color:var(--text-primary);box-shadow:0 18px 48px rgba(0,0,0,.24);backdrop-filter:blur(14px) saturate(1.15);-webkit-backdrop-filter:blur(14px) saturate(1.15);font-size:.9rem;font-weight:800;line-height:1.3;font-family:inherit;text-align:center;opacity:0;transition:opacity .16s ease,transform .16s ease;}
-#aaChatCopyToast.show{display:block;opacity:1;transform:translate(-50%,0);}
+#aaChatCopyToast{position:fixed;left:50%;bottom:calc(env(safe-area-inset-bottom) + 26px);transform:translate(-50%,22px) scale(.78);transform-origin:center bottom;z-index:2147483647;display:block;visibility:hidden;pointer-events:none;min-width:150px;max-width:min(320px,calc(100vw - 28px));padding:11px 16px;border-radius:14px;background:color-mix(in srgb,var(--bg-secondary) 96%,transparent);border:1px solid color-mix(in srgb,var(--border) 68%,var(--accent1) 32%);color:var(--text-primary);box-shadow:0 18px 48px rgba(0,0,0,.24);backdrop-filter:blur(14px) saturate(1.15);-webkit-backdrop-filter:blur(14px) saturate(1.15);font-size:.9rem;font-weight:800;line-height:1.3;font-family:inherit;text-align:center;opacity:0;transition:opacity .34s cubic-bezier(.22,.8,.22,1),transform .34s cubic-bezier(.22,.8,.22,1),visibility 0s linear .34s;}
+#aaChatCopyToast.show{visibility:visible;opacity:1;transform:translate(-50%,0) scale(1);transition:opacity .34s cubic-bezier(.22,.8,.22,1),transform .34s cubic-bezier(.22,.8,.22,1),visibility 0s linear 0s;}
 #chatEditMessageModal{width:min(560px,calc(100vw - 28px))!important;max-width:560px!important;padding:20px!important;border-radius:22px!important;background:var(--bg-card)!important;border:1px solid color-mix(in srgb,var(--border) 72%,var(--accent1) 28%)!important;box-shadow:0 26px 80px rgba(0,0,0,.28)!important;}
 #chatEditMessageModal h3{margin:0 0 12px!important;font-size:1.18rem!important;font-weight:900!important;}
 #chatEditMessageModal #chatEditMessageInput{width:100%!important;min-height:120px!important;max-height:42vh!important;padding:13px 14px!important;border:1px solid var(--border)!important;border-radius:16px!important;background:var(--bg-secondary)!important;color:var(--text-primary)!important;font:inherit!important;line-height:1.65!important;resize:vertical!important;outline:0!important;box-shadow:none!important;}
@@ -17256,8 +17258,9 @@ const page=document.getElementById('courseChatPage'),list=document.getElementByI
 function getMsg(id){if(!id)return null;try{return page.querySelector('.chat-msg[data-message-id="'+CSS.escape(String(id))+'"]')}catch(_){return [...page.querySelectorAll('.chat-msg')].find(x=>String(x.dataset.messageId)===String(id))||null;}}
 function getReplyData(el){if(!el)return null;const name=el.querySelector('.chat-profile-name')?.textContent?.trim()||el.querySelector('.u')?.textContent?.trim()||'مستخدم';const text=el.querySelector('.t')?.innerText?.trim()||'';const img=el.querySelector('.message-gallery img,.chat-msg > img');return{id:el.dataset.messageId||'',name,text,thumb:img?.src||''};}
 function renderReplyPreview(name,text,thumb){const box=document.getElementById('chatReplyIndicatorPage');if(!box)return;let wrap=box.querySelector('.aa-reply-preview');let close=box.querySelector('.close-reply');if(!wrap){wrap=document.createElement('div');wrap.className='aa-reply-preview';const copy=document.createElement('div');copy.className='aa-reply-preview-copy';copy.innerHTML='<strong></strong><span></span>';wrap.appendChild(copy);box.innerHTML='';box.appendChild(wrap);if(close)box.appendChild(close);}const old=wrap.querySelector('.aa-reply-preview-thumb');if(old)old.remove();if(thumb){const im=document.createElement('img');im.className='aa-reply-preview-thumb';im.src=thumb;im.alt='';wrap.insertBefore(im,wrap.firstChild);}const n=wrap.querySelector('strong'),t=wrap.querySelector('span');if(n)n.textContent=name||'مستخدم';if(t)t.textContent=text||'صورة';}
-const baseReply=window.replyTo||function(){};window.replyTo=function(msgId,userName,msgText,replyThumb){baseReply.apply(this,arguments);renderReplyPreview(userName,msgText,replyThumb||'');};
-function setReplyFromElement(el){const d=getReplyData(el);if(d?.id)window.replyTo?.(d.id,d.name,d.text.slice(0,120),d.thumb);}
+function chatReplyPreviewText(text){const lines=String(text||'').replace(/\r/g,'').split('\n');const first=(lines[0]||'').trim();return lines.length>1?`${first}…`:first;}
+const baseReply=window.replyTo||function(){};window.replyTo=function(msgId,userName,msgText,replyThumb){baseReply.apply(this,arguments);renderReplyPreview(userName,chatReplyPreviewText(msgText),replyThumb||'');};
+function setReplyFromElement(el){const d=getReplyData(el);if(d?.id)window.replyTo?.(d.id,d.name,d.text,d.thumb);}
 function flashOriginal(id){const el=getMsg(id);if(!el)return;el.scrollIntoView({behavior:'smooth',block:'center'});clearTimeout(el.__aaReplyFlashTimer);el.classList.add('aa-reply-flash');el.__aaReplyFlashTimer=setTimeout(()=>el.classList.remove('aa-reply-flash'),720);}
 document.addEventListener('click',e=>{const block=e.target.closest?.('#courseChatPage .reply-block[data-reply-to-id]');if(!block)return;if(block.dataset.replyDeleted==='1'){e.preventDefault();e.stopPropagation();return;}e.preventDefault();e.stopPropagation();flashOriginal(block.getAttribute('data-reply-to-id'));},true);
 let sx=0,sy=0,st=0,target=null;list.addEventListener('touchstart',e=>{if(e.touches.length!==1)return;const t=e.target.closest?.('.chat-msg');if(!t||e.target.closest('button,input,textarea,select,.msg-actions,.message-gallery,.chat-profile-avatar-outside,.chat-profile-name-trigger,.reply-block')){target=null;return;}const p=e.touches[0];sx=p.clientX;sy=p.clientY;st=Date.now();target=t;},{passive:true,capture:true});
@@ -17288,6 +17291,55 @@ setTimeout(()=>{syncLockUI();scheduleLockClock()},0);
 })();
 </script>
 
+<style id="aa-chat-direction-final-fix">
+/* Requested chat direction: own messages right, others left. */
+#courseChatPage .chat-msg.sent{
+    align-self:flex-end!important;
+    margin-inline-start:0!important;
+    margin-inline-end:0!important;
+}
+#courseChatPage .chat-msg.received{
+    align-self:flex-start!important;
+    margin-inline-start:0!important;
+    margin-inline-end:34px!important;
+}
+/* For received messages, keep the avatar and name on the physical left side of the bubble. */
+#courseChatPage .chat-msg.received .chat-profile-avatar-outside{
+    inset-inline-start:auto!important;
+    left:-34px!important;
+    right:auto!important;
+}
+#courseChatPage .chat-msg.received .msg-header{
+    position:absolute!important;
+    left:-136px!important;
+    right:auto!important;
+    top:4px!important;
+    width:96px!important;
+    margin:0!important;
+    justify-content:flex-start!important;
+    direction:ltr!important;
+    overflow:hidden!important;
+}
+#courseChatPage .chat-msg.received .chat-profile-name-trigger{
+    display:block!important;
+    width:100%!important;
+    max-width:100%!important;
+    text-align:left!important;
+    direction:rtl!important;
+    overflow:hidden!important;
+    text-overflow:ellipsis!important;
+    white-space:nowrap!important;
+}
+#courseChatPage .chat-msg.sent .msg-header,
+#courseChatPage .chat-msg.sent .chat-profile-avatar-outside{
+    display:none!important;
+}
+@media(max-width:768px){
+    #courseChatPage .chat-msg.received{margin-inline-end:31px!important;}
+    #courseChatPage .chat-msg.received .chat-profile-avatar-outside{left:-31px!important;}
+    #courseChatPage .chat-msg.received .msg-header{left:-116px!important;width:82px!important;}
+}
+</style>
 <style id="aa-chat-smart-grouping-final-css">
 #courseChatPage .chat-msg-grouped .msg-time{opacity:.52;}
 #courseChatPage .chat-msg-grouped .reply-block{margin-bottom:4px;}
