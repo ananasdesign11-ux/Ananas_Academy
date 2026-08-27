@@ -4367,17 +4367,9 @@ body.aa-chat-fullscreen-open.aa-v9-modal-locked::before{
         let chatSelectedFiles=[];
         let editingChatMessageId=null;
 
-        window.openChatMessageGallery=async function(courseId,msgId,startIndex=0){
+        window.openChatMessageGallery=async function(courseId,msgId){
             const snap=await db.collection('courses').doc(courseId).collection('chat').doc(msgId).get(); if(!snap.exists)return;
-            const m=snap.data()||{},images=Array.isArray(m.imageUrls)?m.imageUrls:(m.imageUrl?[m.imageUrl]:[]); if(!images.length)return;
-            const time=new Date(tsMs(m.createdAt)||Date.now()).toLocaleTimeString('ar-SA',{hour:'2-digit',minute:'2-digit'});
-            const caption=String(m.imageCaption||m.caption||'').trim();
-            const viewer=document.getElementById('platformGalleryViewer'),content=document.getElementById('platformGalleryViewerContent');
-            if(!viewer||!content)return;
-            content.innerHTML=images.map((u,i)=>`<figure class="chat-open-image-item" data-open-index="${i}"><div class="chat-open-image-frame"><img src="${safeEscape(u)}" alt="صورة ${i+1}"><span class="chat-open-image-time">${safeEscape(time)}</span></div></figure>`).join('')+(caption?`<div class="gallery-viewer-caption">${safeEscape(caption)}</div>`:'');
-            viewer.classList.add('active'); viewer.setAttribute('aria-hidden','false');
-            const index=Math.max(0,Math.min(images.length-1,Number(startIndex)||0));
-            content.querySelector(`[data-open-index="${index}"]`)?.scrollIntoView({behavior:'auto',block:'center'});
+            const m=snap.data()||{},images=Array.isArray(m.imageUrls)?m.imageUrls:(m.imageUrl?[m.imageUrl]:[]); if(images.length)openPlatformGalleryViewer(images,m.userName||'صورة في المحادثة');
         };
         window.editChatMessage=async function(courseId,msgId){
             if(!currentUser)return triggerAuth(); const snap=await db.collection('courses').doc(courseId).collection('chat').doc(msgId).get(); if(!snap.exists)return;
@@ -16132,14 +16124,7 @@ body.light-mode #courseChatPage .chat-msg.received{
             const replyText=replyLines.length>1?`${firstReplyLine}…`:firstReplyLine;
             const reply=m.replyToId?`<div class="reply-block ${replyTargetDeleted?'reply-to-deleted':''}" data-reply-to-id="${safeEscape(m.replyToId||'')}" data-reply-deleted="${replyTargetDeleted?'1':'0'}"><div class="ru">${safeEscape(replyAuthorName)}</div><div class="rt">${safeEscape(replyText)}</div></div>`:'';
             const imageCaption=String(m.imageCaption||m.caption||'').trim();
-            const imageTime=date.toLocaleTimeString('ar-SA',{hour:'2-digit',minute:'2-digit'});
-            let gallery='';
-            if(!deleted&&images.length){
-                const galleryLayout=images.length===1?'single':images.length===2?'double':images.length===3?'triple':'grid4';
-                const visibleImages=images.slice(0,4);
-                const extraCount=Math.max(0,images.length-4);
-                gallery=`<div class="message-gallery message-gallery-${galleryLayout}" data-image-count="${images.length}">${visibleImages.map((u,i)=>`<figure class="chat-media-item${extraCount>0&&i===3?' has-more':''}"><div class="chat-media-frame"><img src="${safeEscape(u)}" alt="صورة" loading="lazy" decoding="async" onclick="openChatMessageGallery('${safeEscape(courseId)}','${safeEscape(doc.id)}',${i})">${extraCount>0&&i===3?`<span class="chat-media-more">+${extraCount}</span>`:''}</div></figure>`).join('')}${imageCaption?`<div class="chat-image-caption"><span class="chat-image-caption-text">${safeEscape(imageCaption)}</span><span class="chat-image-caption-time">${safeEscape(imageTime)}</span></div>`:`<span class="chat-media-time chat-media-time-group">${safeEscape(imageTime)}</span>`}</div>`;
-            }
+            const gallery=(!deleted&&images.length)?`<div class="message-gallery">${images.map(u=>`<figure class="chat-media-item"><div class="chat-media-frame"><img src="${safeEscape(u)}" alt="صورة" loading="lazy" decoding="async" onclick="openChatMessageGallery('${safeEscape(courseId)}','${safeEscape(doc.id)}')"><span class="chat-media-time">${safeEscape(date.toLocaleTimeString('ar-SA',{hour:'2-digit',minute:'2-digit'}))}</span></div></figure>`).join('')}${imageCaption?`<div class="chat-image-caption">${safeEscape(imageCaption)}</div>`:''}</div>`:'';
             let body='';
             if(deleted&&!isAdmin){
                 body='<div class="t" style="color:var(--text-muted);font-style:italic;"><i class="fas fa-ban"></i> هذه الرسالة محذوفة</div>';
@@ -16152,8 +16137,7 @@ body.light-mode #courseChatPage .chat-msg.received{
                 ? `<div class="msg-actions deleted-message-actions"><button type="button" onclick="hideChatMessageFromAccount('${safeEscape(courseId)}','${safeEscape(doc.id)}')" title="حذف من حسابي" aria-label="حذف من حسابي"><i class="fas fa-trash"></i></button></div>`
                 : (deleted ? '' : `<div class="msg-actions"><button onclick='replyTo(${JSON.stringify(doc.id)},${JSON.stringify(replyAuthorName||m.userName||profile.name||'زائر')},${JSON.stringify(m.message||'')})' title="رد"><i class="fas fa-reply"></i></button>${isMine&&canEdit?`<button data-chat-action="edit" onclick="editChatMessage('${safeEscape(courseId)}','${safeEscape(doc.id)}')" title="تعديل"><i class="fas fa-edit"></i></button>`:''}${(isMine||isAdmin)?`<button onclick="deleteChatMessage('${safeEscape(courseId)}','${safeEscape(doc.id)}')" title="حذف"><i class="fas fa-trash"></i></button>`:''}</div>`);
             const wrapper=document.createElement('div');
-            const standaloneTime=!images.length?`<div class="msg-time">${safeEscape(imageTime)}</div>`:'';
-            wrapper.innerHTML=`<div class="chat-msg ${isMine?'sent':'received'} ${deleted?'deleted-message':''}" data-message-id="${safeEscape(doc.id)}" data-user-id="${safeEscape(m.userId||'')}" data-created-at="${safeEscape(date.getTime())}">${reply}${body}${standaloneTime}${actions}</div>`;
+            wrapper.innerHTML=`<div class="chat-msg ${isMine?'sent':'received'} ${deleted?'deleted-message':''}" data-message-id="${safeEscape(doc.id)}" data-user-id="${safeEscape(m.userId||'')}" data-created-at="${safeEscape(date.getTime())}">${reply}${body}<div class="msg-time">${safeEscape(date.toLocaleTimeString('ar-SA',{hour:'2-digit',minute:'2-digit'}))}</div>${actions}</div>`;
             return wrapper.firstElementChild;
         }
         function ensureProfileData(allDocs){
@@ -16635,9 +16619,9 @@ body.light-mode #chatEmojiPickerPage.chat-emoji-rebuilt::-webkit-scrollbar-thumb
 #aaChatImagePreviewModal .aa-chat-preview-loading.open{display:flex;}
 #aaChatImagePreviewModal .aa-chat-preview-spinner{width:54px;height:54px;border-radius:50%;border:4px solid rgba(255,255,255,.22);border-top-color:#fff;animation:aaChatPreviewSpin .8s linear infinite;}
 @keyframes aaChatPreviewSpin{to{transform:rotate(360deg)}}
-#aaChatImagePreviewModal .aa-chat-preview-nav{position:absolute;top:50%;translate:0 -50%;width:48px;height:48px;margin:0;border-radius:50%;border:1px solid rgba(255,255,255,.14);background:rgba(10,10,15,.54);backdrop-filter:blur(10px);color:#fff;display:flex;align-items:center;justify-content:center;cursor:pointer;z-index:8;box-shadow:0 10px 26px rgba(0,0,0,.18);transition:background .14s ease,color .14s ease,border-color .14s ease,box-shadow .14s ease,opacity .14s ease;will-change:auto;transform:none!important;}
-#aaChatImagePreviewModal .aa-chat-preview-nav:hover{background:rgba(108,92,231,.18);color:#fff;border-color:rgba(108,92,231,.28);box-shadow:0 11px 27px rgba(0,0,0,.20);transform:none!important;}
-#aaChatImagePreviewModal .aa-chat-preview-nav:active{background:rgba(108,92,231,.24);box-shadow:0 8px 20px rgba(0,0,0,.18);transform:none!important;}
+#aaChatImagePreviewModal .aa-chat-preview-nav{position:absolute;top:50%;width:48px;height:48px;margin:0;border-radius:50%;border:1px solid rgba(255,255,255,.14);background:rgba(10,10,15,.54);backdrop-filter:blur(10px);color:#fff;display:flex;align-items:center;justify-content:center;cursor:pointer;z-index:8;box-shadow:0 10px 26px rgba(0,0,0,.18);transform:translateY(-50%) translateZ(0);transition:background .16s ease,color .16s ease,box-shadow .16s ease,opacity .16s ease;will-change:auto;}
+#aaChatImagePreviewModal .aa-chat-preview-nav:hover{background:color-mix(in srgb,var(--accent1) 88%,transparent);color:#fff;box-shadow:0 11px 27px rgba(0,0,0,.20);}
+#aaChatImagePreviewModal .aa-chat-preview-nav:active{background:color-mix(in srgb,var(--accent1) 72%,transparent);box-shadow:0 8px 20px rgba(0,0,0,.18);}
 #aaChatImagePreviewModal .aa-chat-preview-nav:disabled{opacity:0;pointer-events:none;}
 #aaChatImagePreviewModal .aa-chat-preview-nav.prev{left:16px;}
 #aaChatImagePreviewModal .aa-chat-preview-nav.next{right:16px;}
@@ -17586,242 +17570,5 @@ if(nameInput&&!nameInput.dataset.aaNameLimitBound){
 })();
 </script>
 
-
-<style id="chat-image-gallery-layout-stage32">
-/* Stage 32: image gallery rebuilt from scratch to match the supplied reference,
-   while following the site's existing theme variables. */
-#courseChatPage .chat-msg .message-gallery{
-  --gallery-gap:2px;
-  --gallery-radius:18px;
-  position:relative;
-  width:min(100%,520px);
-  max-width:100%;
-  margin-top:7px;
-  overflow:hidden;
-  display:grid;
-  gap:var(--gallery-gap);
-  background:var(--bg-secondary);
-  border:1px solid color-mix(in srgb,var(--border) 82%,transparent);
-  border-radius:var(--gallery-radius);
-  isolation:isolate;
-  direction:ltr;
-}
-#courseChatPage .chat-msg .message-gallery .chat-media-item{
-  position:relative;
-  min-width:0;
-  min-height:0;
-  margin:0;
-  overflow:hidden;
-  background:var(--bg-secondary);
-}
-#courseChatPage .chat-msg .message-gallery .chat-media-frame{
-  position:relative;
-  width:100%;
-  height:100%;
-  min-height:0;
-  overflow:hidden;
-  background:var(--bg-secondary);
-}
-#courseChatPage .chat-msg .message-gallery img{
-  display:block!important;
-  width:100%!important;
-  height:100%!important;
-  min-width:0;
-  min-height:0;
-  margin:0!important;
-  border:0;
-  object-fit:cover!important;
-  cursor:zoom-in;
-  user-select:none;
-  -webkit-user-drag:none;
-  transition:filter .16s ease;
-}
-#courseChatPage .chat-msg .message-gallery .chat-media-item:hover img{filter:brightness(.97);}
-
-/* 1 image — natural ratio, full width, no crop. */
-#courseChatPage .chat-msg .message-gallery-single{
-  display:block;
-}
-#courseChatPage .chat-msg .message-gallery-single .chat-media-item,
-#courseChatPage .chat-msg .message-gallery-single .chat-media-frame{
-  width:100%;
-  height:auto;
-}
-#courseChatPage .chat-msg .message-gallery-single img{
-  width:100%!important;
-  height:auto!important;
-  max-height:520px;
-  object-fit:contain!important;
-  background:var(--bg-secondary);
-}
-
-/* 2 images — equal 1×2 grid. */
-#courseChatPage .chat-msg .message-gallery-double{
-  grid-template-columns:repeat(2,minmax(0,1fr));
-  grid-template-rows:260px;
-}
-
-/* 3 images — horizontal reference layout by default. */
-#courseChatPage .chat-msg .message-gallery-triple{
-  grid-template-columns:repeat(2,minmax(0,1fr));
-  grid-template-rows:minmax(0,1.2fr) minmax(0,1fr);
-  height:370px;
-}
-#courseChatPage .chat-msg .message-gallery-triple .chat-media-item:first-child{
-  grid-column:1 / -1;
-  grid-row:1;
-}
-#courseChatPage .chat-msg .message-gallery-triple .chat-media-item:nth-child(2){grid-column:1;grid-row:2;}
-#courseChatPage .chat-msg .message-gallery-triple .chat-media-item:nth-child(3){grid-column:2;grid-row:2;}
-
-/* 3 images — vertical reference layout when first image is portrait. */
-#courseChatPage .chat-msg .message-gallery-triple.is-vertical{
-  grid-template-columns:repeat(2,minmax(0,1fr));
-  grid-template-rows:repeat(2,minmax(0,1fr));
-  height:370px;
-}
-#courseChatPage .chat-msg .message-gallery-triple.is-vertical .chat-media-item:first-child{
-  grid-column:1;
-  grid-row:1 / -1;
-}
-#courseChatPage .chat-msg .message-gallery-triple.is-vertical .chat-media-item:nth-child(2){
-  grid-column:2;
-  grid-row:1;
-}
-#courseChatPage .chat-msg .message-gallery-triple.is-vertical .chat-media-item:nth-child(3){
-  grid-column:2;
-  grid-row:2;
-}
-
-/* 4+ images — exactly four visible cells in a 2×2 grid. */
-#courseChatPage .chat-msg .message-gallery-grid4{
-  grid-template-columns:repeat(2,minmax(0,1fr));
-  grid-template-rows:repeat(2,minmax(0,1fr));
-  aspect-ratio:1 / 1;
-  max-height:520px;
-}
-#courseChatPage .chat-msg .message-gallery-grid4 .chat-media-item{aspect-ratio:1 / 1;}
-
-/* Outer corners rounded; internal seams sharp. */
-#courseChatPage .chat-msg .message-gallery-double .chat-media-item:first-child .chat-media-frame{border-radius:var(--gallery-radius) 0 0 var(--gallery-radius)!important;}
-#courseChatPage .chat-msg .message-gallery-double .chat-media-item:last-child .chat-media-frame{border-radius:0 var(--gallery-radius) var(--gallery-radius) 0!important;}
-
-#courseChatPage .chat-msg .message-gallery-triple:not(.is-vertical) .chat-media-item:first-child .chat-media-frame{border-radius:var(--gallery-radius) var(--gallery-radius) 0 0!important;}
-#courseChatPage .chat-msg .message-gallery-triple:not(.is-vertical) .chat-media-item:nth-child(2) .chat-media-frame{border-radius:0 0 0 var(--gallery-radius)!important;}
-#courseChatPage .chat-msg .message-gallery-triple:not(.is-vertical) .chat-media-item:nth-child(3) .chat-media-frame{border-radius:0 0 var(--gallery-radius) 0!important;}
-
-#courseChatPage .chat-msg .message-gallery-triple.is-vertical .chat-media-item:first-child .chat-media-frame{border-radius:var(--gallery-radius) 0 0 var(--gallery-radius)!important;}
-#courseChatPage .chat-msg .message-gallery-triple.is-vertical .chat-media-item:nth-child(2) .chat-media-frame{border-radius:0 var(--gallery-radius) 0 0!important;}
-#courseChatPage .chat-msg .message-gallery-triple.is-vertical .chat-media-item:nth-child(3) .chat-media-frame{border-radius:0 0 var(--gallery-radius) 0!important;}
-
-#courseChatPage .chat-msg .message-gallery-grid4 .chat-media-item:nth-child(1) .chat-media-frame{border-radius:var(--gallery-radius) 0 0 0!important;}
-#courseChatPage .chat-msg .message-gallery-grid4 .chat-media-item:nth-child(2) .chat-media-frame{border-radius:0 var(--gallery-radius) 0 0!important;}
-#courseChatPage .chat-msg .message-gallery-grid4 .chat-media-item:nth-child(3) .chat-media-frame{border-radius:0 0 0 var(--gallery-radius)!important;}
-#courseChatPage .chat-msg .message-gallery-grid4 .chat-media-item:nth-child(4) .chat-media-frame{border-radius:0 0 var(--gallery-radius) 0!important;}
-
-/* +N overlay. */
-#courseChatPage .chat-msg .chat-media-more{
-  position:absolute;
-  inset:0;
-  display:flex;
-  align-items:center;
-  justify-content:center;
-  background:rgba(0,0,0,.56);
-  color:#fff;
-  font-size:clamp(1.5rem,4vw,2.05rem);
-  font-weight:900;
-  letter-spacing:.01em;
-  z-index:5;
-  pointer-events:none;
-  backdrop-filter:blur(2px);
-}
-
-/* One group timestamp only. */
-#courseChatPage .chat-msg .chat-media-time-group{
-  position:absolute;
-  inset-inline-end:9px;
-  bottom:8px;
-  z-index:7;
-  min-width:46px;
-  padding:7px 9px 6px;
-  color:#fff;
-  text-align:center;
-  white-space:nowrap;
-  font-size:.66rem;
-  font-weight:800;
-  line-height:1;
-  border-radius:999px;
-  background:linear-gradient(180deg,rgba(0,0,0,0),rgba(0,0,0,.80));
-  pointer-events:none;
-}
-
-/* Caption occupies the whole width below the images. */
-#courseChatPage .chat-msg .chat-image-caption{
-  grid-column:1 / -1;
-  display:flex;
-  align-items:flex-end;
-  gap:9px;
-  width:100%;
-  min-width:0;
-  padding:11px 12px 10px;
-  background:color-mix(in srgb,var(--bg-card) 96%,var(--bg-secondary) 4%);
-  color:var(--text-primary);
-  border-top:1px solid color-mix(in srgb,var(--border) 72%,transparent);
-  box-sizing:border-box;
-  font-size:.80rem;
-  line-height:1.55;
-}
-#courseChatPage .chat-msg .chat-image-caption-text{
-  flex:1 1 auto;
-  min-width:0;
-  white-space:pre-wrap;
-  overflow-wrap:anywhere;
-  word-break:normal;
-}
-#courseChatPage .chat-msg .chat-image-caption-time{
-  flex:0 0 auto;
-  align-self:flex-end;
-  white-space:nowrap;
-  color:var(--text-muted);
-  font-size:.66rem;
-  line-height:1;
-}
-
-@media(max-width:768px){
-  #courseChatPage .chat-msg .message-gallery{
-    --gallery-radius:15px;
-    max-width:100%;
-  }
-  #courseChatPage .chat-msg .message-gallery-double{grid-template-rows:minmax(0,58vw);}
-  #courseChatPage .chat-msg .message-gallery-triple{height:min(84vw,360px);grid-template-rows:minmax(0,1.2fr) minmax(0,1fr);}
-  #courseChatPage .chat-msg .message-gallery-triple.is-vertical{height:min(84vw,360px);}
-  #courseChatPage .chat-msg .message-gallery-grid4{max-height:92vw;}
-  #courseChatPage .chat-msg .message-gallery-single img{max-height:72vh;}
-}
-</style>
-<script id="chat-image-gallery-layout-stage32-js">
-(function(){
-'use strict';
-if(window.__aaChatImageGalleryLayoutStage32)return;
-window.__aaChatImageGalleryLayoutStage32=true;
-const list=document.getElementById('chatPageMessagesList');
-if(!list)return;
-function applyTripleOrientation(img){
-  const gallery=img?.closest?.('.message-gallery-triple');
-  if(!gallery)return;
-  const w=Number(img.naturalWidth)||0,h=Number(img.naturalHeight)||0;
-  if(w&&h)gallery.classList.toggle('is-vertical',h>w);
-}
-list.addEventListener('load',e=>{
-  const img=e.target;
-  if(!(img instanceof HTMLImageElement))return;
-  if(!img.matches('.message-gallery-triple .chat-media-item:first-child img'))return;
-  applyTripleOrientation(img);
-},true);
-list.querySelectorAll('.message-gallery-triple .chat-media-item:first-child img').forEach(img=>{
-  if(img.complete)applyTripleOrientation(img);
-});
-})();
-</script>
 </body>
 </html>
