@@ -10463,7 +10463,7 @@ window.openPublicProfileFinal=async function(uid){
 };
 
 /* Generic future-ready profile links: any card/button with data-profile-uid opens the profile. */
-document.addEventListener('click',e=>{const node=e.target.closest?.('[data-profile-uid]');if(!node)return;const uid=node.dataset.profileUid;if(!uid)return;e.preventDefault();e.stopPropagation();window.viewProfileByUserId?.(uid)},true);
+document.addEventListener('click',e=>{const node=e.target.closest?.('[data-profile-uid]');if(!node||node.closest?.('#chatImageLightbox .chat-image-lightbox-sender'))return;const uid=node.dataset.profileUid;if(!uid)return;e.preventDefault();e.stopPropagation();window.viewProfileByUserId?.(uid)},true);
 
 /* Assignment cards created by the fallback page expose the student profile as well. */
 document.addEventListener('click',e=>{const t=e.target.closest?.('.assignment-v2-body strong[data-profile-uid]');if(!t)return;window.viewProfileByUserId?.(t.dataset.profileUid)},true);
@@ -18572,117 +18572,60 @@ body.aa-chat-profile-over-lightbox #aaRebuiltProfilePage .aa-profile-hero{
 </script>
 
 
-<style id="chat-lightbox-profile-portal-v5">
-/* Profile opened from Lightbox: portal it into the Lightbox stacking context. */
-#chatImageLightbox .chat-lightbox-profile-portal{
-  position:fixed!important;inset:0!important;z-index:2147483647!important;
-  display:none!important;pointer-events:none!important;
+<style id="chat-lightbox-profile-overlay-v7">
+body.aa-chat-profile-over-lightbox #aaRebuiltProfilePage{
+    position:fixed!important;
+    inset:0!important;
+    z-index:2147483647!important;
+    display:block!important;
+    padding:18px!important;
+    background:var(--bg-primary)!important;
+    overflow:auto!important;
 }
-#chatImageLightbox .chat-lightbox-profile-portal.active{
-  display:block!important;pointer-events:auto!important;
+body.aa-chat-profile-over-lightbox #aaRebuiltProfilePage .aa-profile-shell{
+    padding-top:max(8px,env(safe-area-inset-top));
+    padding-bottom:max(18px,env(safe-area-inset-bottom));
 }
-#chatImageLightbox .chat-lightbox-profile-portal > #aaRebuiltProfilePage{
-  position:fixed!important;inset:0!important;z-index:2!important;
-  display:block!important;visibility:visible!important;opacity:1!important;
+body.aa-chat-profile-over-lightbox #aaRebuiltProfilePage .aa-profile-hero{
+    animation:aaChatProfileOverlayInV7 .18s cubic-bezier(.2,.8,.2,1);
 }
-body.aa-chat-profile-over-lightbox #chatImageLightbox .chat-lightbox-profile-portal > #aaRebuiltProfilePage{
-  display:block!important;
+@keyframes aaChatProfileOverlayInV7{
+    from{opacity:0;transform:translateY(6px) scale(.996)}
+    to{opacity:1;transform:none}
 }
 </style>
-<script id="chat-lightbox-profile-portal-v5-js">
+<script id="chat-lightbox-profile-overlay-v7">
 (function(){
   'use strict';
-  if(window.__aaChatLightboxProfilePortalV5)return;
-  window.__aaChatLightboxProfilePortalV5=true;
-  const viewer=()=>document.getElementById('chatImageLightbox');
-  const ensurePortal=()=>{
-    const v=viewer(); if(!v)return null;
-    let portal=v.querySelector('.chat-lightbox-profile-portal');
-    if(!portal){
-      portal=document.createElement('div');
-      portal.className='chat-lightbox-profile-portal';
-      portal.setAttribute('aria-hidden','true');
-      v.appendChild(portal);
-    }
-    return portal;
-  };
-  const moveProfileIntoLightbox=()=>{
-    const v=viewer(),p=document.getElementById('aaRebuiltProfilePage');
-    if(!v||!p)return false;
-    const portal=ensurePortal(); if(!portal)return false;
-    if(p.parentElement!==portal){
-      p.dataset.aaChatLightboxPortaled='1';
-      portal.appendChild(p);
-    }
-    portal.classList.add('active');
-    portal.setAttribute('aria-hidden','false');
-    return true;
-  };
-  const restoreProfileToBody=()=>{
-    const p=document.getElementById('aaRebuiltProfilePage');
-    if(!p)return;
-    if(p.parentElement && p.parentElement.classList?.contains('chat-lightbox-profile-portal')){
-      document.body.appendChild(p);
-      delete p.dataset.aaChatLightboxPortaled;
-    }
-    const portal=viewer()?.querySelector('.chat-lightbox-profile-portal');
-    if(portal){portal.classList.remove('active');portal.setAttribute('aria-hidden','true');}
-  };
-
-  const originalOpen=window.aaOpenProfile;
-  if(typeof originalOpen==='function' && !originalOpen.__aaChatLightboxPortalV5){
-    const wrapped=async function(uid,opts){
-      const chatSource=opts?.kind==='chat-lightbox' && viewer()?.classList.contains('active');
-      if(chatSource){
-        try{window.__ensureRebuiltProfilePage?.();}catch(_){ }
-        moveProfileIntoLightbox();
-        document.body.classList.add('aa-chat-profile-over-lightbox');
-      }
-      const result=await originalOpen.apply(this,arguments);
-      if(chatSource){
-        moveProfileIntoLightbox();
-        document.body.classList.add('aa-chat-profile-over-lightbox');
-      }
-      return result;
-    };
-    wrapped.__aaChatLightboxPortalV5=true;
-    wrapped.__original=originalOpen;
-    window.aaOpenProfile=wrapped;
+  if(window.__aaChatLightboxProfileOverlayV7)return;
+  window.__aaChatLightboxProfileOverlayV7=true;
+  const baseOpen=window.aaOpenProfile;
+  if(typeof baseOpen!=='function')return;
+  function lift(){
+    const page=document.getElementById('aaRebuiltProfilePage');
+    if(!page)return;
+    document.body.classList.add('aa-chat-profile-over-lightbox');
+    page.classList.add('active');
+    page.style.setProperty('position','fixed','important');
+    page.style.setProperty('inset','0','important');
+    page.style.setProperty('z-index','2147483647','important');
+    page.style.setProperty('display','block','important');
+    page.style.setProperty('padding','18px','important');
   }
-
-  const originalClose=window.closeChatImageLightbox;
-  if(typeof originalClose==='function' && !originalClose.__aaChatLightboxPortalCloseV5){
-    const wrappedClose=function(){
-      restoreProfileToBody();
-      document.body.classList.remove('aa-chat-profile-over-lightbox');
-      return originalClose.apply(this,arguments);
-    };
-    wrappedClose.__aaChatLightboxPortalCloseV5=true;
-    wrappedClose.__original=originalClose;
-    window.closeChatImageLightbox=wrappedClose;
-  }
-
-  /* The existing profileBack() handles the chat-lightbox source itself. Restore the
-     profile node to body before that branch reactivates the Lightbox. */
-  document.addEventListener('click',e=>{
-    const back=e.target.closest?.('#aaRebuiltProfilePage #aaProfileBack');
-    if(!back)return;
-    if(window.profileState?.source?.kind==='chat-lightbox'){
-      restoreProfileToBody();
-      document.body.classList.remove('aa-chat-profile-over-lightbox');
+  const wrapped=async function(uid,opts={}){
+    if(opts&&opts.kind==='chat-lightbox'&&uid){
+      lift();
+      requestAnimationFrame(lift);
+      const r=await baseOpen.apply(this,arguments);
+      requestAnimationFrame(lift);
+      return r;
     }
-  },true);
-
-  /* Safety: if the profile is closed by another existing path, never leave it portaled. */
-  const obs=new MutationObserver(()=>{
-    const p=document.getElementById('aaRebuiltProfilePage');
-    if(!p)return;
-    const portal=p.parentElement?.classList?.contains('chat-lightbox-profile-portal');
-    if(portal && !document.body.classList.contains('aa-chat-profile-over-lightbox')) restoreProfileToBody();
-  });
-  if(document.body)obs.observe(document.body,{subtree:true,childList:true,attributes:true,attributeFilter:['class']});
+    return baseOpen.apply(this,arguments);
+  };
+  wrapped.__aaChatLightboxProfileOverlayV7=true;
+  wrapped.__original=baseOpen;
+  window.aaOpenProfile=wrapped;
 })();
 </script>
-
 </body>
 </html>
