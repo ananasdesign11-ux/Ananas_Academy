@@ -16656,6 +16656,15 @@ body.light-mode #chatEmojiPickerPage.chat-emoji-rebuilt::-webkit-scrollbar-thumb
   border-color:rgba(108,92,231,.10)!important;
 }
 </style>
+<style id="chat-image-preview-interaction-fix">
+#aaChatImagePreviewModal .aa-chat-preview-nav{transform:translateY(-50%)!important;transition:background .14s ease,color .14s ease,box-shadow .14s ease!important;}
+#aaChatImagePreviewModal .aa-chat-preview-nav:hover{transform:translateY(-50%)!important;}
+#aaChatImagePreviewModal .aa-chat-preview-nav:active{transform:translateY(-50%) scale(.96)!important;}
+#aaChatImagePreviewModal .aa-chat-preview-thumb{transform:none!important;}
+#aaChatImagePreviewModal .aa-chat-preview-thumb.active{transform:none!important;}
+#aaChatImagePreviewModal .aa-chat-preview-thumb:hover{transform:none!important;}
+#aaChatImagePreviewModal .aa-chat-preview-add{transform:none!important;}
+</style>
 <style id="chat-image-lifecycle-stage28-css">
 #aaChatImagePreviewModal{position:fixed;inset:0;z-index:2147483645;display:none;align-items:center;justify-content:center;padding:0;background:rgba(5,7,15,.72);backdrop-filter:blur(14px) saturate(1.08);-webkit-backdrop-filter:blur(14px) saturate(1.08);}
 #aaChatImagePreviewModal.open{display:flex;}
@@ -16729,7 +16738,7 @@ body.light-mode #chatEmojiPickerPage.chat-emoji-rebuilt::-webkit-scrollbar-thumb
 if(window.__aaChatImageLifecycleStage28)return;window.__aaChatImageLifecycleStage28=true;
 const fileInput=document.getElementById('fullChatPageFileInput'),input=document.getElementById('fullChatPageInput');
 if(!fileInput||!input)return;
-let files=[];let urls=[];let modal=null;let captionEl=null;let sendBtn=null;let closeBtn=null;let stageImage=null;let thumbs=null;let counter=null;let prevBtn=null;let nextBtn=null;let emojiBtn=null;let emojiPopover=null;let sending=false;let currentIndex=0;let dragStartX=0;let dragScrollLeft=0;let dragging=false;let dragMoved=false;let suppressThumbScrollSyncUntil=0;
+let files=[],urls=[],modal=null,captionEl=null,sendBtn=null,closeBtn=null,stageImage=null,thumbs=null,counter=null,prevBtn=null,nextBtn=null,emojiBtn=null,emojiPopover=null,sending=false,currentIndex=0,dragStartX=0,dragScrollLeft=0,dragging=false,dragMoved=false,suppressThumbScrollSyncUntil=0,addInput=null;
 const previewEmojis=['😀','😂','😍','🥰','😎','😭','😡','👍','👏','🔥','❤️','🎉','✨','💯','🙏','🤍','🤣','😅','🤔','👀','💪','🙌','🌟','🎯','📚','✏️','🚀','😊','😮','😢','❤️‍🔥','💙','😄','😁','😇','😉','😌','😘','😋','😛','😜','🤪','🤨','🤓','😏','🙄','😬','😴','🥳','🤩','🥺','😱','🤗','🤭','🤫','🫡','😶','😐','😯','😲','🥱','😵','🤯','😈','💀','👻','🤖','🐶','🐱','🦊','🐻','🐼','🐨','🐯','🦁','🦄','🐝','🦋','🌸','🌹','🌺','🌻','🌷','🌱','🌿','🍀','🍎','🍓','🍉','🍕','🍔','🍟','🍩','🍪','☕','🎂','⚽','🏆','🎮','🎵','🎶','🚀','⭐','🌈','☀️','🌙','🧡','💛','💚','💙','💜','🖤','🤎','💔','💕','💞','💓','💗','💖','💘','💝','✅','❌','❗','❓','✔️','➕','➖','🔔','📌','📎','🎁','💡','📝','🔒'];
 function cleanupUrls(){urls.forEach(u=>{try{URL.revokeObjectURL(u)}catch(_){}});urls=[];}
 function closeModal(clear=true){if(!modal)return;modal.classList.remove('open');modal.setAttribute('aria-hidden','true');emojiPopover?.classList.remove('open');document.body.classList.remove('aa-chat-image-modal-open');if(clear){files=[];cleanupUrls();currentIndex=0;if(fileInput)fileInput.value='';}}
@@ -16740,91 +16749,34 @@ function ensureModal(){
  modal.innerHTML='<div class="aa-chat-image-preview-panel" role="dialog" aria-modal="true" aria-label="معاينة الصور قبل الإرسال"><div class="aa-chat-image-preview-head"><strong>معاينة الصور قبل الإرسال</strong><button type="button" class="aa-chat-image-preview-close" aria-label="إغلاق">&times;</button></div><div class="aa-chat-image-preview-stage"><button type="button" class="aa-chat-preview-nav prev" aria-label="الصورة السابقة"><i class="fas fa-chevron-left"></i></button><img class="aa-chat-preview-main-image" alt="معاينة"><div class="aa-chat-preview-loading"><span class="aa-chat-preview-spinner"></span></div><div class="aa-chat-preview-counter"></div><button type="button" class="aa-chat-preview-nav next" aria-label="الصورة التالية"><i class="fas fa-chevron-right"></i></button></div><div class="aa-chat-preview-caption-wrap"><div class="aa-chat-preview-composer"><button type="button" class="aa-chat-preview-emoji-btn" aria-label="اختيار رمز تعبيري"><i class="far fa-smile"></i></button><textarea id="aaChatImagePreviewCaption" rows="1" placeholder="رسالة مرفقة (اختياري)"></textarea><button type="button" class="aa-chat-preview-send-btn" aria-label="إرسال"><i class="fas fa-paper-plane"></i></button></div></div><div class="aa-chat-preview-thumbs-wrap"><div class="aa-chat-preview-thumbs" aria-label="الصور المرفقة"></div></div><div class="aa-chat-preview-emoji-popover" aria-hidden="true"></div></div>';
  document.body.appendChild(modal);stageImage=modal.querySelector('.aa-chat-preview-main-image');captionEl=modal.querySelector('#aaChatImagePreviewCaption');sendBtn=modal.querySelector('.aa-chat-preview-send-btn');closeBtn=modal.querySelector('.aa-chat-image-preview-close');thumbs=modal.querySelector('.aa-chat-preview-thumbs');counter=modal.querySelector('.aa-chat-preview-counter');prevBtn=modal.querySelector('.aa-chat-preview-nav.prev');nextBtn=modal.querySelector('.aa-chat-preview-nav.next');emojiBtn=modal.querySelector('.aa-chat-preview-emoji-btn');emojiPopover=modal.querySelector('.aa-chat-preview-emoji-popover');
  previewEmojis.forEach(em=>{const b=document.createElement('button');b.type='button';b.textContent=em;b.title=em;b.addEventListener('click',()=>insertCaptionEmoji(em));emojiPopover.appendChild(b);});
- modal.addEventListener('click',e=>{if(e.target===modal&&!sending)closeModal();});closeBtn.addEventListener('click',()=>{if(!sending)closeModal();});sendBtn.addEventListener('click',sendImages);prevBtn.addEventListener('click',()=>showIndex(currentIndex-1,true));nextBtn.addEventListener('click',()=>showIndex(currentIndex+1,true));emojiBtn.addEventListener('click',e=>{e.preventDefault();e.stopPropagation();emojiPopover.classList.toggle('open');emojiPopover.setAttribute('aria-hidden',emojiPopover.classList.contains('open')?'false':'true');});
- document.addEventListener('click',e=>{if(!modal?.classList.contains('open')||!emojiPopover?.classList.contains('open'))return;if(!emojiPopover.contains(e.target)&&!emojiBtn.contains(e.target)){emojiPopover.classList.remove('open');emojiPopover.setAttribute('aria-hidden','true');}});
+ modal.addEventListener('click',e=>{if(e.target===modal&&!sending)closeModal();});closeBtn.addEventListener('click',()=>{if(!sending)closeModal();});sendBtn.addEventListener('click',sendImages);
+ prevBtn.addEventListener('click',()=>showIndex(currentIndex-1,'right'));
+ nextBtn.addEventListener('click',()=>showIndex(currentIndex+1,'left'));
+ emojiBtn.addEventListener('click',e=>{e.preventDefault();e.stopPropagation();emojiPopover.classList.toggle('open');emojiPopover.setAttribute('aria-hidden',emojiPopover.classList.contains('open')?'false':'true');});
  thumbs.addEventListener('scroll',syncIndexFromThumbs,{passive:true});
- /* A thumbnail is always a click target; only empty rail space can start mouse-dragging. */
- thumbs.addEventListener('pointerdown',e=>{
-   if(e.target.closest?.('.aa-chat-preview-add') || e.target.closest?.('.aa-chat-preview-thumb'))return;
-   dragging=true;dragMoved=false;dragStartX=e.clientX;dragScrollLeft=thumbs.scrollLeft;
-   thumbs.setPointerCapture?.(e.pointerId);
- });
+ thumbs.addEventListener('pointerdown',e=>{if(e.target.closest?.('.aa-chat-preview-add')||e.target.closest?.('.aa-chat-preview-thumb'))return;dragging=true;dragMoved=false;dragStartX=e.clientX;dragScrollLeft=thumbs.scrollLeft;thumbs.setPointerCapture?.(e.pointerId);});
  thumbs.addEventListener('pointermove',e=>{if(!dragging)return;const dx=e.clientX-dragStartX;if(Math.abs(dx)>5)dragMoved=true;thumbs.scrollLeft=dragScrollLeft-dx;syncIndexFromThumbs();});
- const stopDrag=e=>{if(!dragging)return;dragging=false;try{thumbs.releasePointerCapture?.(e.pointerId)}catch(_){}snapThumbsToIndex();setTimeout(()=>{dragMoved=false;},0);};
- thumbs.addEventListener('pointerup',stopDrag);thumbs.addEventListener('pointercancel',stopDrag);thumbs.addEventListener('pointerleave',e=>{if(e.buttons===0)stopDrag(e);});
- /* Delegate thumbnail clicks so re-rendering the rail can never lose the handler. */
- thumbs.addEventListener('click',e=>{
-   const add=e.target.closest?.('.aa-chat-preview-add');
-   if(add){e.preventDefault();e.stopPropagation();openAddFilesPicker();return;}
-   const thumb=e.target.closest?.('.aa-chat-preview-thumb[data-index]');
-   if(!thumb)return;
-   const index=Number(thumb.dataset.index);
-   if(!Number.isInteger(index)||index<0||index>=files.length)return;
-   e.preventDefault();e.stopPropagation();dragging=false;dragMoved=false;
-   suppressThumbScrollSyncUntil=Date.now()+700;
-   showIndex(index,true);
- });
+ const stopDrag=e=>{if(!dragging)return;dragging=false;try{thumbs.releasePointerCapture?.(e.pointerId)}catch(_){}if(!dragMoved)suppressThumbScrollSyncUntil=Date.now()+500;};
+ thumbs.addEventListener('pointerup',stopDrag);thumbs.addEventListener('pointercancel',stopDrag);
+ thumbs.addEventListener('click',e=>{const add=e.target.closest?.('.aa-chat-preview-add');if(add){e.preventDefault();e.stopPropagation();openAddFilesPicker();return;}const thumb=e.target.closest?.('.aa-chat-preview-thumb[data-index]');if(!thumb)return;if(dragMoved){dragMoved=false;return;}const index=Number(thumb.dataset.index);if(!Number.isInteger(index)||index<0||index>=files.length||sending)return;e.preventDefault();e.stopPropagation();suppressThumbScrollSyncUntil=Date.now()+700;const dir=index>currentIndex?'left':index<currentIndex?'right':'none';showIndex(index,dir);});
+ ensureAddFilesInput();
  return modal;
 }
-function ensureAddFilesInput(){let addInput=document.getElementById('aaChatPreviewAddFilesInput');if(addInput)return addInput;addInput=document.createElement('input');addInput.type='file';addInput.id='aaChatPreviewAddFilesInput';addInput.accept='image/*';addInput.multiple=true;addInput.tabIndex=-1;addInput.setAttribute('aria-hidden','true');addInput.style.cssText='position:fixed;left:-10000px;top:-10000px;width:1px;height:1px;opacity:0;';document.body.appendChild(addInput);addInput.addEventListener('change',e=>{const chosen=[...(e.target.files||[])].filter(f=>/^image\//i.test(f.type));e.target.value='';if(!chosen.length||!modal?.classList.contains('open')||sending)return;const firstNewIndex=files.length;files.push(...chosen);urls.push(...chosen.map(f=>URL.createObjectURL(f)));renderThumbs();updateNav();showIndex(firstNewIndex,true);requestAnimationFrame(()=>centerThumb(currentIndex,'smooth'));});return addInput;}
-function openAddFilesPicker(){if(sending||!modal?.classList.contains('open'))return;const addInput=ensureAddFilesInput();try{if(typeof addInput.showPicker==='function')addInput.showPicker();else addInput.click();}catch(_){try{addInput.click();}catch(e){console.error('chat preview add files picker',e);}}}
-function renderThumbs(){
- if(!thumbs)return;
- thumbs.innerHTML='';
- files.forEach((file,index)=>{
-   const url=urls[index];
-   const b=document.createElement('button');
-   b.type='button'; b.className='aa-chat-preview-thumb'; b.dataset.index=String(index);
-   b.innerHTML='<img alt="">'; b.querySelector('img').src=url;
-   let downX=0,downY=0;
-   const select=ev=>{
-     const dx=Math.abs((ev.clientX??downX)-downX),dy=Math.abs((ev.clientY??downY)-downY);
-     if(dx>8||dy>8||sending)return;
-     ev.preventDefault(); ev.stopPropagation();
-     dragging=false; dragMoved=false;
-     suppressThumbScrollSyncUntil=Date.now()+700;
-     showIndex(Number(b.dataset.index),true);
-   };
-   b.addEventListener('pointerdown',e=>{downX=e.clientX;downY=e.clientY;e.stopPropagation();},{passive:true});
-   b.addEventListener('pointerup',select,{passive:false});
-   b.addEventListener('click',select);
-   thumbs.appendChild(b);
- });
- const add=document.createElement('button');
- add.type='button'; add.className='aa-chat-preview-thumb aa-chat-preview-add';
- add.setAttribute('aria-label','إضافة صور أخرى'); add.title='إضافة صور أخرى';
- add.innerHTML='<span aria-hidden="true">+</span>';
- const openAdd=ev=>{ev?.preventDefault?.();ev?.stopPropagation?.();dragging=false;dragMoved=false;openAddFilesPicker();};
- add.addEventListener('pointerdown',e=>{e.stopPropagation();},{passive:true});
- add.addEventListener('pointerup',openAdd,{passive:false});
- add.addEventListener('click',openAdd);
- thumbs.appendChild(add);
-}
+function ensureAddFilesInput(){if(addInput?.isConnected)return addInput;addInput=document.getElementById('aaChatPreviewAddFilesInput')||document.createElement('input');addInput.type='file';addInput.id='aaChatPreviewAddFilesInput';addInput.accept='image/*';addInput.multiple=true;addInput.tabIndex=-1;addInput.setAttribute('aria-hidden','true');addInput.style.cssText='position:fixed;left:-10000px;top:-10000px;width:1px;height:1px;opacity:0;';if(!addInput.isConnected)document.body.appendChild(addInput);if(addInput.dataset.bound!=='1'){addInput.dataset.bound='1';addInput.addEventListener('change',e=>{const chosen=[...(e.target.files||[])].filter(f=>/^image\//i.test(f.type));e.target.value='';if(!chosen.length||!modal?.classList.contains('open')||sending)return;const firstNewIndex=files.length;files.push(...chosen);urls.push(...chosen.map(f=>URL.createObjectURL(f)));renderThumbs();updateNav();showIndex(firstNewIndex,'left');requestAnimationFrame(()=>centerThumb(currentIndex,'smooth'));});}return addInput;}
+function openAddFilesPicker(){if(sending||!modal?.classList.contains('open'))return;const i=ensureAddFilesInput();i.value='';try{i.click();}catch(e){console.error('chat preview add files picker',e);}}
+function renderThumbs(){if(!thumbs)return;thumbs.innerHTML='';files.forEach((file,index)=>{const url=urls[index],b=document.createElement('button');b.type='button';b.className='aa-chat-preview-thumb';b.dataset.index=String(index);b.innerHTML='<img alt="">';b.querySelector('img').src=url;thumbs.appendChild(b);});const add=document.createElement('button');add.type='button';add.className='aa-chat-preview-thumb aa-chat-preview-add';add.setAttribute('aria-label','إضافة صور أخرى');add.title='إضافة صور أخرى';add.innerHTML='<span aria-hidden="true">+</span>';thumbs.appendChild(add);}
 function setLoading(v){modal?.querySelector('.aa-chat-preview-loading')?.classList.toggle('open',!!v);stageImage?.classList.toggle('is-loading',!!v);}
 function updateNav(){const many=files.length>1;if(prevBtn)prevBtn.disabled=!many;if(nextBtn)nextBtn.disabled=!many;if(prevBtn)prevBtn.style.opacity=many?'1':'0';if(nextBtn)nextBtn.style.opacity=many?'1':'0';if(counter)counter.textContent=many?`${currentIndex+1} / ${files.length}`:'';}
 function centerThumb(index,behavior='smooth'){const b=thumbs?.querySelector(`[data-index="${index}"]`);if(!b||!thumbs)return;const left=b.offsetLeft-(thumbs.clientWidth-b.offsetWidth)/2;if(behavior==='smooth')suppressThumbScrollSyncUntil=Date.now()+500;else suppressThumbScrollSyncUntil=Date.now()+80;thumbs.scrollTo({left:Math.max(0,left),behavior});}
-function snapThumbsToIndex(){centerThumb(currentIndex,'smooth');}
-function syncIndexFromThumbs(){if(!files.length||!thumbs||Date.now()<suppressThumbScrollSyncUntil)return;const center=thumbs.scrollLeft+thumbs.clientWidth/2;let best=0,bestDist=Infinity;[...thumbs.children].forEach((b,i)=>{if(!b.dataset.index)return;const c=b.offsetLeft+b.offsetWidth/2,d=Math.abs(c-center);if(d<bestDist){bestDist=d;best=Number(b.dataset.index);}});if(best!==currentIndex){currentIndex=best;updateMainImage(false);}}
-function showIndex(index,focusThumb=true){if(!files.length)return;const oldIndex=currentIndex;currentIndex=(index+files.length)%files.length;if(currentIndex===oldIndex){updateMainImage(true);if(focusThumb)centerThumb(currentIndex);return;}updateMainImage(true,oldIndex);if(focusThumb)centerThumb(currentIndex);}
-function updateMainImage(withLoading=true,oldIndex=currentIndex){const file=files[currentIndex],url=urls[currentIndex];if(!file||!url)return;setLoading(!!withLoading);stageImage.classList.remove('aa-preview-slide-left','aa-preview-slide-right');if(withLoading&&oldIndex!==currentIndex){const dir=currentIndex>oldIndex?'left':'right';void stageImage.offsetWidth;stageImage.classList.add(dir==='left'?'aa-preview-slide-left':'aa-preview-slide-right');}stageImage.src=url;stageImage.alt=file.name||'معاينة الصورة';stageImage.onload=()=>{setLoading(false);stageImage.classList.remove('aa-preview-slide-left','aa-preview-slide-right');};stageImage.onerror=()=>{setLoading(false);stageImage.classList.remove('aa-preview-slide-left','aa-preview-slide-right');};updateNav();[...thumbs?.children||[]].forEach((b,i)=>b.classList.toggle('active',i===currentIndex));}
-function openModal(list){
- ensureModal(); files=[...list]; cleanupUrls(); urls=files.map(f=>URL.createObjectURL(f));currentIndex=0;renderThumbs();captionEl.value='';modal.classList.add('open');modal.setAttribute('aria-hidden','false');document.body.classList.add('aa-chat-image-modal-open');showIndex(0,false);requestAnimationFrame(()=>{centerThumb(0,'auto');captionEl?.focus();});
-}
+function syncIndexFromThumbs(){if(!files.length||!thumbs||Date.now()<suppressThumbScrollSyncUntil)return;const center=thumbs.scrollLeft+thumbs.clientWidth/2;let best=0,bestDist=Infinity;[...thumbs.children].forEach(b=>{if(!b.dataset.index)return;const c=b.offsetLeft+b.offsetWidth/2,d=Math.abs(c-center);if(d<bestDist){bestDist=d;best=Number(b.dataset.index);}});if(best!==currentIndex){const dir=best>currentIndex?'left':'right';currentIndex=best;updateMainImage(false,dir);}}
+function showIndex(index,direction=null,focusThumb=true){if(!files.length)return;const oldIndex=currentIndex;const next=(index+files.length)%files.length;if(next===oldIndex){updateMainImage(false,null);if(focusThumb)centerThumb(currentIndex);return;}currentIndex=next;const dir=direction||(currentIndex>oldIndex?'left':'right');updateMainImage(true,dir);if(focusThumb)centerThumb(currentIndex);}
+function updateMainImage(withLoading=true,direction=null){const file=files[currentIndex],url=urls[currentIndex];if(!file||!url)return;setLoading(!!withLoading);stageImage.classList.remove('aa-preview-slide-left','aa-preview-slide-right');if(direction){void stageImage.offsetWidth;stageImage.classList.add(direction==='left'?'aa-preview-slide-left':'aa-preview-slide-right');}stageImage.src=url;stageImage.alt=file.name||'معاينة الصورة';stageImage.onload=()=>{setLoading(false);stageImage.classList.remove('aa-preview-slide-left','aa-preview-slide-right');};stageImage.onerror=()=>{setLoading(false);stageImage.classList.remove('aa-preview-slide-left','aa-preview-slide-right');};updateNav();[...thumbs?.querySelectorAll?.('.aa-chat-preview-thumb[data-index]')||[]].forEach(b=>b.classList.toggle('active',Number(b.dataset.index)===currentIndex));}
+function openModal(list){ensureModal();files=[...list];cleanupUrls();urls=files.map(f=>URL.createObjectURL(f));currentIndex=0;renderThumbs();captionEl.value='';modal.classList.add('open');modal.setAttribute('aria-hidden','false');document.body.classList.add('aa-chat-image-modal-open');updateMainImage(false,null);requestAnimationFrame(()=>{centerThumb(0,'auto');captionEl?.focus();});}
 function loadImage(file){return new Promise((resolve,reject)=>{const src=URL.createObjectURL(file),img=new Image();img.onload=()=>{URL.revokeObjectURL(src);resolve(img);};img.onerror=()=>{URL.revokeObjectURL(src);reject(new Error('image-load'));};img.src=src;});}
-async function processImage(file){
- const img=await loadImage(file),w=img.naturalWidth||img.width,h=img.naturalHeight||img.height;const ratio=w/Math.max(1,h);let targetRatio=ratio;
- if(ratio<.62)targetRatio=.75;else if(ratio>1.9)targetRatio=16/9;
- let sx=0,sy=0,sw=w,sh=h;if(Math.abs(targetRatio-ratio)>.02){if(ratio>targetRatio){sw=Math.round(h*targetRatio);sx=Math.round((w-sw)/2);}else{sh=Math.round(w/targetRatio);sy=Math.round((h-sh)/2);}}
- const maxSide=1800,scale=Math.min(1,maxSide/Math.max(sw,sh)),cw=Math.max(1,Math.round(sw*scale)),ch=Math.max(1,Math.round(sh*scale));const canvas=document.createElement('canvas');canvas.width=cw;canvas.height=ch;const ctx=canvas.getContext('2d',{alpha:false});ctx.drawImage(img,sx,sy,sw,sh,0,0,cw,ch);const blob=await new Promise((resolve,reject)=>canvas.toBlob(b=>b?resolve(b):reject(new Error('image-encode')),'image/jpeg',.9));return new File([blob],(file.name||'image').replace(/\.[^.]+$/,'')+'.jpg',{type:'image/jpeg',lastModified:Date.now()});
-}
-async function sendImages(){
- if(sending||!files.length||!activeCourseId||!currentUser)return;if(currentChatLock?.locked&&!isAdmin)return showCustomAlert('الدردشة مقفلة',currentChatLock.reason||'الدردشة مقفلة حالياً.');sending=true;sendBtn.disabled=true;closeBtn.disabled=true;captionEl.disabled=true;prevBtn.disabled=true;nextBtn.disabled=true;emojiBtn.disabled=true;setLoading(true);
- try{const processed=[];for(const f of files)processed.push(await processImage(f));const imageUrls=[];for(let i=0;i<processed.length;i++){const url=await uploadImage(processed[i]);if(!url)throw new Error('upload');imageUrls.push(url);}const caption=captionEl.value.trim();const data={userId:currentUser.uid,userName:currentUser.displayName||'طالب',message:'',createdAt:firebase.firestore.FieldValue.serverTimestamp(),imageUrls,imageUrl:imageUrls[0]};if(caption)data.imageCaption=caption;if(replyToMsgId){data.replyToId=replyToMsgId;data.replyToName=replyToUser;data.replyToText=replyToMsgText;}await db.collection('courses').doc(activeCourseId).collection('chat').add(data);if(input)input.value='';chatSelectedFiles=[];fileInput.value='';cancelReply();closeModal();}
- catch(err){console.error('chat image lifecycle',err);setLoading(false);showCustomAlert('خطأ','فشل رفع إحدى الصور.');}
- finally{sending=false;if(sendBtn)sendBtn.disabled=false;if(closeBtn)closeBtn.disabled=false;if(captionEl)captionEl.disabled=false;if(prevBtn)prevBtn.disabled=false;if(nextBtn)nextBtn.disabled=false;if(emojiBtn)emojiBtn.disabled=false;}
-}
-fileInput.addEventListener('change',e=>{e.preventDefault();e.stopImmediatePropagation();const chosen=[...(e.target.files||[])].filter(f=>/^image\//i.test(f.type));if(!chosen.length){fileInput.value='';fileInput.dataset.aaAppendToPreview='';return;}const append=fileInput.dataset.aaAppendToPreview==='1'&&modal?.classList.contains('open');fileInput.dataset.aaAppendToPreview='';if(append){const oldCount=files.length;files.push(...chosen);urls.push(...chosen.map(f=>URL.createObjectURL(f)));renderThumbs();updateNav();updateMainImage(false);requestAnimationFrame(()=>centerThumb(currentIndex,'smooth'));}else{openModal(chosen);}},{capture:true});
-document.addEventListener('keydown',e=>{if(!modal?.classList.contains('open'))return;if(e.key==='Escape'&&!sending){e.preventDefault();closeModal();return;}if(e.key==='ArrowLeft'&&!sending){e.preventDefault();showIndex(currentIndex-1);}if(e.key==='ArrowRight'&&!sending){e.preventDefault();showIndex(currentIndex+1);}});
+async function processImage(file){const img=await loadImage(file),w=img.naturalWidth||img.width,h=img.naturalHeight||img.height;const ratio=w/Math.max(1,h);let targetRatio=ratio;if(ratio<.62)targetRatio=.75;else if(ratio>1.9)targetRatio=16/9;let sx=0,sy=0,sw=w,sh=h;if(Math.abs(targetRatio-ratio)>.02){if(ratio>targetRatio){sw=Math.round(h*targetRatio);sx=Math.round((w-sw)/2);}else{sh=Math.round(w/targetRatio);sy=Math.round((h-sh)/2);}}const maxSide=1800,scale=Math.min(1,maxSide/Math.max(sw,sh)),cw=Math.max(1,Math.round(sw*scale)),ch=Math.max(1,Math.round(sh*scale));const canvas=document.createElement('canvas');canvas.width=cw;canvas.height=ch;const ctx=canvas.getContext('2d',{alpha:false});ctx.drawImage(img,sx,sy,sw,sh,0,0,cw,ch);const blob=await new Promise((resolve,reject)=>canvas.toBlob(b=>b?resolve(b):reject(new Error('image-encode')),'image/jpeg',.9));return new File([blob],(file.name||'image').replace(/\.[^.]+$/,'')+'.jpg',{type:'image/jpeg',lastModified:Date.now()});}
+async function sendImages(){if(sending||!files.length||!activeCourseId||!currentUser)return;if(currentChatLock?.locked&&!isAdmin)return showCustomAlert('الدردشة مقفلة',currentChatLock.reason||'الدردشة مقفلة حالياً.');sending=true;sendBtn.disabled=true;closeBtn.disabled=true;captionEl.disabled=true;prevBtn.disabled=true;nextBtn.disabled=true;emojiBtn.disabled=true;setLoading(true);try{const processed=[];for(const f of files)processed.push(await processImage(f));const imageUrls=[];for(const f of processed){const url=await uploadImage(f);if(!url)throw new Error('upload');imageUrls.push(url);}const caption=captionEl.value.trim();const data={userId:currentUser.uid,userName:currentUser.displayName||'طالب',message:'',createdAt:firebase.firestore.FieldValue.serverTimestamp(),imageUrls,imageUrl:imageUrls[0]};if(caption)data.imageCaption=caption;if(replyToMsgId){data.replyToId=replyToMsgId;data.replyToName=replyToUser;data.replyToText=replyToMsgText;}await db.collection('courses').doc(activeCourseId).collection('chat').add(data);if(input)input.value='';chatSelectedFiles=[];fileInput.value='';cancelReply();closeModal();}catch(err){console.error('chat image lifecycle',err);setLoading(false);showCustomAlert('خطأ','فشل رفع إحدى الصور.');}finally{sending=false;if(sendBtn)sendBtn.disabled=false;if(closeBtn)closeBtn.disabled=false;if(captionEl)captionEl.disabled=false;if(prevBtn)prevBtn.disabled=false;if(nextBtn)nextBtn.disabled=false;if(emojiBtn)emojiBtn.disabled=false;}}
+fileInput.addEventListener('change',e=>{e.preventDefault();e.stopImmediatePropagation();const chosen=[...(e.target.files||[])].filter(f=>/^image\//i.test(f.type));fileInput.value='';if(!chosen.length)return;openModal(chosen);},{capture:true});
+document.addEventListener('keydown',e=>{if(!modal?.classList.contains('open'))return;if(e.key==='Escape'&&!sending){e.preventDefault();closeModal();return;}if(e.key==='ArrowLeft'&&!sending){e.preventDefault();showIndex(currentIndex-1,'right');}if(e.key==='ArrowRight'&&!sending){e.preventDefault();showIndex(currentIndex+1,'left');}});
 window.__aaOpenChatImagePreview=openModal;
 })();
 </script>
