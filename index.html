@@ -4011,7 +4011,7 @@ body.aa-chat-fullscreen-open.aa-v9-modal-locked::before{
                 loadAssignmentsPage(activeCourseId);
             } else if(page === 'chat') {
                 document.getElementById('courseChatPage').style.display = 'block';
-                loadChatPage(activeCourseId);
+                window.loadChatPage(activeCourseId);
             }
             setMobileNavActive(page === 'lessonPlayer' ? 'learning' : page);
             persistCourseState();
@@ -4366,28 +4366,6 @@ body.aa-chat-fullscreen-open.aa-v9-modal-locked::before{
 
         let chatSelectedFiles=[];
         let editingChatMessageId=null;
-
-        async function loadChatPage(courseId) {
-            const container=document.getElementById('chatPageMessagesList'); if(!container)return;
-            if(chatUnsubscribe){chatUnsubscribe();chatUnsubscribe=null;}
-            container.innerHTML='<p style="color:var(--text-muted);text-align:center;padding:30px;">جاري تحميل الرسائل...</p>';
-            chatUnsubscribe=db.collection('courses').doc(courseId).collection('chat').orderBy('createdAt','asc').onSnapshot(snapshot=>{
-                if(snapshot.empty){container.innerHTML='<p style="color:var(--text-muted);text-align:center;padding:30px;">لا توجد رسائل.</p>';return;}
-                let html='',lastDate=''; const uid=currentUser?.uid||null;
-                snapshot.forEach(doc=>{
-                    const m=doc.data()||{}; const date=m.createdAt?.toDate?m.createdAt.toDate():(m.createdAt?.seconds?new Date(m.createdAt.seconds*1000):new Date());
-                    const dateKey=date.toLocaleDateString('ar-EG',{year:'numeric',month:'long',day:'numeric'});
-                    if(dateKey!==lastDate){html+=`<div style="text-align:center;margin:15px 0;font-size:.8rem;color:var(--text-muted);"><span style="background:var(--bg-card);padding:5px 15px;border-radius:20px;">${escapeHtml(dateKey)}</span></div>`;lastDate=dateKey;}
-                    const mine=m.userId===uid, images=Array.isArray(m.imageUrls)?m.imageUrls:(m.imageUrl?[m.imageUrl]:[]);
-                    const time=date.toLocaleTimeString('ar-EG',{hour:'2-digit',minute:'2-digit'});
-                    const reply=m.replyToText?`<div class="reply-block"><div class="ru">${escapeHtml(m.replyToName||'زائر')}</div><div class="rt">${escapeHtml(m.replyToText)}</div></div>`:'';
-                    const gallery=images.length?`<div class="message-gallery">${images.map(u=>`<img src="${escapeHtml(u)}" alt="صورة" onclick="openChatMessageGallery('${courseId}','${doc.id}')">`).join('')}</div>`:'';
-                    const actions=`<div class="msg-actions"><button onclick='replyTo(${JSON.stringify(doc.id)},${JSON.stringify(m.userName||"زائر")},${JSON.stringify((m.message||"").slice(0,120))})' title="رد"><i class="fas fa-reply"></i></button>${mine?`<button onclick="editChatMessage('${courseId}','${doc.id}')" title="تعديل"><i class="fas fa-edit"></i></button>`:''}${(mine||isAdmin)?`<button onclick="deleteChatMessage('${courseId}','${doc.id}')" title="حذف"><i class="fas fa-trash"></i></button>`:''}</div>`;
-                    html+=`<div class="chat-msg ${mine?'sent':'received'}" data-message-id="${doc.id}">${!mine?`<div class="msg-header"><span class="u">${escapeHtml(m.userName||'زائر')}</span></div>`:''}${reply}<div class="t">${escapeHtml(m.message||'')}${m.edited?'<span class="edited-label">(معدلة)</span>':''}</div>${gallery}<div class="msg-time">${time}</div>${actions}</div>`;
-                });
-                container.innerHTML=html; container.scrollTop=container.scrollHeight;
-            },err=>{console.error(err);container.innerHTML='<p style="color:#e74c3c;text-align:center;padding:30px;">حدث خطأ في تحميل الدردشة.</p>';});
-        }
 
         window.openChatMessageGallery=async function(courseId,msgId){
             const snap=await db.collection('courses').doc(courseId).collection('chat').doc(msgId).get(); if(!snap.exists)return;
@@ -7917,141 +7895,6 @@ body.aa-chat-fullscreen-open.aa-v9-modal-locked::before{
     if(skipConfirm)return remove();
     showCustomConfirm('حذف الرسالة من الجميع','سيتم حذف هذه الرسالة من جميع المشاركين وستظهر للمشرف كرسالة محذوفة. هل تريد المتابعة؟',remove,()=>{});
   };
-  window.loadChatPage=async function(courseId){
-    const container=document.getElementById('chatPageMessagesList');
-    if(!container)return;
-    if(chatUnsubscribe){chatUnsubscribe();chatUnsubscribe=null;}
-    const profileCache=window.__chatProfileCache=window.__chatProfileCache||{};
-    const chatCache=window.__aaChatPageCache=window.__aaChatPageCache||{};
-    const courseCache=chatCache[courseId]||(chatCache[courseId]={signature:'',ids:[],rendered:false,lastDate:'',lastUserId:null,lastWasReceived:false});
-    const hiddenReady=window.__aaLoadHiddenChatIds?.(courseId)||Promise.resolve(new Set());
-    if(!courseCache.rendered || !container.querySelector('.chat-msg')){
-      container.innerHTML='<p style=\"color:var(--text-muted);text-align:center;padding:30px;\">جاري تحميل الرسائل...</p>';
-    }
-
-    try{
-      chatUnsubscribe=db.collection('courses').doc(courseId).collection('chat').orderBy('createdAt','asc').onSnapshot(async snapshot=>{
-        if(snapshot.empty){
-          container.innerHTML='<p style="color:var(--text-muted);text-align:center;padding:30px;">لا توجد رسائل.</p>';
-          return;
-        }
-
-        const hiddenIds=await hiddenReady;
-        const docs=snapshot.docs.filter(d=>!hiddenIds?.has?.(String(d.id)));
-        if(!docs.length){
-          container.innerHTML='<p style="color:var(--text-muted);text-align:center;padding:30px;">لا توجد رسائل.</p>';
-          courseCache.signature='';courseCache.ids=[];courseCache.rendered=false;
-          return;
-        }
-        const ids=[...new Set(docs.map(d=>String(d.data()?.userId||'')).filter(Boolean))];
-
-        await Promise.all(ids.map(async uid=>{
-          if(profileCache[uid])return;
-          try{
-            const s=await db.collection('users').doc(uid).get();
-            const p=s.exists?(s.data()||{}):{};
-            profileCache[uid]={
-              name:p.displayName||p.name||'مستخدم',
-              photo:p.photoURL||p.photoUrl||p.photo||''
-            };
-          }catch(_){
-            profileCache[uid]={name:'مستخدم',photo:''};
-          }
-        }));
-
-        const signature=docs.map(d=>{const x=d.data()||{},u=x.updatedAt?.toMillis?x.updatedAt.toMillis():x.updatedAt?.seconds?x.updatedAt.seconds*1000:'';return String(d.id)+':'+String(u||x.editedAt?.seconds||x.deletedAt?.seconds||x.message||'')}).join('|');
-        const visibleIds=docs.map(d=>String(d.id));
-        if(courseCache.rendered && courseCache.signature===signature && container.querySelector('.chat-msg')){
-          return;
-        }
-
-        const uid=currentUser?.uid||null;
-        const previousIds=Array.isArray(courseCache.ids)?courseCache.ids:[];
-        const isAppendOnly=courseCache.rendered && visibleIds.length===previousIds.length+1 && previousIds.every((id,i)=>id===visibleIds[i]);
-
-        if(isAppendOnly){
-          const newDoc=docs[docs.length-1],m=newDoc.data()||{};
-          const date=m.createdAt?.toDate?m.createdAt.toDate():(m.createdAt?.seconds?new Date(m.createdAt.seconds*1000):new Date());
-          const dateKey=date.toLocaleDateString('ar-SA',{year:'numeric',month:'long',day:'numeric'});
-          const mine=m.userId===uid,profileUid=String(m.userId||''),profile=profileCache[profileUid]||{name:m.userName||'مستخدم',photo:''};
-          const lastEl=container.querySelector('.chat-msg:last-of-type');
-          const showHeader=!mine&&!(lastEl?.classList.contains('received')&&lastEl?.dataset.userId===profileUid);
-          const images=Array.isArray(m.imageUrls)?m.imageUrls:(m.imageUrl?[m.imageUrl]:[]),deleted=!!m.deleted;
-          const reply=m.replyToText?`<div class=\"reply-block\" data-reply-to-id=\"${escapeHtml(m.replyToId||'')}\"><div class=\"ru\">${escapeHtml(m.replyToName||'زائر')}</div><div class=\"rt\">${escapeHtml(m.replyToText)}</div></div>`:'';
-          const gallery=(!deleted&&images.length)?`<div class=\"message-gallery\">${images.map(u=>`<img src=\"${escapeHtml(u)}\" alt=\"صورة\" onclick=\"openChatMessageGallery('${courseId}','${newDoc.id}')\">`).join('')}</div>`:'';
-          const body=deleted&&!isAdmin?'<div class=\"t\" style=\"color:var(--text-muted);font-style:italic;\"><i class=\"fas fa-ban\"></i> هذه الرسالة محذوفة</div>':`${deleted?'<div style=\"color:#e74c3c;font-size:.78rem;font-weight:800;margin-bottom:5px;\"><i class=\"fas fa-trash\"></i> تم حذف هذه الرسالة</div>':''}<div class=\"t\">${escapeHtml(m.message||'')}${m.edited?'<span class=\"edited-label\">(معدلة)</span>':''}</div>${gallery}`;
-          const actions=deleted?'':`<div class=\"msg-actions\"><button onclick='replyTo(${JSON.stringify(newDoc.id)},${JSON.stringify(profile.name||m.userName||'زائر')},${JSON.stringify(m.message||'')})' title=\"رد\"><i class=\"fas fa-reply\"></i></button>${mine?`<button onclick=\"editChatMessage('${courseId}','${newDoc.id}')\" title=\"تعديل\"><i class=\"fas fa-edit\"></i></button>`:''}${(mine||isAdmin)?`<button onclick=\"deleteChatMessage('${courseId}','${newDoc.id}')\" title=\"حذف\"><i class=\"fas fa-trash\"></i></button>`:''}</div>`;
-          if(dateKey!==courseCache.lastDate){const divider=document.createElement('div');divider.className='chat-date-divider';divider.setAttribute('role','separator');divider.textContent=dateKey;container.appendChild(divider);}
-          const wrap=document.createElement('div');wrap.className=`chat-msg ${mine?'sent':'received'} ${deleted?'deleted-message':''} ${(!mine&&!showHeader)?'chat-msg-grouped':''}`;wrap.dataset.messageId=String(newDoc.id);wrap.dataset.userId=String(m.userId||'');wrap.innerHTML=`${showHeader?`<div class=\"chat-profile-avatar chat-profile-avatar-outside\" data-profile-uid=\"${escapeHtml(profileUid)}\">${profile.photo?`<img src=\"${escapeHtml(profile.photo)}\" alt=\"\">`:escapeHtml((profile.name||'مستخدم').slice(0,1))}</div><div class=\"msg-header\"><span class=\"chat-profile-name chat-profile-name-trigger\" data-profile-uid=\"${escapeHtml(profileUid)}\">${escapeHtml(profile.name||m.userName||'مستخدم')}</span></div>`:''}${reply}${body}<div class=\"msg-time\">${escapeHtml(date.toLocaleTimeString('ar-SA',{hour:'2-digit',minute:'2-digit'}))}</div>${actions}`;container.appendChild(wrap);
-          const atBottom=(container.scrollHeight-container.clientHeight-container.scrollTop)<80;if(atBottom)container.scrollTop=container.scrollHeight;
-          courseCache.signature=signature;courseCache.ids=visibleIds;courseCache.lastDate=dateKey;courseCache.lastUserId=String(m.userId||'');courseCache.lastWasReceived=!mine;
-          return;
-        }
-
-        let html='',lastDate='',previousUserId=null,previousWasReceived=false;
-
-        docs.forEach(doc=>{
-          const m=doc.data()||{};
-          const date=m.createdAt?.toDate?m.createdAt.toDate():
-            (m.createdAt?.seconds?new Date(m.createdAt.seconds*1000):new Date());
-          const dateKey=date.toLocaleDateString('ar-SA',{
-            year:'numeric',month:'long',day:'numeric'
-          });
-
-          if(dateKey!==lastDate){
-            html+=`<div style="text-align:center;margin:15px 0;font-size:.8rem;color:var(--text-muted);"><span style="background:var(--bg-card);padding:5px 15px;border-radius:20px;">${escapeHtml(dateKey)}</span></div>`;
-            lastDate=dateKey;
-            previousUserId=null;
-            previousWasReceived=false;
-          }
-
-          const mine=m.userId===uid;
-          const profileUid=String(m.userId||'');
-          const profile=profileCache[profileUid]||{
-            name:m.userName||'مستخدم',
-            photo:''
-          };
-          const showHeader=!mine&&(!previousWasReceived||previousUserId!==profileUid);
-
-          const images=Array.isArray(m.imageUrls)?m.imageUrls:(m.imageUrl?[m.imageUrl]:[]);
-          const time=date.toLocaleTimeString('ar-SA',{hour:'2-digit',minute:'2-digit'});
-          const deleted=!!m.deleted;
-          const reply=m.replyToText?`<div class="reply-block"><div class="ru">${escapeHtml(m.replyToName||'زائر')}</div><div class="rt">${escapeHtml(m.replyToText)}</div></div>`:'';
-          const gallery=(!deleted&&images.length)?`<div class="message-gallery">${images.map(u=>`<img src="${escapeHtml(u)}" alt="صورة" onclick="openChatMessageGallery('${courseId}','${doc.id}')">`).join('')}</div>`:'';
-
-          let body='';
-          if(deleted&&!isAdmin){
-            body='<div class="t" style="color:var(--text-muted);font-style:italic;"><i class="fas fa-ban"></i> هذه الرسالة محذوفة</div>';
-          }else{
-            body=`${deleted?'<div style="color:#e74c3c;font-size:.78rem;font-weight:800;margin-bottom:5px;"><i class="fas fa-trash"></i> تم حذف هذه الرسالة</div>':''}<div class="t">${escapeHtml(m.message||'')}${m.edited?'<span class="edited-label">(معدلة)</span>':''}</div>${gallery}`;
-          }
-
-          const actions=deleted?'':`<div class="msg-actions"><button onclick='replyTo(${JSON.stringify(doc.id)},${JSON.stringify(profile.name||m.userName||'زائر')},${JSON.stringify(m.message||'')})' title="رد"><i class="fas fa-reply"></i></button>${mine?`<button onclick="editChatMessage('${courseId}','${doc.id}')" title="تعديل"><i class="fas fa-edit"></i></button>`:''}${(mine||isAdmin)?`<button onclick="deleteChatMessage('${courseId}','${doc.id}')" title="حذف"><i class="fas fa-trash"></i></button>`:''}</div>`;
-
-          html+=`<div class="chat-msg ${mine?'sent':'received'} ${deleted?'deleted-message':''} ${(!mine&&!showHeader)?'chat-msg-grouped':''}" data-message-id="${doc.id}" data-user-id="${escapeHtml(m.userId||'')}" data-created-at="${escapeHtml(date.getTime())}">${showHeader?`<div class="chat-profile-avatar chat-profile-avatar-outside" data-profile-uid="${escapeHtml(profileUid)}">${profile.photo?`<img src="${escapeHtml(profile.photo)}" alt="">`:escapeHtml((profile.name||'مستخدم').slice(0,1))}</div><div class="msg-header"><span class="chat-profile-name chat-profile-name-trigger" data-profile-uid="${escapeHtml(profileUid)}">${escapeHtml(profile.name||m.userName||'مستخدم')}</span></div>`:''}${reply}${body}<div class="msg-time">${time}</div>${actions}</div>`;
-
-          previousUserId=profileUid;
-          previousWasReceived=!mine;
-        });
-
-        container.innerHTML=html;
-        container.scrollTop=container.scrollHeight;
-        courseCache.signature=signature;
-        courseCache.ids=visibleIds;
-        courseCache.lastDate=lastDate;
-        courseCache.lastUserId=previousUserId;
-        courseCache.lastWasReceived=previousWasReceived;
-        courseCache.rendered=true;
-      },err=>{
-        console.error(err);
-        container.innerHTML='<p style="color:#e74c3c;text-align:center;padding:30px;">حدث خطأ في تحميل الدردشة.</p>';
-      });
-    }catch(e){
-      console.error(e);
-      container.innerHTML='<p style="color:#e74c3c;text-align:center;padding:30px;">خطأ في الاتصال بالدردشة.</p>';
-    }
-  };
-
   /* Ensure the enrollment agreement is explicit and cannot be bypassed. */
   const agree=document.getElementById('enrollTermsAgree'),continueBtn=document.getElementById('enrollTermsContinueBtn');
   if(agree&&continueBtn){const sync=()=>{continueBtn.disabled=!agree.checked;continueBtn.style.opacity=agree.checked?'1':'.5';continueBtn.style.cursor=agree.checked?'pointer':'not-allowed';};agree.addEventListener('change',sync);sync();}
@@ -15524,13 +15367,6 @@ body.light-mode #courseChatPage .chat-msg.received{
 #courseChatPage .chat-msg .msg-time{font-variant-numeric:tabular-nums;}
 #courseChatPage .chat-msg .msg-actions{transition:opacity .2s ease,transform .2s ease!important;}
 #courseChatPage .chat-msg:hover .msg-actions{transform:translateY(-1px);}
-#courseChatPage .chat-messages-rebuilt.is-scrolling .chat-msg:hover{
-    transform:none!important;
-    box-shadow:inherit!important;
-}
-#courseChatPage .chat-messages-rebuilt.is-scrolling .chat-msg{
-    transition:none!important;
-}
 @keyframes chatMessageIn{
     from{opacity:0;transform:translateY(7px) scale(.988)}
     to{opacity:1;transform:translateY(0) scale(1)}
@@ -16174,12 +16010,18 @@ body.light-mode #courseChatPage .chat-msg.received{
         }
     });
     scrollBtn?.addEventListener('click',()=>scrollToBottom('smooth'));
+    let chatScrollRaf=0;
     chatList.addEventListener('scroll',()=>{
-        const distance=chatList.scrollHeight-chatList.clientHeight-chatList.scrollTop;
-        chatUserAtBottom=distance<=80;
-        maybeClearUnreadByViewport();
-        if(chatUserAtBottom) clearUnreadMessages();
-        updateScrollButton();
+        if(chatScrollRaf)return;
+        chatScrollRaf=requestAnimationFrame(()=>{
+            chatScrollRaf=0;
+            const distance=chatList.scrollHeight-chatList.clientHeight-chatList.scrollTop;
+            chatUserAtBottom=distance<=80;
+            maybeClearUnreadByViewport();
+            if(chatUserAtBottom) clearUnreadMessages();
+            updateScrollButton();
+            try{window.__chatStage23HandleScroll?.();}catch(_){ }
+        });
     },{passive:true});
     document.addEventListener('click',e=>{
         if(chatAdminMenuOpen && !adminRoot?.contains(e.target)) closeAdminMenu();
@@ -16340,6 +16182,7 @@ body.light-mode #courseChatPage .chat-msg.received{
                 previousUserId=profileUid; previousWasReceived=!isMine;
             }
             container.innerHTML=html||'<p style="color:var(--text-muted);text-align:center;padding:30px;">لا توجد رسائل.</p>';
+            window.__chatStage23ScheduleUnreadMarker?.();
         }
         function refreshGroupingAround(targetIds){
             const nodes=[...container.querySelectorAll('.chat-msg')];
@@ -16427,6 +16270,7 @@ body.light-mode #courseChatPage .chat-msg.received{
             }
             if(changedIds.length)refreshGroupingAround(changedIds);
             ensureUnreadDivider();
+            window.__chatStage23ScheduleUnreadMarker?.();
             return changedIds;
         }
 
@@ -16443,6 +16287,7 @@ body.light-mode #courseChatPage .chat-msg.received{
                 ss.docs=new Map([...ss.docs].filter(([id])=>!ss.hiddenIds.has(String(id))));
                 ss.lastId=[...ss.docs.keys()].at(-1)||null;
                 updateScrollButton();
+                window.__chatStage23ScheduleUnreadMarker?.();
             }catch(err){console.warn('hidden chat refresh',err);}
         };
         try{
@@ -16505,29 +16350,6 @@ body.light-mode #courseChatPage .chat-msg.received{
 })();
 </script>
 
-<script id="chat-performance-v1">
-(function(){
-    'use strict';
-    const list=document.getElementById('chatPageMessagesList');
-    if(!list||list.dataset.chatPerformanceBound==='1')return;
-    list.dataset.chatPerformanceBound='1';
-    let endTimer=0,scrolling=false;
-    const stop=()=>{
-        clearTimeout(endTimer);
-        endTimer=setTimeout(()=>{
-            scrolling=false;
-            list.classList.remove('is-scrolling');
-        },90);
-    };
-    list.addEventListener('scroll',()=>{
-        if(!scrolling){
-            scrolling=true;
-            list.classList.add('is-scrolling');
-        }
-        stop();
-    },{passive:true});
-})();
-</script>
 
 <style id="chat-stage6-hide-browser-scrollbar">
 /* Stage 6: when the chat page is open, the document itself must never expose a browser scrollbar.
@@ -17040,21 +16862,23 @@ syncHeight();
     if(unreadBadge){unreadBadge.hidden=unreadCount<=0;unreadBadge.textContent=formatCount(unreadCount);}
   };
 
-  // Mark messages as read only after the user reaches the newest message.
-  chatList.addEventListener('scroll',()=>{
+  // The rebuilt chat owns the only scroll listener. This hook contains only the unread/read bookkeeping.
+  window.__chatStage23HandleScroll=function(){
+    if(!currentOpenChat())return;
     const distance=chatList.scrollHeight-chatList.clientHeight-chatList.scrollTop;
     if(distance<=80 && activeCourseId){
       const course=activeCourseId;
       if(unreadCount>0||readState(course)>0) markReadToLatest(course);
       else setUnreadState(0,null);
     }
-  },{passive:true});
+  };
 
-  // When chat opens, wait for its first render, then place the viewport at the first unread message.
-  const chatObserver=new MutationObserver(()=>{
-    if(currentOpenChat())requestAnimationFrame(()=>requestAnimationFrame(applyUnreadMarker));
-  });
-  chatObserver.observe(chatList,{childList:true,subtree:true});
+  // The renderer calls this after DOM updates; no MutationObserver is needed.
+  window.__chatStage23ScheduleUnreadMarker=function(){
+    if(!currentOpenChat()||!unreadFirstId||unreadCount<=0)return;
+    cancelAnimationFrame(window.__chatUnreadMarkerRaf||0);
+    window.__chatUnreadMarkerRaf=requestAnimationFrame(()=>requestAnimationFrame(applyUnreadMarker));
+  };
 
   // Patch the existing page navigation without replacing its implementation.
   const oldSwitch=window.switchCoursePage;
