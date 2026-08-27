@@ -4367,9 +4367,17 @@ body.aa-chat-fullscreen-open.aa-v9-modal-locked::before{
         let chatSelectedFiles=[];
         let editingChatMessageId=null;
 
-        window.openChatMessageGallery=async function(courseId,msgId){
+        window.openChatMessageGallery=async function(courseId,msgId,startIndex=0){
             const snap=await db.collection('courses').doc(courseId).collection('chat').doc(msgId).get(); if(!snap.exists)return;
-            const m=snap.data()||{},images=Array.isArray(m.imageUrls)?m.imageUrls:(m.imageUrl?[m.imageUrl]:[]); if(images.length)openPlatformGalleryViewer(images,m.userName||'صورة في المحادثة');
+            const m=snap.data()||{},images=Array.isArray(m.imageUrls)?m.imageUrls:(m.imageUrl?[m.imageUrl]:[]); if(!images.length)return;
+            const time=new Date(tsMs(m.createdAt)||Date.now()).toLocaleTimeString('ar-SA',{hour:'2-digit',minute:'2-digit'});
+            const caption=String(m.imageCaption||m.caption||'').trim();
+            const viewer=document.getElementById('platformGalleryViewer'),content=document.getElementById('platformGalleryViewerContent');
+            if(!viewer||!content)return;
+            content.innerHTML=images.map((u,i)=>`<figure class="chat-open-image-item" data-open-index="${i}"><div class="chat-open-image-frame"><img src="${safeEscape(u)}" alt="صورة ${i+1}"><span class="chat-open-image-time">${safeEscape(time)}</span></div></figure>`).join('')+(caption?`<div class="gallery-viewer-caption">${safeEscape(caption)}</div>`:'');
+            viewer.classList.add('active'); viewer.setAttribute('aria-hidden','false');
+            const index=Math.max(0,Math.min(images.length-1,Number(startIndex)||0));
+            content.querySelector(`[data-open-index="${index}"]`)?.scrollIntoView({behavior:'auto',block:'center'});
         };
         window.editChatMessage=async function(courseId,msgId){
             if(!currentUser)return triggerAuth(); const snap=await db.collection('courses').doc(courseId).collection('chat').doc(msgId).get(); if(!snap.exists)return;
@@ -16124,7 +16132,14 @@ body.light-mode #courseChatPage .chat-msg.received{
             const replyText=replyLines.length>1?`${firstReplyLine}…`:firstReplyLine;
             const reply=m.replyToId?`<div class="reply-block ${replyTargetDeleted?'reply-to-deleted':''}" data-reply-to-id="${safeEscape(m.replyToId||'')}" data-reply-deleted="${replyTargetDeleted?'1':'0'}"><div class="ru">${safeEscape(replyAuthorName)}</div><div class="rt">${safeEscape(replyText)}</div></div>`:'';
             const imageCaption=String(m.imageCaption||m.caption||'').trim();
-            const gallery=(!deleted&&images.length)?`<div class="message-gallery">${images.map(u=>`<figure class="chat-media-item"><div class="chat-media-frame"><img src="${safeEscape(u)}" alt="صورة" loading="lazy" decoding="async" onclick="openChatMessageGallery('${safeEscape(courseId)}','${safeEscape(doc.id)}')"><span class="chat-media-time">${safeEscape(date.toLocaleTimeString('ar-SA',{hour:'2-digit',minute:'2-digit'}))}</span></div></figure>`).join('')}${imageCaption?`<div class="chat-image-caption">${safeEscape(imageCaption)}</div>`:''}</div>`:'';
+            const imageTime=date.toLocaleTimeString('ar-SA',{hour:'2-digit',minute:'2-digit'});
+            let gallery='';
+            if(!deleted&&images.length){
+                const galleryLayout=images.length===1?'single':images.length===2?'double':images.length===3?'triple':'grid4';
+                const visibleImages=images.slice(0,4);
+                const extraCount=Math.max(0,images.length-4);
+                gallery=`<div class="message-gallery message-gallery-${galleryLayout}" data-image-count="${images.length}">${visibleImages.map((u,i)=>`<figure class="chat-media-item${extraCount>0&&i===3?' has-more':''}"><div class="chat-media-frame"><img src="${safeEscape(u)}" alt="صورة" loading="lazy" decoding="async" onclick="openChatMessageGallery('${safeEscape(courseId)}','${safeEscape(doc.id)}',${i})">${extraCount>0&&i===3?`<span class="chat-media-more">+${extraCount}</span>`:''}</div></figure>`).join('')}${imageCaption?`<div class="chat-image-caption"><span class="chat-image-caption-text">${safeEscape(imageCaption)}</span><span class="chat-image-caption-time">${safeEscape(imageTime)}</span></div>`:`<span class="chat-media-time chat-media-time-group">${safeEscape(imageTime)}</span>`}</div>`;
+            }
             let body='';
             if(deleted&&!isAdmin){
                 body='<div class="t" style="color:var(--text-muted);font-style:italic;"><i class="fas fa-ban"></i> هذه الرسالة محذوفة</div>';
@@ -16137,7 +16152,8 @@ body.light-mode #courseChatPage .chat-msg.received{
                 ? `<div class="msg-actions deleted-message-actions"><button type="button" onclick="hideChatMessageFromAccount('${safeEscape(courseId)}','${safeEscape(doc.id)}')" title="حذف من حسابي" aria-label="حذف من حسابي"><i class="fas fa-trash"></i></button></div>`
                 : (deleted ? '' : `<div class="msg-actions"><button onclick='replyTo(${JSON.stringify(doc.id)},${JSON.stringify(replyAuthorName||m.userName||profile.name||'زائر')},${JSON.stringify(m.message||'')})' title="رد"><i class="fas fa-reply"></i></button>${isMine&&canEdit?`<button data-chat-action="edit" onclick="editChatMessage('${safeEscape(courseId)}','${safeEscape(doc.id)}')" title="تعديل"><i class="fas fa-edit"></i></button>`:''}${(isMine||isAdmin)?`<button onclick="deleteChatMessage('${safeEscape(courseId)}','${safeEscape(doc.id)}')" title="حذف"><i class="fas fa-trash"></i></button>`:''}</div>`);
             const wrapper=document.createElement('div');
-            wrapper.innerHTML=`<div class="chat-msg ${isMine?'sent':'received'} ${deleted?'deleted-message':''}" data-message-id="${safeEscape(doc.id)}" data-user-id="${safeEscape(m.userId||'')}" data-created-at="${safeEscape(date.getTime())}">${reply}${body}<div class="msg-time">${safeEscape(date.toLocaleTimeString('ar-SA',{hour:'2-digit',minute:'2-digit'}))}</div>${actions}</div>`;
+            const standaloneTime=!images.length?`<div class="msg-time">${safeEscape(imageTime)}</div>`:'';
+            wrapper.innerHTML=`<div class="chat-msg ${isMine?'sent':'received'} ${deleted?'deleted-message':''}" data-message-id="${safeEscape(doc.id)}" data-user-id="${safeEscape(m.userId||'')}" data-created-at="${safeEscape(date.getTime())}">${reply}${body}${standaloneTime}${actions}</div>`;
             return wrapper.firstElementChild;
         }
         function ensureProfileData(allDocs){
@@ -17570,5 +17586,56 @@ if(nameInput&&!nameInput.dataset.aaNameLimitBound){
 })();
 </script>
 
+
+<style id="chat-image-gallery-layout-stage29">
+#courseChatPage .chat-msg .message-gallery{position:relative;display:grid;gap:2px;width:100%;max-width:100%;margin-top:6px;overflow:hidden;border-radius:14px;background:var(--bg-secondary);}
+#courseChatPage .chat-msg .message-gallery .chat-media-item{position:relative;margin:0;min-width:0;min-height:0;overflow:hidden;background:var(--bg-secondary);}
+#courseChatPage .chat-msg .message-gallery .chat-media-frame{position:relative;width:100%;height:100%;overflow:hidden;background:var(--bg-secondary);}
+#courseChatPage .chat-msg .message-gallery img{display:block;width:100%;height:100%;object-fit:cover;margin:0;cursor:zoom-in;}
+#courseChatPage .chat-msg .message-gallery-single{grid-template-columns:1fr;}
+#courseChatPage .chat-msg .message-gallery-single .chat-media-item{max-height:520px;}
+#courseChatPage .chat-msg .message-gallery-single img{height:auto;max-height:520px;object-fit:contain;background:var(--bg-secondary);}
+#courseChatPage .chat-msg .message-gallery-double{grid-template-columns:repeat(2,minmax(0,1fr));aspect-ratio:2/1;}
+#courseChatPage .chat-msg .message-gallery-triple{grid-template-columns:repeat(2,minmax(0,1fr));grid-template-rows:1.15fr 1fr;aspect-ratio:4/3;}
+#courseChatPage .chat-msg .message-gallery-triple .chat-media-item:first-child{grid-column:1 / -1;grid-row:1;}
+#courseChatPage .chat-msg .message-gallery-triple.is-vertical{grid-template-columns:repeat(2,minmax(0,1fr));grid-template-rows:1fr 1fr;aspect-ratio:4/3;}
+#courseChatPage .chat-msg .message-gallery-triple.is-vertical .chat-media-item:first-child{grid-column:1;grid-row:1 / -1;}
+#courseChatPage .chat-msg .message-gallery-triple.is-vertical .chat-media-item:nth-child(2){grid-column:2;grid-row:1;}
+#courseChatPage .chat-msg .message-gallery-triple.is-vertical .chat-media-item:nth-child(3){grid-column:2;grid-row:2;}
+#courseChatPage .chat-msg .message-gallery-grid4{grid-template-columns:repeat(2,minmax(0,1fr));grid-template-rows:repeat(2,minmax(0,1fr));aspect-ratio:1/1;}
+#courseChatPage .chat-msg .message-gallery-grid4 .chat-media-item{aspect-ratio:1/1;}
+#courseChatPage .chat-msg .chat-media-more{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.42);color:#fff;font-size:1.15rem;font-weight:900;pointer-events:none;}
+#courseChatPage .chat-msg .chat-media-time-group{position:absolute;right:auto;inset-inline-end:8px;bottom:7px;z-index:5;padding:4px 8px 10px;border-radius:999px;color:#fff;background:linear-gradient(180deg,transparent,rgba(0,0,0,.76));font-size:.68rem;font-weight:800;pointer-events:none;}
+#courseChatPage .chat-msg .chat-image-caption{grid-column:1 / -1;display:flex;align-items:center;gap:10px;width:100%;padding:8px 10px;background:var(--bg-card);color:var(--text-primary);font-size:.82rem;line-height:1.45;box-sizing:border-box;}
+#courseChatPage .chat-msg .chat-image-caption-text{flex:1;min-width:0;white-space:pre-wrap;overflow-wrap:anywhere;}
+#courseChatPage .chat-msg .chat-image-caption-time{flex:0 0 auto;white-space:nowrap;font-size:.68rem;opacity:.7;}
+#courseChatPage .chat-msg .message-gallery .chat-media-frame{border-radius:0!important;}
+#courseChatPage .chat-msg .message-gallery-single .chat-media-frame{border-radius:14px!important;}
+@media(max-width:768px){#courseChatPage .chat-msg .message-gallery{border-radius:12px;}#courseChatPage .chat-msg .message-gallery-single .chat-media-item,#courseChatPage .chat-msg .message-gallery-single img{max-height:430px;}}
+#platformGalleryViewer .chat-open-image-item{position:relative;width:100%;margin:0;display:flex;justify-content:center;}
+#platformGalleryViewer .chat-open-image-frame{position:relative;width:100%;max-width:min(1000px,96vw);display:flex;justify-content:center;}
+#platformGalleryViewer .chat-open-image-item img{display:block;max-width:100%;max-height:78vh;width:auto;height:auto;object-fit:contain;border-radius:14px;box-shadow:0 20px 60px rgba(0,0,0,.5);}
+#platformGalleryViewer .chat-open-image-time{position:absolute;inset-inline-end:14px;bottom:12px;padding:5px 8px 11px;border-radius:999px;background:linear-gradient(180deg,transparent,rgba(0,0,0,.78));color:#fff;font-size:.72rem;font-weight:800;pointer-events:none;}
+</style>
+<script id="chat-image-gallery-layout-stage29-js">
+(function(){
+'use strict';
+if(window.__aaChatImageGalleryLayoutStage29)return;
+window.__aaChatImageGalleryLayoutStage29=true;
+const list=document.getElementById('chatPageMessagesList');
+if(!list)return;
+function bindTriple(g){
+  if(!g||g.dataset.galleryLayoutBound==='1')return;
+  const first=g.querySelector('.chat-media-item:first-child img');
+  if(!first)return;
+  const apply=()=>{const w=first.naturalWidth||0,h=first.naturalHeight||0;if(w&&h)g.classList.toggle('is-vertical',h>w);};
+  g.dataset.galleryLayoutBound='1';
+  first.complete?apply():first.addEventListener('load',apply,{once:true});
+}
+function scan(root){(root||list).querySelectorAll('.message-gallery-triple').forEach(bindTriple);}
+scan();
+new MutationObserver(records=>{for(const r of records){if(r.addedNodes?.length){scan(r.target);break;}}}).observe(list,{childList:true,subtree:true});
+})();
+</script>
 </body>
 </html>
