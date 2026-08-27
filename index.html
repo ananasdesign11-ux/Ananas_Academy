@@ -15877,6 +15877,9 @@ body.light-mode #courseChatPage .chat-msg.received{
     if(!chatPage || !chatList) return;
 
     let chatUserAtBottom = true;
+    let chatUnread = 0;
+    let chatUnreadBoundaryId = null;
+    let chatUnreadLastId = null;
     let chatInitialized = false;
     let chatLastMessageId = null;
     let chatAdminMenuOpen = false;
@@ -15886,9 +15889,28 @@ body.light-mode #courseChatPage .chat-msg.received{
         return String(value ?? '').replace(/[&<>'\"]/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','\"':'&quot;'}[ch]));
     }
     function isAdminUser(){ return typeof isAdmin !== 'undefined' && !!isAdmin; }
+    function removeUnreadDivider(){ chatList.querySelector('.chat-unread-divider')?.remove(); }
+    function clearUnreadMessages(){
+        chatUnread=0;
+        chatUnreadBoundaryId=null;
+        chatUnreadLastId=null;
+        removeUnreadDivider();
+        try{window.__chatStage23ClearUnreadTimer?.();}catch(_){ }
+    }
+    function scrollToBottom(behavior='smooth'){
+        chatList.scrollTo({top:chatList.scrollHeight,left:0,behavior});
+        chatUserAtBottom = true;
+        /* Reaching the newest message is handled by the unread system's 10-second timer. */
+        requestAnimationFrame(()=>{try{window.__chatStage23HandleScroll?.();}catch(_){}});
+        updateScrollButton();
+    }
     function updateScrollButton(){
         const away = !chatUserAtBottom || (chatList.scrollHeight - chatList.clientHeight - chatList.scrollTop > 120);
         scrollBtn?.classList.toggle('visible',away);
+        if(unreadBadge){
+            unreadBadge.hidden = chatUnread <= 0;
+            unreadBadge.textContent = chatUnread > 99 ? '99+' : String(chatUnread);
+        }
         if(scrollBtn) scrollBtn.setAttribute('aria-hidden',away ? 'false' : 'true');
     }
     function renderAdminMenu(){
@@ -15939,7 +15961,7 @@ body.light-mode #courseChatPage .chat-msg.received{
             showCustomConfirm('حذف المحادثة','سيتم حذف جميع الرسائل. هل أنت متأكد؟',async()=>{
                 const snap=await db.collection('courses').doc(activeCourseId).collection('chat').get();
                 const batch=db.batch(); snap.forEach(d=>batch.delete(d.ref)); await batch.commit();
-                chatLastMessageId=null;
+                chatUnread=0; chatLastMessageId=null;
                 scrollToBottom('auto');
             });
         });
@@ -16049,7 +16071,7 @@ body.light-mode #courseChatPage .chat-msg.received{
             chatUnsubscribe=null;
         }
 
-        chatUserAtBottom=true; updateScrollButton();
+        chatUnread=0; chatUserAtBottom=true; updateScrollButton();
         const profileCache=window.__chatProfileCache=window.__chatProfileCache||{};
 
         function tsMs(value){
@@ -16233,6 +16255,11 @@ body.light-mode #courseChatPage .chat-msg.received{
                 }
             });
             session.docs=newMap;session.allDocs=new Map(allDocs.map(d=>[String(d.id),d]));session.lastId=visibleDocs[visibleDocs.length-1]?.id||null;
+            if(newIds.length&&!chatUserAtBottom){
+                if(!chatUnreadBoundaryId)chatUnreadBoundaryId=newIds[0];
+                chatUnreadLastId=newIds[newIds.length-1];
+                chatUnread+=newIds.length;
+            }
             if(changedIds.length)refreshGroupingAround(changedIds);
             window.__chatStage23ScheduleUnreadMarker?.();
             return changedIds;
@@ -16278,7 +16305,11 @@ body.light-mode #courseChatPage .chat-msg.received{
                             }
                             window.__chatStage23SyncFromDocs?.(allDocs,courseId);
                             chatInitialized=true;chatLastMessageId=session.lastId;
-                            requestAnimationFrame(()=>{if(chatUserAtBottom||!firstForSubscription)scrollToBottom('auto');});
+                            requestAnimationFrame(()=>{
+                                const hasUnread=!!window.__chatStage23HasUnread?.();
+                                if(!hasUnread && (chatUserAtBottom||!firstForSubscription)) scrollToBottom('auto');
+                                else window.__chatStage23ScheduleUnreadMarker?.();
+                            });
                         }else{
                             const wasBottom=chatUserAtBottom;
                             applySnapshotIncrementally(snapshot);
@@ -16640,13 +16671,7 @@ syncHeight();
 })();
 </script>
 
-<style id="chat-account-avatar-only-v2">
-#authToggleBtn{width:46px!important;height:46px!important;min-width:46px!important;min-height:46px!important;padding:4px!important;border-radius:50%!important;justify-content:center!important;gap:0!important;overflow:hidden!important;}
-#authToggleBtn .auth-user-name{display:none!important;}
-#authToggleBtn .auth-user-avatar{width:38px!important;height:38px!important;flex:0 0 38px!important;border-radius:50%!important;border:2px solid rgba(255,255,255,.62)!important;}
-@media(max-width:768px){#authToggleBtn{width:40px!important;height:40px!important;min-width:40px!important;min-height:40px!important;}#authToggleBtn .auth-user-avatar{width:34px!important;height:34px!important;flex-basis:34px!important;}}
-</style>
-<style id="chat-stage23-unread-ui-css">
+\n<style id="chat-stage23-unread-ui-css">
 /* Stage 23: unread state UI. */
 #courseChatPage .chat-scroll-bottom{overflow:visible!important;}
 #courseChatPage .chat-unread-count{
@@ -16700,11 +16725,9 @@ syncHeight();
   let unreadFirstId=null;
   let unreadLastId=null;
   let unreadCount=0;
+  let readTimer=null;
+  let viewportRaf=0;
   let lastStateSignature='';
-  let markerRaf=0;
-  let readTimer=0;
-  let timerForMessageId='';
-  let lastRenderedUnreadLastId='';
 
   function uid(){return currentUser?.uid||'guest';}
   function stateKey(courseId){return `ananas.chat.read.${uid()}.${courseId}`;}
@@ -16713,9 +16736,10 @@ syncHeight();
   }
   function saveRead(courseId,ms){
     if(!courseId||!Number.isFinite(ms)||ms<=0)return;
-    try{localStorage.setItem(stateKey(courseId),String(Math.floor(ms)));}catch(_){ }
+    try{localStorage.setItem(stateKey(courseId),String(Math.floor(ms)));}catch(_){}
   }
   function tsMs(v){
+    if(v?.toMillis)return v.toMillis();
     if(v?.toDate){const d=v.toDate();return Number.isFinite(d.getTime())?d.getTime():0;}
     if(v?.seconds)return Number(v.seconds)*1000+Math.floor(Number(v.nanoseconds||0)/1e6);
     if(v instanceof Date)return v.getTime();
@@ -16724,36 +16748,24 @@ syncHeight();
   function currentOpenChat(){return chatPage.classList.contains('active')||getComputedStyle(chatPage).display!=='none';}
   function formatCount(n){return n>99?'99+':String(Math.max(0,n));}
 
-  function cancelReadTimer(){
-    if(readTimer){clearTimeout(readTimer);readTimer=0;}
-    timerForMessageId='';
+  function clearReadTimer(){if(readTimer){clearTimeout(readTimer);readTimer=null;}}
+  function removeDivider(){chatList.querySelector('.chat-unread-divider')?.remove();}
+  function renderBadges(){
+    if(unreadBadge){unreadBadge.hidden=unreadCount<=0;unreadBadge.textContent=formatCount(unreadCount);}
+    renderDashboardBadge(unreadCount);
   }
-
-  function removeUnreadDivider(){ chatList.querySelector('.chat-unread-divider')?.remove(); }
-
-  function clearUnreadState(keepReadMarker=false){
-    cancelReadTimer();
-    unreadFirstId=null; unreadLastId=null; unreadCount=0; lastStateSignature='';
-    removeUnreadDivider();
-    renderFloatingBadge();
-    renderDashboardBadge(0);
-    if(!keepReadMarker && activeCourseId){
-      const course=activeCourseId;
-      const nodes=[...chatList.querySelectorAll('.chat-msg[data-created-at]')];
-      const latest=nodes.reduce((max,n)=>Math.max(max,Number(n.dataset.createdAt||0)),0);
-      if(latest>0)saveRead(course,latest);
-    }
+  function clearState(){
+    clearReadTimer();
+    unreadFirstId=null;unreadLastId=null;unreadCount=0;lastStateSignature='';
+    removeDivider();renderBadges();
   }
 
   window.__aaResetChatForAccount=function(){
     stopWatcher();
-    cancelReadTimer();
-    try{if(markerRaf)cancelAnimationFrame(markerRaf);}catch(_){ }
-    unreadFirstId=null; unreadLastId=null; unreadCount=0; lastStateSignature=''; lastRenderedUnreadLastId='';
-    renderFloatingBadge(); renderDashboardBadge(0);
-    removeUnreadDivider();
+    try{window.__chatUnreadMarkerRaf&&cancelAnimationFrame(window.__chatUnreadMarkerRaf);}catch(_){}
+    clearState();
     chatList.querySelectorAll('.chat-msg').forEach(n=>n.remove());
-    try{window.__aaChatSessions?.clear();}catch(_){ }
+    try{window.__aaChatSessions?.clear();}catch(_){}
   };
 
   function dashboardChatButton(){
@@ -16768,99 +16780,35 @@ syncHeight();
     let badge=btn.querySelector('.chat-dashboard-unread-badge');
     if(count>0){
       if(!badge){badge=document.createElement('span');badge.className='chat-dashboard-unread-badge';badge.setAttribute('aria-label','رسائل جديدة');btn.appendChild(badge);}
-      badge.textContent=formatCount(count); badge.hidden=false;
-    }else if(badge){badge.remove();}
+      badge.textContent=formatCount(count);badge.hidden=false;
+    }else if(badge)badge.remove();
   }
-  function renderFloatingBadge(){
-    if(!unreadBadge)return;
-    unreadBadge.hidden=unreadCount<=0;
-    unreadBadge.textContent=formatCount(unreadCount);
-  }
+
   function setUnreadState(count,firstId,lastId){
-    unreadCount=Math.max(0,Number(count)||0);
-    unreadFirstId=firstId||null;
-    unreadLastId=lastId||null;
-    renderFloatingBadge();
-    renderDashboardBadge(unreadCount);
+    const nextCount=Math.max(0,Number(count)||0);
+    const nextFirst=firstId||null;
+    const nextLast=lastId||nextFirst;
+    const changed=`${nextCount}|${nextFirst||''}|${nextLast||''}`!==lastStateSignature;
+    unreadCount=nextCount;unreadFirstId=nextFirst;unreadLastId=nextLast;
+    if(changed)clearReadTimer();
     lastStateSignature=`${unreadCount}|${unreadFirstId||''}|${unreadLastId||''}`;
-    if(lastRenderedUnreadLastId!==unreadLastId){
-      cancelReadTimer();
-      lastRenderedUnreadLastId=unreadLastId||'';
-    }
+    if(!unreadCount){removeDivider();}
+    renderBadges();
   }
+
   function stopWatcher(){
-    if(watchUnsub){try{watchUnsub();}catch(_){ }watchUnsub=null;}
+    if(watchUnsub){try{watchUnsub();}catch(_){}watchUnsub=null;}
     watchedCourseId=null;
   }
+
   async function ensureBaseline(courseId){
-    const existing=readState(courseId);
-    if(existing>0)return existing;
+    const saved=readState(courseId);
+    if(saved>0)return saved;
     try{
       const snap=await db.collection('courses').doc(courseId).collection('chat').orderBy('createdAt','desc').limit(1).get();
-      const last=snap.docs[0]?.data()?.createdAt;
-      const ms=tsMs(last)||Date.now(); saveRead(courseId,ms); return ms;
-    }catch(_){saveRead(courseId,Date.now());return Date.now();}
+      const ms=tsMs(snap.docs[0]?.data()?.createdAt)||Date.now();saveRead(courseId,ms);return ms;
+    }catch(_){const now=Date.now();saveRead(courseId,now);return now;}
   }
-
-  function placeUnreadDivider(scrollToStart=false){
-    if(!currentOpenChat()||!unreadFirstId||unreadCount<=0)return;
-    const target=chatList.querySelector(`.chat-msg[data-message-id="${CSS.escape(String(unreadFirstId))}"]`);
-    if(!target)return;
-    let divider=chatList.querySelector('.chat-unread-divider');
-    if(!divider){
-      divider=document.createElement('div');
-      divider.className='chat-unread-divider';
-      divider.setAttribute('role','separator');
-      divider.innerHTML='<span>رسائل غير مقروءة</span>';
-      target.parentNode.insertBefore(divider,target);
-    }else if(divider.nextElementSibling!==target){
-      target.parentNode.insertBefore(divider,target);
-    }
-    if(scrollToStart){
-      requestAnimationFrame(()=>{
-        const top=Math.max(0,divider.offsetTop-10);
-        chatList.scrollTop=top;
-      });
-    }
-    armReadTimerIfLastVisible();
-  }
-
-  function armReadTimerIfLastVisible(){
-    if(!currentOpenChat()||!unreadLastId||unreadCount<=0)return;
-    const target=chatList.querySelector(`.chat-msg[data-message-id="${CSS.escape(String(unreadLastId))}"]`);
-    if(!target)return;
-    const listRect=chatList.getBoundingClientRect();
-    const targetRect=target.getBoundingClientRect();
-    const visible=targetRect.top>=listRect.top+2 && targetRect.bottom<=listRect.bottom-2;
-    if(!visible){cancelReadTimer();return;}
-    if(readTimer && timerForMessageId===String(unreadLastId))return;
-    cancelReadTimer();
-    timerForMessageId=String(unreadLastId);
-    readTimer=setTimeout(async()=>{
-      readTimer=0; timerForMessageId='';
-      if(!activeCourseId||!unreadLastId||unreadCount<=0)return;
-      const latestTarget=chatList.querySelector(`.chat-msg[data-message-id="${CSS.escape(String(unreadLastId))}"]`);
-      if(!latestTarget){return;}
-      const r=chatList.getBoundingClientRect(),t=latestTarget.getBoundingClientRect();
-      if(t.top<r.top+2||t.bottom>r.bottom-2)return;
-      await markReadToLatest(activeCourseId);
-    },10000);
-  }
-
-  window.__chatStage23SyncFromDocs=function(docs,courseId){
-    if(!courseId||!Array.isArray(docs))return;
-    const baseline=readState(courseId);
-    if(!baseline){setUnreadState(0,null,null);return;}
-    const me=String(currentUser?.uid||'guest');
-    const incoming=docs.map(doc=>({doc,ms:tsMs(doc.data()?.createdAt)}))
-      .filter(x=>x.ms>baseline && String(x.doc.data()?.userId||'')!==me)
-      .sort((a,b)=>a.ms-b.ms);
-    setUnreadState(incoming.length,incoming[0]?.doc?.id||null,incoming[incoming.length-1]?.doc?.id||null);
-    if(currentOpenChat()){
-      cancelAnimationFrame(markerRaf);
-      markerRaf=requestAnimationFrame(()=>placeUnreadDivider(false));
-    }
-  };
 
   async function markReadToLatest(courseId){
     if(!courseId)return;
@@ -16868,13 +16816,63 @@ syncHeight();
       const snap=await db.collection('courses').doc(courseId).collection('chat').orderBy('createdAt','desc').limit(1).get();
       const ms=tsMs(snap.docs[0]?.data()?.createdAt)||Date.now();
       saveRead(courseId,ms);
-    }catch(_){ }
-    clearUnreadState(true);
+    }catch(_){}
+    clearState();
   }
+
+  function placeDividerAndReveal(){
+    if(!currentOpenChat()||!unreadFirstId||unreadCount<=0)return;
+    const target=chatList.querySelector(`.chat-msg[data-message-id="${CSS.escape(String(unreadFirstId))}"]`);
+    if(!target)return;
+    let divider=chatList.querySelector('.chat-unread-divider');
+    if(!divider){
+      divider=document.createElement('div');divider.className='chat-unread-divider';divider.setAttribute('role','separator');
+      divider.innerHTML='<span>رسائل غير مقروءة</span>';target.before(divider);
+    }else if(divider.nextElementSibling!==target){target.before(divider);}
+
+    /* Put the divider at the top of the visible message area. With one/two messages it naturally leaves them all visible. */
+    const desired=Math.max(0,target.offsetTop-divider.offsetHeight-10);
+    if(Math.abs(chatList.scrollTop-desired)>2){chatList.scrollTop=desired;}
+  }
+
+  function isLastUnreadVisible(){
+    if(!unreadLastId||unreadCount<=0)return false;
+    const target=chatList.querySelector(`.chat-msg[data-message-id="${CSS.escape(String(unreadLastId))}"]`);
+    if(!target)return false;
+    const listRect=chatList.getBoundingClientRect();
+    const rect=target.getBoundingClientRect();
+    const visible=Math.min(rect.bottom,listRect.bottom)-Math.max(rect.top,listRect.top);
+    return visible>=Math.min(rect.height*.78,listRect.height*.30) && rect.bottom<=listRect.bottom+6;
+  }
+
+  function scheduleReadAfterTenSeconds(){
+    if(!currentOpenChat()||!unreadCount||!unreadLastId||readTimer)return;
+    if(!isLastUnreadVisible())return;
+    const expectedLast=String(unreadLastId);
+    readTimer=setTimeout(async()=>{
+      readTimer=null;
+      if(!currentOpenChat()||!unreadCount||String(unreadLastId)!==expectedLast||!isLastUnreadVisible())return;
+      await markReadToLatest(activeCourseId);
+    },10000);
+  }
+
+  window.__chatStage23ClearUnreadTimer=clearReadTimer;
+  window.__chatStage23HasUnread=()=>unreadCount>0;
+  window.__chatStage23SyncFromDocs=function(docs,courseId){
+    if(!courseId||!Array.isArray(docs))return;
+    const baseline=readState(courseId);
+    if(!baseline){setUnreadState(0,null,null);return;}
+    const me=String(currentUser?.uid||'guest');
+    const incoming=docs.map(doc=>({doc,ms:tsMs(doc.data()?.createdAt)}))
+      .filter(x=>x.ms>baseline&&String(x.doc.data()?.userId||'')!==me)
+      .sort((a,b)=>a.ms-b.ms);
+    setUnreadState(incoming.length,incoming[0]?.doc?.id||null,incoming[incoming.length-1]?.doc?.id||null);
+    if(currentOpenChat()&&incoming.length)window.__chatStage23ScheduleUnreadMarker?.();
+  };
 
   function startWatcher(courseId){
     if(!courseId||currentOpenChat()||watchedCourseId===courseId)return;
-    stopWatcher(); watchedCourseId=courseId;
+    stopWatcher();watchedCourseId=courseId;
     (async()=>{
       const baseline=await ensureBaseline(courseId);
       if(watchedCourseId!==courseId)return;
@@ -16884,31 +16882,42 @@ syncHeight();
           .orderBy('createdAt','asc')
           .onSnapshot(snap=>{
             if(watchedCourseId!==courseId)return;
-            const me=String(currentUser?.uid||'guest');
-            const docs=snap.docs.filter(doc=>String(doc.data()?.userId||'')!==me);
+            const docs=snap.docs.filter(doc=>String(doc.data()?.userId||'')!==String(uid()));
             setUnreadState(docs.length,docs[0]?.id||null,docs[docs.length-1]?.id||null);
-          },()=>{setUnreadState(0,null,null);});
+          },()=>setUnreadState(0,null,null));
       }catch(_){setUnreadState(0,null,null);}
     })();
   }
 
   window.__chatStage23ForceUnreadView=function(){
-    renderFloatingBadge(); renderDashboardBadge(unreadCount);
+    if(scrollBtn&&unreadCount>0)scrollBtn.classList.add('visible');
+    renderBadges();
   };
-
-  let scrollCheckRaf=0;
   window.__chatStage23HandleScroll=function(){
-    if(scrollCheckRaf||!currentOpenChat())return;
-    scrollCheckRaf=requestAnimationFrame(()=>{scrollCheckRaf=0;armReadTimerIfLastVisible();});
+    if(!currentOpenChat())return;
+    if(viewportRaf)return;
+    viewportRaf=requestAnimationFrame(()=>{
+      viewportRaf=0;
+      if(!unreadCount){return;}
+      scheduleReadAfterTenSeconds();
+    });
   };
-
   window.__chatStage23ScheduleUnreadMarker=function(){
     if(!currentOpenChat()||!unreadFirstId||unreadCount<=0)return;
-    cancelAnimationFrame(markerRaf);
-    markerRaf=requestAnimationFrame(()=>placeUnreadDivider(false));
+    cancelAnimationFrame(window.__chatUnreadMarkerRaf||0);
+    window.__chatUnreadMarkerRaf=requestAnimationFrame(()=>{
+      const hadDivider=!!chatList.querySelector('.chat-unread-divider');
+      placeDividerAndReveal();
+      /* Only the first appearance positions the viewport. Later messages must never pull the user away. */
+      if(hadDivider){
+        const marker=chatList.querySelector('.chat-unread-divider');
+        const target=unreadFirstId&&chatList.querySelector(`[data-message-id="${CSS.escape(String(unreadFirstId))}"]`);
+        if(marker&&target&&marker.nextElementSibling!==target)target.before(marker);
+      }
+      scheduleReadAfterTenSeconds();
+    });
   };
 
-  // When entering the chat, put the first unread message immediately below the divider.
   const oldSwitch=window.switchCoursePage;
   if(typeof oldSwitch==='function'&&!oldSwitch.__chatStage23Wrapped){
     const wrapped=function(page){
@@ -16916,15 +16925,12 @@ syncHeight();
       setTimeout(()=>{
         if(page==='chat'){
           stopWatcher();
-          requestAnimationFrame(()=>requestAnimationFrame(()=>{
-            if(unreadFirstId&&unreadCount>0)placeUnreadDivider(true);
-            else removeUnreadDivider();
-          }));
+          if(unreadCount>0)window.__chatStage23ScheduleUnreadMarker?.();
         }else if(activeCourseId){startWatcher(activeCourseId);}
       },60);
       return result;
     };
-    wrapped.__chatStage23Wrapped=true; wrapped.__original=oldSwitch; window.switchCoursePage=wrapped;
+    wrapped.__chatStage23Wrapped=true;wrapped.__original=oldSwitch;window.switchCoursePage=wrapped;
   }
 
   const oldOpenCourse=window.openCourseContent;
@@ -16934,10 +16940,26 @@ syncHeight();
       setTimeout(()=>startWatcher(courseId),80);
       return result;
     };
-    wrapped.__chatStage23Wrapped=true; wrapped.__original=oldOpenCourse; window.openCourseContent=wrapped;
+    wrapped.__chatStage23Wrapped=true;wrapped.__original=oldOpenCourse;window.openCourseContent=wrapped;
   }
 
   document.getElementById('backToCoursesBtn')?.addEventListener('click',()=>stopWatcher(),true);
+
+  /* Lightweight reconciliation only when the active course changes; it never touches scroll position. */
+  let lastCourse=null;
+  let courseCheckTimer=null;
+  function reconcileCourse(){
+    const cid=activeCourseId||null;
+    if(cid!==lastCourse){
+      lastCourse=cid;
+      if(!cid)stopWatcher();
+      else if(!currentOpenChat())startWatcher(cid);
+      renderDashboardBadge(unreadCount);
+    }
+    courseCheckTimer=setTimeout(reconcileCourse,1200);
+  }
+  reconcileCourse();
+
   renderDashboardBadge(unreadCount);
 })();
 </script>\n
@@ -16960,6 +16982,8 @@ body.aa-chat-fullscreen-open #courseChatPage .chat-topbar-title{display:none!imp
 #courseChatPage .aa-chat-left-controls{display:flex;align-items:center;gap:7px;direction:rtl;order:1;flex:0 0 auto;margin:0!important;}
 #courseChatPage .aa-chat-left-controls button{position:relative!important;flex:0 0 42px!important;width:42px!important;height:42px!important;min-width:42px!important;min-height:42px!important;box-sizing:border-box!important;border:1px solid color-mix(in srgb,var(--chat-purple) 16%,var(--border))!important;border-radius:14px!important;background:linear-gradient(145deg,color-mix(in srgb,var(--bg-card) 96%,transparent),color-mix(in srgb,var(--chat-purple) 6%,var(--bg-card)))!important;color:var(--text-primary)!important;display:inline-flex!important;align-items:center!important;justify-content:center!important;cursor:pointer;font:inherit;overflow:hidden;}
 #courseChatPage .aa-chat-left-controls button:hover{color:#fff!important;border-color:rgba(108,92,231,.65)!important;background:linear-gradient(145deg,#6c5ce7,#5546ce)!important;}
+#courseChatPage .aa-chat-left-controls .aa-chat-profile-btn img{width:100%!important;height:100%!important;display:block!important;object-fit:cover!important;border-radius:12px!important;}
+
 #courseChatPage .chat-back-btn{order:2!important;margin-inline-start:auto!important;}
 body.aa-chat-fullscreen-open #courseChatPage .chat-admin-menu{
     position:absolute!important;
@@ -17075,8 +17099,9 @@ document.addEventListener('keydown',e=>{if(e.key==='Escape'&&menu?.classList.con
 document.addEventListener('touchstart',e=>{const el=e.target.closest?.('#courseChatPage .chat-msg');if(!el||e.touches.length!==1)return;clearTimeout(pressTimer);const t=e.touches[0];pressTimer=setTimeout(()=>{suppressClickUntil=Date.now()+900;showFor(el,t.clientX,t.clientY)},520)},{passive:true,capture:true});
 ['touchmove','touchend','touchcancel','scroll'].forEach(t=>document.addEventListener(t,()=>clearTimeout(pressTimer),{passive:true,capture:true}));
 function control(id,icon,label){const x=document.createElement('button');x.type='button';x.id=id;x.setAttribute('aria-label',label);x.title=label;x.innerHTML='<i class="fas '+icon+'"></i>';return x}
-function controls(){let g=topbar.querySelector('.aa-chat-left-controls');if(g)return;g=document.createElement('div');g.className='aa-chat-left-controls';const admin=topbar.querySelector('.chat-admin-root');if(admin)g.appendChild(admin);const p=control('aaChatProfileBtn','fa-user','الملف الشخصي');p.onclick=e=>{e.preventDefault();e.stopPropagation();if(window.currentUser)window.openUserProfilePage?.();else document.getElementById('authToggleBtn')?.click()};const t=control('aaChatThemeBtn',document.body.classList.contains('light-mode')?'fa-sun':'fa-moon','الوضع');t.onclick=e=>{e.preventDefault();e.stopPropagation();document.getElementById('themeToggle')?.click();setTimeout(()=>t.innerHTML='<i class="fas '+(document.body.classList.contains('light-mode')?'fa-sun':'fa-moon')+'"></i>');};g.append(t,p);topbar.insertBefore(g,topbar.firstChild)}
-function sync(){const open=getComputedStyle(page).display!=='none'&&page.offsetParent!==null;document.body.classList.toggle('aa-chat-fullscreen-open',open);if(open){controls();const prof=document.getElementById('userProfilePage');if(prof)prof.style.setProperty('inset','0','important')}else close()}
+function controls(){let g=topbar.querySelector('.aa-chat-left-controls');if(g)return;g=document.createElement('div');g.className='aa-chat-left-controls';const admin=topbar.querySelector('.chat-admin-root');if(admin)g.appendChild(admin);const p=control('aaChatProfileBtn','fa-user','الملف الشخصي');p.classList.add('aa-chat-profile-btn');p.onclick=e=>{e.preventDefault();e.stopPropagation();if(window.currentUser)window.openUserProfilePage?.();else document.getElementById('authToggleBtn')?.click()};const t=control('aaChatThemeBtn',document.body.classList.contains('light-mode')?'fa-sun':'fa-moon','الوضع');t.onclick=e=>{e.preventDefault();e.stopPropagation();document.getElementById('themeToggle')?.click();setTimeout(()=>t.innerHTML='<i class="fas '+(document.body.classList.contains('light-mode')?'fa-sun':'fa-moon')+'"></i>');};g.append(t,p);topbar.insertBefore(g,topbar.firstChild)}
+function syncProfileButton(){const p=document.getElementById('aaChatProfileBtn');if(!p)return;const user=typeof currentUser!=='undefined'?currentUser:null;const prof=typeof currentUserProfile!=='undefined'?(currentUserProfile||{}):{};const photo=prof.photoURL||prof.photoUrl||prof.photo||user?.photoURL||'';const name=prof.displayName||prof.name||user?.displayName||'الملف الشخصي';if(photo){p.innerHTML='<img src="'+(window.escapeHtml?window.escapeHtml(photo):String(photo).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;'))+'" alt="" aria-hidden="true">';}else{p.innerHTML='<i class="fas fa-user" aria-hidden="true"></i>';}p.title=name;p.setAttribute('aria-label',name);}
+function sync(){const open=getComputedStyle(page).display!=='none'&&page.offsetParent!==null;document.body.classList.toggle('aa-chat-fullscreen-open',open);if(open){controls();syncProfileButton();const prof=document.getElementById('userProfilePage');if(prof)prof.style.setProperty('inset','0','important')}else close()}
 new MutationObserver(sync).observe(page,{attributes:true,attributeFilter:['style','class']});new MutationObserver(()=>{if(document.body.classList.contains('aa-chat-fullscreen-open')){const t=document.getElementById('aaChatThemeBtn');if(t)t.innerHTML='<i class="fas '+(document.body.classList.contains('light-mode')?'fa-sun':'fa-moon')+'"></i>'}}).observe(document.body,{attributes:true,attributeFilter:['class']});sync();
 })();
 </script>
