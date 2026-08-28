@@ -20546,16 +20546,32 @@ function openBackgroundEditor(){
   modal.classList.add('open');
 }
 async function canvasFileFromEditor(){
-  const st=$('chatStage14BgStage'),im=$('chatStage14BgImage');if(!st||!im||!im.naturalWidth||!editorState)return null;
-  const out=document.createElement('canvas'),W=1600,H=Math.round(W*(st.clientHeight/Math.max(1,st.clientWidth)));out.width=W;out.height=H;
-  const ctx=out.getContext('2d');ctx.imageSmoothingEnabled=true;ctx.imageSmoothingQuality='high';
-  ctx.fillStyle='#111';ctx.fillRect(0,0,W,H);
-  const sx=st.clientWidth,sy=st.clientHeight,scaleX=W/sx,scaleY=H/sy;
-  const base=editorState.base||Math.max(sx/im.naturalWidth,sy/im.naturalHeight),z=editorState.zoom||1;
-  const dw=im.naturalWidth*base*z,dh=im.naturalHeight*base*z;
-  const left=(sx-dw)/2+editorState.x*sx,top=(sy-dh)/2+editorState.y*sy;
-  ctx.save();ctx.translate((left+dw/2)*scaleX,(top+dh/2)*scaleY);ctx.rotate((editorState.rotation||0)*Math.PI/180);ctx.drawImage(im,-dw/2*scaleX,-dh/2*scaleY,dw*scaleX,dh*scaleY);ctx.restore();
-  return await new Promise(resolve=>out.toBlob(blob=>resolve(blob?new File([blob],'chat-background.jpg',{type:'image/jpeg',lastModified:Date.now()}):null),'image/jpeg',.9));
+  const st=$('chatStage14BgStage'),im=$('chatStage14BgImage');if(!st||!im||!editorState)return null;
+  let source=null,sourceWidth=0,sourceHeight=0,bitmap=null;
+  try{
+    if(editorState.file){
+      if(typeof createImageBitmap==='function'){
+        bitmap=await createImageBitmap(editorState.file);source=bitmap;sourceWidth=bitmap.width;sourceHeight=bitmap.height;
+      }else{
+        if(!im.complete||!im.naturalWidth)await new Promise((resolve,reject)=>{im.onload=()=>resolve();im.onerror=()=>reject(new Error('تعذر قراءة الصورة.'));});
+        source=im;sourceWidth=im.naturalWidth;sourceHeight=im.naturalHeight;
+      }
+    }else{
+      if(!im.naturalWidth||!im.naturalHeight)return null;
+      source=im;sourceWidth=im.naturalWidth;sourceHeight=im.naturalHeight;
+    }
+    const out=document.createElement('canvas'),W=1600,H=Math.round(W*(st.clientHeight/Math.max(1,st.clientWidth)));out.width=W;out.height=H;
+    const ctx=out.getContext('2d');if(!ctx)throw new Error('تعذر إنشاء مساحة معالجة الصورة.');
+    ctx.imageSmoothingEnabled=true;ctx.imageSmoothingQuality='high';ctx.fillStyle='#111';ctx.fillRect(0,0,W,H);
+    const sx=st.clientWidth,sy=st.clientHeight,scaleX=W/sx,scaleY=H/sy;
+    const base=editorState.base||Math.max(sx/sourceWidth,sy/sourceHeight),z=editorState.zoom||1;
+    const dw=sourceWidth*base*z,dh=sourceHeight*base*z;
+    const left=(sx-dw)/2+editorState.x*sx,top=(sy-dh)/2+editorState.y*sy;
+    ctx.save();ctx.translate((left+dw/2)*scaleX,(top+dh/2)*scaleY);ctx.rotate((editorState.rotation||0)*Math.PI/180);ctx.drawImage(source,-dw/2*scaleX,-dh/2*scaleY,dw*scaleX,dh*scaleY);ctx.restore();
+    const file=await new Promise(resolve=>out.toBlob(blob=>resolve(blob?new File([blob],'chat-background.jpg',{type:'image/jpeg',lastModified:Date.now()}):null),'image/jpeg',.9));
+    bitmap?.close?.();
+    return file;
+  }catch(err){bitmap?.close?.();throw err;}
 }
 async function saveEditor(){
   const u=account(),c=cid();if(admin()||!u?.uid||!c||!editorState)return;
@@ -20573,7 +20589,7 @@ async function saveEditor(){
     }
     list.style.removeProperty('background-image');list.style.removeProperty('background-size');list.style.removeProperty('background-position');list.style.removeProperty('background-repeat');list.style.removeProperty('background-attachment');
     closeEditor();showCopyToast('تم تطبيق خلفية الدردشة');
-  }catch(err){console.error('stage14 background save failed',err);showCustomAlert?.('خطأ','تعذر تطبيق خلفية الدردشة.');}
+  }catch(err){console.error('stage14 background save failed',err);const detail=String(err?.message||'').trim();showCustomAlert?.('خطأ',detail?`تعذر تطبيق خلفية الدردشة: ${detail}`:'تعذر تطبيق خلفية الدردشة.');}
   finally{if(btn)btn.disabled=false;}
 }
 
