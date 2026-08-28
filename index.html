@@ -5343,6 +5343,7 @@ to{opacity:1;transform:none}}
             const input=document.getElementById('fullChatPageInput'),fileInput=document.getElementById('fullChatPageFileInput');
             if(!activeCourseId||!currentUser)return triggerAuth();
             if(currentChatLock?.locked&&!isAdmin)return showCustomAlert('الدردشة مقفلة',currentChatLock.reason||'الدردشة مقفلة حالياً.');
+            if(!isAdmin&&window.__aaChatStage11CanSend&&!(await window.__aaChatStage11CanSend()))return;
             const message=input?.value.trim()||''; const files=chatSelectedFiles.length?chatSelectedFiles:Array.from(fileInput?.files||[]);
             if(!message&&!files.length)return;
             const imageUrls=[]; if(files.length){
@@ -5352,6 +5353,7 @@ to{opacity:1;transform:none}}
             if(imageUrls.length){data.imageUrls=imageUrls;data.imageUrl=imageUrls[0];}
             if(replyToMsgId){data.replyToId=replyToMsgId;data.replyToName=replyToUser;data.replyToText=replyToMsgText;}
             await db.collection('courses').doc(activeCourseId).collection('chat').add(data);
+            await window.__aaChatStage11MarkSent?.();
             if(input)input.value=''; chatSelectedFiles=[]; if(fileInput)fileInput.value=''; renderChatImagePreview(); cancelReply();
         }
         function renderChatImagePreview(){
@@ -16940,7 +16942,9 @@ body.light-mode #courseChatPage .chat-msg.received{
         menu.setAttribute('role','menu');
         menu.innerHTML=`
             <button type="button" id="clearChatPageBtn" role="menuitem"><i class="fas fa-trash" aria-hidden="true"></i><span>حذف المحادثة كلها</span></button>
-            <button type="button" id="chatLockBtn" role="menuitem"><i class="fas fa-lock" aria-hidden="true"></i><span>قفل الدردشة</span></button>`;
+            <button type="button" id="chatLockBtn" role="menuitem"><i class="fas fa-lock" aria-hidden="true"></i><span>قفل الدردشة</span></button>
+            <button type="button" id="chatAnnouncementBtn" role="menuitem"><i class="fas fa-bullhorn" aria-hidden="true"></i><span>رسالة إعلان</span></button>
+            <button type="button" id="chatSlowModeBtn" role="menuitem"><i class="fas fa-hourglass-half" aria-hidden="true"></i><span>الوضع البطيء</span></button>`;
         const syncChatLockMenu=()=>{
             const locked=!!currentChatLock?.locked;
             const lock=$('chatLockBtn');
@@ -16984,6 +16988,18 @@ body.light-mode #courseChatPage .chat-msg.received{
                 if(typeof window.openChatLockDialog==='function') window.openChatLockDialog();
             }
             window.__aaSyncChatLockMenu?.();
+        });
+        $('chatAnnouncementBtn')?.addEventListener('click',e=>{
+            e.preventDefault(); e.stopPropagation();
+            menu.classList.remove('open'); chatAdminMenuOpen=false;
+            if(!isAdminUser()||!activeCourseId)return;
+            window.__aaOpenChatStage11Modal?.('announcement');
+        });
+        $('chatSlowModeBtn')?.addEventListener('click',e=>{
+            e.preventDefault(); e.stopPropagation();
+            menu.classList.remove('open'); chatAdminMenuOpen=false;
+            if(!isAdminUser()||!activeCourseId)return;
+            window.__aaOpenChatStage11Modal?.('slow');
         });
     }
     function closeAdminMenu(){
@@ -17108,6 +17124,15 @@ body.light-mode #courseChatPage .chat-msg.received{
         function buildMessageNode(doc,allDocsMap){
             const m=doc.data()||{};
             const currentUserId=currentUser?.uid||null;
+            if(m.messageType==='announcement'){
+                const wrap=document.createElement('div');
+                wrap.className='chat-announcement-divider';
+                const date=dateFromDoc(doc);
+                const text=String(m.message||m.text||'').trim();
+                wrap.dataset.messageId=String(doc.id);
+                wrap.innerHTML=`<div class="chat-announcement-divider-inner"><span class="chat-announcement-icon"><i class="fas fa-bullhorn"></i></span><div class="chat-announcement-copy"><strong>إعلان من المشرف</strong><div class="chat-announcement-text">${safeEscape(text)}</div><small>${safeEscape(date.toLocaleTimeString('ar-SA',{hour:'2-digit',minute:'2-digit'}))}</small></div></div>`;
+                return wrap;
+            }
             const isMine=m.userId===currentUserId;
             const profileUid=String(m.userId||'');
             const profile=profileCache[profileUid]||{name:m.userName||'مستخدم',photo:''};
@@ -19196,6 +19221,124 @@ function sync(){const cid=String(activeCourseId||''),uid=String(currentUser?.uid
 new MutationObserver(()=>sync()).observe(document.body,{subtree:true,childList:true,attributes:true,attributeFilter:['class','style']});
 const oldSwitch=window.switchCoursePage;if(typeof oldSwitch==='function'&&!oldSwitch.__aaStage10Wrapped){const wrapped=function(page){const r=oldSwitch.apply(this,arguments);if(page==='chat')setTimeout(sync,0);else if(page!=='chat'){pinUnsub?.();pinUnsub=null;muteUnsub?.();muteUnsub=null;warningUnsub?.();warningUnsub=null;}return r};wrapped.__aaStage10Wrapped=true;wrapped.__original=oldSwitch;window.switchCoursePage=wrapped;}
 sync();
+})();
+</script>
+
+
+<!-- ===== STAGE 11: GLOBAL CHAT ADMIN CONTROLS ===== -->
+<style id="aa-chat-stage11-global-css">
+#courseChatPage .chat-announcement-divider{width:100%;padding:10px 0;margin:10px 0;}
+#courseChatPage .chat-announcement-divider-inner{width:min(760px,94%);margin:0 auto;display:flex;align-items:flex-start;gap:11px;padding:14px 16px;border:1px solid rgba(108,92,231,.28);border-radius:18px;background:linear-gradient(135deg,rgba(108,92,231,.12),rgba(9,132,227,.08));box-shadow:0 10px 30px rgba(108,92,231,.10);}
+#courseChatPage .chat-announcement-icon{flex:0 0 36px;width:36px;height:36px;border-radius:12px;background:var(--accent-gradient);color:#fff;display:grid;place-items:center;box-shadow:0 6px 18px rgba(108,92,231,.24);}
+#courseChatPage .chat-announcement-copy{min-width:0;flex:1;}
+#courseChatPage .chat-announcement-copy strong{display:block;color:var(--accent1);font-size:.78rem;font-weight:900;}
+#courseChatPage .chat-announcement-text{margin-top:4px;color:var(--text-primary);font-size:.9rem;line-height:1.8;white-space:pre-wrap;overflow-wrap:anywhere;}
+#courseChatPage .chat-announcement-copy small{display:block;margin-top:5px;color:var(--text-muted);font-size:.68rem;}
+#aaChatStage11Modal{position:fixed;inset:0;z-index:2147483606;display:none;align-items:center;justify-content:center;padding:16px;background:rgba(0,0,0,.52);backdrop-filter:blur(7px);-webkit-backdrop-filter:blur(7px);}
+#aaChatStage11Modal.open{display:flex;}
+#aaChatStage11Modal .aa-stage11-card{width:min(440px,calc(100vw - 24px));background:var(--bg-card);border:1px solid var(--border);border-radius:24px;box-shadow:0 24px 90px rgba(0,0,0,.38);padding:18px;}
+#aaChatStage11Modal .aa-stage11-head{display:flex;align-items:center;gap:11px;margin-bottom:14px;}
+#aaChatStage11Modal .aa-stage11-head-icon{width:42px;height:42px;border-radius:13px;background:var(--accent-gradient);color:#fff;display:grid;place-items:center;flex:0 0 42px;}
+#aaChatStage11Modal .aa-stage11-head h3{margin:0;font-size:1.05rem;}
+#aaChatStage11Modal .aa-stage11-head p{margin:3px 0 0;color:var(--text-muted);font-size:.74rem;line-height:1.5;}
+#aaChatStage11Modal .aa-stage11-field{display:grid;gap:6px;margin:11px 0;}
+#aaChatStage11Modal .aa-stage11-field label{font-size:.78rem;color:var(--text-muted);font-weight:800;}
+#aaChatStage11Modal textarea, #aaChatStage11Modal select{width:100%;box-sizing:border-box;border:1px solid var(--border);border-radius:14px;background:var(--bg-secondary);color:var(--text-primary);font:inherit;padding:11px;outline:none;}
+#aaChatStage11Modal textarea{min-height:125px;resize:vertical;line-height:1.7;}
+#aaChatStage11Modal .aa-stage11-note{padding:10px 12px;border-radius:14px;background:rgba(108,92,231,.07);border:1px solid rgba(108,92,231,.13);color:var(--text-muted);font-size:.76rem;line-height:1.7;}
+#aaChatStage11Modal .aa-stage11-actions{display:flex;gap:8px;margin-top:15px;}
+#aaChatStage11Modal .aa-stage11-actions button{flex:1;min-height:42px;padding:8px 14px;border-radius:13px;border:1px solid var(--border);background:var(--bg-secondary);color:var(--text-primary);font-family:inherit;font-weight:800;cursor:pointer;}
+#aaChatStage11Modal .aa-stage11-actions .primary{border-color:transparent;background:var(--accent-gradient);color:#fff;}
+#aaChatStage11Modal .aa-stage11-close{position:absolute;inset-inline-end:24px;top:22px;border:0;background:transparent;color:var(--text-muted);font-size:1.25rem;cursor:pointer;}
+#courseChatPage .chat-composer-shell.aa-chat-slowmode button:disabled{opacity:.58!important;cursor:not-allowed!important;}
+#courseChatPage .chat-composer-shell.aa-chat-slowmode input:disabled{cursor:not-allowed!important;}
+#courseChatPage .chat-composer-shell #fullChatPageSendBtn.aa-slowmode-countdown-button{min-width:72px;padding:0 11px;gap:7px;background:var(--bg-secondary)!important;border:1px solid var(--border)!important;color:var(--accent1)!important;box-shadow:none!important;opacity:1!important;}
+#courseChatPage .chat-composer-shell #fullChatPageSendBtn.aa-slowmode-countdown-button span{font-size:.76rem;font-weight:900;direction:rtl;}
+@media(max-width:768px){#courseChatPage .chat-announcement-divider-inner{width:calc(100% - 16px);padding:13px 12px;border-radius:16px;}#aaChatStage11Modal .aa-stage11-card{padding:15px;border-radius:20px;}}
+</style>
+<script id="aa-chat-stage11-global-js">
+(function(){
+'use strict';
+if(window.__aaChatStage11Installed)return;window.__aaChatStage11Installed=true;
+const $=id=>document.getElementById(id);
+const courseRef=()=>activeCourseId?db.collection('courses').doc(String(activeCourseId)):null;
+const settingRef=()=>courseRef()?.collection('settings').doc('chatStage11')||null;
+const slowUserRef=()=>activeCourseId&&currentUser?.uid?db.collection('courses').doc(String(activeCourseId)).collection('chatSlowModeUsers').doc(String(currentUser.uid)):null;
+const ts=()=>firebase.firestore.FieldValue.serverTimestamp();
+let slowCfg={enabled:false,seconds:0};
+let slowUntil=0,slowTimer=0,slowUnsub=null;
+function ensureModal(){
+  let m=$('aaChatStage11Modal');if(m)return m;
+  m=document.createElement('div');m.id='aaChatStage11Modal';
+  m.innerHTML='<button type="button" class="aa-stage11-close" id="aaStage11Close" aria-label="إغلاق"><i class="fas fa-xmark"></i></button><div class="aa-stage11-card"><div class="aa-stage11-head"><span class="aa-stage11-head-icon"><i id="aaStage11Icon" class="fas fa-bullhorn"></i></span><div><h3 id="aaStage11Title"></h3><p id="aaStage11Desc"></p></div></div><div id="aaStage11Body"></div><div class="aa-stage11-actions"><button type="button" id="aaStage11Cancel">إلغاء</button><button type="button" class="primary" id="aaStage11Save">حفظ</button></div></div>';
+  document.body.appendChild(m);
+  const close=()=>m.classList.remove('open');$('aaStage11Close').onclick=close;$('aaStage11Cancel').onclick=close;
+  return m;
+}
+window.__aaOpenChatStage11Modal=function(type){
+  if(!isAdminUser()||!activeCourseId)return;
+  const m=ensureModal(),title=$('aaStage11Title'),desc=$('aaStage11Desc'),body=$('aaStage11Body'),icon=$('aaStage11Icon');
+  if(type==='announcement'){
+    icon.className='fas fa-bullhorn';title.textContent='رسالة إعلان';desc.textContent='سيظهر الإعلان لجميع المشاركين داخل الدردشة كفاصل إداري واضح.';
+    body.innerHTML='<div class="aa-stage11-field"><label>نص الإعلان</label><textarea id="aaStage11AnnouncementText" placeholder="اكتب التعميم الذي تريد إيصاله للطلاب..."></textarea></div><div class="aa-stage11-note"><i class="fas fa-circle-info" style="color:var(--accent1)"></i> لن يكون الإعلان رسالة شخصية، وسيظهر في تسلسل الدردشة كإعلان من المشرف.</div>';
+    $('aaStage11Save').onclick=async()=>{const text=($('aaStage11AnnouncementText').value||'').trim();if(!text)return showCustomAlert('تنبيه','اكتب نص الإعلان.');try{await courseRef().collection('chat').add({messageType:'announcement',message:text,text,createdAt:ts(),userId:currentUser.uid,userName:currentUser.displayName||'المشرف',createdBy:currentUser.uid});m.classList.remove('open');showCopyToast('تم نشر الإعلان');}catch(e){console.error(e);showCustomAlert('خطأ','تعذر نشر الإعلان.')}};
+  }else{
+    icon.className='fas fa-hourglass-half';title.textContent='الوضع البطيء';desc.textContent='حدد المدة بين رسائل كل طالب. لكل حساب عداد مستقل.';
+    const options=[['0','إيقاف الوضع البطيء'],['5','5 ثوانٍ'],['10','10 ثوانٍ'],['15','15 ثانية'],['30','30 ثانية'],['60','دقيقة واحدة'],['120','دقيقتان'],['300','5 دقائق']];
+    body.innerHTML='<div class="aa-stage11-field"><label>المدة</label><select id="aaStage11SlowSeconds">'+options.map(([v,l])=>`<option value="${v}">${l}</option>`).join('')+'</select></div><div class="aa-stage11-note"><i class="fas fa-user-clock" style="color:var(--accent1)"></i> بعد إرسال الطالب للرسالة يبدأ عداده الخاص، ولا يتأثر به أي طالب آخر. المشرف لا يخضع للوضع البطيء.</div>';
+    $('aaStage11SlowSeconds').value=String(slowCfg.enabled?slowCfg.seconds:0);
+    $('aaStage11Save').onclick=async()=>{const sec=Math.max(0,Number($('aaStage11SlowSeconds').value)||0);try{await settingRef().set({enabled:sec>0,seconds:sec,updatedAt:ts(),updatedBy:currentUser.uid},{merge:true});m.classList.remove('open');showCopyToast(sec>0?`تم تفعيل الوضع البطيء (${sec} ثانية)`:'تم إيقاف الوضع البطيء');}catch(e){console.error(e);showCustomAlert('خطأ','تعذر حفظ إعداد الوضع البطيء.')}};
+  }
+  m.classList.add('open');
+};
+function applySlowUI(){
+  const student=!isAdmin&&!!currentUser&&!!activeCourseId;
+  const active=student&&slowUntil>Date.now();
+  const shell=$('courseChatPage')?.querySelector('.chat-composer-shell');
+  ['fullChatPageInput','fullChatPageFileInput','chatEmojiBtnPage'].forEach(id=>{const el=$(id);if(el)el.disabled=active;});
+  const send=$('fullChatPageSendBtn');
+  if(send){
+    if(active){
+      if(!send.dataset.aaSlowOriginalHtml)send.dataset.aaSlowOriginalHtml=send.innerHTML;
+      send.disabled=true;send.setAttribute('aria-disabled','true');send.classList.add('aa-slowmode-countdown-button');
+      send.innerHTML='<i class="fas fa-hourglass-half" aria-hidden="true"></i><span>'+formatRemaining(Math.max(0,slowUntil-Date.now()))+'</span>';
+      send.title='انتظر حتى ينتهي العداد قبل الإرسال';
+    }else{
+      send.disabled=false;send.removeAttribute('aria-disabled');send.classList.remove('aa-slowmode-countdown-button');
+      if(send.dataset.aaSlowOriginalHtml){send.innerHTML=send.dataset.aaSlowOriginalHtml;delete send.dataset.aaSlowOriginalHtml;}
+      send.removeAttribute('title');
+    }
+  }
+  if(shell)shell.classList.toggle('aa-chat-slowmode',active);
+}
+function formatRemaining(msv){const s=Math.ceil(Math.max(0,msv)/1000);if(s<60)return `${s}ث`;const m=Math.floor(s/60),r=s%60;return r?`${m}د ${r}ث`:`${m}د`;}
+function startCountdown(until){clearInterval(slowTimer);slowUntil=Number(until)||0;applySlowUI();if(slowUntil<=Date.now())return;slowTimer=setInterval(()=>{if(Date.now()>=slowUntil){clearInterval(slowTimer);slowTimer=0;slowUntil=0;applySlowUI();return;}applySlowUI();},250);}
+async function loadSlowForStudent(){
+  clearInterval(slowTimer);slowTimer=0;slowUntil=0;slowUnsub?.();slowUnsub=null;
+  if(!currentUser||!activeCourseId||isAdmin){applySlowUI();return;}
+  try{
+    slowUnsub=settingRef()?.onSnapshot(s=>{const d=s.exists?s.data()||{}:{};slowCfg={enabled:!!d.enabled,seconds:Number(d.seconds)||0};loadOwnCooldown();},()=>{});
+  }catch(_){ }
+  await loadOwnCooldown();
+}
+async function loadOwnCooldown(){
+  if(!slowCfg.enabled||slowCfg.seconds<=0){startCountdown(0);return;}
+  try{const s=await slowUserRef()?.get();const until=Number(s?.data()?.until||0);startCountdown(until);}catch(_){startCountdown(0);}
+}
+window.__aaChatStage11CanSend=async function(){
+  if(isAdmin)return true;
+  if(!slowCfg.enabled||slowCfg.seconds<=0)return true;
+  if(slowUntil>Date.now()){applySlowUI();showCustomAlert('الوضع البطيء',`انتظر ${formatRemaining(slowUntil-Date.now())} قبل إرسال الرسالة التالية.`);return false;}
+  return true;
+};
+window.__aaChatStage11MarkSent=async function(){
+  if(isAdmin||!slowCfg.enabled||slowCfg.seconds<=0||!currentUser||!activeCourseId)return;
+  const until=Date.now()+slowCfg.seconds*1000;
+  startCountdown(until);
+  try{await slowUserRef()?.set({until,seconds:slowCfg.seconds,updatedAt:ts()},{merge:true});}catch(e){console.warn('slow mode cooldown save',e);}
+};
+const oldSwitch=window.switchCoursePage;if(typeof oldSwitch==='function'&&!oldSwitch.__aaStage11Wrapped){const wrapped=function(page){const r=oldSwitch.apply(this,arguments);if(page==='chat')setTimeout(loadSlowForStudent,0);else{slowUnsub?.();slowUnsub=null;clearInterval(slowTimer);slowTimer=0;}return r};wrapped.__aaStage11Wrapped=true;wrapped.__original=oldSwitch;window.switchCoursePage=wrapped;}
+loadSlowForStudent();
 })();
 </script>
 
