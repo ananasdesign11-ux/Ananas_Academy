@@ -16190,6 +16190,29 @@ body.light-mode #courseChatPage .chat-rebuilt-shell{
         radial-gradient(75% 48% at 50% 0%, rgba(108,92,231,.08), transparent 70%),
         linear-gradient(180deg,#f7f8fc 0%,#f1f3f8 100%);
 }
+/* Personal chat background is anchored to the chat viewport, not the scrolling message list. */
+#courseChatPage .chat-rebuilt-shell::before{
+    content:"";
+    position:absolute!important;
+    inset:0!important;
+    z-index:0!important;
+    pointer-events:none!important;
+    background-image:var(--aa-chat-user-bg-image,none)!important;
+    background-size:cover!important;
+    background-position:center!important;
+    background-repeat:no-repeat!important;
+    background-attachment:scroll!important;
+}
+#courseChatPage .chat-rebuilt-shell::after{
+    content:"";
+    position:absolute!important;
+    inset:0!important;
+    z-index:0!important;
+    pointer-events:none!important;
+    background:var(--aa-chat-user-bg-overlay,transparent)!important;
+}
+#courseChatPage .chat-rebuilt-shell > *{position:relative;z-index:1;}
+
 
 /* ---------- Top Bar ---------- */
 #courseChatPage .chat-topbar{
@@ -20203,20 +20226,22 @@ window.__aaStage10RefreshPins=refreshPinsForOpenChat;
     }
 
     function setChatBackground(url){
-        if(!list)return;
+        const shell=chat.querySelector('.chat-rebuilt-shell');
+        if(!shell||!list)return;
         if(url){
-            list.style.backgroundImage=`linear-gradient(rgba(0,0,0,.08),rgba(0,0,0,.08)),url("${String(url).replace(/"/g,'%22')}")`;
-            list.style.backgroundSize='cover';
-            list.style.backgroundPosition='center';
-            list.style.backgroundRepeat='no-repeat';
-            list.style.backgroundAttachment='local';
+            const safeUrl=String(url).replace(/"/g,'%22');
+            shell.style.setProperty('--aa-chat-user-bg-image',`url("${safeUrl}")`);
+            shell.style.setProperty('--aa-chat-user-bg-overlay','linear-gradient(rgba(0,0,0,.08),rgba(0,0,0,.08))');
         }else{
-            list.style.removeProperty('background-image');
-            list.style.removeProperty('background-size');
-            list.style.removeProperty('background-position');
-            list.style.removeProperty('background-repeat');
-            list.style.removeProperty('background-attachment');
+            shell.style.removeProperty('--aa-chat-user-bg-image');
+            shell.style.removeProperty('--aa-chat-user-bg-overlay');
         }
+        list.style.removeProperty('background-image');
+        list.style.removeProperty('background-size');
+        list.style.removeProperty('background-position');
+        list.style.removeProperty('background-repeat');
+        list.style.removeProperty('background-attachment');
+        list.style.removeProperty('background');
     }
 
     async function loadBackground(){
@@ -20540,8 +20565,13 @@ async function saveEditor(){
     const url=await uploadImage(file);if(!url)throw Error('upload');
     await db.collection('users').doc(u.uid).collection('chatBackgrounds').doc(c).set({url,updatedAt:firebase.firestore.FieldValue.serverTimestamp()},{merge:true});
     try{localStorage.setItem(bgKey(u.uid,c),url)}catch(_){ }
-    list.style.backgroundImage=`linear-gradient(rgba(0,0,0,.08),rgba(0,0,0,.08)),url("${url.replace(/"/g,'%22')}")`;
-    list.style.backgroundSize='cover';list.style.backgroundPosition='center';list.style.backgroundRepeat='no-repeat';list.style.backgroundAttachment='local';
+    const shell=chat.querySelector('.chat-rebuilt-shell');
+    if(shell){
+      const safeUrl=url.replace(/"/g,'%22');
+      shell.style.setProperty('--aa-chat-user-bg-image',`url("${safeUrl}")`);
+      shell.style.setProperty('--aa-chat-user-bg-overlay','linear-gradient(rgba(0,0,0,.08),rgba(0,0,0,.08))');
+    }
+    list.style.removeProperty('background-image');list.style.removeProperty('background-size');list.style.removeProperty('background-position');list.style.removeProperty('background-repeat');list.style.removeProperty('background-attachment');
     closeEditor();showCopyToast('تم تطبيق خلفية الدردشة');
   }catch(err){console.error('stage14 background save failed',err);showCustomAlert?.('خطأ','تعذر تطبيق خلفية الدردشة.');}
   finally{if(btn)btn.disabled=false;}
