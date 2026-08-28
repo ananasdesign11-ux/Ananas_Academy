@@ -18965,6 +18965,12 @@ body.aa-chat-signing-out .auth-popup{display:none!important;pointer-events:none!
 #aaChatPinnedBar .aa-pin-counter{font-size:.68rem;font-weight:900;color:var(--accent1);white-space:nowrap;}
 #aaChatMuteBanner{display:none!important;margin:0!important;padding:8px var(--chat-safe-right)!important;border-bottom:1px solid rgba(107,114,128,.2)!important;background:rgba(107,114,128,.08)!important;color:var(--text-muted)!important;font-size:.78rem!important;font-weight:800!important;}
 #aaChatMuteBanner.open{display:block!important;}
+#courseChatPage .chat-composer-shell.aa-chat-muted-composer{opacity:.72!important;filter:saturate(.62)!important;}
+#courseChatPage .chat-composer-shell.aa-chat-muted-composer .chat-input-group{cursor:not-allowed!important;}
+#courseChatPage .chat-composer-shell.aa-chat-muted-composer #fullChatPageInput{cursor:not-allowed!important;caret-color:transparent!important;}
+#courseChatPage .chat-composer-shell.aa-chat-muted-composer #chatEmojiBtnPage,
+#courseChatPage .chat-composer-shell.aa-chat-muted-composer #chatImageBtnPage,
+#courseChatPage .chat-composer-shell.aa-chat-muted-composer #fullChatPageSendBtn{cursor:not-allowed!important;}
 #aaChatAdminModal{position:fixed;inset:0;z-index:2147483605;display:none;align-items:center;justify-content:center;padding:16px;background:rgba(0,0,0,.50);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);}
 #aaChatAdminModal.open{display:flex;}
 #aaChatAdminModal .aa-admin-modal-card{width:min(430px,calc(100vw - 24px));background:var(--bg-card);color:var(--text-primary);border:1px solid var(--border);border-radius:22px;box-shadow:0 24px 80px rgba(0,0,0,.35);padding:18px;}
@@ -19033,22 +19039,77 @@ const pinDomObserver=new MutationObserver(()=>{if(pinState.messageIds.length)ren
 const pinDomTarget=$('chatPageMessagesList');if(pinDomTarget)pinDomObserver.observe(pinDomTarget,{childList:true,subtree:true});
 
 /* ---------- Mute state ---------- */
-let muteUnsub=null,currentMute=null;
+let muteUnsub=null,currentMute=null,muteStateReady=true;
 function muteDoc(uid){return courseRef()?.collection('chatMutes').doc(String(uid))||null;}
 function muteActive(d){const until=ms(d?.until);return !!d?.muted&&(!until||Date.now()<until)}
 function applyMuteUI(){
-  const active=!isAdminNow()&&muteActive(currentMute||{}),ids=['fullChatPageInput','fullChatInput','fullChatPageSendBtn','fullSendChatBtn','fullChatPageFileInput','fullChatFileInput','chatEmojiBtnPage'];
-  ids.forEach(id=>{const el=$(id);if(el)el.disabled=active;});
-  const input=$('fullChatPageInput');if(input){input.placeholder=active?'تم كتمك من الكتابة في الدردشة':'اكتب رسالتك هنا...';}
+  const student=!isAdminNow()&&!!currentUser&&!!activeCourseId;
+  const active=student && (!muteStateReady || muteActive(currentMute||{}));
+  const ids=['fullChatPageInput','fullChatInput','fullChatPageSendBtn','fullSendChatBtn','fullChatPageFileInput','fullChatFileInput','chatEmojiBtnPage'];
+  ids.forEach(id=>{const el=$(id);if(el){el.disabled=active;el.setAttribute('aria-disabled',active?'true':'false');}});
+  const input=$('fullChatPageInput');
+  if(input){input.readOnly=active;input.tabIndex=active?-1:0;input.placeholder=active?(muteStateReady?'تم كتمك من الكتابة في الدردشة':'جارٍ التحقق من حالة الكتم...'):'اكتب رسالتك هنا...';}
   const shell=$('courseChatPage')?.querySelector('.chat-composer-shell');
-  if(shell){shell.classList.toggle('aa-chat-muted-composer',active);let b=$('aaChatMuteBanner');if(!b){b=document.createElement('div');b.id='aaChatMuteBanner';shell.parentElement?.insertBefore(b,shell);}b.textContent=currentMute?.reason?`تم كتمك من الدردشة: ${currentMute.reason}`:'تم كتمك من الكتابة في الدردشة.';b.classList.toggle('open',active);}
+  if(shell){
+    shell.classList.toggle('aa-chat-muted-composer',active);
+    shell.setAttribute('aria-disabled',active?'true':'false');
+    shell.dataset.muted=active?'1':'0';
+    let b=$('aaChatMuteBanner');
+    if(!b){b=document.createElement('div');b.id='aaChatMuteBanner';shell.parentElement?.insertBefore(b,shell);}
+    b.textContent=currentMute?.reason?`تم كتمك من الدردشة: ${currentMute.reason}`:'تم كتمك من الكتابة في الدردشة.';
+    b.classList.toggle('open',student&&muteActive(currentMute||{}));
+  }
 }
 function loadMute(){
-  muteUnsub?.();muteUnsub=null;currentMute=null;applyMuteUI();
-  if(isAdminNow()||!currentUser||!activeCourseId)return;const ref=muteDoc(currentUser.uid);if(!ref)return;
-  muteUnsub=ref.onSnapshot(s=>{currentMute=s.exists?s.data():null;applyMuteUI();if(muteActive(currentMute||{})&&ms(currentMute.until)){setTimeout(()=>applyMuteUI(),Math.max(0,ms(currentMute.until)-Date.now()+50));}},()=>applyMuteUI());
+  muteUnsub?.();muteUnsub=null;currentMute=null;
+  if(isAdminNow()||!currentUser||!activeCourseId){muteStateReady=true;applyMuteUI();return;}
+  muteStateReady=false;applyMuteUI();
+  const ref=muteDoc(currentUser.uid);
+  if(!ref){muteStateReady=true;applyMuteUI();return;}
+  muteUnsub=ref.onSnapshot(s=>{
+    currentMute=s.exists?s.data():null;
+    muteStateReady=true;
+    applyMuteUI();
+    if(muteActive(currentMute||{})&&ms(currentMute.until)){setTimeout(()=>applyMuteUI(),Math.max(0,ms(currentMute.until)-Date.now()+50));}
+  },()=>{muteStateReady=true;applyMuteUI();});
 }
-async function assertNotMuted(){if(isAdminNow())return true;if(muteActive(currentMute||{})) {showCustomAlert('الدردشة مكتومة',currentMute.reason?'لا يمكنك الكتابة حالياً. السبب: '+currentMute.reason:'لا يمكنك الكتابة في الدردشة حالياً.');return false;}return true;}
+async function assertNotMuted(){
+  if(isAdminNow())return true;
+  if(muteActive(currentMute||{})){showCustomAlert('الدردشة مكتومة',currentMute.reason?'لا يمكنك الكتابة حالياً. السبب: '+currentMute.reason:'لا يمكنك الكتابة في الدردشة حالياً.');return false;}
+  return true;
+}
+
+/* Hard interaction guard: a muted student cannot focus, type, open attachments, use emoji, or send. */
+document.addEventListener('beforeinput',e=>{
+  const shell=e.target?.closest?.('#courseChatPage .chat-composer-shell');
+  if(!shell||shell.dataset.muted!=='1'||isAdminNow())return;
+  e.preventDefault();e.stopImmediatePropagation();
+},{capture:true});
+document.addEventListener('keydown',e=>{
+  const shell=e.target?.closest?.('#courseChatPage .chat-composer-shell');
+  if(!shell||shell.dataset.muted!=='1'||isAdminNow())return;
+  e.preventDefault();e.stopImmediatePropagation();
+},{capture:true});
+document.addEventListener('paste',e=>{
+  const shell=e.target?.closest?.('#courseChatPage .chat-composer-shell');
+  if(!shell||shell.dataset.muted!=='1'||isAdminNow())return;
+  e.preventDefault();e.stopImmediatePropagation();
+},{capture:true});
+document.addEventListener('drop',e=>{
+  const shell=e.target?.closest?.('#courseChatPage .chat-composer-shell');
+  if(!shell||shell.dataset.muted!=='1'||isAdminNow())return;
+  e.preventDefault();e.stopImmediatePropagation();
+},{capture:true});
+document.addEventListener('pointerdown',e=>{
+  const shell=e.target?.closest?.('#courseChatPage .chat-composer-shell');
+  if(!shell||shell.dataset.muted!=='1'||isAdminNow())return;
+  e.preventDefault();e.stopImmediatePropagation();
+},{capture:true});
+document.addEventListener('click',e=>{
+  const shell=e.target?.closest?.('#courseChatPage .chat-composer-shell');
+  if(!shell||shell.dataset.muted!=='1'||isAdminNow())return;
+  e.preventDefault();e.stopImmediatePropagation();
+},{capture:true});
 async function loadAdminTargetPreview(modal,payload,type){
   const body=$('aaChatAdminModalBody');
   if(!body||!payload?.userId)return;
