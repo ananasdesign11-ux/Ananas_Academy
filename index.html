@@ -19284,8 +19284,10 @@ sync();
 #aaChatStage11AnnouncementModal .aa-stage11-announcement-actions{display:flex;gap:9px;padding:0 22px 22px;}
 #aaChatStage11AnnouncementModal .aa-stage11-announcement-actions button{flex:1;min-height:46px;border-radius:14px;border:1px solid var(--border);background:var(--bg-secondary);color:var(--text-primary);font:inherit;font-weight:900;cursor:pointer;}
 #aaChatStage11AnnouncementModal .aa-stage11-announcement-actions .primary{border-color:transparent;background:var(--accent-gradient);color:#fff;}
-#courseChatPage .chat-slowmode-divider{align-self:center;display:flex;align-items:center;justify-content:center;gap:7px;margin:8px auto;padding:5px 10px;border:1px solid color-mix(in srgb,var(--accent1) 27%,var(--border) 73%);border-radius:999px;background:color-mix(in srgb,var(--bg-card) 94%,var(--accent1) 6%);color:var(--text-muted);font-size:.65rem;line-height:1.25;box-shadow:0 5px 16px rgba(108,92,231,.07);}
-#courseChatPage .chat-slowmode-divider i{color:var(--accent1);font-size:.68rem;}
+#courseChatPage .chat-slowmode-divider{position:relative;align-self:stretch;display:flex;align-items:center;justify-content:center;gap:8px;width:100%;margin:16px 0;padding:0 12px;box-sizing:border-box;color:var(--text-muted);font-size:.67rem;font-weight:800;line-height:1.3;text-align:center;}
+#courseChatPage .chat-slowmode-divider::before,#courseChatPage .chat-slowmode-divider::after{content:"";height:1px;flex:1 1 auto;background:linear-gradient(90deg,transparent,color-mix(in srgb,var(--accent1) 28%,var(--border) 72%),transparent);}
+#courseChatPage .chat-slowmode-divider span{padding:3px 10px;border:1px solid color-mix(in srgb,var(--accent1) 22%,var(--border) 78%);border-radius:999px;background:var(--bg-card);white-space:nowrap;}
+#courseChatPage .chat-slowmode-divider i{display:none;}
 #aaChatStage11Modal{position:fixed;inset:0;z-index:2147483606;display:none;align-items:center;justify-content:center;padding:16px;background:rgba(0,0,0,.52);backdrop-filter:blur(7px);-webkit-backdrop-filter:blur(7px);}
 #aaChatStage11Modal.open{display:flex;}
 #aaChatStage11Modal .aa-stage11-card{width:min(440px,calc(100vw - 24px));background:var(--bg-card);border:1px solid var(--border);border-radius:24px;box-shadow:0 24px 90px rgba(0,0,0,.38);padding:18px;}
@@ -19331,9 +19333,11 @@ const $=id=>document.getElementById(id);
 const courseRef=()=>activeCourseId?db.collection('courses').doc(String(activeCourseId)):null;
 const settingRef=()=>courseRef()?.collection('settings').doc('chatStage11')||null;
 const slowUserRef=()=>activeCourseId&&currentUser?.uid?db.collection('courses').doc(String(activeCourseId)).collection('chatSlowModeUsers').doc(String(currentUser.uid)):null;
+const slowEventRef=()=>activeCourseId?db.collection('courses').doc(String(activeCourseId)).collection('chatSlowModeEvents'):null;
 const ts=()=>firebase.firestore.FieldValue.serverTimestamp();
 let slowCfg={enabled:false,seconds:0};
-let slowUntil=0,slowTimer=0,slowUnsub=null;
+let slowUntil=0,slowTimer=0,slowUnsub=null,slowEventsUnsub=null;
+let slowModeEvents=[];
 function ensureModal(){
   let m=$('aaChatStage11Modal');if(m)return m;
   m=document.createElement('div');m.id='aaChatStage11Modal';
@@ -19376,30 +19380,48 @@ window.__aaChatStage11SetSlowMode=async function(enabled,seconds=0){
   try{
     const sec=enabled?Math.max(5,Number(seconds)||0):0;
     await settingRef().set({enabled:sec>0,seconds:sec,updatedAt:ts(),updatedBy:currentUser.uid},{merge:true});
+    if(sec>0){
+      const lastMessage=[...document.querySelectorAll('#chatPageMessagesList .chat-msg[data-created-at]')] .pop();
+      const lastCreatedAt=Number(lastMessage?.dataset?.createdAt||0);
+      await slowEventRef()?.add({activatedAt:Date.now(),activatedAfterMessageAt:lastCreatedAt||null,seconds:sec,createdBy:currentUser.uid,createdAt:ts()});
+    }
     slowCfg={enabled:sec>0,seconds:sec};
     window.__aaSyncChatSlowMenu?.();
-    window.__aaStage11RenderSlowDivider?.();
+    await loadSlowModeEvents();
     showCopyToast(sec>0?`تم تفعيل الوضع البطيء (${sec} ثانية)`:'تم إلغاء الوضع البطيء');
     return true;
   }catch(e){console.error(e);showCustomAlert('خطأ','تعذر تحديث الوضع البطيء.');return false;}
 };
+async function loadSlowModeEvents(){
+  slowEventsUnsub?.();slowEventsUnsub=null;slowModeEvents=[];
+  if(!activeCourseId){window.__aaStage11RenderSlowDivider?.();return;}
+  try{
+    slowEventsUnsub=slowEventRef()?.onSnapshot(snap=>{
+      slowModeEvents=snap.docs.map(d=>({id:d.id,...(d.data()||{})})).sort((a,b)=>Number(a.activatedAt||0)-Number(b.activatedAt||0));
+      window.__aaStage11RenderSlowDivider?.();
+    },()=>{slowModeEvents=[];window.__aaStage11RenderSlowDivider?.();});
+  }catch(_){slowModeEvents=[];window.__aaStage11RenderSlowDivider?.();}
+}
+function getChatItemCreatedMs(node){return Number(node?.dataset?.createdAt||0)||0;}
 window.__aaStage11RenderSlowDivider=function(){
   const list=document.getElementById('chatPageMessagesList');if(!list)return;
-  list.querySelector('.chat-slowmode-divider')?.remove();
-  if(!slowEnabled())return;
-  const div=document.createElement('div');div.className='chat-slowmode-divider';div.setAttribute('role','separator');
-  div.innerHTML='<i class="fas fa-hourglass-half"></i><span>الوضع البطيء مفعّل</span>';
-  const messages=[...list.querySelectorAll('.chat-msg')];
-  const myUid=String(currentUser?.uid||'');
-  let lastMine=null;
-  for(const msg of messages){
-    if(String(msg.dataset.userId||'')===myUid) lastMine=msg;
-  }
-  if(lastMine){
-    lastMine.after(div);
-  }else{
-    const fallback=[...list.querySelectorAll('.chat-date-divider,.chat-msg,.chat-announcement-divider')];
-    fallback.length?fallback[fallback.length-1].after(div):list.appendChild(div);
+  list.querySelectorAll('.chat-slowmode-divider').forEach(el=>el.remove());
+  const events=[...slowModeEvents];if(!events.length)return;
+  const items=[...list.querySelectorAll('[data-created-at]')].filter(el=>!el.classList.contains('chat-slowmode-divider'));
+  for(const event of events){
+    const when=Number(event.activatedAt||0);
+    let anchor=null;
+    for(const item of items){
+      const ms=getChatItemCreatedMs(item);
+      if(ms && ms<=when) anchor=item;
+    }
+    const div=document.createElement('div');
+    div.className='chat-slowmode-divider';div.setAttribute('role','separator');
+    div.dataset.slowmodeEventId=String(event.id||'');
+    div.dataset.createdAt=String(when||Date.now());
+    div.innerHTML='<span>الوضع البطيء مفعّل</span>';
+    if(anchor) anchor.after(div);else list.insertBefore(div,list.firstChild||null);
+    items.push(div);items.sort((a,b)=>getChatItemCreatedMs(a)-getChatItemCreatedMs(b));
   }
 };
 let stage11SlowDividerQueued=false,stage11SlowDividerRendering=false;
@@ -19508,8 +19530,9 @@ window.__aaChatStage11MarkSent=async function(){
   startCountdown(until);
   try{await slowUserRef()?.set({until,seconds:slowCfg.seconds,updatedAt:ts()},{merge:true});}catch(e){console.warn('slow mode cooldown save',e);}
 };
-const oldSwitch=window.switchCoursePage;if(typeof oldSwitch==='function'&&!oldSwitch.__aaStage11Wrapped){const wrapped=function(page){const r=oldSwitch.apply(this,arguments);if(page==='chat')setTimeout(loadSlowForStudent,0);else{slowUnsub?.();slowUnsub=null;clearInterval(slowTimer);slowTimer=0;$('aaChatStage11AnnouncementModal')?.classList.remove('open');}return r};wrapped.__aaStage11Wrapped=true;wrapped.__original=oldSwitch;window.switchCoursePage=wrapped;}
+const oldSwitch=window.switchCoursePage;if(typeof oldSwitch==='function'&&!oldSwitch.__aaStage11Wrapped){const wrapped=function(page){const r=oldSwitch.apply(this,arguments);if(page==='chat')setTimeout(()=>{loadSlowForStudent();loadSlowModeEvents();},0);else{slowUnsub?.();slowUnsub=null;slowEventsUnsub?.();slowEventsUnsub=null;slowModeEvents=[];clearInterval(slowTimer);slowTimer=0;$('aaChatStage11AnnouncementModal')?.classList.remove('open');}return r};wrapped.__aaStage11Wrapped=true;wrapped.__original=oldSwitch;window.switchCoursePage=wrapped;}
 loadSlowForStudent();
+loadSlowModeEvents();
 })();
 </script>
 
