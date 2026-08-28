@@ -2848,6 +2848,7 @@ to{opacity:1;transform:none}}
                         </header>
 
                         <div id="chatLockBannerPage" class="chat-lock-banner"></div>
+                        <div id="aaChatPinnedBar" aria-live="polite" aria-hidden="true"></div>
 
                         <main id="chatPageMessagesList" class="chat-messages-rebuilt" aria-live="polite"></main>
 
@@ -8108,8 +8109,10 @@ to{opacity:1;transform:none}}
                             msgHtml += `<div class="msg-time">${timeStr}</div>`;
                             msgHtml += `<div class="msg-actions"><button onclick='replyTo(${JSON.stringify(doc.id)},${JSON.stringify(profile.name||m.userName||'زائر')},${JSON.stringify((legacyImages.length?legacyCaption:m.message||'').substring(0,120))},${JSON.stringify(legacyImages[0]||'')})'><i class="fas fa-reply"></i></button>`;
 
-                            if (isAdmin || isMine) {
-                                msgHtml += `<button onclick="deleteChatMessage('${courseId}', '${doc.id}')" style="color:${isMine ? '#fff' : '#e74c3c'}"><i class="fas fa-trash"></i></button>`;
+                            if (isMine) {
+                                msgHtml += `<button onclick="deleteChatMessage('${courseId}', '${doc.id}')" style="color:#fff"><i class="fas fa-trash"></i></button>`;
+                            } else if (isAdmin) {
+                                msgHtml += `<button onclick="deleteChatMessage('${courseId}', '${doc.id}')" style="color:#e74c3c"><i class="fas fa-trash"></i></button>`;
                             }
 
                             msgHtml += `</div></div>`;
@@ -17105,15 +17108,17 @@ body.light-mode #courseChatPage .chat-msg.received{
             const replyImages=replyTargetDeleted?[]:(Array.isArray(originalReplyData.imageUrls)?originalReplyData.imageUrls.filter(Boolean):(originalReplyData.imageUrl?[originalReplyData.imageUrl]:[]));
             const replyThumb=replyImages[0]||'';
             const replyMedia=(m.replyToId&&!replyTargetDeleted&&replyThumb)?`<div class="aa-reply-media"><img class="aa-reply-thumb" src="${safeEscape(replyThumb)}" alt=""><div class="rt${replyText?'':' aa-reply-no-caption'}">${replyText?safeEscape(replyText):''}</div></div>`:'';
-            const reply=m.replyToId?`<div class="reply-block ${replyTargetDeleted?'reply-to-deleted':''}" data-reply-to-id="${safeEscape(m.replyToId||'')}" data-reply-deleted="${replyTargetDeleted?'1':'0'}"><div class="ru">${safeEscape(replyAuthorName)}</div>${replyMedia || `<div class="rt">${safeEscape(replyText)}</div>`}</div>`:'';
+            const reply=(!deleted&&m.replyToId)?`<div class="reply-block ${replyTargetDeleted?'reply-to-deleted':''}" data-reply-to-id="${safeEscape(m.replyToId||'')}" data-reply-deleted="${replyTargetDeleted?'1':'0'}"><div class="ru">${safeEscape(replyAuthorName)}</div>${replyMedia || `<div class="rt">${safeEscape(replyText)}</div>`}</div>`:'';
             const gallery=(!deleted&&images.length)?`<div class="message-gallery" data-image-count="${images.length}">${images.slice(0,4).map((u,i)=>`<figure class="chat-media-item"><div class="chat-media-frame"><img src="${safeEscape(u)}" alt="صورة" loading="lazy" decoding="async" onclick="openChatMessageGallery('${safeEscape(courseId)}','${safeEscape(doc.id)}',${i},this)">${images.length>4&&i===3?`<span class="chat-media-more">+${images.length-4}</span>`:''}</div></figure>`).join('')}</div>`:'';
             const captionHtml=(!deleted&&images.length&&imageCaption)?`<div class="chat-image-caption">${safeEscape(imageCaption)}</div>`:'';
             let body='';
-            if(deleted&&!isAdmin){
-                body='<div class="t" style="color:var(--text-muted);font-style:italic;"><i class="fas fa-ban"></i> هذه الرسالة محذوفة</div>';
+            if(deleted){
+                body=isAdmin
+                    ? '<div style="color:#e74c3c;font-size:.78rem;font-weight:800;margin-bottom:5px;"><i class="fas fa-trash"></i> تم حذف هذه الرسالة</div>'
+                    : '<div class="t" style="color:var(--text-muted);font-style:italic;"><i class="fas fa-ban"></i> هذه الرسالة محذوفة</div>';
             }else{
                 const textHtml=(!images.length&&messageText)?`<div class="t">${safeEscape(messageText)}${m.edited?'<span class="edited-label">(معدلة)</span>':''}</div>`:'';
-                body=`${deleted?'<div style="color:#e74c3c;font-size:.78rem;font-weight:800;margin-bottom:5px;"><i class="fas fa-trash"></i> تم حذف هذه الرسالة</div>':''}${gallery}${captionHtml}${textHtml}`;
+                body=`${gallery}${captionHtml}${textHtml}`;
             }
             const canEdit=!!window.__aaChatCanEditMessage?.(m);
             const actions=deleted&&!isAdmin
@@ -18217,7 +18222,8 @@ function showFor(el,x,y){ensureUI();close();selected=el;const r=el.getBoundingCl
 :[b('copy','نسخ','fa-copy',false),b(mine?'delete':'local',mine?'حذف من الجميع':'حذف من حسابي',mine?'fa-trash':'fa-eye-slash',true)];if(canEdit&&!deleted)arr.push(b('edit','تعديل','fa-pen',false));if(!deleted)arr.push(b('reply','رد','fa-reply',false));
 if(admin){
   const addAdmin=(action,label,icon,danger=false)=>{const x=b(action,label,icon,danger);x.dataset.adminAction='1';x.dataset.adminUserId=String(el.dataset.userId||'');x.dataset.adminMessageId=String(el.dataset.messageId||'');return x;};
-  arr.push(addAdmin('admin-delete','حذف الرسالة للجميع','fa-trash',true));
+  if(deleted)arr.push(addAdmin('admin-permanent-delete','حذف الرسالة نهائيًا','fa-trash-can',true));
+  else if(!mine)arr.push(addAdmin('admin-delete','حذف الرسالة للجميع','fa-trash',true));
   arr.push(addAdmin('admin-pin',(window.__aaChatStage10IsPinned?.(el.dataset.messageId)?'إلغاء تثبيت الرسالة':'تثبيت الرسالة'),'fa-thumbtack',false));
   if(!mine&&!deleted){arr.push(addAdmin('admin-mute','كتم الطالب','fa-microphone-slash',false));arr.push(addAdmin('admin-warning','إرسال تحذير مخفي','fa-triangle-exclamation',false));}
 }
@@ -18902,13 +18908,16 @@ body.aa-chat-signing-out .auth-popup{display:none!important;pointer-events:none!
 
 <!-- ===== STAGE 10: ADMIN SUPERPOWERS ===== -->
 <style id="aa-chat-stage10-admin-superpowers-css">
-#courseChatPage #aaChatPinnedBar{display:none;align-items:center;gap:10px;margin:0;padding:8px var(--chat-safe-right) 8px var(--chat-safe-left);background:linear-gradient(90deg,rgba(108,92,231,.10),rgba(34,197,94,.06));border-bottom:1px solid rgba(108,92,231,.16);cursor:pointer;min-width:0;}
+#courseChatPage #aaChatPinnedBar{display:none;align-items:center;gap:8px;margin:0;padding:7px var(--chat-safe-right) 7px var(--chat-safe-left);background:linear-gradient(90deg,rgba(108,92,231,.10),rgba(34,197,94,.06));border-bottom:1px solid rgba(108,92,231,.16);min-width:0;}
 #courseChatPage #aaChatPinnedBar.open{display:flex;}
+#aaChatPinnedBar .aa-pin-nav{flex:0 0 32px;width:32px;height:32px;border:1px solid rgba(108,92,231,.18);border-radius:10px;background:var(--bg-secondary);color:var(--text-muted);display:inline-flex;align-items:center;justify-content:center;cursor:pointer;}
+#aaChatPinnedBar .aa-pin-nav:hover{color:var(--accent1);border-color:rgba(108,92,231,.38);}
+#aaChatPinnedBar .aa-pin-main{min-width:0;flex:1;display:flex;align-items:center;gap:9px;cursor:pointer;}
 #aaChatPinnedBar .aa-pin-icon{flex:0 0 30px;width:30px;height:30px;border-radius:10px;display:grid;place-items:center;background:rgba(108,92,231,.14);color:var(--accent1);}
 #aaChatPinnedBar .aa-pin-copy{min-width:0;flex:1;overflow:hidden;}
-#aaChatPinnedBar .aa-pin-title{display:block;font-weight:900;font-size:.78rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+#aaChatPinnedBar .aa-pin-title{display:block;font-weight:900;font-size:.76rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 #aaChatPinnedBar .aa-pin-text{display:block;color:var(--text-muted);font-size:.72rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px;}
-#aaChatPinnedBar .aa-pin-counter{font-size:.7rem;font-weight:900;color:var(--accent1);white-space:nowrap;}
+#aaChatPinnedBar .aa-pin-counter{font-size:.68rem;font-weight:900;color:var(--accent1);white-space:nowrap;}
 #aaChatMuteBanner{display:none!important;margin:0!important;padding:8px var(--chat-safe-right)!important;border-bottom:1px solid rgba(107,114,128,.2)!important;background:rgba(107,114,128,.08)!important;color:var(--text-muted)!important;font-size:.78rem!important;font-weight:800!important;}
 #aaChatMuteBanner.open{display:block!important;}
 #aaChatAdminModal{position:fixed;inset:0;z-index:2147483605;display:none;align-items:center;justify-content:center;padding:16px;background:rgba(0,0,0,.50);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);}
@@ -18923,6 +18932,9 @@ body.aa-chat-signing-out .auth-popup{display:none!important;pointer-events:none!
 #aaChatAdminModal .aa-admin-actions button{min-height:42px;padding:8px 16px;border-radius:13px;border:1px solid var(--border);background:var(--bg-secondary);color:var(--text-primary);font-family:inherit;font-weight:800;cursor:pointer;}
 #aaChatAdminModal .aa-admin-actions .primary{border-color:transparent;background:var(--accent-gradient);color:#fff;}
 #aaChatAdminModal .aa-admin-actions .danger{color:#e74c3c;}
+#aaChatAdminModal .aa-mute-duration-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;}
+#aaChatAdminModal .aa-mute-duration-choice{min-height:42px;padding:9px 10px;border:1px solid var(--border);border-radius:12px;background:var(--bg-secondary);color:var(--text-primary);font-family:inherit;font-weight:800;cursor:pointer;}
+#aaChatAdminModal .aa-mute-duration-choice.active{border-color:var(--accent1);background:rgba(108,92,231,.10);color:var(--accent1);box-shadow:0 0 0 2px rgba(108,92,231,.08);}
 #aaChatContextMenu button[data-admin-action="1"]{border-top:1px solid var(--border);margin-top:3px;padding-top:10px;}
 #courseChatPage .chat-msg.aa-pinned-message{box-shadow:0 0 0 2px rgba(108,92,231,.32),0 10px 28px rgba(108,92,231,.10)!important;}
 @media(max-width:768px){
@@ -18950,16 +18962,27 @@ async function loadPins(){
 function messageById(id){return document.querySelector('#courseChatPage .chat-msg[data-message-id="'+CSS.escape(String(id))+'"]');}
 function messageSummary(el){return (el?.querySelector('.chat-image-caption')?.innerText?.trim()||el?.querySelector('.t')?.innerText?.trim()||'صورة').replace(/\s+/g,' ').slice(0,100)}
 function renderPinBar(){
-  let bar=$('aaChatPinnedBar');if(!bar){const lock=$('chatLockBannerPage');if(!lock)return;bar=document.createElement('div');bar.id='aaChatPinnedBar';lock.insertAdjacentElement('afterend',bar);}
-  if(!pinState.messageIds.length){bar.classList.remove('open');return;}
+  const bar=$('aaChatPinnedBar');
+  if(!bar)return;
+  if(!pinState.messageIds.length){bar.classList.remove('open');bar.setAttribute('aria-hidden','true');bar.innerHTML='';return;}
   pinState.index=Math.min(pinState.index,pinState.messageIds.length-1);
-  const id=pinState.messageIds[pinState.index],el=messageById(id);bar.classList.add('open');
-  bar.innerHTML='<div class="aa-pin-icon"><i class="fas fa-thumbtack"></i></div><div class="aa-pin-copy"><span class="aa-pin-title">رسالة مثبتة</span><span class="aa-pin-text">'+escapeHtml(messageSummary(el)||'اضغط للانتقال إلى الرسالة')+'</span></div><span class="aa-pin-counter">'+(pinState.index+1)+' / '+pinState.messageIds.length+'</span>';
+  const id=pinState.messageIds[pinState.index],el=messageById(id);
+  bar.classList.add('open');bar.setAttribute('aria-hidden','false');
+  const summary=messageSummary(el)||'اضغط للانتقال إلى الرسالة';
+  const prevDisabled=pinState.messageIds.length<2?' disabled':'';
+  bar.innerHTML='<button type="button" class="aa-pin-nav" data-pin-nav="prev" aria-label="الرسالة المثبتة السابقة"'+prevDisabled+'><i class="fas fa-chevron-right"></i></button>'
+    +'<div class="aa-pin-main" data-pin-goto="1"><div class="aa-pin-icon"><i class="fas fa-thumbtack"></i></div><div class="aa-pin-copy"><span class="aa-pin-title">رسالة مثبتة</span><span class="aa-pin-text">'+escapeHtml(summary)+'</span></div></div>'
+    +'<span class="aa-pin-counter">'+(pinState.index+1)+' / '+pinState.messageIds.length+'</span>'
+    +'<button type="button" class="aa-pin-nav" data-pin-nav="next" aria-label="الرسالة المثبتة التالية"'+prevDisabled+'><i class="fas fa-chevron-left"></i></button>';
 }
+
 function markPinnedMessages(){document.querySelectorAll('#courseChatPage .chat-msg.aa-pinned-message').forEach(el=>el.classList.remove('aa-pinned-message'));pinState.messageIds.forEach(id=>messageById(id)?.classList.add('aa-pinned-message'));}
 async function savePins(ids){const ref=pinDoc();if(!ref)throw new Error('no-course');await ref.set({messageIds:[...new Set(ids.map(String))].slice(0,50),updatedAt:ts(),updatedBy:currentUser.uid},{merge:true});}
 async function togglePin(id){if(!isAdminNow()||!id)return;const next=pinState.messageIds.includes(String(id))?pinState.messageIds.filter(x=>x!==String(id)):[...pinState.messageIds,String(id)];await savePins(next);showCopyToast(next.includes(String(id))?'تم تثبيت الرسالة':'تم إلغاء تثبيت الرسالة');}
 window.__aaChatStage10IsPinned=id=>pinState.messageIds.includes(String(id||''));
+
+const pinDomObserver=new MutationObserver(()=>{if(pinState.messageIds.length)renderPinBar();});
+const pinDomTarget=$('chatPageMessagesList');if(pinDomTarget)pinDomObserver.observe(pinDomTarget,{childList:true,subtree:true});
 
 /* ---------- Mute state ---------- */
 let muteUnsub=null,currentMute=null;
@@ -18982,7 +19005,7 @@ function openAdminModal(type,payload){
   let modal=$('aaChatAdminModal');if(!modal){modal=document.createElement('div');modal.id='aaChatAdminModal';modal.innerHTML='<div class="aa-admin-modal-card"><h3 id="aaChatAdminModalTitle"></h3><div id="aaChatAdminModalBody"></div><div class="aa-admin-actions"><button type="button" id="aaChatAdminCancel">إلغاء</button><button type="button" id="aaChatAdminSave" class="primary">حفظ</button></div></div>';document.body.appendChild(modal);modal.addEventListener('click',e=>{if(e.target===modal)modal.classList.remove('open')});$('aaChatAdminCancel').onclick=()=>modal.classList.remove('open');}
   const title=$('aaChatAdminModalTitle'),body=$('aaChatAdminModalBody');
   if(type==='mute'){
-    title.textContent='كتم الطالب';body.innerHTML='<div class="aa-admin-field"><label>مدة الكتم</label><select id="aaAdminMuteDuration"><option value="1h">ساعة واحدة</option><option value="1d">يوم واحد</option><option value="3d">3 أيام</option><option value="7d">7 أيام</option><option value="30d">30 يومًا</option><option value="custom">حتى تاريخ محدد</option><option value="manual">بدون انتهاء (إلغاء يدوي)</option></select></div><div class="aa-admin-field" id="aaAdminMuteCustomWrap" style="display:none"><label>ينتهي في</label><input id="aaAdminMuteCustom" type="datetime-local"></div><div class="aa-admin-field"><label>السبب (اختياري)</label><textarea id="aaAdminMuteReason" style="min-height:76px"></textarea></div>';const dur=$('aaAdminMuteDuration');dur.onchange=()=>{$('aaAdminMuteCustomWrap').style.display=dur.value==='custom'?'grid':'none';};$('aaChatAdminSave').onclick=async()=>{const d=dur.value;let until=null;if(d==='custom'){const v=$('aaAdminMuteCustom').value;if(!v)return showCustomAlert('تنبيه','حدد تاريخ ووقت انتهاء الكتم.');until=new Date(v).getTime();}else if(d!=='manual'){const hrs=({'1h':1,'1d':24,'3d':72,'7d':168,'30d':720})[d];until=Date.now()+hrs*3600000;}if(until&&until<=Date.now())return showCustomAlert('تنبيه','وقت انتهاء الكتم يجب أن يكون في المستقبل.');try{await muteDoc(payload.userId).set({muted:true,until,reason:($('aaAdminMuteReason').value||'').trim(),mutedBy:currentUser.uid,mutedAt:ts()},{merge:true});modal.classList.remove('open');showCopyToast('تم كتم الطالب');}catch(e){console.error(e);showCustomAlert('خطأ','تعذر حفظ كتم الطالب.');}};
+    title.innerHTML='<div style="display:flex;align-items:center;gap:10px"><span style="width:42px;height:42px;border-radius:13px;background:rgba(108,92,231,.10);color:var(--accent1);display:grid;place-items:center"><i class="fas fa-microphone-slash"></i></span><span><strong style="display:block">كتم الطالب</strong><small style="display:block;margin-top:3px;color:var(--text-muted);font-weight:600">منع الطالب من الكتابة في هذه الدردشة</small></span></div>';body.innerHTML='<div class="aa-admin-field"><label>مدة الكتم</label><div class="aa-mute-duration-grid" id="aaAdminMuteDuration"><button type="button" class="aa-mute-duration-choice active" data-mute-duration="1h">ساعة واحدة</button><button type="button" class="aa-mute-duration-choice" data-mute-duration="1d">يوم واحد</button><button type="button" class="aa-mute-duration-choice" data-mute-duration="3d">3 أيام</button><button type="button" class="aa-mute-duration-choice" data-mute-duration="7d">7 أيام</button><button type="button" class="aa-mute-duration-choice" data-mute-duration="30d">30 يومًا</button><button type="button" class="aa-mute-duration-choice" data-mute-duration="custom">وقت مخصص</button><button type="button" class="aa-mute-duration-choice" data-mute-duration="manual">حتى إلغاء الكتم</button></div></div><div class="aa-admin-field" id="aaAdminMuteCustomWrap" style="display:none"><label>تاريخ ووقت انتهاء الكتم</label><input id="aaAdminMuteCustom" type="datetime-local"><small>سيُرفع الكتم تلقائيًا عند هذا الوقت.</small></div><label class="aa-admin-field"><span>سبب الكتم <small>(اختياري)</small></span><textarea id="aaAdminMuteReason" placeholder="يمكنك كتابة سبب الكتم أو ترك الحقل فارغًا"></textarea></label><div style="padding:11px 13px;border-radius:14px;background:rgba(108,92,231,.07);border:1px solid rgba(108,92,231,.14);color:var(--text-muted);font-size:.8rem"><i class="fas fa-circle-info" style="color:var(--accent1)"></i> سيتم منع الطالب من الكتابة وإرسال الصور والإيموجي طوال مدة الكتم.</div>';let muteMode='1h';const choices=[...modal.querySelectorAll('[data-mute-duration]')];choices.forEach(c=>c.addEventListener('click',()=>{choices.forEach(x=>x.classList.remove('active'));c.classList.add('active');muteMode=c.dataset.muteDuration;$('aaAdminMuteCustomWrap').style.display=muteMode==='custom'?'grid':'none';}));$('aaChatAdminSave').onclick=async()=>{const d=muteMode;let until=null;if(d==='custom'){const v=$('aaAdminMuteCustom').value;if(!v)return showCustomAlert('تنبيه','حدد تاريخ ووقت انتهاء الكتم.');until=new Date(v).getTime();}else if(d!=='manual'){const hrs=({'1h':1,'1d':24,'3d':72,'7d':168,'30d':720})[d];until=Date.now()+hrs*3600000;}if(until&&until<=Date.now())return showCustomAlert('تنبيه','وقت انتهاء الكتم يجب أن يكون في المستقبل.');try{await muteDoc(payload.userId).set({muted:true,until,reason:($('aaAdminMuteReason').value||'').trim(),mutedBy:currentUser.uid,mutedAt:ts()},{merge:true});modal.classList.remove('open');showCopyToast('تم كتم الطالب');}catch(e){console.error(e);showCustomAlert('خطأ','تعذر حفظ كتم الطالب.');}};
   }else if(type==='warning'){
     title.textContent='إرسال تحذير مخفي';body.innerHTML='<div class="aa-admin-field"><label>التحذير</label><textarea id="aaAdminWarningText" placeholder="اكتب رسالة التحذير التي ستظهر لهذا الطالب فقط..."></textarea></div>'; $('aaChatAdminSave').onclick=async()=>{const text=($('aaAdminWarningText').value||'').trim();if(!text)return showCustomAlert('تنبيه','اكتب نص التحذير.');try{await courseRef().collection('chatWarnings').add({userId:payload.userId,messageId:payload.messageId,text,createdAt:ts(),createdBy:currentUser.uid});modal.classList.remove('open');showCopyToast('تم إرسال التحذير للطالب فقط');}catch(e){console.error(e);showCustomAlert('خطأ','تعذر إرسال التحذير.');}};
   }
@@ -18996,6 +19019,17 @@ function renderWarnings(items){let old=$('aaChatWarningStack');if(!old){old=docu
 
 document.addEventListener('click',e=>{const b=e.target.closest?.('[data-warning-goto]');if(!b)return;const el=messageById(b.getAttribute('data-warning-goto'));el?.scrollIntoView({behavior:'smooth',block:'center'});el?.classList.add('aa-reply-flash');},true);
 
+async function permanentlyDeleteChatMessage(courseId,msgId){
+  if(!isAdminNow()||!courseId||!msgId)return false;
+  const ref=db.collection('courses').doc(String(courseId)).collection('chat').doc(String(msgId));
+  try{
+    await ref.delete();
+    showCopyToast('تم حذف الرسالة نهائيًا');
+    return true;
+  }catch(e){console.error(e);showCustomAlert('خطأ','تعذر حذف الرسالة نهائيًا.');return false;}
+}
+window.__aaChatStage10PermanentDelete=permanentlyDeleteChatMessage;
+
 /* ---------- Context menu admin actions ---------- */
 const ctx=window.__aaChatStage10Ctx={};
 function installContextExtension(){
@@ -19007,14 +19041,21 @@ document.addEventListener('click',async e=>{
   const b=e.target.closest?.('#aaChatContextMenu [data-admin-action="1"]');if(!b)return;e.preventDefault();e.stopImmediatePropagation();
   const action=b.dataset.ctxAction,mid=b.dataset.adminMessageId,uid=b.dataset.adminUserId; $('aaChatContextMenu')?.classList.remove('open');$('aaChatContextOverlay')?.classList.remove('open');document.body.classList.remove('aa-chat-context-open');
   if(!isAdminNow()||!activeCourseId)return;
-  if(action==='admin-delete'){return window.deleteChatMessage?.(activeCourseId,mid,true)}
+  if(action==='admin-permanent-delete'){if(!isAdminNow()||!selected?.classList.contains('deleted-message'))return;const ok=typeof showCustomConfirm==='function'?await new Promise(r=>showCustomConfirm('حذف نهائي','سيتم حذف الرسالة نهائيًا ولن تظهر للمشرف أو أي مستخدم بعد ذلك. هل تريد المتابعة؟',()=>r(true),()=>r(false))):window.confirm('حذف الرسالة نهائيًا؟');if(ok)return window.__aaChatStage10PermanentDelete?.(activeCourseId,mid)}
+  if(action==='admin-delete'){if(!isAdminNow()||mine||selected?.classList.contains('deleted-message'))return;return window.deleteChatMessage?.(activeCourseId,mid,true)}
   if(action==='admin-pin'){try{await togglePin(mid)}catch(err){console.error(err);showCustomAlert('خطأ','تعذر تثبيت الرسالة.')}}
   if(action==='admin-mute'){openAdminModal('mute',{userId:uid,messageId:mid})}
   if(action==='admin-warning'){openAdminModal('warning',{userId:uid,messageId:mid})}
 },true);
 
 /* ---------- Pin navigation ---------- */
-document.addEventListener('click',e=>{const bar=e.target.closest?.('#aaChatPinnedBar');if(!bar||!pinState.messageIds.length)return;e.preventDefault();const id=pinState.messageIds[pinState.index],el=messageById(id);if(el){el.scrollIntoView({behavior:'smooth',block:'center'});el.classList.add('aa-reply-flash');}pinState.index=(pinState.index+1)%pinState.messageIds.length;setTimeout(renderPinBar,0);},true);
+document.addEventListener('click',e=>{
+  const bar=e.target.closest?.('#aaChatPinnedBar');if(!bar||!pinState.messageIds.length)return;
+  const nav=e.target.closest?.('[data-pin-nav]');
+  if(nav){e.preventDefault();e.stopImmediatePropagation();if(pinState.messageIds.length<2)return;const dir=nav.dataset.pinNav==='prev'?-1:1;pinState.index=(pinState.index+dir+pinState.messageIds.length)%pinState.messageIds.length;renderPinBar();return;}
+  const main=e.target.closest?.('[data-pin-goto]');if(!main)return;e.preventDefault();e.stopImmediatePropagation();
+  const id=pinState.messageIds[pinState.index],el=messageById(id);if(el){el.scrollIntoView({behavior:'smooth',block:'center'});el.classList.add('aa-reply-flash');setTimeout(()=>{el.classList.remove('aa-reply-flash');if(pinState.messageIds.length>1){pinState.index=(pinState.index+1)%pinState.messageIds.length;renderPinBar();}},650);}
+},true);
 
 /* ---------- Guard both chat send paths ---------- */
 const wrapSend=name=>{const original=window[name];if(typeof original!=='function'||original.__aaStage10MuteWrapped)return;const wrapped=async function(){if(!(await assertNotMuted()))return;return original.apply(this,arguments)};wrapped.__aaStage10MuteWrapped=true;wrapped.__original=original;window[name]=wrapped;};
