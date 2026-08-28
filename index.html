@@ -17027,8 +17027,9 @@ body.light-mode #courseChatPage .chat-msg.received{
     }
 
     // Replace only the chat-page renderer; Firestore data shape and all other site functions remain unchanged.
-    window.loadChatPage=async function(courseId){
+    window.loadChatPage=async function(courseId,options={}){
         const container=$('chatPageMessagesList'); if(!container)return;
+        const forceRefresh=!!(options&&options.forceRefresh);
         const courseKey=String(courseId||'');
         const sessions=window.__aaChatSessions||(window.__aaChatSessions=new Map());
         const accountUid=String(currentUser?.uid||'guest');
@@ -17061,7 +17062,7 @@ body.light-mode #courseChatPage .chat-msg.received{
         /* Keep the existing DOM alive while navigating around the site.
            A session may have no active listener after leaving the course, but its
            already-rendered messages remain visible and are reused immediately. */
-        if(session.initialized && container.querySelector('.chat-msg')){
+        if(session.initialized && container.querySelector('.chat-msg') && !forceRefresh){
             if(!session.unsubscribe){
                 /* Reconnect silently in the background; never replace the visible DOM. */
             }else{
@@ -19048,15 +19049,44 @@ function loadMute(){
   muteUnsub=ref.onSnapshot(s=>{currentMute=s.exists?s.data():null;applyMuteUI();if(muteActive(currentMute||{})&&ms(currentMute.until)){setTimeout(()=>applyMuteUI(),Math.max(0,ms(currentMute.until)-Date.now()+50));}},()=>applyMuteUI());
 }
 async function assertNotMuted(){if(isAdminNow())return true;if(muteActive(currentMute||{})) {showCustomAlert('الدردشة مكتومة',currentMute.reason?'لا يمكنك الكتابة حالياً. السبب: '+currentMute.reason:'لا يمكنك الكتابة في الدردشة حالياً.');return false;}return true;}
+async function loadAdminTargetPreview(modal,payload,type){
+  const body=$('aaChatAdminModalBody');
+  if(!body||!payload?.userId)return;
+  const safe=v=>String(v??'').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',"'":'&#39;'}[ch]));
+  try{
+    const userSnap=await db.collection('users').doc(String(payload.userId)).get();
+    const u=userSnap.exists?(userSnap.data()||{}):{};
+    const name=u.displayName||u.name||'طالب';
+    const photo=u.photoURL||u.photoUrl||u.photo||'';
+    const avatar=photo?`<img src="${safe(photo)}" alt="" style="width:46px;height:46px;border-radius:14px;object-fit:cover;display:block">`:`<span style="width:46px;height:46px;border-radius:14px;background:var(--accent-gradient);color:#fff;display:grid;place-items:center;font-weight:900;font-size:1.05rem">${safe(name.slice(0,1))}</span>`;
+    let preview=`<div class="aa-admin-target" style="display:flex;align-items:center;gap:11px;padding:11px 12px;border:1px solid var(--border);border-radius:15px;background:var(--bg-secondary);margin-bottom:12px">${avatar}<div style="min-width:0"><strong style="display:block;font-size:.9rem">${safe(name)}</strong><span style="display:block;margin-top:2px;color:var(--text-muted);font-size:.74rem">الطالب المستهدف</span></div></div>`;
+    if(type==='warning'&&payload.messageId){
+      const msgSnap=await db.collection('courses').doc(String(activeCourseId)).collection('chat').doc(String(payload.messageId)).get();
+      if(msgSnap.exists){
+        const d=msgSnap.data()||{},images=Array.isArray(d.imageUrls)?d.imageUrls.filter(Boolean):(d.imageUrl?[d.imageUrl]:[]),text=String(d.message||'').trim(),caption=String(d.imageCaption||d.caption||'').trim();
+        let msg='';
+        if(text)msg+=`<div style="white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.75">${safe(text)}</div>`;
+        if(images.length)msg+=`<img src="${safe(images[0])}" alt="" style="display:block;width:100%;max-height:190px;object-fit:cover;border-radius:12px;margin-top:8px">`;
+        if(caption)msg+=`<div style="margin-top:7px;color:var(--text-muted);font-size:.77rem;line-height:1.6">${safe(caption)}</div>`;
+        if(!msg)msg='<span style="color:var(--text-muted)">رسالة بدون نص أو صورة.</span>';
+        preview+=`<div style="padding:11px 12px;border:1px solid rgba(108,92,231,.22);border-radius:15px;background:var(--bg-secondary);margin-bottom:10px"><div style="font-size:.73rem;font-weight:900;color:var(--accent1);margin-bottom:7px"><i class="fas fa-message"></i> الرسالة التي سيُرسل بسببها التحذير</div>${msg}</div>`;
+      }
+    }
+    const marker=body.querySelector('[data-admin-target-preview]');
+    if(marker)marker.innerHTML=preview;
+  }catch(e){console.warn('admin target preview failed',e);}
+}
+
 function openAdminModal(type,payload){
   let modal=$('aaChatAdminModal');if(!modal){modal=document.createElement('div');modal.id='aaChatAdminModal';modal.innerHTML='<div class="aa-admin-modal-card"><h3 id="aaChatAdminModalTitle"></h3><div id="aaChatAdminModalBody"></div><div class="aa-admin-actions"><button type="button" id="aaChatAdminCancel">إلغاء</button><button type="button" id="aaChatAdminSave" class="primary">حفظ</button></div></div>';document.body.appendChild(modal);modal.addEventListener('click',e=>{if(e.target===modal)modal.classList.remove('open')});$('aaChatAdminCancel').onclick=()=>modal.classList.remove('open');}
   const title=$('aaChatAdminModalTitle'),body=$('aaChatAdminModalBody');
   if(type==='mute'){
-    title.innerHTML='<div style="display:flex;align-items:center;gap:10px"><span style="width:42px;height:42px;border-radius:13px;background:rgba(108,92,231,.10);color:var(--accent1);display:grid;place-items:center"><i class="fas fa-microphone-slash"></i></span><span><strong style="display:block">كتم الطالب</strong><small style="display:block;margin-top:3px;color:var(--text-muted);font-weight:600">منع الطالب من الكتابة في هذه الدردشة</small></span></div>';body.innerHTML='<div class="aa-admin-field"><label>مدة الكتم</label><div class="aa-mute-duration-grid" id="aaAdminMuteDuration"><button type="button" class="aa-mute-duration-choice active" data-mute-duration="1h">ساعة واحدة</button><button type="button" class="aa-mute-duration-choice" data-mute-duration="1d">يوم واحد</button><button type="button" class="aa-mute-duration-choice" data-mute-duration="3d">3 أيام</button><button type="button" class="aa-mute-duration-choice" data-mute-duration="7d">7 أيام</button><button type="button" class="aa-mute-duration-choice" data-mute-duration="30d">30 يومًا</button><button type="button" class="aa-mute-duration-choice" data-mute-duration="custom">وقت مخصص</button><button type="button" class="aa-mute-duration-choice" data-mute-duration="manual">حتى إلغاء الكتم</button></div></div><div class="aa-admin-field" id="aaAdminMuteCustomWrap" style="display:none"><label>تاريخ ووقت انتهاء الكتم</label><input id="aaAdminMuteCustom" type="datetime-local"><small>سيُرفع الكتم تلقائيًا عند هذا الوقت.</small></div><label class="aa-admin-field"><span>سبب الكتم <small>(اختياري)</small></span><textarea id="aaAdminMuteReason" placeholder="يمكنك كتابة سبب الكتم أو ترك الحقل فارغًا"></textarea></label><div style="padding:11px 13px;border-radius:14px;background:rgba(108,92,231,.07);border:1px solid rgba(108,92,231,.14);color:var(--text-muted);font-size:.8rem"><i class="fas fa-circle-info" style="color:var(--accent1)"></i> سيتم منع الطالب من الكتابة وإرسال الصور والإيموجي طوال مدة الكتم.</div>';let muteMode='1h';const choices=[...modal.querySelectorAll('[data-mute-duration]')];choices.forEach(c=>c.addEventListener('click',()=>{choices.forEach(x=>x.classList.remove('active'));c.classList.add('active');muteMode=c.dataset.muteDuration;$('aaAdminMuteCustomWrap').style.display=muteMode==='custom'?'grid':'none';}));$('aaChatAdminSave').onclick=async()=>{const d=muteMode;let until=null;if(d==='custom'){const v=$('aaAdminMuteCustom').value;if(!v)return showCustomAlert('تنبيه','حدد تاريخ ووقت انتهاء الكتم.');until=new Date(v).getTime();}else if(d!=='manual'){const hrs=({'1h':1,'1d':24,'3d':72,'7d':168,'30d':720})[d];until=Date.now()+hrs*3600000;}if(until&&until<=Date.now())return showCustomAlert('تنبيه','وقت انتهاء الكتم يجب أن يكون في المستقبل.');try{await muteDoc(payload.userId).set({muted:true,until,reason:($('aaAdminMuteReason').value||'').trim(),mutedBy:currentUser.uid,mutedAt:ts()},{merge:true});modal.classList.remove('open');showCopyToast('تم كتم الطالب');}catch(e){console.error(e);showCustomAlert('خطأ','تعذر حفظ كتم الطالب.');}};
+    title.innerHTML='<div style="display:flex;align-items:center;gap:10px"><span style="width:42px;height:42px;border-radius:13px;background:rgba(108,92,231,.10);color:var(--accent1);display:grid;place-items:center"><i class="fas fa-microphone-slash"></i></span><span><strong style="display:block">كتم الطالب</strong><small style="display:block;margin-top:3px;color:var(--text-muted);font-weight:600">منع الطالب من الكتابة في هذه الدردشة</small></span></div>';body.innerHTML='<div data-admin-target-preview></div><div class="aa-admin-field"><label>مدة الكتم</label><div class="aa-mute-duration-grid" id="aaAdminMuteDuration"><button type="button" class="aa-mute-duration-choice active" data-mute-duration="1h">ساعة واحدة</button><button type="button" class="aa-mute-duration-choice" data-mute-duration="1d">يوم واحد</button><button type="button" class="aa-mute-duration-choice" data-mute-duration="3d">3 أيام</button><button type="button" class="aa-mute-duration-choice" data-mute-duration="7d">7 أيام</button><button type="button" class="aa-mute-duration-choice" data-mute-duration="30d">30 يومًا</button><button type="button" class="aa-mute-duration-choice" data-mute-duration="custom">وقت مخصص</button><button type="button" class="aa-mute-duration-choice" data-mute-duration="manual">حتى إلغاء الكتم</button></div></div><div class="aa-admin-field" id="aaAdminMuteCustomWrap" style="display:none"><label>تاريخ ووقت انتهاء الكتم</label><input id="aaAdminMuteCustom" type="datetime-local"><small>سيُرفع الكتم تلقائيًا عند هذا الوقت.</small></div><label class="aa-admin-field"><span>سبب الكتم <small>(اختياري)</small></span><textarea id="aaAdminMuteReason" placeholder="يمكنك كتابة سبب الكتم أو ترك الحقل فارغًا"></textarea></label><div style="padding:11px 13px;border-radius:14px;background:rgba(108,92,231,.07);border:1px solid rgba(108,92,231,.14);color:var(--text-muted);font-size:.8rem"><i class="fas fa-circle-info" style="color:var(--accent1)"></i> سيتم منع الطالب من الكتابة وإرسال الصور والإيموجي طوال مدة الكتم.</div>';let muteMode='1h';const choices=[...modal.querySelectorAll('[data-mute-duration]')];choices.forEach(c=>c.addEventListener('click',()=>{choices.forEach(x=>x.classList.remove('active'));c.classList.add('active');muteMode=c.dataset.muteDuration;$('aaAdminMuteCustomWrap').style.display=muteMode==='custom'?'grid':'none';}));$('aaChatAdminSave').onclick=async()=>{const d=muteMode;let until=null;if(d==='custom'){const v=$('aaAdminMuteCustom').value;if(!v)return showCustomAlert('تنبيه','حدد تاريخ ووقت انتهاء الكتم.');until=new Date(v).getTime();}else if(d!=='manual'){const hrs=({'1h':1,'1d':24,'3d':72,'7d':168,'30d':720})[d];until=Date.now()+hrs*3600000;}if(until&&until<=Date.now())return showCustomAlert('تنبيه','وقت انتهاء الكتم يجب أن يكون في المستقبل.');try{await muteDoc(payload.userId).set({muted:true,until,reason:($('aaAdminMuteReason').value||'').trim(),mutedBy:currentUser.uid,mutedAt:ts()},{merge:true});modal.classList.remove('open');showCopyToast('تم كتم الطالب');}catch(e){console.error(e);showCustomAlert('خطأ','تعذر حفظ كتم الطالب.');}};
   }else if(type==='warning'){
-    title.textContent='إرسال تحذير مخفي';body.innerHTML='<div class="aa-admin-field"><label>التحذير</label><textarea id="aaAdminWarningText" placeholder="اكتب رسالة التحذير التي ستظهر لهذا الطالب فقط..."></textarea></div>'; $('aaChatAdminSave').onclick=async()=>{const text=($('aaAdminWarningText').value||'').trim();if(!text)return showCustomAlert('تنبيه','اكتب نص التحذير.');try{await courseRef().collection('chatWarnings').add({userId:payload.userId,messageId:payload.messageId,text,createdAt:ts(),createdBy:currentUser.uid});modal.classList.remove('open');showCopyToast('تم إرسال التحذير للطالب فقط');}catch(e){console.error(e);showCustomAlert('خطأ','تعذر إرسال التحذير.');}};
+    title.textContent='إرسال تحذير مخفي';body.innerHTML='<div data-admin-target-preview></div><div class="aa-admin-field"><label>التحذير</label><textarea id="aaAdminWarningText" placeholder="اكتب رسالة التحذير التي ستظهر لهذا الطالب فقط..."></textarea></div>'; $('aaChatAdminSave').onclick=async()=>{const text=($('aaAdminWarningText').value||'').trim();if(!text)return showCustomAlert('تنبيه','اكتب نص التحذير.');try{await courseRef().collection('chatWarnings').add({userId:payload.userId,messageId:payload.messageId,text,createdAt:ts(),createdBy:currentUser.uid});modal.classList.remove('open');showCopyToast('تم إرسال التحذير للطالب فقط');}catch(e){console.error(e);showCustomAlert('خطأ','تعذر إرسال التحذير.');}};
   }
   modal.classList.add('open');
+  if(type==='mute'||type==='warning')void loadAdminTargetPreview(modal,payload,type);
 }
 
 window.__aaOpenChatAdminModal=openAdminModal;
@@ -19268,7 +19298,7 @@ function ensureWarningModal(){
         const ref=db.collection('courses').doc(String(activeCourseId)).collection('chat').doc(String(id));
         const snap=await ref.get();
         if(snap.exists && typeof window.loadChatPage==='function'){
-          await window.loadChatPage(activeCourseId);
+          await window.loadChatPage(activeCourseId,{forceRefresh:true});
           await new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));
           el=document.querySelector('#courseChatPage .chat-msg[data-message-id="'+CSS.escape(String(id))+'"]');
         }
