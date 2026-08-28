@@ -17107,14 +17107,16 @@ body.light-mode #courseChatPage .chat-msg.received{
             const replyText=replyLines.length>1?`${firstReplyLine}…`:firstReplyLine;
             const replyImages=replyTargetDeleted?[]:(Array.isArray(originalReplyData.imageUrls)?originalReplyData.imageUrls.filter(Boolean):(originalReplyData.imageUrl?[originalReplyData.imageUrl]:[]));
             const replyThumb=replyImages[0]||'';
-            const replyMedia=(m.replyToId&&!replyTargetDeleted&&replyThumb)?`<div class="aa-reply-media"><img class="aa-reply-thumb" src="${safeEscape(replyThumb)}" alt=""><div class="rt${replyText?'':' aa-reply-no-caption'}">${replyText?safeEscape(replyText):''}</div></div>`:'';
-            const reply=(!deleted&&m.replyToId)?`<div class="reply-block ${replyTargetDeleted?'reply-to-deleted':''}" data-reply-to-id="${safeEscape(m.replyToId||'')}" data-reply-deleted="${replyTargetDeleted?'1':'0'}"><div class="ru">${safeEscape(replyAuthorName)}</div>${replyMedia || `<div class="rt">${safeEscape(replyText)}</div>`}</div>`:'';
-            const gallery=(!deleted&&images.length)?`<div class="message-gallery" data-image-count="${images.length}">${images.slice(0,4).map((u,i)=>`<figure class="chat-media-item"><div class="chat-media-frame"><img src="${safeEscape(u)}" alt="صورة" loading="lazy" decoding="async" onclick="openChatMessageGallery('${safeEscape(courseId)}','${safeEscape(doc.id)}',${i},this)">${images.length>4&&i===3?`<span class="chat-media-more">+${images.length-4}</span>`:''}</div></figure>`).join('')}</div>`:'';
-            const captionHtml=(!deleted&&images.length&&imageCaption)?`<div class="chat-image-caption">${safeEscape(imageCaption)}</div>`:'';
+            const showDeletedOwnContent=!!(deleted&&isAdmin&&isMine);
+            const showMessageContent=!deleted||showDeletedOwnContent;
+            const replyMedia=(showMessageContent&&m.replyToId&&!replyTargetDeleted&&replyThumb)?`<div class="aa-reply-media"><img class="aa-reply-thumb" src="${safeEscape(replyThumb)}" alt=""><div class="rt${replyText?'':' aa-reply-no-caption'}">${replyText?safeEscape(replyText):''}</div></div>`:'';
+            const reply=(showMessageContent&&m.replyToId)?`<div class="reply-block ${replyTargetDeleted?'reply-to-deleted':''}" data-reply-to-id="${safeEscape(m.replyToId||'')}" data-reply-deleted="${replyTargetDeleted?'1':'0'}"><div class="ru">${safeEscape(replyAuthorName)}</div>${replyMedia || `<div class="rt">${safeEscape(replyText)}</div>`}</div>`:'';
+            const gallery=(showMessageContent&&images.length)?`<div class="message-gallery" data-image-count="${images.length}">${images.slice(0,4).map((u,i)=>`<figure class="chat-media-item"><div class="chat-media-frame"><img src="${safeEscape(u)}" alt="صورة" loading="lazy" decoding="async" onclick="openChatMessageGallery('${safeEscape(courseId)}','${safeEscape(doc.id)}',${i},this)">${images.length>4&&i===3?`<span class="chat-media-more">+${images.length-4}</span>`:''}</div></figure>`).join('')}</div>`:'';
+            const captionHtml=(showMessageContent&&images.length&&imageCaption)?`<div class="chat-image-caption">${safeEscape(imageCaption)}</div>`:'';
             let body='';
             if(deleted){
                 body=isAdmin
-                    ? '<div style="color:#e74c3c;font-size:.78rem;font-weight:800;margin-bottom:5px;"><i class="fas fa-trash"></i> تم حذف هذه الرسالة</div>'
+                    ? `<div style="color:#e74c3c;font-size:.78rem;font-weight:800;margin-bottom:5px;"><i class="fas fa-trash"></i> تم حذف هذه الرسالة</div>${showDeletedOwnContent?`${gallery}${captionHtml}${(!images.length&&messageText)?`<div class="t">${safeEscape(messageText)}${m.edited?'<span class="edited-label">(معدلة)</span>':''}</div>`:''}`:''}`
                     : '<div class="t" style="color:var(--text-muted);font-style:italic;"><i class="fas fa-ban"></i> هذه الرسالة محذوفة</div>';
             }else{
                 const textHtml=(!images.length&&messageText)?`<div class="t">${safeEscape(messageText)}${m.edited?'<span class="edited-label">(معدلة)</span>':''}</div>`:'';
@@ -19021,6 +19023,13 @@ async function permanentlyDeleteChatMessage(courseId,msgId){
   const ref=db.collection('courses').doc(String(courseId)).collection('chat').doc(String(msgId));
   try{
     await ref.delete();
+    const node=document.querySelector(`#courseChatPage .chat-msg[data-message-id="${CSS.escape(String(msgId))}"]`);
+    if(node)node.remove();
+    if(pinState.messageIds.includes(String(msgId))){
+      pinState.messageIds=pinState.messageIds.filter(x=>x!==String(msgId));
+      pinState.index=Math.min(pinState.index,Math.max(0,pinState.messageIds.length-1));
+      renderPinBar();
+    }
     showCopyToast('تم حذف الرسالة نهائيًا');
     return true;
   }catch(e){console.error(e);showCustomAlert('خطأ','تعذر حذف الرسالة نهائيًا.');return false;}
