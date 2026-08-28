@@ -20716,5 +20716,249 @@ const originalSwitch=window.switchCoursePage;if(typeof originalSwitch==='functio
 window.__aaChatStage14OpenBackgroundEditor=openBackgroundEditor;
 })();
 </script>
+
+
+<!-- ===== AUTH POPUP REDESIGN / ROBUST CLOSE FIX ===== -->
+<style id="ananas-auth-redesign-v1">
+  /* Keep the existing authentication logic, redesign only its presentation. */
+  #authPopup.auth-popup{
+    width:min(440px, calc(100vw - 28px))!important;
+    max-width:calc(100vw - 28px)!important;
+    padding:0!important;
+    overflow:hidden!important;
+    border:1px solid color-mix(in srgb, var(--accent1) 24%, var(--border))!important;
+    border-radius:28px!important;
+    background:var(--bg-card)!important;
+    box-shadow:0 30px 90px rgba(0,0,0,.28), 0 0 0 100vmax rgba(15,23,42,.42)!important;
+    isolation:isolate!important;
+  }
+
+  #authPopup.auth-popup.active{
+    z-index:2147483600!important;
+    animation:ananasAuthOpen .22s cubic-bezier(.2,.8,.2,1)!important;
+  }
+
+  @keyframes ananasAuthOpen{
+    from{opacity:0;transform:translate(-50%,-46%) scale(.97)}
+    to{opacity:1;transform:translate(-50%,-50%) scale(1)}
+  }
+
+  #authPopup .auth-popup-head{
+    padding:24px 24px 18px;
+    background:linear-gradient(135deg,rgba(108,92,231,.13),rgba(9,132,227,.08));
+    border-bottom:1px solid var(--border);
+  }
+
+  #authPopup .auth-popup-icon{
+    width:52px;height:52px;border-radius:17px;
+    display:grid;place-items:center;
+    margin-bottom:14px;
+    color:#fff;font-size:1.25rem;
+    background:var(--accent-gradient);
+    box-shadow:0 12px 28px rgba(108,92,231,.26);
+  }
+
+  #authPopup #authTitle{
+    margin:0!important;
+    text-align:right!important;
+    color:var(--text-primary)!important;
+    font-size:1.45rem!important;
+    font-weight:900!important;
+    letter-spacing:-.02em;
+  }
+
+  #authPopup .auth-popup-subtitle{
+    margin:7px 0 0;
+    color:var(--text-muted);
+    font-size:.88rem;
+    line-height:1.7;
+  }
+
+  #authPopup .auth-popup-body{padding:22px 24px 24px;}
+
+  #authPopup .close-lightbox#authCloseBtn{
+    position:absolute!important;
+    top:16px!important;
+    inset-inline-start:16px!important;
+    float:none!important;
+    z-index:30!important;
+    width:40px!important;height:40px!important;
+    min-width:40px!important;
+    padding:0!important;
+    display:grid!important;place-items:center!important;
+    border:1px solid var(--border)!important;
+    border-radius:50%!important;
+    background:var(--bg-secondary)!important;
+    color:var(--text-muted)!important;
+    font-size:1.35rem!important;
+    line-height:1!important;
+    cursor:pointer!important;
+    box-shadow:0 8px 22px rgba(0,0,0,.08)!important;
+    opacity:1!important;
+  }
+  #authPopup .close-lightbox#authCloseBtn:hover{
+    color:var(--text-primary)!important;
+    border-color:var(--accent1)!important;
+    background:var(--bg-card)!important;
+    transform:scale(1.05)!important;
+  }
+  #authPopup .close-lightbox#authCloseBtn:active{transform:scale(.94)!important;}
+
+  #authPopup .modal-form{display:grid;gap:10px;}
+  #authPopup .modal-form input,
+  #authPopup .modal-form select{
+    width:100%!important;
+    min-height:48px!important;
+    margin:0!important;
+    padding:11px 14px!important;
+    border-radius:16px!important;
+    border:1px solid var(--border)!important;
+    background:var(--bg-secondary)!important;
+    color:var(--text-primary)!important;
+    font-family:inherit!important;
+    outline:none!important;
+    transition:border-color .18s ease,box-shadow .18s ease,transform .18s ease!important;
+  }
+  #authPopup .modal-form input:focus,
+  #authPopup .modal-form select:focus{
+    border-color:var(--accent1)!important;
+    box-shadow:0 0 0 4px rgba(108,92,231,.11)!important;
+  }
+
+  #authPopup .google-btn{
+    min-height:50px!important;
+    margin:0!important;
+    border-radius:16px!important;
+    border:1px solid var(--border)!important;
+    box-shadow:none!important;
+    font-family:inherit!important;
+  }
+  #authPopup .google-btn:hover{transform:translateY(-1px);}
+
+  #authPopup .divider{margin:16px 0!important;font-size:.82rem;}
+  #authPopup .divider::before,#authPopup .divider::after{width:42%!important;}
+
+  #authPopup #emailSignInBtn{
+    min-height:50px!important;
+    margin-top:2px!important;
+    border-radius:16px!important;
+    background:var(--accent-gradient)!important;
+    box-shadow:0 12px 28px rgba(108,92,231,.18)!important;
+  }
+  #authPopup #emailSignInBtn:hover{transform:translateY(-1px);box-shadow:0 15px 32px rgba(108,92,231,.24)!important;}
+
+  #authPopup #autoSignUpHint{
+    margin:6px 0 0!important;
+    line-height:1.7!important;
+  }
+  #authPopup #authStatus{
+    margin:4px 24px 18px!important;
+    min-height:22px;
+    line-height:1.6;
+  }
+
+  @media(max-width:600px){
+    #authPopup.auth-popup{border-radius:24px!important;}
+    #authPopup .auth-popup-head{padding:22px 20px 16px;}
+    #authPopup .auth-popup-body{padding:18px 20px 20px;}
+    #authPopup #authTitle{font-size:1.28rem!important;}
+  }
+</style>
+<script id="ananas-auth-redesign-v1-js">
+(function(){
+  'use strict';
+  function initAuthPopupRedesign(){
+    const popup=document.getElementById('authPopup');
+    if(!popup || popup.dataset.authRedesignReady==='1') return;
+    popup.dataset.authRedesignReady='1';
+
+    const closeBtn=document.getElementById('authCloseBtn');
+    const title=document.getElementById('authTitle');
+    const step1=document.getElementById('authStep1');
+    const step2=document.getElementById('authStep2');
+    const status=document.getElementById('authStatus');
+
+    /* Wrap the existing content; no authentication logic is replaced. */
+    if(!popup.querySelector('.auth-popup-head')){
+      const head=document.createElement('div');
+      head.className='auth-popup-head';
+      const icon=document.createElement('div');
+      icon.className='auth-popup-icon';
+      icon.innerHTML='<i class="fas fa-user-shield" aria-hidden="true"></i>';
+      const subtitle=document.createElement('p');
+      subtitle.className='auth-popup-subtitle';
+      subtitle.textContent='سجّل دخولك للمتابعة إلى دوراتك ومحتواك التعليمي.';
+      head.append(icon,title,subtitle);
+      popup.insertBefore(head,popup.firstChild);
+
+      const body=document.createElement('div');
+      body.className='auth-popup-body';
+      const movable=[...popup.children].filter(el=>el!==closeBtn && el!==head);
+      movable.forEach(el=>body.appendChild(el));
+      popup.appendChild(body);
+    }
+
+    const closeAuth=()=>{
+      popup.classList.remove('active');
+      popup.removeAttribute('aria-modal');
+      popup.setAttribute('aria-hidden','true');
+      delete popup.dataset.ananasModalZ;
+      popup.style.removeProperty('z-index');
+      document.body.classList.remove('aa-chat-signing-out');
+      document.body.classList.remove('aa-v9-modal-locked');
+      document.documentElement.classList.remove('aa-v9-modal-locked');
+      try{window.__ananasModalStackSync?.();}catch(_){ }
+    };
+
+    if(closeBtn){
+      closeBtn.type='button';
+      closeBtn.setAttribute('aria-label','إغلاق نافذة تسجيل الدخول');
+      closeBtn.title='إغلاق';
+      closeBtn.addEventListener('click',function(e){
+        e.preventDefault();
+        e.stopPropagation();
+        e.stopImmediatePropagation?.();
+        closeAuth();
+      },true);
+    }
+
+    popup.addEventListener('click',function(e){
+      if(e.target===popup) closeAuth();
+    });
+    document.addEventListener('keydown',function(e){
+      if(e.key==='Escape' && popup.classList.contains('active')){
+        e.preventDefault();
+        closeAuth();
+      }
+    },true);
+
+    window.__aaCloseAuthPopup=closeAuth;
+    window.__aaOpenAuthPopup=function(){
+      document.body.classList.remove('aa-chat-signing-out');
+      popup.setAttribute('aria-modal','true');
+      popup.setAttribute('aria-hidden','false');
+      popup.classList.add('active');
+      if(step1)step1.style.display='block';
+      if(step2)step2.style.display='none';
+      if(status)status.textContent='';
+      try{window.__ananasModalStackSync?.();}catch(_){ }
+    };
+  }
+
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',initAuthPopupRedesign,{once:true});
+  else initAuthPopupRedesign();
+
+  /* Capture-phase fallback guarantees the X remains clickable even if another
+     document-level click handler is installed later by the platform. */
+  document.addEventListener('click',function(e){
+    const btn=e.target?.closest?.('#authCloseBtn');
+    if(!btn) return;
+    e.preventDefault();
+    e.stopImmediatePropagation?.();
+    window.__aaCloseAuthPopup?.();
+  },true);
+})();
+</script>
+
 </body>
 </html>
