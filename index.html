@@ -16877,30 +16877,39 @@ body.light-mode #courseChatPage .chat-msg.received{
         removeUnreadDivider();
         try{window.__chatStage23ClearUnreadTimer?.();}catch(_){ }
     }
+    let chatBottomAnimationFrame=0;
     function scrollToBottom(behavior='smooth'){
-        const last=chatList.querySelector('.chat-msg:last-of-type');
-        if(last){
-            const listRect=chatList.getBoundingClientRect();
-            const lastRect=last.getBoundingClientRect();
-            const targetTop=Math.max(0,Math.round(chatList.scrollTop+(lastRect.bottom-listRect.bottom)));
-            chatList.scrollTo({top:targetTop,left:0,behavior});
-        }else{
-            chatList.scrollTo({top:Math.max(0,chatList.scrollHeight-chatList.clientHeight),left:0,behavior});
-        }
-        chatUserAtBottom = true;
-        requestAnimationFrame(()=>{
-            const last=chatList.querySelector('.chat-msg:last-of-type');
-            if(last){
-                const listRect=chatList.getBoundingClientRect();
-                const lastRect=last.getBoundingClientRect();
-                const delta=lastRect.bottom-listRect.bottom;
-                if(Math.abs(delta)>1)chatList.scrollTop=Math.max(0,Math.round(chatList.scrollTop+delta));
-            }else{
-                chatList.scrollTop=Math.max(0,chatList.scrollHeight-chatList.clientHeight);
-            }
+        if(chatBottomAnimationFrame)cancelAnimationFrame(chatBottomAnimationFrame);
+        const startTop=Number(chatList.scrollTop)||0;
+        const startTime=performance.now();
+        const duration=behavior==='smooth'?900:0;
+        const easeOutCubic=t=>1-Math.pow(1-t,3);
+        const getMaxTop=()=>Math.max(0,chatList.scrollHeight-chatList.clientHeight);
+        const finish=()=>{
+            if(chatBottomAnimationFrame){cancelAnimationFrame(chatBottomAnimationFrame);chatBottomAnimationFrame=0;}
+            chatList.scrollTop=getMaxTop();
+            chatUserAtBottom=true;
             try{window.__chatStage23HandleScroll?.();}catch(_){}
             updateScrollButton();
-        });
+        };
+        if(!duration){
+            finish();
+            return;
+        }
+        chatUserAtBottom=true;
+        const step=now=>{
+            const progress=Math.min(1,(now-startTime)/duration);
+            const eased=easeOutCubic(progress);
+            const maxTop=getMaxTop();
+            const next=startTop+(maxTop-startTop)*eased;
+            chatList.scrollTop=Math.round(next);
+            if(progress<1){
+                chatBottomAnimationFrame=requestAnimationFrame(step);
+            }else{
+                finish();
+            }
+        };
+        chatBottomAnimationFrame=requestAnimationFrame(step);
         updateScrollButton();
     }
     function updateScrollButton(){
@@ -17319,8 +17328,8 @@ body.light-mode #courseChatPage .chat-msg.received{
                             requestAnimationFrame(()=>{
                                 const hasUnread=!!window.__chatStage23HasUnread?.();
                                 if(!hasUnread && (chatUserAtBottom||!firstForSubscription)){
-                                    scrollToBottom('auto');
-                                    requestAnimationFrame(()=>scrollToBottom('auto'));
+                                    scrollToBottom('smooth');
+                                    requestAnimationFrame(()=>scrollToBottom('smooth'));
                                 }else window.__chatStage23ScheduleUnreadMarker?.();
                             });
                         }else{
@@ -19073,24 +19082,6 @@ async function permanentlyDeleteChatMessage(courseId,msgId){
   }catch(e){console.error(e);showCustomAlert('خطأ','تعذر حذف الرسالة نهائيًا.');return false;}
 }
 window.__aaChatStage10PermanentDelete=permanentlyDeleteChatMessage;
-
-/* ---------- Context menu admin actions ---------- */
-const ctx=window.__aaChatStage10Ctx={};
-function installContextExtension(){
-  if(window.__aaStage10ContextExtended)return;window.__aaStage10ContextExtended=true;
-  const originalShow=window.__aaStage10OriginalShowFor;
-}
-/* Handle added admin actions before the legacy context action handler. */
-document.addEventListener('click',async e=>{
-  const b=e.target.closest?.('#aaChatContextMenu [data-admin-action="1"]');if(!b)return;e.preventDefault();e.stopImmediatePropagation();
-  const action=b.dataset.ctxAction,mid=b.dataset.adminMessageId,adminUid=b.dataset.adminUserId,selectedMessage=window.__aaChatContextSelected; $('aaChatContextMenu')?.classList.remove('open');$('aaChatContextOverlay')?.classList.remove('open');document.body.classList.remove('aa-chat-context-open');
-  if(!isAdminNow()||!activeCourseId)return;
-  if(action==='admin-permanent-delete'){if(!isAdminNow()||!selectedMessage?.classList.contains('deleted-message'))return;const ok=typeof showCustomConfirm==='function'?await new Promise(r=>showCustomConfirm('حذف نهائي','سيتم حذف الرسالة نهائيًا ولن تظهر للمشرف أو أي مستخدم بعد ذلك. هل تريد المتابعة؟',()=>r(true),()=>r(false))):window.confirm('حذف الرسالة نهائيًا؟');if(ok)return window.__aaChatStage10PermanentDelete?.(activeCourseId,mid)}
-  if(action==='admin-delete'){const selectedIsMine=String(adminUid||'')===String(uid());if(!isAdminNow()||selectedIsMine||selectedMessage?.classList.contains('deleted-message'))return;return window.deleteChatMessage?.(activeCourseId,mid,true)}
-  if(action==='admin-pin'){try{await togglePin(mid)}catch(err){console.error(err);showCustomAlert('خطأ','تعذر تثبيت الرسالة.')}}
-  if(action==='admin-mute'){openAdminModal('mute',{userId:uid,messageId:mid})}
-  if(action==='admin-warning'){openAdminModal('warning',{userId:uid,messageId:mid})}
-},true);
 
 /* ---------- Pin navigation ---------- */
 document.addEventListener('click',e=>{
