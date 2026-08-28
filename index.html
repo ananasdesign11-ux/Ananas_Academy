@@ -20433,6 +20433,8 @@ window.__aaStage10RefreshPins=refreshPinsForOpenChat;
 #courseChatPage .chat-student-bg-editor-actions{display:flex;gap:8px;margin-top:13px;}
 #courseChatPage .chat-student-bg-editor-actions button{flex:1;min-height:44px;border:1px solid var(--border);border-radius:13px;background:var(--bg-secondary);color:var(--text-primary);font:inherit;font-weight:900;cursor:pointer;}
 #courseChatPage .chat-student-bg-editor-actions .primary{border-color:transparent;background:var(--accent-gradient);color:#fff;}
+#courseChatPage .chat-student-bg-editor-actions .danger{color:#e74c3c;border-color:rgba(231,76,60,.25);background:rgba(231,76,60,.06);}
+#courseChatPage .chat-student-bg-editor-actions .danger:hover{border-color:#e74c3c;background:rgba(231,76,60,.10);color:#d63031;}
 #courseChatPage .chat-student-bg-editor-note{margin-top:9px;color:var(--text-muted);font-size:.72rem;line-height:1.65;}
 @media(max-width:768px){
   #courseChatPage .chat-msg.sent .chat-self-header,#courseChatPage .chat-msg.sent .chat-admin-sender-header{right:-116px!important;width:103px!important;}
@@ -20490,11 +20492,12 @@ function ensureEditor(){
     </div>
     <div class="chat-student-bg-editor-zoom"><span>تصغير</span><input id="chatStage14BgZoom" type="range" min="1" max="3.5" step="0.01" value="1"><span>تكبير</span></div>
     <input id="chatStage14BgInput" type="file" accept="image/*" hidden>
-    <div class="chat-student-bg-editor-actions"><button type="button" id="chatStage14BgCancel">إلغاء</button><button type="button" class="primary" id="chatStage14BgSave"><i class="fas fa-check"></i> تطبيق الخلفية</button></div>
+    <div class="chat-student-bg-editor-actions"><button type="button" id="chatStage14BgRemove" class="danger"><i class="fas fa-trash-can"></i> إزالة الخلفية</button><button type="button" id="chatStage14BgCancel">إلغاء</button><button type="button" class="primary" id="chatStage14BgSave"><i class="fas fa-check"></i> تطبيق الخلفية</button></div>
     <div class="chat-student-bg-editor-note">اسحب الصورة داخل الإطار لتحديد الجزء الذي سيظهر في الدردشة. يمكنك تكبيرها أو تصغيرها وتدويرها ثم تطبيق النسخة النهائية.</div>
   </div>`;
   chat.appendChild(modal);
   $('chatStage14BgClose').onclick=closeEditor;$('chatStage14BgCancel').onclick=closeEditor;
+  $('chatStage14BgRemove').onclick=removeBackground;
   modal.addEventListener('click',e=>{if(e.target===modal)closeEditor();});
   $('chatStage14BgPick').onclick=()=>$('chatStage14BgInput')?.click();
   $('chatStage14BgInput').addEventListener('change',e=>loadEditorFile(e.target.files?.[0]||null));
@@ -20534,6 +20537,31 @@ function loadEditorFile(file){
   im.onload=()=>{editorState={file,src:editorBlobUrl,x:0,y:0,zoom:1,rotation:0,base:1};syncZoom();renderEditor();};
   im.src=editorBlobUrl;
 }
+async function removeBackground(){
+  const u=account(),c=cid();
+  if(admin()||!u?.uid||!c)return;
+  const ok=typeof window.showCustomConfirm==='function'
+    ? await new Promise(resolve=>window.showCustomConfirm('إزالة خلفية الدردشة','سيتم حذف الخلفية الحالية من حسابك في هذه الدورة فقط. هل تريد المتابعة؟',()=>resolve(true),()=>resolve(false)))
+    : window.confirm('إزالة خلفية الدردشة؟');
+  if(!ok)return;
+  try{
+    await db.collection('users').doc(u.uid).collection('chatBackgrounds').doc(c).delete();
+    try{localStorage.removeItem(bgKey(u.uid,c));}catch(_){}
+    const shell=chat.querySelector('.chat-rebuilt-shell');
+    if(shell){shell.style.removeProperty('--aa-chat-user-bg-image');shell.style.removeProperty('--aa-chat-user-bg-overlay');}
+    list.style.removeProperty('background-image');
+    list.style.removeProperty('background-size');
+    list.style.removeProperty('background-position');
+    list.style.removeProperty('background-repeat');
+    list.style.removeProperty('background-attachment');
+    closeEditor();
+    showCopyToast('تمت إزالة خلفية الدردشة');
+  }catch(err){
+    console.error('stage14 background remove failed',err);
+    showCustomAlert?.('خطأ','تعذر إزالة خلفية الدردشة.');
+  }
+}
+
 function openBackgroundEditor(){
   if(admin()||!account()?.uid||!cid())return;
   const modal=ensureEditor(),input=$('chatStage14BgInput');
@@ -20547,38 +20575,64 @@ function openBackgroundEditor(){
 }
 async function canvasFileFromEditor(){
   const st=$('chatStage14BgStage'),im=$('chatStage14BgImage');if(!st||!im||!editorState)return null;
-  let source=null,sourceWidth=0,sourceHeight=0,bitmap=null;
+  let bitmap=null;
   try{
+    let source=null,sourceWidth=0,sourceHeight=0;
     if(editorState.file){
-      if(typeof createImageBitmap==='function'){
-        bitmap=await createImageBitmap(editorState.file);source=bitmap;sourceWidth=bitmap.width;sourceHeight=bitmap.height;
-      }else{
-        if(!im.complete||!im.naturalWidth)await new Promise((resolve,reject)=>{im.onload=()=>resolve();im.onerror=()=>reject(new Error('تعذر قراءة الصورة.'));});
-        source=im;sourceWidth=im.naturalWidth;sourceHeight=im.naturalHeight;
-      }
+      const dataUrl=await new Promise((resolve,reject)=>{
+        const reader=new FileReader();
+        reader.onload=()=>resolve(String(reader.result||''));
+        reader.onerror=()=>reject(new Error('تعذر قراءة ملف الصورة.'));
+        reader.readAsDataURL(editorState.file);
+      });
+      const safeImage=await new Promise((resolve,reject)=>{
+        const img=new Image();
+        img.onload=()=>resolve(img);
+        img.onerror=()=>reject(new Error('تعذر تحميل الصورة المختارة.'));
+        img.src=dataUrl;
+      });
+      source=safeImage;sourceWidth=safeImage.naturalWidth;sourceHeight=safeImage.naturalHeight;
     }else{
-      if(!im.naturalWidth||!im.naturalHeight)return null;
-      source=im;sourceWidth=im.naturalWidth;sourceHeight=im.naturalHeight;
+      // Existing remote backgrounds may not allow canvas export because of CORS.
+      // Keep them untouched when no new local source was selected; a new image can still be edited safely.
+      if(!editorState.src||!im.naturalWidth||!im.naturalHeight)return null;
+      return null;
     }
-    const out=document.createElement('canvas'),W=1600,H=Math.round(W*(st.clientHeight/Math.max(1,st.clientWidth)));out.width=W;out.height=H;
+    const out=document.createElement('canvas'),W=1600,H=Math.max(900,Math.round(W*(st.clientHeight/Math.max(1,st.clientWidth))));
+    out.width=W;out.height=H;
     const ctx=out.getContext('2d');if(!ctx)throw new Error('تعذر إنشاء مساحة معالجة الصورة.');
     ctx.imageSmoothingEnabled=true;ctx.imageSmoothingQuality='high';ctx.fillStyle='#111';ctx.fillRect(0,0,W,H);
     const sx=st.clientWidth,sy=st.clientHeight,scaleX=W/sx,scaleY=H/sy;
     const base=editorState.base||Math.max(sx/sourceWidth,sy/sourceHeight),z=editorState.zoom||1;
     const dw=sourceWidth*base*z,dh=sourceHeight*base*z;
     const left=(sx-dw)/2+editorState.x*sx,top=(sy-dh)/2+editorState.y*sy;
-    ctx.save();ctx.translate((left+dw/2)*scaleX,(top+dh/2)*scaleY);ctx.rotate((editorState.rotation||0)*Math.PI/180);ctx.drawImage(source,-dw/2*scaleX,-dh/2*scaleY,dw*scaleX,dh*scaleY);ctx.restore();
-    const file=await new Promise(resolve=>out.toBlob(blob=>resolve(blob?new File([blob],'chat-background.jpg',{type:'image/jpeg',lastModified:Date.now()}):null),'image/jpeg',.9));
+    ctx.save();
+    ctx.translate((left+dw/2)*scaleX,(top+dh/2)*scaleY);
+    ctx.rotate((editorState.rotation||0)*Math.PI/180);
+    ctx.drawImage(source,-dw/2*scaleX,-dh/2*scaleY,dw*scaleX,dh*scaleY);
+    ctx.restore();
+    return await new Promise((resolve,reject)=>{
+      out.toBlob(blob=>blob?resolve(new File([blob],'chat-background.jpg',{type:'image/jpeg',lastModified:Date.now()})):reject(new Error('تعذر تجهيز صورة الخلفية.')),'image/jpeg',.9);
+    });
+  }catch(err){
     bitmap?.close?.();
-    return file;
-  }catch(err){bitmap?.close?.();throw err;}
+    throw err;
+  }
 }
+
 async function saveEditor(){
   const u=account(),c=cid();if(admin()||!u?.uid||!c||!editorState)return;
   const btn=$('chatStage14BgSave');if(btn)btn.disabled=true;
   try{
-    const file=await canvasFileFromEditor();if(!file)throw Error('crop');
-    const url=await uploadImage(file);if(!url)throw Error('upload');
+    let url='';
+    if(editorState.file){
+      const file=await canvasFileFromEditor();if(!file)throw Error('crop');
+      url=await uploadImage(file);if(!url)throw Error('upload');
+    }else if(editorState.src){
+      url=editorState.src;
+    }else{
+      throw Error('crop');
+    }
     await db.collection('users').doc(u.uid).collection('chatBackgrounds').doc(c).set({url,updatedAt:firebase.firestore.FieldValue.serverTimestamp()},{merge:true});
     try{localStorage.setItem(bgKey(u.uid,c),url)}catch(_){ }
     const shell=chat.querySelector('.chat-rebuilt-shell');
