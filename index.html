@@ -17107,7 +17107,7 @@ body.light-mode #courseChatPage .chat-msg.received{
             const replyText=replyLines.length>1?`${firstReplyLine}…`:firstReplyLine;
             const replyImages=replyTargetDeleted?[]:(Array.isArray(originalReplyData.imageUrls)?originalReplyData.imageUrls.filter(Boolean):(originalReplyData.imageUrl?[originalReplyData.imageUrl]:[]));
             const replyThumb=replyImages[0]||'';
-            const showDeletedOwnContent=!!(deleted&&isAdmin&&isMine);
+            const showDeletedOwnContent=!!(deleted&&isAdmin);
             const showMessageContent=!deleted||showDeletedOwnContent;
             const replyMedia=(showMessageContent&&m.replyToId&&!replyTargetDeleted&&replyThumb)?`<div class="aa-reply-media"><img class="aa-reply-thumb" src="${safeEscape(replyThumb)}" alt=""><div class="rt${replyText?'':' aa-reply-no-caption'}">${replyText?safeEscape(replyText):''}</div></div>`:'';
             const reply=(showMessageContent&&m.replyToId)?`<div class="reply-block ${replyTargetDeleted?'reply-to-deleted':''}" data-reply-to-id="${safeEscape(m.replyToId||'')}" data-reply-deleted="${replyTargetDeleted?'1':'0'}"><div class="ru">${safeEscape(replyAuthorName)}</div>${replyMedia || `<div class="rt">${safeEscape(replyText)}</div>`}</div>`:'';
@@ -17976,15 +17976,15 @@ syncHeight();
     return visible>=Math.min(rect.height*.78,listRect.height*.30) && rect.bottom<=listRect.bottom+6;
   }
 
-  function scheduleReadAfterTenSeconds(){
+  function scheduleReadAfterTwoSeconds(){
     if(!currentOpenChat()||!unreadCount||!unreadLastId||readTimer)return;
     if(!isLastUnreadVisible())return;
     const expectedLast=String(unreadLastId);
     readTimer=setTimeout(async()=>{
       readTimer=null;
-      if(!currentOpenChat()||!unreadCount||String(unreadLastId)!==expectedLast||!isLastUnreadVisible())return;
+      if(!currentOpenChat()||!unreadCount||String(unreadLastId)!==expectedLast)return;
       await markReadToLatest(activeCourseId);
-    },10000);
+    },2000);
   }
 
   window.__chatStage23ClearUnreadTimer=clearReadTimer;
@@ -18030,7 +18030,7 @@ syncHeight();
     viewportRaf=requestAnimationFrame(()=>{
       viewportRaf=0;
       if(!unreadCount){return;}
-      scheduleReadAfterTenSeconds();
+      scheduleReadAfterTwoSeconds();
     });
   };
   window.__chatStage23ScheduleUnreadMarker=function(){
@@ -18045,7 +18045,7 @@ syncHeight();
         const target=unreadFirstId&&chatList.querySelector(`[data-message-id="${CSS.escape(String(unreadFirstId))}"]`);
         if(marker&&target&&marker.nextElementSibling!==target)target.before(marker);
       }
-      scheduleReadAfterTenSeconds();
+      scheduleReadAfterTwoSeconds();
     });
   };
 
@@ -19161,11 +19161,24 @@ sync();
   function clear(){
     document.querySelectorAll('#courseChatPage .chat-msg.aa-chat-message-target').forEach(el=>el.classList.remove('aa-chat-message-target'));
   }
+  function scrollPrecisely(el,behavior='smooth'){
+    const list=document.getElementById('chatPageMessagesList');
+    if(!list||!el)return;
+    const targetTop=el.offsetTop-Math.max(16,(list.clientHeight-el.offsetHeight)/2);
+    const maxTop=Math.max(0,list.scrollHeight-list.clientHeight);
+    list.scrollTo({top:Math.max(0,Math.min(maxTop,targetTop)),behavior});
+  }
+  window.__aaScrollToChatMessagePrecisely=function(id,behavior='smooth'){
+    const el=findMessage(id);
+    if(!el)return false;
+    scrollPrecisely(el,behavior);
+    return true;
+  };
   window.__aaHighlightChatMessage=function(id){
     const el=findMessage(id);
     if(!el)return false;
     clear();
-    try{el.scrollIntoView({behavior:'smooth',block:'center'});}catch(_){el.scrollIntoView();}
+    scrollPrecisely(el,'smooth');
     requestAnimationFrame(()=>{
       el.classList.add('aa-chat-message-target');
       clearTimeout(timer);
@@ -19189,6 +19202,12 @@ sync();
 #aaChatWarningModal .aa-warning-title{margin:0;font-size:1.12rem;font-weight:900;}
 #aaChatWarningModal .aa-warning-subtitle{margin-top:3px;color:var(--text-muted);font-size:.76rem;line-height:1.5;}
 #aaChatWarningModal .aa-warning-message{margin-top:16px;padding:14px;border-radius:16px;background:var(--bg-secondary);border:1px solid var(--border);font-size:.92rem;line-height:1.8;white-space:pre-wrap;overflow-wrap:anywhere;}
+#aaChatWarningModal .aa-warning-target-wrap{margin-top:12px;}
+#aaChatWarningModal .aa-warning-target-label{display:flex;align-items:center;gap:7px;color:var(--text-muted);font-size:.74rem;font-weight:900;margin-bottom:7px;}
+#aaChatWarningModal .aa-warning-target{padding:12px;border-radius:16px;background:var(--bg-secondary);border:1px solid color-mix(in srgb,var(--accent1) 24%,var(--border) 76%);overflow:hidden;}
+#aaChatWarningModal .aa-warning-target .aa-warning-target-text{font-size:.86rem;line-height:1.75;white-space:pre-wrap;overflow-wrap:anywhere;}
+#aaChatWarningModal .aa-warning-target img{display:block;width:100%;max-height:220px;object-fit:cover;border-radius:12px;margin-top:8px;}
+#aaChatWarningModal .aa-warning-target .aa-warning-target-caption{margin-top:8px;color:var(--text-muted);font-size:.78rem;line-height:1.6;}
 #aaChatWarningModal .aa-warning-linked{margin-top:10px;padding:11px 13px;border-radius:14px;background:rgba(108,92,231,.07);border:1px solid rgba(108,92,231,.14);color:var(--text-muted);font-size:.78rem;line-height:1.6;}
 #aaChatWarningModal .aa-warning-actions{display:flex;gap:8px;margin-top:16px;}
 #aaChatWarningModal .aa-warning-actions button{flex:1;min-height:44px;padding:9px 13px;border-radius:13px;border:1px solid var(--border);background:var(--bg-secondary);color:var(--text-primary);font:inherit;font-weight:800;cursor:pointer;}
@@ -19217,6 +19236,7 @@ function ensureWarningModal(){
   m.innerHTML=`<div class="aa-warning-card" role="dialog" aria-modal="true" aria-labelledby="aaWarningTitle">
     <div class="aa-warning-head"><div class="aa-warning-icon"><i class="fas fa-triangle-exclamation"></i></div><div><h3 id="aaWarningTitle" class="aa-warning-title">تحذير من المشرف</h3><div class="aa-warning-subtitle">هذا التحذير خاص بك ولا يظهر لبقية الطلاب.</div></div></div>
     <div id="aaWarningMessage" class="aa-warning-message"></div>
+    <div id="aaWarningTargetWrap" class="aa-warning-target-wrap" style="display:none"><div class="aa-warning-target-label"><i class="fas fa-message"></i><span>الرسالة المرتبط بها التحذير</span></div><div id="aaWarningTarget" class="aa-warning-target"></div></div>
     <div id="aaWarningLinked" class="aa-warning-linked"><i class="fas fa-link"></i> تم ربط هذا التحذير برسالة محددة في الدردشة لتوضيح سبب التنبيه.</div>
     <div class="aa-warning-actions"><button type="button" id="aaWarningAcknowledge" class="primary">حسنًا</button><button type="button" id="aaWarningGoto">الانتقال إلى الرسالة</button></div>
   </div>`;
@@ -19240,22 +19260,43 @@ function ensureWarningModal(){
       }catch(err){console.warn('warning goto message failed',err);}
     }
     if(el){
-      el.scrollIntoView({behavior:'smooth',block:'center'});
+      window.__aaScrollToChatMessagePrecisely?.(id,'smooth');
       setTimeout(()=>window.__aaHighlightChatMessage?.(id),180);
     }
   };
   return m;
 }
 function closeWarning(){const m=$('aaChatWarningModal');if(!m)return;m.classList.remove('open');m.setAttribute('aria-hidden','true');}
-function openWarning(item){
+async function openWarning(item){
   const m=ensureWarningModal();
   m.dataset.messageId=String(item.messageId||'');
-  const msg=$('aaWarningMessage'),link=$('aaWarningLinked'),goto=$('aaWarningGoto');
+  const msg=$('aaWarningMessage'),link=$('aaWarningLinked'),goto=$('aaWarningGoto'),targetWrap=$('aaWarningTargetWrap'),target=$('aaWarningTarget');
   if(msg)msg.textContent=String(item.text||'');
-  const el=item.messageId?document.querySelector('#courseChatPage .chat-msg[data-message-id="'+CSS.escape(String(item.messageId))+'"]'):null;
-  if(link)link.innerHTML='هذا التحذير مرتبط برسالة محددة في الدردشة. يمكنك الانتقال إليها الآن.';
+  if(link)link.innerHTML='هذا التحذير مرتبط مباشرة برسالة محددة في الدردشة.';
   if(goto)goto.style.display=item.messageId?'':'none';
+  if(targetWrap)targetWrap.style.display=item.messageId?'':'none';
+  if(target)target.innerHTML='<div style="color:var(--text-muted);font-size:.8rem">جاري تحميل الرسالة المرتبطة...</div>';
   m.classList.add('open');m.setAttribute('aria-hidden','false');
+  if(!item.messageId||!activeCourseId)return;
+  try{
+    const ref=db.collection('courses').doc(String(activeCourseId)).collection('chat').doc(String(item.messageId));
+    const snap=await ref.get();
+    if(!snap.exists){
+      if(target)target.innerHTML='<div class="aa-warning-target-text">تعذر العثور على الرسالة المرتبطة.</div>';
+      return;
+    }
+    const d=snap.data()||{},images=Array.isArray(d.imageUrls)?d.imageUrls.filter(Boolean):(d.imageUrl?[d.imageUrl]:[]),text=String(d.message||'').trim(),caption=String(d.imageCaption||d.caption||'').trim();
+    const esc=v=>String(v??'').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+    let html='';
+    if(text)html+=`<div class="aa-warning-target-text">${esc(text)}</div>`;
+    if(images.length)html+=images.slice(0,1).map(u=>`<img src="${esc(u)}" alt="" loading="lazy">`).join('');
+    if(caption)html+=`<div class="aa-warning-target-caption">${esc(caption)}</div>`;
+    if(!html)html='<div class="aa-warning-target-text" style="color:var(--text-muted)">رسالة بدون نص أو صورة.</div>';
+    if(target)target.innerHTML=html;
+  }catch(err){
+    console.warn('warning linked message load failed',err);
+    if(target)target.innerHTML='<div class="aa-warning-target-text">تعذر تحميل الرسالة المرتبطة.</div>';
+  }
 }
 function warningRef(){return activeCourseId&&currentUser?db.collection('courses').doc(String(activeCourseId)).collection('chatWarnings'):null;}
 async function openPendingWarningOnChatEntry(){
@@ -19270,7 +19311,7 @@ async function openPendingWarningOnChatEntry(){
       const am=a.createdAt?.toMillis?a.createdAt.toMillis():Number(a.createdAt||0),bm=b.createdAt?.toMillis?b.createdAt.toMillis():Number(b.createdAt||0);return am-bm;
     });
     const pending=items.find(x=>!warningSeenSession.has(String(x.id)));
-    if(pending){warningSeenSession.add(String(pending.id));saveWarningSeen();openWarning(pending);}
+    if(pending){warningSeenSession.add(String(pending.id));saveWarningSeen();void openWarning(pending);}
   }catch(e){console.warn('chat warning modal load failed',e);}
 }
 function stopWarningEntryWatcher(){warningOpenUnsub?.();warningOpenUnsub=null;closeWarning();}
