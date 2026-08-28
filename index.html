@@ -16879,6 +16879,7 @@ body.light-mode #courseChatPage .chat-msg.received{
         removeUnreadDivider();
         try{window.__chatStage23ClearUnreadTimer?.();}catch(_){ }
     }
+    window.__aaChatClearUnreadLocal=clearUnreadMessages;
     let chatBottomAnimationFrame=0;
     function scrollToBottom(behavior='smooth'){
         if(chatBottomAnimationFrame)cancelAnimationFrame(chatBottomAnimationFrame);
@@ -20053,6 +20054,259 @@ window.__aaStage10RefreshPins=refreshPinsForOpenChat;
     document.querySelectorAll('#courseChatPage .chat-announcement-text, #aaChatStage11AnnouncementModal .aa-stage11-announcement-text').forEach(el=>el.setAttribute('dir','auto'));
   };
   markAutoDirection();
+})();
+</script>
+
+
+<!-- ===== STAGE 13: STUDENT CHAT BACKGROUND + PERSONAL CHAT HISTORY ===== -->
+<style id="aa-chat-stage13-student-settings-css">
+#courseChatPage .chat-student-menu-modal{
+    position:fixed!important;inset:0!important;z-index:2147483610!important;display:none;align-items:center;justify-content:center;
+    padding:16px;background:rgba(0,0,0,.52);backdrop-filter:blur(7px);-webkit-backdrop-filter:blur(7px);
+}
+#courseChatPage .chat-student-menu-modal.open{display:flex!important;}
+#courseChatPage .chat-student-settings-card{
+    width:min(460px,calc(100vw - 24px));max-height:min(88vh,720px);overflow-y:auto;box-sizing:border-box;
+    padding:18px;border:1px solid color-mix(in srgb,var(--accent1) 22%,var(--border) 78%);border-radius:22px;
+    background:var(--bg-card);color:var(--text-primary);box-shadow:0 26px 90px rgba(0,0,0,.38);
+}
+#courseChatPage .chat-student-settings-head{display:flex;align-items:center;gap:11px;margin-bottom:15px;}
+#courseChatPage .chat-student-settings-icon{width:42px;height:42px;flex:0 0 42px;border-radius:13px;background:var(--accent-gradient);color:#fff;display:grid;place-items:center;}
+#courseChatPage .chat-student-settings-head h3{margin:0;font-size:1.05rem;}
+#courseChatPage .chat-student-settings-head p{margin:3px 0 0;color:var(--text-muted);font-size:.74rem;line-height:1.5;}
+#courseChatPage .chat-student-settings-close{margin-inline-start:auto;width:40px;height:40px;border:1px solid var(--border);border-radius:12px;background:var(--bg-secondary);color:var(--text-primary);cursor:pointer;}
+#courseChatPage .chat-student-bg-preview{width:100%;height:150px;border:1px solid var(--border);border-radius:16px;background:var(--bg-secondary) center/cover no-repeat;display:grid;place-items:center;overflow:hidden;position:relative;}
+#courseChatPage .chat-student-bg-preview::after{content:"";position:absolute;inset:0;background:linear-gradient(180deg,rgba(0,0,0,.06),rgba(0,0,0,.18));pointer-events:none;}
+#courseChatPage .chat-student-bg-empty{position:relative;z-index:1;padding:10px 14px;border-radius:12px;background:rgba(0,0,0,.42);color:#fff;font-size:.78rem;font-weight:800;}
+#courseChatPage .chat-student-settings-actions{display:flex;gap:8px;margin-top:12px;}
+#courseChatPage .chat-student-settings-actions button{flex:1;min-height:42px;border:1px solid var(--border);border-radius:13px;background:var(--bg-secondary);color:var(--text-primary);font:inherit;font-weight:800;cursor:pointer;}
+#courseChatPage .chat-student-settings-actions .primary{border-color:transparent;background:var(--accent-gradient);color:#fff;}
+#courseChatPage .chat-student-settings-actions .danger{color:#e74c3c;}
+#courseChatPage .chat-student-bg-note{margin-top:9px;color:var(--text-muted);font-size:.72rem;line-height:1.65;}
+@media(max-width:768px){
+    #courseChatPage .chat-student-settings-card{padding:15px;border-radius:19px;max-height:90vh;}
+    #courseChatPage .chat-student-bg-preview{height:130px;}
+}
+</style>
+<script id="aa-chat-stage13-student-settings-js">
+(function(){
+    'use strict';
+    if(window.__aaChatStage13StudentSettings)return;
+    window.__aaChatStage13StudentSettings=true;
+
+    const $=id=>document.getElementById(id);
+    const chatPage=$('courseChatPage'),root=$('chatAdminRoot'),list=$('chatPageMessagesList');
+    if(!chatPage||!root)return;
+
+    let backgroundUnsub=null;
+    let backgroundCourse='';
+    let backgroundUser='';
+    const bgLocalKey=(uid,cid)=>`ananas.chat.background.v1.${String(uid||'')}.${String(cid||'')}`;
+
+    function isAdminNow(){try{return typeof isAdmin!=='undefined'&&!!isAdmin}catch(_){return !!window.isAdmin}}
+    function courseNow(){try{return (typeof activeCourseId!=='undefined'&&activeCourseId)?String(activeCourseId):String(window.activeCourseId||'')}catch(_){return String(window.activeCourseId||'')}}
+    function userNow(){try{return (typeof currentUser!=='undefined'&&currentUser)?currentUser:(window.currentUser||null)}catch(_){return window.currentUser||null}}
+
+    function closeStudentMenu(){
+        const menu=$('chatStudentMenu');
+        const btn=$('chatStudentMenuBtn');
+        if(menu)menu.classList.remove('open');
+        if(btn)btn.setAttribute('aria-expanded','false');
+    }
+
+    function ensureStudentMenu(){
+        if(isAdminNow()||!userNow()?.uid||!courseNow())return;
+        if(root.querySelector('#chatStudentMenuBtn'))return;
+        root.innerHTML='';
+        const btn=document.createElement('button');
+        btn.type='button';
+        btn.id='chatStudentMenuBtn';
+        btn.className='chat-admin-menu-btn';
+        btn.setAttribute('aria-label','خيارات الدردشة');
+        btn.setAttribute('aria-expanded','false');
+        btn.innerHTML='<i class="fas fa-ellipsis-vertical" aria-hidden="true"></i>';
+        const menu=document.createElement('div');
+        menu.id='chatStudentMenu';
+        menu.className='chat-admin-menu';
+        menu.setAttribute('role','menu');
+        menu.innerHTML='<button type="button" id="chatStudentBackgroundBtn" role="menuitem"><i class="fas fa-image" aria-hidden="true"></i><span>تغيير خلفية الدردشة</span></button><button type="button" id="chatStudentClearHistoryBtn" role="menuitem"><i class="fas fa-trash" aria-hidden="true"></i><span>حذف سجل المحادثة</span></button>';
+        root.append(btn,menu);
+
+        btn.addEventListener('click',e=>{
+            e.preventDefault();e.stopPropagation();
+            const next=!menu.classList.contains('open');
+            menu.classList.toggle('open',next);
+            btn.setAttribute('aria-expanded',next?'true':'false');
+        });
+        $('chatStudentBackgroundBtn')?.addEventListener('click',e=>{
+            e.preventDefault();e.stopPropagation();
+            closeStudentMenu();
+            openBackgroundModal();
+        });
+        $('chatStudentClearHistoryBtn')?.addEventListener('click',e=>{
+            e.preventDefault();e.stopPropagation();
+            closeStudentMenu();
+            clearStudentChatHistory();
+        });
+    }
+
+    function ensureBackgroundModal(){
+        let modal=$('chatStudentBackgroundModal');
+        if(modal)return modal;
+        modal=document.createElement('div');
+        modal.id='chatStudentBackgroundModal';
+        modal.className='chat-student-menu-modal';
+        modal.innerHTML='<div class="chat-student-settings-card" role="dialog" aria-modal="true" aria-labelledby="chatStudentBgTitle"><div class="chat-student-settings-head"><span class="chat-student-settings-icon"><i class="fas fa-image"></i></span><div><h3 id="chatStudentBgTitle">خلفية الدردشة</h3><p>الخلفية التي تختارها تظهر لك أنت فقط.</p></div><button type="button" class="chat-student-settings-close" id="chatStudentBgClose" aria-label="إغلاق"><i class="fas fa-xmark"></i></button></div><div id="chatStudentBgPreview" class="chat-student-bg-preview"><span class="chat-student-bg-empty">لم يتم اختيار خلفية</span></div><input id="chatStudentBgInput" type="file" accept="image/*" hidden><div class="chat-student-settings-actions"><button type="button" id="chatStudentBgPick"><i class="fas fa-upload"></i> اختيار صورة</button><button type="button" id="chatStudentBgSave" class="primary"><i class="fas fa-check"></i> حفظ الخلفية</button></div><div class="chat-student-settings-actions"><button type="button" id="chatStudentBgRemove" class="danger"><i class="fas fa-trash-can"></i> إزالة الخلفية</button></div><div class="chat-student-bg-note">لن تتغير خلفية الطلاب الآخرين أو المشرف. الخلفية مرتبطة بحسابك وهذه الدورة فقط.</div></div>';
+        document.body.appendChild(modal);
+        $('chatStudentBgClose').onclick=()=>modal.classList.remove('open');
+        modal.addEventListener('click',e=>{if(e.target===modal)modal.classList.remove('open')});
+        $('chatStudentBgPick').onclick=()=>$('chatStudentBgInput')?.click();
+        $('chatStudentBgInput').addEventListener('change',()=>{
+            const file=$('chatStudentBgInput')?.files?.[0];
+            if(!file)return;
+            if(!file.type.startsWith('image/'))return showCustomAlert?.('تنبيه','اختر صورة فقط.');
+            const url=URL.createObjectURL(file);
+            const preview=$('chatStudentBgPreview');
+            if(preview){preview.style.backgroundImage=`url("${url.replace(/"/g,'&quot;')}")`;preview.innerHTML='';}
+        });
+        $('chatStudentBgSave').onclick=saveBackground;
+        $('chatStudentBgRemove').onclick=removeBackground;
+        return modal;
+    }
+
+    function setChatBackground(url){
+        if(!list)return;
+        if(url){
+            list.style.backgroundImage=`linear-gradient(rgba(0,0,0,.08),rgba(0,0,0,.08)),url("${String(url).replace(/"/g,'%22')}")`;
+            list.style.backgroundSize='cover';
+            list.style.backgroundPosition='center';
+            list.style.backgroundRepeat='no-repeat';
+            list.style.backgroundAttachment='local';
+        }else{
+            list.style.removeProperty('background-image');
+            list.style.removeProperty('background-size');
+            list.style.removeProperty('background-position');
+            list.style.removeProperty('background-repeat');
+            list.style.removeProperty('background-attachment');
+        }
+    }
+
+    async function loadBackground(){
+        backgroundUnsub?.();backgroundUnsub=null;backgroundCourse=courseNow();backgroundUser=userNow()?.uid||'';
+        if(isAdminNow()||!backgroundCourse||!backgroundUser){setChatBackground('');return;}
+        let local='';
+        try{local=localStorage.getItem(bgLocalKey(backgroundUser,backgroundCourse))||'';}catch(_){}
+        setChatBackground(local);
+        try{
+            const ref=db.collection('users').doc(backgroundUser).collection('chatBackgrounds').doc(backgroundCourse);
+            backgroundUnsub=ref.onSnapshot(s=>{
+                const url=String(s.exists?(s.data()?.url||''):'');
+                try{if(url)localStorage.setItem(bgLocalKey(backgroundUser,backgroundCourse),url);else localStorage.removeItem(bgLocalKey(backgroundUser,backgroundCourse));}catch(_){}
+                setChatBackground(url);
+            },()=>setChatBackground(local));
+        }catch(_){setChatBackground(local);}
+    }
+
+    function openBackgroundModal(){
+        if(isAdminNow()||!userNow()?.uid||!courseNow())return;
+        const modal=ensureBackgroundModal(),preview=$('chatStudentBgPreview'),input=$('chatStudentBgInput');
+        const local=(()=>{try{return localStorage.getItem(bgLocalKey(userNow().uid,courseNow()))||''}catch(_){return ''}})();
+        if(preview){preview.style.backgroundImage=local?`url("${local.replace(/"/g,'%22')}")`:'';preview.innerHTML=local?'':'<span class="chat-student-bg-empty">لم يتم اختيار خلفية</span>';}
+        if(input)input.value='';
+        modal.classList.add('open');
+    }
+
+    async function saveBackground(){
+        const account=userNow(),cid=courseNow(),file=$('chatStudentBgInput')?.files?.[0];
+        if(isAdminNow()||!account?.uid||!cid)return;
+        if(!file)return showCustomAlert?.('تنبيه','اختر صورة للخلفية أولاً.');
+        const btn=$('chatStudentBgSave');if(btn)btn.disabled=true;
+        try{
+            const url=await uploadImage(file);
+            if(!url)throw new Error('upload');
+            await db.collection('users').doc(account.uid).collection('chatBackgrounds').doc(cid).set({url,updatedAt:firebase.firestore.FieldValue.serverTimestamp()},{merge:true});
+            try{localStorage.setItem(bgLocalKey(account.uid,cid),url)}catch(_){}
+            setChatBackground(url);
+            $('chatStudentBackgroundModal')?.classList.remove('open');
+            showCopyToast('تم حفظ خلفية الدردشة');
+        }catch(err){
+            console.error('student chat background save failed',err);
+            showCustomAlert?.('خطأ','تعذر حفظ خلفية الدردشة.');
+        }finally{if(btn)btn.disabled=false;}
+    }
+
+    async function removeBackground(){
+        const account=userNow(),cid=courseNow();
+        if(isAdminNow()||!account?.uid||!cid)return;
+        const ok=typeof window.showCustomConfirm==='function'
+            ? await new Promise(r=>window.showCustomConfirm('إزالة خلفية الدردشة','ستعود الدردشة إلى الخلفية الافتراضية لك. هل تريد المتابعة؟',()=>r(true),()=>r(false)))
+            : window.confirm('إزالة خلفية الدردشة؟');
+        if(!ok)return;
+        try{
+            await db.collection('users').doc(account.uid).collection('chatBackgrounds').doc(cid).delete();
+            try{localStorage.removeItem(bgLocalKey(account.uid,cid));}catch(_){}
+            setChatBackground('');
+            $('chatStudentBackgroundModal')?.classList.remove('open');
+            showCopyToast('تمت إزالة خلفية الدردشة');
+        }catch(err){console.error('student chat background remove failed',err);showCustomAlert?.('خطأ','تعذر إزالة خلفية الدردشة.');}
+    }
+
+    async function clearStudentChatHistory(){
+        const account=userNow(),cid=courseNow();
+        if(isAdminNow()||!account?.uid||!cid)return;
+        const ok=typeof window.showCustomConfirm==='function'
+            ? await new Promise(r=>window.showCustomConfirm('حذف سجل المحادثة','سيتم إخفاء جميع رسائل هذه المحادثة من حسابك فقط، ولن تُحذف من حسابات الآخرين. هل تريد المتابعة؟',()=>r(true),()=>r(false)))
+            : window.confirm('حذف سجل المحادثة من حسابك فقط؟');
+        if(!ok)return;
+        try{
+            const snap=await db.collection('courses').doc(cid).collection('chat').get();
+            const allIds=snap.docs.map(d=>String(d.id));
+            const old=await window.__aaLoadHiddenChatIds?.(cid);
+            const ids=new Set(Array.from(old instanceof Set?old:[],String));
+            allIds.forEach(id=>ids.add(id));
+            try{
+                const seenKey=`ananas.chat.announcement.seen.${account.uid}.${cid}`;
+                const seen=JSON.parse(localStorage.getItem(seenKey)||'[]');
+                const seenSet=new Set(Array.isArray(seen)?seen.map(String):[]);
+                snap.docs.forEach(d=>{if(d.data()?.messageType==='announcement')seenSet.add(String(d.id));});
+                localStorage.setItem(seenKey,JSON.stringify([...seenSet].slice(-200)));
+            }catch(_){}
+            await window.__aaSaveHiddenChatIds?.(cid,ids);
+            await window.__aaRefreshHiddenChat?.(cid);
+            window.__aaChatClearUnreadLocal?.();
+            showCopyToast('تم حذف سجل المحادثة من حسابك');
+        }catch(err){
+            console.error('student chat history clear failed',err);
+            showCustomAlert?.('خطأ','تعذر حذف سجل المحادثة من حسابك.');
+        }
+    }
+
+    window.__aaChatClearStudentHistory=clearStudentChatHistory;
+    window.__aaChatReloadStudentBackground=loadBackground;
+
+    document.addEventListener('click',e=>{
+        if(e.target.closest?.('#chatStudentMenu')||e.target.closest?.('#chatStudentMenuBtn'))return;
+        closeStudentMenu();
+    },{passive:true});
+
+    const rootObserver=new MutationObserver(()=>{
+        if(!isAdminNow())ensureStudentMenu();
+    });
+    rootObserver.observe(root,{childList:true,subtree:true});
+
+    let lastKey='';
+    const sync=()=>{
+        const key=`${isAdminNow()?'admin':'student'}:${userNow()?.uid||''}:${courseNow()}`;
+        if(key===lastKey)return;
+        lastKey=key;
+        backgroundUnsub?.();backgroundUnsub=null;
+        if(isAdminNow()){setChatBackground('');return;}
+        ensureStudentMenu();
+        loadBackground();
+    };
+    new MutationObserver(sync).observe(document.body,{subtree:true,childList:true,attributes:true,attributeFilter:['class','style']});
+    if(typeof auth!=='undefined' && auth?.onAuthStateChanged)auth.onAuthStateChanged(()=>sync());
+    sync();
 })();
 </script>
 </body>
