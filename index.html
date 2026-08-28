@@ -4025,7 +4025,7 @@ to{opacity:1;transform:none}}
         window.recalculateCourseDuration = recalculateCourseDuration;
 
         function getCourseActionHTML(courseId) {
-            if (!currentUser) return `<button class="btn btn-outline" onclick="window.triggerAuth()">تسجيل الدخول</button>`;
+            if (!currentUser) return `<button type="button" class="btn btn-outline course-login-btn">تسجيل الدخول</button>`;
             const enrollment = userEnrollmentMap[courseId];
             if (enrollment && enrollment.enrollmentActive !== false) return `<button class="btn btn-primary" onclick="openCourse('${courseId}')">الدخول للدورة</button>`;
             return `<button class="btn btn-primary" onclick="openCourse('${courseId}')">الاشتراك في الدورة</button>`;
@@ -4075,6 +4075,16 @@ to{opacity:1;transform:none}}
             // If a newer render was requested while this one was being built, abort it.
             if (renderId !== coursesRenderVersion) return;
             if (grid.innerHTML !== html) grid.innerHTML = html;
+
+            // Bind the dynamically-rendered course login buttons directly so
+            // they always open the existing authentication popup.
+            grid.querySelectorAll('.course-login-btn').forEach(button => {
+                button.onclick = event => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    window.triggerAuth?.();
+                };
+            });
 
             // Do not block the first paint on enrollment lookup.
             if (currentUser && enrollmentMapLoadedUid !== currentUser.uid) {
