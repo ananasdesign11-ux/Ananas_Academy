@@ -18980,6 +18980,8 @@ function markPinnedMessages(){document.querySelectorAll('#courseChatPage .chat-m
 async function savePins(ids){const ref=pinDoc();if(!ref)throw new Error('no-course');await ref.set({messageIds:[...new Set(ids.map(String))].slice(0,50),updatedAt:ts(),updatedBy:currentUser.uid},{merge:true});}
 async function togglePin(id){if(!isAdminNow()||!id)return;const next=pinState.messageIds.includes(String(id))?pinState.messageIds.filter(x=>x!==String(id)):[...pinState.messageIds,String(id)];await savePins(next);showCopyToast(next.includes(String(id))?'تم تثبيت الرسالة':'تم إلغاء تثبيت الرسالة');}
 window.__aaChatStage10IsPinned=id=>pinState.messageIds.includes(String(id||''));
+window.__aaStage10RefreshPinsInternal=loadPins;
+window.__aaStage10RenderPinsInternal=renderPinBar;
 
 const pinDomObserver=new MutationObserver(()=>{if(pinState.messageIds.length)renderPinBar();});
 const pinDomTarget=$('chatPageMessagesList');if(pinDomTarget)pinDomObserver.observe(pinDomTarget,{childList:true,subtree:true});
@@ -19070,5 +19072,119 @@ sync();
 })();
 </script>
 
+
+
+<!-- ===== FINAL STAGE 10 WARNING + PIN OPEN-ROUTE FIX ===== -->
+<style id="aa-stage10-warning-pin-open-fix-css">
+/* The warning is intentionally modal and only opened from the student's chat-entry route. */
+#aaChatWarningStack{display:none!important;}
+#aaChatWarningModal{position:fixed;inset:0;z-index:2147483606;display:none;align-items:center;justify-content:center;padding:16px;background:rgba(0,0,0,.52);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);}
+#aaChatWarningModal.open{display:flex;}
+#aaChatWarningModal .aa-warning-card{width:min(460px,calc(100vw - 24px));max-height:min(78vh,620px);overflow:auto;background:var(--bg-card);color:var(--text-primary);border:1px solid rgba(231,76,60,.26);border-radius:24px;box-shadow:0 28px 90px rgba(0,0,0,.38);padding:20px;direction:rtl;}
+#aaChatWarningModal .aa-warning-head{display:flex;align-items:center;gap:12px;}
+#aaChatWarningModal .aa-warning-icon{width:46px;height:46px;flex:0 0 46px;border-radius:14px;display:grid;place-items:center;background:rgba(231,76,60,.10);color:#e74c3c;font-size:1.15rem;}
+#aaChatWarningModal .aa-warning-title{margin:0;font-size:1.12rem;font-weight:900;}
+#aaChatWarningModal .aa-warning-subtitle{margin-top:3px;color:var(--text-muted);font-size:.76rem;line-height:1.5;}
+#aaChatWarningModal .aa-warning-message{margin-top:16px;padding:14px;border-radius:16px;background:var(--bg-secondary);border:1px solid var(--border);font-size:.92rem;line-height:1.8;white-space:pre-wrap;overflow-wrap:anywhere;}
+#aaChatWarningModal .aa-warning-linked{margin-top:10px;padding:11px 13px;border-radius:14px;background:rgba(108,92,231,.07);border:1px solid rgba(108,92,231,.14);color:var(--text-muted);font-size:.78rem;line-height:1.6;}
+#aaChatWarningModal .aa-warning-actions{display:flex;gap:8px;margin-top:16px;}
+#aaChatWarningModal .aa-warning-actions button{flex:1;min-height:44px;padding:9px 13px;border-radius:13px;border:1px solid var(--border);background:var(--bg-secondary);color:var(--text-primary);font:inherit;font-weight:800;cursor:pointer;}
+#aaChatWarningModal .aa-warning-actions .primary{border-color:transparent;background:var(--accent-gradient);color:#fff;}
+@media(max-width:768px){#aaChatWarningModal{padding:12px;}#aaChatWarningModal .aa-warning-card{padding:16px;border-radius:20px;width:calc(100vw - 20px);max-height:82vh;}#aaChatWarningModal .aa-warning-actions{flex-direction:column-reverse;}}
+</style>
+<script id="aa-stage10-warning-pin-open-fix-js">
+(function(){
+'use strict';
+if(window.__aaStage10WarningPinOpenFix)return;window.__aaStage10WarningPinOpenFix=true;
+const $=id=>document.getElementById(id);
+const chatPage=$('courseChatPage');
+let warningOpenUnsub=null;
+let warningSeenSession=new Set();
+let lastChatOpenToken=0;
+
+function ensureWarningModal(){
+  let m=$('aaChatWarningModal');
+  if(m)return m;
+  m=document.createElement('div');
+  m.id='aaChatWarningModal';
+  m.setAttribute('aria-hidden','true');
+  m.innerHTML=`<div class="aa-warning-card" role="dialog" aria-modal="true" aria-labelledby="aaWarningTitle">
+    <div class="aa-warning-head"><div class="aa-warning-icon"><i class="fas fa-triangle-exclamation"></i></div><div><h3 id="aaWarningTitle" class="aa-warning-title">تحذير من المشرف</h3><div class="aa-warning-subtitle">هذا التحذير خاص بك ولا يظهر لبقية الطلاب.</div></div></div>
+    <div id="aaWarningMessage" class="aa-warning-message"></div>
+    <div id="aaWarningLinked" class="aa-warning-linked"><i class="fas fa-link"></i> تم ربط هذا التحذير برسالة محددة في الدردشة لتوضيح سبب التنبيه.</div>
+    <div class="aa-warning-actions"><button type="button" id="aaWarningAcknowledge" class="primary">حسنًا</button><button type="button" id="aaWarningGoto">الانتقال إلى الرسالة</button></div>
+  </div>`;
+  document.body.appendChild(m);
+  m.addEventListener('click',e=>{if(e.target===m)closeWarning();});
+  $('aaWarningAcknowledge').onclick=()=>closeWarning();
+  $('aaWarningGoto').onclick=()=>{const id=m.dataset.messageId;closeWarning();if(!id)return;const el=document.querySelector('#courseChatPage .chat-msg[data-message-id="'+CSS.escape(String(id))+'"]');if(el){el.scrollIntoView({behavior:'smooth',block:'center'});el.classList.add('aa-reply-flash');setTimeout(()=>el.classList.remove('aa-reply-flash'),900);}};
+  return m;
+}
+function closeWarning(){const m=$('aaChatWarningModal');if(!m)return;m.classList.remove('open');m.setAttribute('aria-hidden','true');}
+function openWarning(item){
+  const m=ensureWarningModal();
+  m.dataset.messageId=String(item.messageId||'');
+  const msg=$('aaWarningMessage'),link=$('aaWarningLinked'),goto=$('aaWarningGoto');
+  if(msg)msg.textContent=String(item.text||'');
+  const el=item.messageId?document.querySelector('#courseChatPage .chat-msg[data-message-id="'+CSS.escape(String(item.messageId))+'"]'):null;
+  if(link)link.innerHTML=el?'هذا التحذير مرتبط برسالتك المحددة في الدردشة. يمكنك الانتقال إليها الآن.':'الرسالة المرتبط بها التحذير غير موجودة في العرض الحالي.';
+  if(goto)goto.style.display=el?'':'none';
+  m.classList.add('open');m.setAttribute('aria-hidden','false');
+}
+function warningRef(){return activeCourseId&&currentUser?db.collection('courses').doc(String(activeCourseId)).collection('chatWarnings'):null;}
+async function openPendingWarningOnChatEntry(){
+  if(!currentUser||typeof isAdmin!=='undefined'&&isAdmin||!activeCourseId)return;
+  const token=++lastChatOpenToken;
+  try{
+    const ref=warningRef();if(!ref)return;
+    const snap=await ref.where('userId','==',currentUser.uid).limit(30).get();
+    if(token!==lastChatOpenToken||!chatPage||chatPage.offsetParent===null)return;
+    const items=snap.docs.map(d=>({id:d.id,...(d.data()||{})})).sort((a,b)=>{
+      const am=a.createdAt?.toMillis?a.createdAt.toMillis():Number(a.createdAt||0),bm=b.createdAt?.toMillis?b.createdAt.toMillis():Number(b.createdAt||0);return am-bm;
+    });
+    const pending=items.find(x=>!warningSeenSession.has(String(x.id)));
+    if(pending){warningSeenSession.add(String(pending.id));openWarning(pending);}
+  }catch(e){console.warn('chat warning modal load failed',e);}
+}
+function stopWarningEntryWatcher(){warningOpenUnsub?.();warningOpenUnsub=null;closeWarning();}
+function refreshPinsForOpenChat(){
+  try{
+    if(typeof window.__aaStage10RefreshPinsInternal==='function')window.__aaStage10RefreshPinsInternal();
+  }catch(e){console.warn('chat pins refresh failed',e);}
+  setTimeout(()=>{try{if(typeof window.__aaStage10RefreshPinsInternal==='function')window.__aaStage10RefreshPinsInternal();if(typeof window.__aaStage10RenderPinsInternal==='function')window.__aaStage10RenderPinsInternal();}catch(e){}},180);
+  setTimeout(()=>{try{if(typeof window.__aaStage10RenderPinsInternal==='function')window.__aaStage10RenderPinsInternal();}catch(e){}},700);
+}
+const oldSwitch=window.switchCoursePage;
+if(typeof oldSwitch==='function'&&!oldSwitch.__aaStage10WarningPinOpenFixWrapped){
+  const wrapped=function(page){
+    const r=oldSwitch.apply(this,arguments);
+    if(page==='chat'){
+      refreshPinsForOpenChat();
+      if(!(typeof isAdmin!=='undefined'&&!!isAdmin))setTimeout(openPendingWarningOnChatEntry,80);
+    }else{
+      stopWarningEntryWatcher();
+    }
+    return r;
+  };
+  wrapped.__aaStage10WarningPinOpenFixWrapped=true;
+  wrapped.__original=oldSwitch;
+  window.switchCoursePage=wrapped;
+}
+// Also hook the actual chat loader; this catches direct openings that do not pass through the visible button route.
+const oldLoadChat=window.loadChatPage;
+if(typeof oldLoadChat==='function'&&!oldLoadChat.__aaStage10WarningPinOpenFixWrapped){
+  const wrappedLoad=async function(){
+    const r=await oldLoadChat.apply(this,arguments);
+    setTimeout(()=>{refreshPinsForOpenChat();if(!(typeof isAdmin!=='undefined'&&!!isAdmin))openPendingWarningOnChatEntry();},80);
+    return r;
+  };
+  wrappedLoad.__aaStage10WarningPinOpenFixWrapped=true;
+  wrappedLoad.__original=oldLoadChat;
+  window.loadChatPage=wrappedLoad;
+}
+window.__aaStage10OpenWarning=openPendingWarningOnChatEntry;
+window.__aaStage10RefreshPins=refreshPinsForOpenChat;
+})();
+</script>
 </body>
 </html>
