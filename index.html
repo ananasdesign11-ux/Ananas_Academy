@@ -4107,6 +4107,28 @@ to{opacity:1;transform:none}}
         // always invoke the same login flow.
         window.triggerAuth = triggerAuth;
 
+        // Final delegated handler for course-card login buttons.
+        // This survives any later re-render/replacement of the course cards.
+        if (!window.__aaCourseLoginDelegatedHandler) {
+            window.__aaCourseLoginDelegatedHandler = true;
+            document.addEventListener('click', function(event) {
+                const button = event.target?.closest?.('.course-login-btn');
+                if (!button) return;
+                event.preventDefault();
+                event.stopPropagation();
+                const popup = document.getElementById('authPopup');
+                if (!popup) return;
+                document.body.classList.remove('aa-chat-signing-out');
+                popup.classList.add('active');
+                popup.style.setProperty('display', 'block', 'important');
+                popup.style.setProperty('pointer-events', 'auto', 'important');
+                document.getElementById('authStep1')?.style.setProperty('display', 'block');
+                document.getElementById('authStep2')?.style.setProperty('display', 'none');
+                const status = document.getElementById('authStatus');
+                if (status) status.textContent = '';
+            }, true);
+        }
+
         // === إضافة / تعديل الدورة ===
         document.getElementById('addCourseBtn').addEventListener('click', () => {
             if(!isAdmin) return showCustomAlert('غير مسموح', 'إضافة الدورات متاحة للمشرف فقط.');
