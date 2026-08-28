@@ -19204,6 +19204,9 @@ const chatPage=$('courseChatPage');
 let warningOpenUnsub=null;
 let warningSeenSession=new Set();
 let lastChatOpenToken=0;
+function warningSeenKey(){return `ananas.chatWarningsSeen.${String(currentUser?.uid||'guest')}.${String(activeCourseId||'')}`;}
+function loadWarningSeen(){try{const raw=JSON.parse(localStorage.getItem(warningSeenKey())||'[]');warningSeenSession=new Set(Array.isArray(raw)?raw.map(String):[]);}catch(_){warningSeenSession=new Set();}}
+function saveWarningSeen(){try{localStorage.setItem(warningSeenKey(),JSON.stringify([...warningSeenSession]));}catch(_){}}
 
 function ensureWarningModal(){
   let m=$('aaChatWarningModal');
@@ -19220,7 +19223,27 @@ function ensureWarningModal(){
   document.body.appendChild(m);
   m.addEventListener('click',e=>{if(e.target===m)closeWarning();});
   $('aaWarningAcknowledge').onclick=()=>closeWarning();
-  $('aaWarningGoto').onclick=()=>{const id=m.dataset.messageId;closeWarning();if(!id)return;const el=document.querySelector('#courseChatPage .chat-msg[data-message-id="'+CSS.escape(String(id))+'"]');if(el){window.__aaHighlightChatMessage?.(id);}};
+  $('aaWarningGoto').onclick=async()=>{
+    const id=m.dataset.messageId;
+    closeWarning();
+    if(!id)return;
+    let el=document.querySelector('#courseChatPage .chat-msg[data-message-id="'+CSS.escape(String(id))+'"]');
+    if(!el){
+      try{
+        const ref=db.collection('courses').doc(String(activeCourseId)).collection('chat').doc(String(id));
+        const snap=await ref.get();
+        if(snap.exists && typeof window.loadChatPage==='function'){
+          await window.loadChatPage(activeCourseId);
+          await new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));
+          el=document.querySelector('#courseChatPage .chat-msg[data-message-id="'+CSS.escape(String(id))+'"]');
+        }
+      }catch(err){console.warn('warning goto message failed',err);}
+    }
+    if(el){
+      el.scrollIntoView({behavior:'smooth',block:'center'});
+      setTimeout(()=>window.__aaHighlightChatMessage?.(id),180);
+    }
+  };
   return m;
 }
 function closeWarning(){const m=$('aaChatWarningModal');if(!m)return;m.classList.remove('open');m.setAttribute('aria-hidden','true');}
@@ -19230,14 +19253,15 @@ function openWarning(item){
   const msg=$('aaWarningMessage'),link=$('aaWarningLinked'),goto=$('aaWarningGoto');
   if(msg)msg.textContent=String(item.text||'');
   const el=item.messageId?document.querySelector('#courseChatPage .chat-msg[data-message-id="'+CSS.escape(String(item.messageId))+'"]'):null;
-  if(link)link.innerHTML=el?'هذا التحذير مرتبط برسالتك المحددة في الدردشة. يمكنك الانتقال إليها الآن.':'الرسالة المرتبط بها التحذير غير موجودة في العرض الحالي.';
-  if(goto)goto.style.display=el?'':'none';
+  if(link)link.innerHTML='هذا التحذير مرتبط برسالة محددة في الدردشة. يمكنك الانتقال إليها الآن.';
+  if(goto)goto.style.display=item.messageId?'':'none';
   m.classList.add('open');m.setAttribute('aria-hidden','false');
 }
 function warningRef(){return activeCourseId&&currentUser?db.collection('courses').doc(String(activeCourseId)).collection('chatWarnings'):null;}
 async function openPendingWarningOnChatEntry(){
   if(!currentUser||typeof isAdmin!=='undefined'&&isAdmin||!activeCourseId)return;
   const token=++lastChatOpenToken;
+  loadWarningSeen();
   try{
     const ref=warningRef();if(!ref)return;
     const snap=await ref.where('userId','==',currentUser.uid).limit(30).get();
@@ -19246,7 +19270,7 @@ async function openPendingWarningOnChatEntry(){
       const am=a.createdAt?.toMillis?a.createdAt.toMillis():Number(a.createdAt||0),bm=b.createdAt?.toMillis?b.createdAt.toMillis():Number(b.createdAt||0);return am-bm;
     });
     const pending=items.find(x=>!warningSeenSession.has(String(x.id)));
-    if(pending){warningSeenSession.add(String(pending.id));openWarning(pending);}
+    if(pending){warningSeenSession.add(String(pending.id));saveWarningSeen();openWarning(pending);}
   }catch(e){console.warn('chat warning modal load failed',e);}
 }
 function stopWarningEntryWatcher(){warningOpenUnsub?.();warningOpenUnsub=null;closeWarning();}
