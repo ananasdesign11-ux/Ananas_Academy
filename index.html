@@ -17137,7 +17137,7 @@ body.light-mode #courseChatPage .chat-msg.received{
                 const admin=!!isAdmin;
                 wrap.dataset.messageId=String(doc.id);
                 wrap.dataset.messageType='announcement';
-                wrap.innerHTML=`<article class="chat-announcement-card"><div class="chat-announcement-top"><span class="chat-announcement-icon" aria-hidden="true"><i class="fas fa-bullhorn"></i></span><div class="chat-announcement-heading"><strong>تعميم</strong><span>${safeEscape(date.toLocaleTimeString('ar-SA',{hour:'2-digit',minute:'2-digit'}))}</span></div>${admin?`<button type="button" class="chat-announcement-menu-btn" data-announcement-action="menu" aria-label="خيارات التعميم" aria-expanded="false"><i class="fas fa-ellipsis-vertical"></i></button><div class="chat-announcement-menu" role="menu"><button type="button" data-announcement-action="edit"><i class="fas fa-pen"></i><span>تعديل التعميم</span></button><button type="button" data-announcement-action="delete" class="danger"><i class="fas fa-trash"></i><span>حذف التعميم</span></button></div>`:''}</div><div class="chat-announcement-text">${safeEscape(text)}</div><div class="chat-announcement-footer"><span><i class="fas fa-circle-info"></i> إعلان إداري</span><small>${safeEscape(date.toLocaleDateString('ar-SA',{day:'numeric',month:'long',year:'numeric'}))}</small></div></article>`;
+                wrap.innerHTML=`<article class="chat-announcement-card"><div class="chat-announcement-top"><span class="chat-announcement-icon" aria-hidden="true"><i class="fas fa-bullhorn"></i></span><div class="chat-announcement-heading"><strong>تعميم</strong><span>${safeEscape(date.toLocaleTimeString('ar-SA',{hour:'2-digit',minute:'2-digit'}))}</span></div>${admin?`<button type="button" class="chat-announcement-menu-btn" data-announcement-action="menu" aria-label="خيارات التعميم" aria-expanded="false"><i class="fas fa-ellipsis-vertical"></i></button><div class="chat-announcement-menu" role="menu"><button type="button" data-announcement-action="edit"><i class="fas fa-pen"></i><span>تعديل التعميم</span></button><button type="button" data-announcement-action="delete" class="danger"><i class="fas fa-trash"></i><span>حذف التعميم</span></button></div>`:''}</div><div class="chat-announcement-text" dir="auto">${safeEscape(text)}</div><div class="chat-announcement-footer"><span><i class="fas fa-circle-info"></i> إعلان إداري</span><small>${safeEscape(date.toLocaleDateString('ar-SA',{day:'numeric',month:'long',year:'numeric'}))}</small></div></article>`;
                 return wrap;
             }
             const isMine=m.userId===currentUserId;
@@ -17215,6 +17215,14 @@ body.light-mode #courseChatPage .chat-msg.received{
                 }
                 const isMine=m.userId===(currentUser?.uid||null),profileUid=String(m.userId||''),profile=profileCache[profileUid]||{name:m.userName||'مستخدم',photo:''};
                 const node=buildMessageNode(doc,allDocs);
+                /* Announcements are standalone cards, not chat bubbles; never attach a sender avatar/name to them. */
+                if(m.messageType==='announcement'){
+                    const announcementText=node.querySelector('.chat-announcement-text');
+                    if(announcementText)announcementText.setAttribute('dir','auto');
+                    html+=node.outerHTML;
+                    previousUserId=null; previousWasReceived=false;
+                    continue;
+                }
                 if(!isMine&&previousWasReceived&&previousUserId===profileUid)node.classList.add('chat-msg-grouped');
                 if(!isMine&&(!previousWasReceived||previousUserId!==profileUid)){
                     const avatar=document.createElement('div');
@@ -19448,7 +19456,7 @@ function showStage11AnnouncementPopup(item){
   let modal=$('aaChatStage11AnnouncementModal');
   if(!modal){
     modal=document.createElement('div');modal.id='aaChatStage11AnnouncementModal';
-    modal.innerHTML='<div class="aa-stage11-announcement-card"><div class="aa-stage11-announcement-head"><span class="aa-stage11-announcement-icon"><i class="fas fa-bullhorn"></i></span><div><h3>تعميم</h3><p>إشعار مهم داخل الدردشة</p></div></div><div class="aa-stage11-announcement-body"><div id="aaStage11PopupText" class="aa-stage11-announcement-text"></div><div id="aaStage11PopupMeta" class="aa-stage11-announcement-meta"></div></div><div class="aa-stage11-announcement-actions"><button type="button" id="aaStage11PopupOk" class="primary">حسنًا، فهمت</button></div></div>';
+    modal.innerHTML='<div class="aa-stage11-announcement-card"><div class="aa-stage11-announcement-head"><span class="aa-stage11-announcement-icon"><i class="fas fa-bullhorn"></i></span><div><h3>تعميم</h3><p>إشعار مهم داخل الدردشة</p></div></div><div class="aa-stage11-announcement-body"><div id="aaStage11PopupText" class="aa-stage11-announcement-text" dir="auto"></div><div id="aaStage11PopupMeta" class="aa-stage11-announcement-meta"></div></div><div class="aa-stage11-announcement-actions"><button type="button" id="aaStage11PopupOk" class="primary">حسنًا، فهمت</button></div></div>';
     document.body.appendChild(modal);$('aaStage11PopupOk').onclick=()=>modal.classList.remove('open');modal.addEventListener('click',e=>{if(e.target===modal)modal.classList.remove('open');});
   }
   const dt=item.createdAt?.toDate?item.createdAt.toDate():new Date(Number(item.createdAt)||Date.now());
@@ -19800,6 +19808,211 @@ if(typeof oldLoadChat==='function'&&!oldLoadChat.__aaStage10WarningPinOpenFixWra
 }
 window.__aaStage10OpenWarning=openPendingWarningOnChatEntry;
 window.__aaStage10RefreshPins=refreshPinsForOpenChat;
+})();
+</script>
+
+<style id="aa-requested-chat-mute-announcement-direction-fixes">
+/* Requested chat-only fixes: keep the mute dialog compact/scrollable like the lock dialog. */
+#aaChatAdminModal.aa-mute-modal .aa-admin-modal-card{
+  width:min(620px,95vw)!important;
+  max-width:95vw!important;
+  max-height:calc(100dvh - 24px)!important;
+  overflow-y:auto!important;
+  scrollbar-width:none;
+  padding:0!important;
+  border-radius:24px!important;
+}
+#aaChatAdminModal.aa-mute-modal .aa-admin-modal-card::-webkit-scrollbar{width:0!important;height:0!important;}
+#aaChatAdminModal.aa-mute-modal #aaChatAdminModalTitle{
+  margin:0!important;
+  padding:18px 20px 14px!important;
+  border-bottom:1px solid var(--border);
+  line-height:1.45;
+}
+#aaChatAdminModal.aa-mute-modal #aaChatAdminModalBody{padding:14px 20px 0;}
+#aaChatAdminModal.aa-mute-modal .aa-admin-field{margin:9px 0;}
+#aaChatAdminModal.aa-mute-modal .aa-mute-duration-grid{
+  display:grid!important;
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:10px!important;
+  margin:8px 0 10px;
+}
+#aaChatAdminModal.aa-mute-modal .aa-mute-duration-choice{
+  min-height:52px!important;
+  padding:10px 12px!important;
+  border:1px solid var(--border)!important;
+  border-radius:14px!important;
+  background:var(--bg-secondary)!important;
+  color:var(--text-primary)!important;
+  font-family:inherit!important;
+  font-weight:800!important;
+  cursor:pointer;
+  transition:transform .18s ease,box-shadow .18s ease,border-color .18s ease,background .18s ease;
+}
+#aaChatAdminModal.aa-mute-modal .aa-mute-duration-choice:hover{transform:translateY(-1px);border-color:var(--accent1)!important;box-shadow:0 8px 18px rgba(0,0,0,.08);}
+#aaChatAdminModal.aa-mute-modal .aa-mute-duration-choice.active{background:var(--accent-gradient)!important;color:#fff!important;border-color:transparent!important;box-shadow:0 8px 20px rgba(77,93,230,.20);}
+#aaChatAdminModal.aa-mute-modal #aaAdminMuteCustomWrap{
+  display:none;
+  gap:6px;
+  margin:8px 0 10px!important;
+  padding:12px 13px;
+  border:1px solid var(--border);
+  border-radius:16px;
+  background:var(--bg-secondary);
+}
+#aaChatAdminModal.aa-mute-modal #aaAdminMuteCustomWrap[style*="display: grid"]{display:grid!important;}
+#aaChatAdminModal.aa-mute-modal #aaAdminMuteCustomWrap input{
+  width:100%!important;
+  min-height:48px;
+  padding:10px 12px;
+  border:1px solid var(--border);
+  border-radius:14px;
+  background:var(--bg-card);
+  color:var(--text-primary);
+  font:inherit;
+  outline:none;
+  box-sizing:border-box;
+}
+#aaChatAdminModal.aa-mute-modal #aaAdminMuteCustomWrap input:focus,
+#aaChatAdminModal.aa-mute-modal textarea:focus{border-color:var(--accent1);box-shadow:0 0 0 3px rgba(108,92,231,.10);}
+#aaChatAdminModal.aa-mute-modal textarea{min-height:92px!important;max-height:28vh;resize:vertical;}
+#aaChatAdminModal.aa-mute-modal .aa-admin-actions{
+  padding:0 20px 18px;
+  margin-top:14px!important;
+}
+#aaChatAdminModal.aa-mute-modal .aa-admin-actions button{min-height:44px;border-radius:13px;}
+
+/* Dynamic text direction for Arabic/English chat content and announcements. */
+#courseChatPage .chat-announcement-text,
+#courseChatPage .chat-msg .t,
+#courseChatPage .chat-msg .chat-image-caption,
+#courseChatPage .chat-msg .reply-block .rt,
+#aaChatStage11AnnouncementModal .aa-stage11-announcement-text{
+  direction:rtl;
+  unicode-bidi:plaintext;
+  text-align:start!important;
+}
+#courseChatPage .chat-announcement-text[dir="auto"],
+#aaChatStage11AnnouncementModal .aa-stage11-announcement-text[dir="auto"]{
+
+@media(max-width:600px){
+  #aaChatAdminModal.aa-mute-modal .aa-admin-modal-card{
+    width:calc(100vw - 16px)!important;
+    max-width:calc(100vw - 16px)!important;
+    max-height:calc(100dvh - 12px)!important;
+    border-radius:20px!important;
+  }
+  #aaChatAdminModal.aa-mute-modal #aaChatAdminModalTitle{padding:16px 15px 12px!important;}
+  #aaChatAdminModal.aa-mute-modal #aaChatAdminModalBody{padding:12px 15px 0;}
+  #aaChatAdminModal.aa-mute-modal .aa-mute-duration-grid{grid-template-columns:1fr;}
+  #aaChatAdminModal.aa-mute-modal .aa-admin-actions{padding:0 15px 15px;}
+}
+</style>
+
+<script id="aa-requested-chat-mute-announcement-direction-fixes-js">
+(function(){
+  'use strict';
+
+  function muteActiveNow(data){
+    if(!data||data.muted!==true)return false;
+    let until=0;
+    try{
+      if(data.until?.toMillis)until=data.until.toMillis();
+      else if(data.until?.toDate)until=data.until.toDate().getTime();
+      else until=Number(data.until)||0;
+    }catch(_){until=0;}
+    return !until || Date.now()<until;
+  }
+
+  async function readMuteState(courseId,userId){
+    const snap=await db.collection('courses').doc(String(courseId)).collection('chatMutes').doc(String(userId)).get();
+    return snap.exists && muteActiveNow(snap.data()||{});
+  }
+
+  function closeContextMenu(){
+    document.getElementById('aaChatContextMenu')?.classList.remove('open');
+    document.getElementById('aaChatContextOverlay')?.classList.remove('open');
+    document.body.classList.remove('aa-chat-context-open');
+  }
+
+  async function syncMuteButtons(menu){
+    if(!menu||!menu.classList.contains('open'))return;
+    const buttons=[...menu.querySelectorAll('[data-admin-action="1"][data-admin-user-id]')].filter(b=>{const a=b.dataset.ctxAction;return a==='admin-mute'||a==='admin-unmute';});
+    if(!buttons.length)return;
+    const courseId=(typeof activeCourseId!=='undefined'&&activeCourseId)||window.activeCourseId||'';
+    const byUid=new Map();
+    buttons.forEach(b=>{const id=String(b.dataset.adminUserId||'');if(id)byUid.set(id,readMuteState(courseId,id));});
+    try{
+      const states=await Promise.all([...byUid.entries()].map(async([id,p])=>[id,await p]));
+      const stateMap=new Map(states);
+      buttons.forEach(b=>{
+        const muted=stateMap.get(String(b.dataset.adminUserId||''))===true;
+        b.dataset.ctxAction=muted?'admin-unmute':'admin-mute';
+        b.innerHTML=muted
+          ? '<i class="fas fa-microphone"></i><span>إلغاء كتم الطالب</span>'
+          : '<i class="fas fa-microphone-slash"></i><span>كتم الطالب</span>';
+      });
+    }catch(err){
+      console.warn('requested mute menu sync failed',err);
+    }
+  }
+
+  function markMuteModal(){
+    const modal=document.getElementById('aaChatAdminModal');
+    if(!modal)return;
+    modal.classList.toggle('aa-mute-modal',!!modal.querySelector('#aaAdminMuteDuration'));
+  }
+
+  function bindContextMenu(){
+    const menu=document.getElementById('aaChatContextMenu');
+    if(!menu||menu.dataset.requestedMuteBound==='1')return;
+    menu.dataset.requestedMuteBound='1';
+    const observer=new MutationObserver(()=>{
+      if(menu.classList.contains('open'))syncMuteButtons(menu);
+    });
+    observer.observe(menu,{attributes:true,attributeFilter:['class']});
+    if(menu.classList.contains('open'))syncMuteButtons(menu);
+  }
+
+  const bodyObserver=new MutationObserver(()=>{bindContextMenu();markMuteModal();});
+  bodyObserver.observe(document.body,{childList:true,subtree:true});
+  bindContextMenu();
+  markMuteModal();
+
+  /* Re-read the Firestore state on the exact mute/unmute click before allowing the older handler to run. */
+  document.addEventListener('click',async function(e){
+    const btn=e.target.closest?.('#aaChatContextMenu [data-admin-action="1"][data-admin-user-id][data-ctx-action]');
+    if(!btn)return;
+    const action=btn.dataset.ctxAction;
+    if(action!=='admin-mute'&&action!=='admin-unmute')return;
+    const admin=(typeof isAdmin!=='undefined'&&!!isAdmin);
+    if(!admin)return;
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    const courseId=(typeof activeCourseId!=='undefined'&&activeCourseId)||window.activeCourseId||'';
+    const targetUid=String(btn.dataset.adminUserId||'');
+    const messageId=String(btn.dataset.adminMessageId||'');
+    closeContextMenu();
+    if(!courseId||!targetUid)return;
+    try{
+      const muted=await readMuteState(courseId,targetUid);
+      if(muted){
+        await db.collection('courses').doc(String(courseId)).collection('chatMutes').doc(targetUid).set({muted:false,until:null,updatedAt:firebase.firestore.FieldValue.serverTimestamp(),updatedBy:currentUser?.uid||null},{merge:true});
+        showCopyToast('تم إلغاء كتم الطالب');
+      }else{
+        window.__aaOpenChatAdminModal?.('mute',{userId:targetUid,messageId});
+      }
+    }catch(err){
+      console.error('requested mute toggle failed',err);
+      window.showCustomAlert?.('خطأ','تعذر التحقق من حالة كتم الطالب أو تحديثها.');
+    }
+  },true);
+
+  /* Keep dir=auto on dynamically inserted announcement/popup text without touching unrelated page content. */
+  const markAutoDirection=()=>{
+    document.querySelectorAll('#courseChatPage .chat-announcement-text, #aaChatStage11AnnouncementModal .aa-stage11-announcement-text').forEach(el=>el.setAttribute('dir','auto'));
+  };
+  markAutoDirection();
 })();
 </script>
 </body>
