@@ -4025,7 +4025,7 @@ to{opacity:1;transform:none}}
         window.recalculateCourseDuration = recalculateCourseDuration;
 
         function getCourseActionHTML(courseId) {
-            if (!currentUser) return `<button class="btn btn-outline" onclick="triggerAuth()">تسجيل الدخول</button>`;
+            if (!currentUser) return `<button class="btn btn-outline" onclick="window.triggerAuth()">تسجيل الدخول</button>`;
             const enrollment = userEnrollmentMap[courseId];
             if (enrollment && enrollment.enrollmentActive !== false) return `<button class="btn btn-primary" onclick="openCourse('${courseId}')">الدخول للدورة</button>`;
             return `<button class="btn btn-primary" onclick="openCourse('${courseId}')">الاشتراك في الدورة</button>`;
@@ -4084,12 +4084,18 @@ to{opacity:1;transform:none}}
 
         function triggerAuth() {
             if (!currentUser) {
-                document.getElementById('authPopup').classList.add('active');
-                document.getElementById('authStep1').style.display = 'block';
-                document.getElementById('authStep2').style.display = 'none';
-                document.getElementById('authStatus').textContent = '';
+                const popup = document.getElementById('authPopup');
+                if (!popup) return;
+                popup.classList.add('active');
+                document.getElementById('authStep1')?.style.setProperty('display', 'block');
+                document.getElementById('authStep2')?.style.setProperty('display', 'none');
+                const status = document.getElementById('authStatus');
+                if (status) status.textContent = '';
             }
         }
+        // Expose the existing login helper so dynamically-rendered course-card buttons
+        // always invoke the same login flow.
+        window.triggerAuth = triggerAuth;
 
         // === إضافة / تعديل الدورة ===
         document.getElementById('addCourseBtn').addEventListener('click', () => {
@@ -15778,7 +15784,7 @@ body.light-mode #lessonVideoWrapper .aa-speed-value{color:#172033!important;}
     overflow-y:auto !important;
     overflow-x:hidden !important;
     padding:0 0 28px !important;
-    scrollbar-gutter:stable !important;
+    scrollbar-gutter:auto !important;
   }
   #courseDetailView #courseLessonPlayerPage .lesson-player-sidebar{
     width:360px !important;
@@ -15801,7 +15807,7 @@ body.light-mode #lessonVideoWrapper .aa-speed-value{color:#172033!important;}
     overflow-y:auto !important;
     overflow-x:hidden !important;
     flex:1 1 auto !important;
-    scrollbar-gutter:stable !important;
+    scrollbar-gutter:auto !important;
     padding:12px !important;
   }
   /* The player follows the actual media aspect ratio instead of a fixed height. */
@@ -19314,6 +19320,28 @@ sync();
 </script>
 
 
+
+<!-- Global scrollbar policy: the browser/site scrollbar is hidden, while all scrollable areas remain scrollable. -->
+<style id="aa-global-hide-native-scrollbars">
+html,body{
+    scrollbar-width:none !important;
+    -ms-overflow-style:none !important;
+}
+html::-webkit-scrollbar,body::-webkit-scrollbar{
+    width:0 !important;
+    height:0 !important;
+    display:none !important;
+}
+*{
+    scrollbar-width:none !important;
+    -ms-overflow-style:none !important;
+}
+*::-webkit-scrollbar{
+    width:0 !important;
+    height:0 !important;
+    display:none !important;
+}
+</style>
 <!-- ===== STAGE 11: GLOBAL CHAT ADMIN CONTROLS ===== -->
 <style id="aa-chat-stage11-global-css">
 #courseChatPage .chat-announcement-divider{width:100%;padding:10px 0;margin:10px 0;position:relative;}
