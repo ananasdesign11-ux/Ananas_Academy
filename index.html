@@ -10209,7 +10209,13 @@ window.openUserProfilePage=async function(){if(!currentUser)return;ensureProfile
  try{
   const stats=await db.collection('userStats').doc(currentUser.uid).get();$('profileXP').textContent=Number(stats.data()?.xp||0);
   const done=await db.collection('users').doc(currentUser.uid).collection('completedLessons').get();$('profileLessons').textContent=done.size;$('profileLessonsList').innerHTML=done.empty?'<div style="color:var(--text-muted)">لا توجد حصص مكتملة بعد.</div>':done.docs.slice(0,30).map(d=>`<div class="profile-list-item"><strong>حصة</strong><small>${d.data()?.completedAt?.toDate?d.data().completedAt.toDate().toLocaleDateString('ar-SA'):'مكتملة'}</small></div>`).join('');
-  const qs=await db.collection('userStats').doc(currentUser.uid).collection('completedQuizzes').get();$('profileQuizzes').textContent=qs.size;$('profileQuizzesList').innerHTML=qs.empty?'<div style="color:var(--text-muted)">لا توجد اختبارات مكتملة بعد.</div>':qs.docs.slice(0,30).map(d=>`<div class="profile-list-item"><strong>اختبار</strong><small>${Number(d.data()?.score||0)}%</small></div>`).join('');
+  const [qs,enrolledForProfile]=await Promise.all([
+   db.collection('userStats').doc(currentUser.uid).collection('completedQuizzes').get(),
+   db.collection('users').doc(currentUser.uid).collection('enrolledCourses').get().catch(()=>({docs:[]}))
+  ]);
+  const enrolledIdsForProfile=new Set((enrolledForProfile.docs||[]).filter(d=>{const e=d.data?.()||{};return e.enrollmentActive!==false&&e.active!==false;}).map(d=>String(d.id)));
+  const validQuizDocs=qs.docs.filter(d=>d.data?.()?.courseId ? enrolledIdsForProfile.has(String(d.data().courseId)) : false);
+  $('profileQuizzes').textContent=validQuizDocs.length;$('profileQuizzesList').innerHTML=validQuizDocs.length?validQuizDocs.slice(0,30).map(d=>`<div class="profile-list-item"><strong>اختبار</strong><small>${Number(d.data()?.score||0)}%</small></div>`).join(''):'<div style="color:var(--text-muted)">لا توجد اختبارات مكتملة بعد.</div>';
   const activities=[];let workCount=0;const courses=Array.isArray(coursesData)?coursesData:[];for(const c of courses.slice(0,30)){try{const as=await db.collection('courses').doc(c.id).collection('assignments').get();as.forEach(d=>(d.data()?.submissions||[]).forEach(s=>{if(s.userId===currentUser.uid){workCount++;activities.push({title:d.data()?.titleAr||'واجب',status:s.approved?'معتمد':'قيد المراجعة'});}}))}catch(e){}}
   $('profileAssignments').textContent=workCount;$('profileAssignmentsList').innerHTML=activities.length?activities.slice(0,30).map(a=>`<div class="profile-list-item"><strong>${esc(a.title)}</strong><small>${esc(a.status)}</small></div>`).join(''):'<div style="color:var(--text-muted)">لا توجد أعمال مرفوعة بعد.</div>';
   const activityDocs=[];done.docs.slice(0,15).forEach(d=>activityDocs.push('إكمال حصة'));qs.docs.slice(0,15).forEach(d=>activityDocs.push(`إنهاء اختبار بنسبة ${Number(d.data()?.score||0)}%`));$('profileActivityList').innerHTML=activityDocs.length?activityDocs.map(x=>`<div class="profile-list-item"><span>${esc(x)}</span></div>`).join(''):'<div style="color:var(--text-muted)">لا يوجد نشاط مسجل بعد.</div>';
@@ -10330,6 +10336,8 @@ async function getEffectiveProfileData(uid){
   const completedLessonsSnap=await db.collection('users').doc(uid).collection('completedLessons').get();
   const completedQuizzesSnap=await db.collection('userStats').doc(uid).collection('completedQuizzes').get();
   const completedAssignmentsSnap=await db.collection('userStats').doc(uid).collection('completedAssignments').get().catch(()=>({empty:true,docs:[]}));
+  const enrolledSnap=await db.collection('users').doc(uid).collection('enrolledCourses').get().catch(()=>({docs:[]}));
+  const enrolledCourseIds=new Set((enrolledSnap.docs||[]).filter(d=>{const e=d.data?.()||{};return e.enrollmentActive!==false&&e.active!==false;}).map(d=>String(d.id)));
   const activeLessons=[],activeQuizzes=[];
   let lessonXP=0, quizXP=0, assignmentXP=0;
   completedLessonsSnap.forEach(d=>{
@@ -10342,6 +10350,8 @@ async function getEffectiveProfileData(uid){
   completedQuizzesSnap.forEach(d=>{
     if(cat.quizzes.has(d.id)){
       const x=cat.quizzes.get(d.id), data=d.data()||{};
+      /* A quiz only counts in the profile when its course is actually enrolled. */
+      if(!enrolledCourseIds.has(String(x.courseId))) return;
       activeQuizzes.push({...x,recordId:d.id,score:Number(data.score)||0,passedAt:data.passedAt,xpEarned:Number(data.xpEarned)||0});
       quizXP+=Number(data.xpEarned)||0;
     }
@@ -10495,7 +10505,7 @@ async function openPublicProfileFinal(uid){
 }
 async function renderProfileForUidFinal(uid,isSelf){
   const data=await getEffectiveProfileData(uid);
-  $('profileXP').textContent=data.effectiveXP.toLocaleString('ar-SA');$('profileLessons').textContent=data.activeLessons.length;$('profileQuizzes').textContent=Number(data.currentQuizCount)||0;$('profileAssignments').textContent=data.assignmentWorks.length;
+  $('profileXP').textContent=data.effectiveXP.toLocaleString('ar-SA');$('profileLessons').textContent=data.activeLessons.length;$('profileQuizzes').textContent=data.activeQuizzes.length;$('profileAssignments').textContent=data.assignmentWorks.length;
   $('profileLessonsList').innerHTML=data.activeLessons.length?data.activeLessons.slice().sort((a,b)=>String(b.completedAt?.seconds||0)-String(a.completedAt?.seconds||0)).slice(0,40).map(x=>`<div class="profile-list-item"><strong>${esc(x.titleAr||'حصة')}</strong><small>${esc(x.courseTitle)} · +${Number(x.xpEarned)||0} XP</small></div>`).join(''):'<div class="profile-empty">لا توجد حصص مكتملة حاليًا.</div>';
   $('profileQuizzesList').innerHTML=data.activeQuizzes.length?data.activeQuizzes.slice().sort((a,b)=>String(b.passedAt?.seconds||0)-String(a.passedAt?.seconds||0)).slice(0,40).map(x=>`<div class="profile-list-item"><strong>${esc(x.titleAr||'اختبار')}</strong><small>${Number(x.score)||0}% · +${Number(x.xpEarned)||0} XP</small></div>`).join(''):'<div class="profile-empty">لا توجد اختبارات مكتملة حاليًا.</div>';
   const activity=[...data.activeLessons.map(x=>({t:`أكمل الحصة: ${x.titleAr||'حصة'}`,d:fmtDate(x.completedAt)})),...data.activeQuizzes.map(x=>({t:`أكمل الاختبار: ${x.titleAr||'اختبار'} بنسبة ${Number(x.score)||0}%`,d:fmtDate(x.passedAt)})),...data.assignmentWorks.map(x=>({t:`رفع عملًا في: ${x.assignmentTitle}`,d:fmtDate(x.uploadedAt)}))].slice(0,50);
@@ -11702,6 +11712,7 @@ async function authoritativeLiveProfile(uid){
   const completedLessonMap=new Map(completedLessons.docs.map(d=>[d.id,{id:d.id,...(d.data()||{})}]));
   const completedQuizMap=new Map(completedQuizzes.docs.map(d=>[d.id,{id:d.id,...(d.data()||{})}]));
   const completedAssignmentMap=new Map(completedAssignments.docs.map(d=>[d.id,{id:d.id,...(d.data()||{})}]));
+  const enrolledCourseIds=new Set((enrolled.docs||[]).filter(d=>{const e=d.data?.()||{};return e.enrollmentActive!==false&&e.active!==false;}).map(d=>String(d.id)));
 
   /* Fan out every course's lessons/quizzes/assignments in parallel instead of waiting
      for each course before starting the next one. This removes the N-course waterfall. */
@@ -11734,6 +11745,7 @@ async function authoritativeLiveProfile(uid){
     }
 
     for(const [quizId,completion] of completedQuizMap){
+      if(!enrolledCourseIds.has(String(course.id))) continue;
       const doc=quizMap.get(quizId); if(!doc)continue;
       const quiz={id:doc.id,...(doc.data()||{})};
       const calculated=Array.isArray(quiz.questions)?quiz.questions.reduce((sum,q)=>sum+num(q?.xpReward),0):num(quiz.xpReward);
@@ -12044,7 +12056,7 @@ async function renderAuthoritativeProfile(uid,isSelf){
     if(isSelf){$id('aaProfileLogout').disabled=false;$id('aaProfileLogout').removeAttribute('aria-busy');}
     $id('aaProfileXP').textContent=privateProfile?'—':Number(live.xp||0).toLocaleString('ar-SA');
     $id('aaProfileLessons').textContent=privateProfile?'—':live.lessons.length;
-    $id('aaProfileQuizzes').textContent=privateProfile?'—':Number(live.availableQuizzes||0);
+    $id('aaProfileQuizzes').textContent=privateProfile?'—':live.quizzes.length;
     $id('aaProfileWorks').textContent=privateProfile?'—':live.portfolio.length+live.assignmentWorks.filter(x=>x.approved).length;
     $id('aaProfileData').innerHTML=dataHtml;
     $id('aaProfileCourses').innerHTML=coursesHtml;
