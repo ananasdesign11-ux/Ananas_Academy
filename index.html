@@ -21795,6 +21795,9 @@ body:not(.light-mode){--aa-auth-bg:#0d1020;--aa-auth-surface:#15192b;--aa-auth-s
 (function(){
   'use strict';
   const $=id=>document.getElementById(id);
+  /* Top-level let variables such as activeCourseId are not Window properties.
+     Always resolve the current course through the same fallback used by uploads. */
+  const getActiveCourseId=()=>String(window.activeCourseId||((typeof activeCourseId!=='undefined'&&activeCourseId)?activeCourseId:'')||'');
   const esc=v=>String(v??'').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
   const fmtDate=v=>{
     try{
@@ -21947,7 +21950,7 @@ body:not(.light-mode){--aa-auth-bg:#0d1020;--aa-auth-surface:#15192b;--aa-auth-s
 
   function hasEdit(f){
     try{
-      const raw=localStorage.getItem(stateKey(f,studio.courseId||window.activeCourseId||'global'));
+      const raw=localStorage.getItem(stateKey(f,studio.courseId||getActiveCourseId()||'global'));
       if(!raw)return false;
       const s=JSON.parse(raw),pages=s.pages||{};
       return Object.values(pages).some(p=>Number(p?.rotation||0)%360!==0||Array.isArray(p?.strokes)&&p.strokes.length);
@@ -21958,7 +21961,7 @@ body:not(.light-mode){--aa-auth-bg:#0d1020;--aa-auth-surface:#15192b;--aa-auth-s
     const q=String($('afsSearch')?.value||'').trim().toLocaleLowerCase('ar');
     const type=$('afsType')?.value||'',lesson=$('afsLesson')?.value||'',sort=$('afsSort')?.value||'newest';
     const chip=$('afsChips')?.querySelector('.active')?.dataset.chip||'';
-    const favs=readFavs(window.activeCourseId);
+    const favs=readFavs(getActiveCourseId());
     let list=currentFiles.filter(f=>!f.deleted);
     if(q)list=list.filter(f=>`${f.name||''} ${f.lessonTitle||''}`.toLocaleLowerCase('ar').includes(q));
     if(type)list=list.filter(f=>typeOf(f).key===type);
@@ -21977,7 +21980,7 @@ body:not(.light-mode){--aa-auth-bg:#0d1020;--aa-auth-surface:#15192b;--aa-auth-s
 
   function renderVisibleFiles(){
     const grid=$('afsGrid');if(!grid)return;
-    const list=filteredFiles(),favs=readFavs(window.activeCourseId);
+    const list=filteredFiles(),favs=readFavs(getActiveCourseId());
     $('afsResultCount').textContent=`${list.length.toLocaleString('ar-SA')} ملف`;
     if(!list.length){
       grid.innerHTML=`<div class="afs-empty"><i class="fas fa-folder-open"></i><strong>لا توجد ملفات مطابقة</strong><span>غيّر كلمات البحث أو الفلاتر، أو أضف ملفًا جديدًا.</span></div>`;
@@ -22002,20 +22005,20 @@ body:not(.light-mode){--aa-auth-bg:#0d1020;--aa-auth-surface:#15192b;--aa-auth-s
     grid.querySelectorAll('[data-view]').forEach(b=>b.onclick=()=>openStudio(currentFiles.find(f=>String(f.id)===String(b.dataset.view))));
     grid.querySelectorAll('[data-download]').forEach(b=>b.onclick=()=>downloadFile(currentFiles.find(f=>String(f.id)===String(b.dataset.download))));
     grid.querySelectorAll('[data-fav]').forEach(b=>b.onclick=()=>{
-      const favset=readFavs(window.activeCourseId),id=String(b.dataset.fav);
-      favset.has(id)?favset.delete(id):favset.add(id);writeFavs(window.activeCourseId,favset);renderVisibleFiles();
+      const favset=readFavs(getActiveCourseId()),id=String(b.dataset.fav);
+      favset.has(id)?favset.delete(id):favset.add(id);writeFavs(getActiveCourseId(),favset);renderVisibleFiles();
     });
     grid.querySelectorAll('[data-delete]').forEach(b=>b.onclick=()=>softDeleteFile(b.dataset.delete));
   }
 
   async function loadFilesPage(){
     renderFilesShell();
-    const grid=$('afsGrid');if(!grid||!window.activeCourseId)return;
+    const grid=$('afsGrid');if(!grid||!getActiveCourseId())return;
     grid.innerHTML='<div class="afs-empty"><i class="fas fa-spinner fa-spin"></i><strong>جاري تحميل الملفات</strong><span>يتم تجهيز مكتبة الدورة...</span></div>';
     try{
-      const snap=await db.collection('courses').doc(String(window.activeCourseId)).collection('files').get();
+      const snap=await db.collection('courses').doc(String(getActiveCourseId())).collection('files').get();
       currentFiles=snap.docs.map(d=>({id:d.id,...(d.data()||{})})).filter(f=>!f.deleted);
-      studio.courseId=window.activeCourseId;
+      studio.courseId=getActiveCourseId();
       collectLessonOptions(currentFiles);renderStats(currentFiles);renderVisibleFiles();
     }catch(e){
       console.error('files v1 load',e);
@@ -22025,13 +22028,13 @@ body:not(.light-mode){--aa-auth-bg:#0d1020;--aa-auth-surface:#15192b;--aa-auth-s
   }
 
   async function softDeleteFile(id){
-    if(!isAdmin||!window.activeCourseId||!id)return;
+    if(!isAdmin||!getActiveCourseId()||!id)return;
     const file=currentFiles.find(f=>String(f.id)===String(id));
     const ok=window.showCustomConfirm?await new Promise(resolve=>window.showCustomConfirm('حذف الملف','سيُخفى الملف من مكتبة الدورة. لن يتم حذف المصدر من Cloudinary تلقائيًا.',()=>resolve(true),()=>resolve(false))):window.confirm('حذف الملف؟');
     if(!ok)return;
     try{
-      await db.collection('courses').doc(String(window.activeCourseId)).collection('files').doc(String(id)).set({deleted:true,deletedAt:firebase.firestore.FieldValue.serverTimestamp(),deletedBy:currentUser?.uid||''},{merge:true});
-      localStorage.removeItem(stateKey(file,window.activeCourseId));
+      await db.collection('courses').doc(String(getActiveCourseId())).collection('files').doc(String(id)).set({deleted:true,deletedAt:firebase.firestore.FieldValue.serverTimestamp(),deletedBy:currentUser?.uid||''},{merge:true});
+      localStorage.removeItem(stateKey(file,getActiveCourseId()));
       await loadFilesPage();toast('تم حذف الملف من مكتبة الدورة.');
     }catch(e){console.error(e);toast('تعذر حذف الملف.')}
   }
@@ -22163,7 +22166,7 @@ body:not(.light-mode){--aa-auth-bg:#0d1020;--aa-auth-surface:#15192b;--aa-auth-s
 
   async function openStudio(file){
     if(!file||!file.url)return;
-    ensureStudio();studio={...studio,file,courseId:window.activeCourseId||'global',type:typeOf(file),pdf:null,image:null,page:1,state:readEditState(file,window.activeCourseId||'global'),tool:'pen',color:$('afsColor')?.value||'#6c5ce7',width:Number($('afsWidth')?.value)||4,scale:1,history:[],future:[],baseUrl:file.url};
+    ensureStudio();studio={...studio,file,courseId:getActiveCourseId()||'global',type:typeOf(file),pdf:null,image:null,page:1,state:readEditState(file,getActiveCourseId()||'global'),tool:'pen',color:$('afsColor')?.value||'#6c5ce7',width:Number($('afsWidth')?.value)||4,scale:1,history:[],future:[],baseUrl:file.url};
     studio.state.activePage=Number(studio.state.activePage)||1;studio.page=studio.state.activePage;
     updateStudioMeta();
     const canDownload=file.allowDownload!==false||isAdmin;
@@ -22335,7 +22338,7 @@ body:not(.light-mode){--aa-auth-bg:#0d1020;--aa-auth-surface:#15192b;--aa-auth-s
   window.openCourseFileViewer=async function(file){await openStudio(file);};
   window.openFileViewer=window.openCourseFileViewer;
   window.renderFilesGrid=(files,box)=>{
-    currentFiles=(files||[]).filter(f=>f&&!f.deleted);studio.courseId=window.activeCourseId||'global';
+    currentFiles=(files||[]).filter(f=>f&&!f.deleted);studio.courseId=getActiveCourseId()||'global';
     if(box){renderFilesShell();renderStats(currentFiles);collectLessonOptions(currentFiles);renderVisibleFiles();}
   };
   window.loadCourseFilesPage=loadFilesPage;
@@ -22380,7 +22383,7 @@ body:not(.light-mode){--aa-auth-bg:#0d1020;--aa-auth-surface:#15192b;--aa-auth-s
     const keep=sel.value;sel.innerHTML='<option value="">بدون ربط بحصة</option>';
     const buckets=[];
     try{
-      const preferred=window.activeCourseId?String(window.activeCourseId):'';
+      const preferred=getActiveCourseId()?String(getActiveCourseId()):'';
       if(preferred){
         const snap=await db.collection('courses').doc(preferred).collection('lessons').orderBy('order','asc').get();
         snap.forEach(d=>buckets.push({id:d.id,title:d.data()?.titleAr||'حصة'}));
@@ -22394,7 +22397,7 @@ body:not(.light-mode){--aa-auth-bg:#0d1020;--aa-auth-surface:#15192b;--aa-auth-s
       }
     }catch(e){console.warn('profile work lessons',e)}
     buckets.sort((a,b)=>String(a.title).localeCompare(String(b.title),'ar'));
-    buckets.forEach(x=>{const o=document.createElement('option');o.value=x.id;o.textContent=x.title+(x.courseId?` · ${x.courseId}`:'');o.dataset.lessonId=x.lessonId||x.id;o.dataset.courseId=x.courseId||window.activeCourseId||'';sel.appendChild(o)});
+    buckets.forEach(x=>{const o=document.createElement('option');o.value=x.id;o.textContent=x.title+(x.courseId?` · ${x.courseId}`:'');o.dataset.lessonId=x.lessonId||x.id;o.dataset.courseId=x.courseId||getActiveCourseId()||'';sel.appendChild(o)});
     if([...sel.options].some(o=>o.value===keep))sel.value=keep;
   }
 
@@ -22427,7 +22430,7 @@ body:not(.light-mode){--aa-auth-bg:#0d1020;--aa-auth-surface:#15192b;--aa-auth-s
       const urls=[];for(const f of files){const u=await uploadImage(f);if(!u)throw Error('upload');urls.push(u)}
       const lessonId=opt?.value?String(opt.dataset.lessonId||opt.value):'';
       const lessonTitle=opt?.value?String(opt.textContent||''):'';
-      const courseId=opt?.dataset.courseId||window.activeCourseId||'';
+      const courseId=opt?.dataset.courseId||getActiveCourseId()||'';
       await db.collection('users').doc(currentUser.uid).collection('portfolioWorks').add({title,type,description,images:urls,lessonId,lessonTitle,courseId,createdAt:firebase.firestore.FieldValue.serverTimestamp(),updatedAt:firebase.firestore.FieldValue.serverTimestamp(),deleted:false});
       $('aaProfileSelfWorkModal')?.classList.remove('active');status.textContent='';toast('تمت إضافة العمل وربطه بالحصة المختارة.');
       if(window.openUserProfilePage)await window.openUserProfilePage();
