@@ -21891,7 +21891,7 @@ body:not(.light-mode){--aa-auth-bg:#0d1020;--aa-auth-surface:#15192b;--aa-auth-s
           <select id="afsType" class="afs-select"><option value="">كل الأنواع</option><option value="pdf">PDF</option><option value="image">صور</option><option value="document">مستندات</option><option value="sheet">جداول</option><option value="presentation">عروض</option><option value="archive">أرشيف</option><option value="text">نصوص</option><option value="other">أخرى</option></select>
           <select id="afsLesson" class="afs-select lesson-filter"><option value="">كل الحصص</option><option value="__general">ملفات عامة</option></select>
           <select id="afsSort" class="afs-select"><option value="newest">الأحدث</option><option value="oldest">الأقدم</option><option value="name">الاسم</option><option value="size">الحجم</option></select>
-          <div class="afs-view-toggle"><button class="afs-mini-btn active" id="afsGridBtn" type="button" title="شبكة"><i class="fas fa-grid-2"></i></button><button class="afs-mini-btn" id="afsListBtn" type="button" title="قائمة"><i class="fas fa-list"></i></button></div>
+          <div class="afs-view-toggle"><button class="afs-mini-btn active" id="afsGridBtn" type="button" title="شبكة"><i class="fas fa-grip"></i></button><button class="afs-mini-btn" id="afsListBtn" type="button" title="قائمة"><i class="fas fa-list"></i></button></div>
         </div>
         <div class="afs-results-row">
           <div class="afs-filters-chips" id="afsChips">
@@ -22206,7 +22206,7 @@ body:not(.light-mode){--aa-auth-bg:#0d1020;--aa-auth-surface:#15192b;--aa-auth-s
     }catch(e){
       console.error('PDF viewer',e);
       shell.classList.remove('active');
-      showUnsupportedDocument(file,'تعذر فتح ملف PDF من مصدر التخزين. السبب غالبًا صلاحية تسليم PDF في Cloudinary أو إعدادات CORS، وليس لأن PDF غير مدعوم أصلًا.');
+      showUnsupportedDocument(file,'تعذر فتح ملف PDF من المصدر. إذا كان الرابط المباشر من Cloudinary لا يفتح أيضًا، فعّل Allow delivery of PDF and ZIP files في إعدادات Security في Cloudinary؛ وإذا كان الرابط يفتح لكن العارض لا، فالمشكلة غالبًا CORS.');
     }
   }
 
@@ -22276,10 +22276,19 @@ body:not(.light-mode){--aa-auth-bg:#0d1020;--aa-auth-surface:#15192b;--aa-auth-s
 
   async function exportPdf(file){
     if(!window.PDFLib)throw Error('pdf-lib');
-    let response;
-    try{response=await fetch(file.url,{mode:'cors'});}catch(e){throw Error('cors');}
-    if(!response.ok)throw Error('http');
-    const bytes=await response.arrayBuffer(),doc=await window.PDFLib.PDFDocument.load(bytes);
+    let bytes=null;
+    // Reuse the bytes already loaded by PDF.js. Fetching the Cloudinary URL a second time
+    // can fail under stricter CORS rules even when the viewer itself loaded successfully.
+    if(studio.pdf&&typeof studio.pdf.getData==='function'){
+      try{bytes=await studio.pdf.getData()}catch(e){console.warn('PDF.js getData failed',e)}
+    }
+    if(!bytes){
+      let response;
+      try{response=await fetch(file.url,{mode:'cors'});}catch(e){throw Error('تعذر قراءة ملف PDF من المصدر بسبب CORS.')}
+      if(!response.ok)throw Error(`تعذر قراءة PDF (HTTP ${response.status})`);
+      bytes=await response.arrayBuffer();
+    }
+    const doc=await window.PDFLib.PDFDocument.load(bytes);
     const pages=doc.getPages();
     pages.forEach((page,idx)=>{
       const ps=getPageState(studio.state,idx+1),rot=ps.rotation||0;
@@ -22441,5 +22450,162 @@ body:not(.light-mode){--aa-auth-bg:#0d1020;--aa-auth-surface:#15192b;--aa-auth-s
 })();
 </script>
 
+<style id="ananas-files-studio-v3-hotfix">
+  /* File Studio v3 reliability polish: do not depend on legacy upload UI. */
+  #ananasAfsUploadModal{position:fixed;inset:0;z-index:300000;display:none;align-items:center;justify-content:center;padding:16px;background:rgba(7,10,18,.66);backdrop-filter:blur(12px)}
+  #ananasAfsUploadModal.active{display:flex}
+  .afs-upload-card{width:min(760px,100%);max-height:min(92dvh,900px);overflow:auto;background:var(--bg-card);color:var(--text-primary);border:1px solid var(--border);border-radius:24px;box-shadow:0 30px 100px rgba(0,0,0,.34);padding:22px}
+  .afs-upload-head{display:flex;align-items:flex-start;gap:12px;margin-bottom:18px}.afs-upload-head-icon{width:50px;height:50px;flex:0 0 auto;border-radius:15px;background:var(--accent-gradient);color:#fff;display:grid;place-items:center;font-size:1.2rem}.afs-upload-head h3{margin:0;font-size:1.2rem}.afs-upload-head p{margin:4px 0 0;color:var(--text-muted);font-size:.8rem;line-height:1.75}
+  .afs-upload-close{margin-inline-start:auto;width:40px;height:40px;border-radius:12px;border:1px solid var(--border);background:var(--bg-secondary);color:var(--text-primary);cursor:pointer;display:grid;place-items:center}
+  .afs-upload-drop{border:1.5px dashed rgba(108,92,231,.5);background:linear-gradient(145deg,rgba(108,92,231,.08),rgba(9,132,227,.04));border-radius:20px;min-height:150px;padding:22px;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;cursor:pointer;transition:.18s}.afs-upload-drop:hover,.afs-upload-drop.dragover{border-color:var(--accent1);box-shadow:0 15px 35px rgba(108,92,231,.10);transform:translateY(-1px)}.afs-upload-drop input{display:none}.afs-upload-drop i{font-size:2rem;color:var(--accent1);margin-bottom:8px}.afs-upload-drop strong{font-size:1rem}.afs-upload-drop span{color:var(--text-muted);font-size:.75rem;margin-top:4px;line-height:1.7}.afs-upload-files{width:100%;max-height:96px;overflow:auto;margin-top:10px;color:var(--text-primary);font-size:.74rem;line-height:1.8;word-break:break-word}
+  .afs-upload-form{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:14px}.afs-upload-field{display:flex;flex-direction:column;gap:7px}.afs-upload-field.full{grid-column:1/-1}.afs-upload-field>span{font-size:.8rem;font-weight:900}.afs-upload-field input,.afs-upload-field select{width:100%;height:46px;border:1px solid var(--border);border-radius:13px;background:var(--bg-primary);color:var(--text-primary);font:inherit;padding:0 12px;outline:none}.afs-upload-field input:focus,.afs-upload-field select:focus{border-color:var(--accent1);box-shadow:0 0 0 4px rgba(108,92,231,.1)}
+  .afs-upload-toggle{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 13px;border:1px solid var(--border);border-radius:15px;background:var(--bg-primary);margin-top:12px;cursor:pointer}.afs-upload-toggle-copy{display:flex;flex-direction:column;gap:3px}.afs-upload-toggle-copy strong{font-size:.8rem}.afs-upload-toggle-copy small{font-size:.72rem;color:var(--text-muted);line-height:1.6}.afs-upload-toggle input{width:19px;height:19px;accent-color:var(--accent1)}
+  .afs-upload-progress{min-height:24px;margin-top:10px;color:var(--text-muted);font-size:.76rem;line-height:1.7;white-space:pre-wrap}.afs-upload-error{color:#e74c3c}.afs-upload-ok{color:#16a34a}
+  .afs-upload-actions{display:flex;gap:9px;margin-top:15px}.afs-upload-actions button{flex:1}.afs-upload-hint{margin-top:10px;padding:10px 12px;border:1px solid rgba(108,92,231,.14);background:rgba(108,92,231,.05);border-radius:13px;color:var(--text-muted);font-size:.7rem;line-height:1.75}
+  @media(max-width:620px){.afs-upload-card{padding:16px;border-radius:20px}.afs-upload-form{grid-template-columns:1fr}.afs-upload-field.full{grid-column:auto}.afs-upload-actions{flex-direction:column}}
+</style>
+<script id="ananas-files-studio-v3-hotfix-js">
+(function(){
+  'use strict';
+  const $=id=>document.getElementById(id);
+  const esc=v=>String(v??'').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+  const getCourseId=()=>String(window.activeCourseId||((typeof activeCourseId!=='undefined'&&activeCourseId)?activeCourseId:'')||'');
+  const getAdmin=()=>Boolean(window.isAdmin!==undefined?window.isAdmin:(typeof isAdmin!=='undefined'&&isAdmin));
+  const getUser=()=>window.currentUser||(typeof currentUser!=='undefined'?currentUser:null);
+  const cloudName=typeof CLOUDINARY_CLOUD_NAME!=='undefined'?CLOUDINARY_CLOUD_NAME:'';
+  const uploadPreset=typeof CLOUDINARY_UPLOAD_PRESET!=='undefined'?CLOUDINARY_UPLOAD_PRESET:'';
+
+  function modal(){
+    let m=$('ananasAfsUploadModal');
+    if(m)return m;
+    m=document.createElement('div');m.id='ananasAfsUploadModal';
+    m.innerHTML=`<div class="afs-upload-card" role="dialog" aria-modal="true" aria-labelledby="afsUploadTitle">
+      <div class="afs-upload-head"><div class="afs-upload-head-icon"><i class="fas fa-cloud-arrow-up"></i></div><div><h3 id="afsUploadTitle">رفع ملفات إلى مكتبة الدورة</h3><p>اختر الملفات، اكتب الاسم الذي سيظهر في المكتبة، واربطها بحصة محددة عند الحاجة.</p></div><button class="afs-upload-close" id="afsUploadClose" type="button" aria-label="إغلاق"><i class="fas fa-xmark"></i></button></div>
+      <label class="afs-upload-drop" id="afsUploadDrop" for="afsUploadInput"><input id="afsUploadInput" type="file" multiple accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.zip,.rar,.7z,.csv,.md,.json,.xml"><i class="fas fa-cloud-arrow-up"></i><strong id="afsUploadPickerText">اختر الملفات أو اسحبها هنا</strong><span>صور · PDF · Word · Excel · PowerPoint · نصوص · أرشيفات<br>الحد الأقصى للملف الواحد: 25 ميجابايت</span><div class="afs-upload-files" id="afsUploadFiles"></div></label>
+      <div class="afs-upload-form">
+        <label class="afs-upload-field"><span>اسم الملف / العنوان</span><input id="afsUploadName" type="text" maxlength="180" placeholder="اتركه فارغًا لاستخدام اسم الملف الأصلي"></label>
+        <label class="afs-upload-field"><span>ربط الملف بحصة</span><select id="afsUploadLessonSelect"><option value="">ملف عام للدورة</option></select></label>
+      </div>
+      <label class="afs-upload-toggle"><span class="afs-upload-toggle-copy"><strong>السماح للطلاب بتحميل الملفات</strong><small>عند تعطيلها يستطيع الطالب عرض الملف فقط.</small></span><input id="afsUploadAllowDownload" type="checkbox" checked></label>
+      <div class="afs-upload-progress" id="afsUploadProgress"></div>
+      <div class="afs-upload-hint">ملاحظة: الرفع نفسه يتم إلى Cloudinary، بينما بيانات الملف وربطه بالحصة وصلاحية التحميل تُحفظ في Firestore. التعديلات داخل العارض تبقى محلية لهذا الجهاز.</div>
+      <div class="afs-upload-actions"><button type="button" class="afs-btn" id="afsUploadCancel">إلغاء</button><button type="button" class="afs-btn primary" id="afsUploadSubmit"><i class="fas fa-cloud-arrow-up"></i><span>بدء الرفع</span></button></div>
+    </div>`;
+    document.body.appendChild(m);
+    const input=$('afsUploadInput'),drop=$('afsUploadDrop');
+    $('afsUploadClose').onclick=close; $('afsUploadCancel').onclick=close;
+    m.addEventListener('click',e=>{if(e.target===m)close()});
+    input.addEventListener('change',renderSelection);
+    ['dragenter','dragover'].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.classList.add('dragover')}));
+    ['dragleave','drop'].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.classList.remove('dragover')}));
+    drop.addEventListener('drop',e=>{const dt=e.dataTransfer;if(!dt?.files?.length)return;try{input.files=dt.files}catch(_){/* browser may disallow assignment */}renderSelection()});
+    $('afsUploadSubmit').onclick=submit;
+    return m;
+    function close(){m.classList.remove('active');$('afsUploadProgress').textContent='';}
+    function renderSelection(){
+      const files=[...(input.files||[])],names=files.map(f=>`${esc(f.name)} · ${formatBytes(f.size)}`).join('<br>');
+      $('afsUploadPickerText').textContent=files.length?`تم اختيار ${files.length} ملف`:'اختر الملفات أو اسحبها هنا';
+      $('afsUploadFiles').innerHTML=names;
+    }
+    async function submit(){
+      if(!getAdmin()||!getCourseId()){alertBox('غير مسموح','يجب أن تكون مشرفًا داخل دورة حتى ترفع ملفًا.');return;}
+      const files=[...(input.files||[])],name=$('afsUploadName').value.trim(),lessonId=$('afsUploadLessonSelect').value||'',allow=$('afsUploadAllowDownload').checked,status=$('afsUploadProgress'),btn=$('afsUploadSubmit');
+      if(!files.length){status.className='afs-upload-progress afs-upload-error';status.textContent='اختر ملفًا واحدًا على الأقل.';return;}
+      if(!cloudName||!uploadPreset){status.className='afs-upload-progress afs-upload-error';status.textContent='إعدادات Cloudinary غير موجودة في الصفحة.';return;}
+      const badExt=/\\.(exe|js|html?|php|sh|bat|cmd|msi|apk|dmg)$/i;
+      const oversized=files.find(f=>f.size>25*1024*1024);
+      if(oversized){status.className='afs-upload-progress afs-upload-error';status.textContent=`الملف كبير جدًا: ${oversized.name}`;return;}
+      const bad=files.find(f=>badExt.test(f.name));
+      if(bad){status.className='afs-upload-progress afs-upload-error';status.textContent=`نوع الملف غير مسموح: ${bad.name}`;return;}
+      let lessonTitle='';
+      if(lessonId){try{const s=await db.collection('courses').doc(getCourseId()).collection('lessons').doc(lessonId).get();if(s.exists)lessonTitle=s.data()?.titleAr||'حصة';}catch(e){status.className='afs-upload-progress afs-upload-error';status.textContent='تعذر قراءة الحصة المحددة من Firestore.';return;}}
+      btn.disabled=true;status.className='afs-upload-progress';
+      try{
+        for(let i=0;i<files.length;i++){
+          const file=files[i];status.textContent=`جاري رفع ${i+1} من ${files.length}: ${file.name}`;
+          const url=await uploadOne(file);
+          if(!url)throw new Error(`تعذر الحصول على رابط الملف بعد رفع ${file.name}`);
+          const data={name:name||(file.name||'ملف'),url,mime:file.type||inferMime(file.name),size:file.size||0,lessonId:lessonId||'',lessonTitle,allowDownload:!!allow,uploadedAt:firebase.firestore.FieldValue.serverTimestamp(),uploadedBy:getUser()?.uid||'',deleted:false,storageProvider:'cloudinary'};
+          await db.collection('courses').doc(getCourseId()).collection('files').add(data);
+        }
+        status.className='afs-upload-progress afs-upload-ok';status.textContent=`تم رفع ${files.length} ملف بنجاح.`;
+        input.value='';$('afsUploadName').value='';$('afsUploadFiles').innerHTML='';$('afsUploadPickerText').textContent='اختر الملفات أو اسحبها هنا';
+        if(window.loadCourseFilesPage)await window.loadCourseFilesPage();
+        setTimeout(close,450);
+      }catch(e){
+        console.error('AFS upload',e);
+        status.className='afs-upload-progress afs-upload-error';
+        status.textContent='فشل الرفع.\
+'+(e?.message||String(e));
+      }finally{btn.disabled=false;}
+    }
+  }
+
+  async function fillLessons(preselected=''){
+    const sel=$('afsUploadLessonSelect');if(!sel)return;sel.innerHTML='<option value="">ملف عام للدورة</option>';
+    try{
+      const snap=await db.collection('courses').doc(getCourseId()).collection('lessons').orderBy('order','asc').get();
+      snap.forEach(d=>{const o=document.createElement('option');o.value=d.id;o.textContent=d.data()?.titleAr||'حصة';if(String(d.id)===String(preselected))o.selected=true;sel.appendChild(o)});
+    }catch(e){console.warn('AFS lessons',e);}
+  }
+
+  async function uploadOne(file){
+    const fd=new FormData();fd.append('file',file);fd.append('upload_preset',uploadPreset);
+    let response;
+    try{response=await fetch(`https://api.cloudinary.com/v1_1/${encodeURIComponent(cloudName)}/auto/upload`,{method:'POST',body:fd});}
+    catch(e){throw new Error('تعذر الاتصال بخادم Cloudinary. تحقق من الإنترنت أو من حجب الشبكة للطلب.');}
+    let payload=null;try{payload=await response.json()}catch(_){}
+    if(!response.ok){const msg=payload?.error?.message||`Cloudinary HTTP ${response.status}`;throw new Error(msg)}
+    if(!payload?.secure_url)throw new Error('Cloudinary أعاد استجابة ناجحة بدون secure_url.');
+    return payload.secure_url;
+  }
+  function inferMime(name){const e=String(name||'').toLowerCase().split('.').pop();const m={pdf:'application/pdf',doc:'application/msword',docx:'application/vnd.openxmlformats-officedocument.wordprocessingml.document',xls:'application/vnd.ms-excel',xlsx:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',ppt:'application/vnd.ms-powerpoint',pptx:'application/vnd.openxmlformats-officedocument.presentationml.presentation',txt:'text/plain',csv:'text/csv',json:'application/json'};return m[e]||'application/octet-stream'}
+  function formatBytes(n){n=Number(n)||0;if(n<1024)return `${n} بايت`;if(n<1048576)return `${(n/1024).toFixed(1)} ك.ب`;if(n<1073741824)return `${(n/1048576).toFixed(1)} م.ب`;return `${(n/1073741824).toFixed(1)} ج.ب`}
+  function alertBox(title,msg){if(typeof window.showCustomAlert==='function')window.showCustomAlert(title,msg);else window.alert(`${title}\
+${msg}`)}
+
+  window.openCourseFileUploadModal=async function(preselected=''){
+    if(!getAdmin()||!getCourseId()){alertBox('غير مسموح','هذه العملية متاحة للمشرف داخل دورة فقط.');return;}
+    const m=modal();
+    $('afsUploadName').value='';$('afsUploadInput').value='';$('afsUploadFiles').innerHTML='';$('afsUploadPickerText').textContent='اختر الملفات أو اسحبها هنا';$('afsUploadAllowDownload').checked=true;$('afsUploadProgress').textContent='';
+    await fillLessons(preselected);m.classList.add('active');
+  };
+
+  // Replace the files-page upload trigger without touching unrelated upload systems.
+  document.addEventListener('click',e=>{
+    const b=e.target.closest?.('#afsUploadBtn');
+    if(b){e.preventDefault();e.stopImmediatePropagation();window.openCourseFileUploadModal('');}
+  },true);
+
+  // Use stable Font Awesome names for the view toggle.
+  const normalizeIcons=()=>{const g=$('afsGridBtn')?.querySelector('i');if(g)g.className='fas fa-grip';const l=$('afsListBtn')?.querySelector('i');if(l)l.className='fas fa-list';};
+  normalizeIcons();
+  // Preserve current studio but stop leaking the page overflow state.
+  const oldOpen=window.openCourseFileViewer;
+  if(typeof oldOpen==='function'&&!oldOpen.__afsV3Open){
+    const wrapped=async function(file){
+      const old=document.body.style.overflow;
+      window.__afsPreviousBodyOverflow=old;
+      try{return await oldOpen.apply(this,arguments)}finally{document.body.style.overflow='hidden';} 
+    };wrapped.__afsV3Open=true;wrapped.__original=oldOpen;window.openCourseFileViewer=wrapped;window.openFileViewer=wrapped;
+  }
+  const oldClose=window.closeCourseFileViewer;
+  if(typeof oldClose==='function')void oldClose;
+  document.addEventListener('click',e=>{
+    const b=e.target.closest?.('#afsStudioBack');if(b){setTimeout(()=>{if(!$('ananasFileStudio')?.classList.contains('active'))document.body.style.overflow=window.__afsPreviousBodyOverflow||''},0)}
+  },true);
+
+  // Improve card preview fallback for image failures.
+  const mo=new MutationObserver(()=>{
+    normalizeIcons();
+    document.querySelectorAll('#afsGrid .afs-preview img').forEach(img=>{
+      if(img.dataset.afsFallback==='1')return;img.dataset.afsFallback='1';
+      img.addEventListener('error',()=>{const p=img.parentElement;if(!p)return;img.remove();const type=p.querySelector('.afs-type-pill')?.textContent||'صورة';const d=document.createElement('div');d.className='afs-doc-icon';d.innerHTML='<i class="fas fa-file-image"></i>';p.prepend(d);}, {once:true});
+    });
+  });
+  try{mo.observe(document.body,{childList:true,subtree:true})}catch(_){}
+  window.__ananasAfsV3=true;
+})();
+</script>
 </body>
 </html>
