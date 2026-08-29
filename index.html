@@ -21699,6 +21699,9 @@ body:not(.light-mode){--aa-auth-bg:#0d1020;--aa-auth-surface:#15192b;--aa-auth-s
   .afs-card:hover{transform:translateY(-4px);border-color:rgba(108,92,231,.42);box-shadow:0 18px 44px rgba(108,92,231,.10)}
   .afs-preview{height:136px;background:linear-gradient(145deg,var(--bg-secondary),rgba(108,92,231,.08));display:flex;align-items:center;justify-content:center;position:relative;overflow:hidden}
   .afs-preview img{width:100%;height:100%;object-fit:cover;display:block}
+  .afs-preview .afs-image-fallback{display:none;align-items:center;justify-content:center;width:100%;height:100%}
+  .afs-preview.image-load-failed .afs-image-fallback{display:flex}
+  .afs-preview.image-load-failed img{display:none!important}
   .afs-preview .afs-doc-icon{font-size:3.25rem;color:var(--accent1)}
   .afs-preview .afs-type-pill{position:absolute;top:10px;inset-inline-end:10px;padding:5px 8px;border-radius:999px;background:rgba(4,6,12,.66);backdrop-filter:blur(8px);color:#fff;font-size:.67rem;font-weight:900}
   .afs-favorite{position:absolute;top:10px;inset-inline-start:10px;width:34px;height:34px;border-radius:11px;border:1px solid rgba(255,255,255,.16);background:rgba(4,6,12,.56);color:#fff;cursor:pointer}
@@ -21731,6 +21734,8 @@ body:not(.light-mode){--aa-auth-bg:#0d1020;--aa-auth-surface:#15192b;--aa-auth-s
   .afs-studio-title strong{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .afs-studio-title span{display:block;color:var(--text-muted);font-size:.72rem;margin-top:2px}
   .afs-studio-head-actions{display:flex;gap:7px;flex-wrap:wrap}
+  .afs-studio-head .afs-btn{box-shadow:0 6px 18px rgba(0,0,0,.04)}
+  .afs-studio-head .afs-btn.primary{box-shadow:0 10px 24px rgba(108,92,231,.20)}
   .afs-studio-body{flex:1;min-height:0;display:grid;grid-template-columns:220px minmax(0,1fr) 210px;background:var(--bg-primary)}
   .afs-pages{min-width:0;border-inline-end:1px solid var(--border);background:var(--bg-secondary);display:flex;flex-direction:column}
   .afs-pages-head{padding:12px;border-bottom:1px solid var(--border);font-size:.77rem;font-weight:900;display:flex;align-items:center;justify-content:space-between}
@@ -21748,7 +21753,8 @@ body:not(.light-mode){--aa-auth-bg:#0d1020;--aa-auth-surface:#15192b;--aa-auth-s
       radial-gradient(circle at 50% 20%,rgba(108,92,231,.10),transparent 38%),var(--bg-primary)}
   .afs-canvas-shell{position:relative;display:none;max-width:100%;max-height:100%;box-shadow:0 30px 70px rgba(0,0,0,.30);border-radius:8px;overflow:hidden;background:#fff;touch-action:none}
   .afs-canvas-shell.active{display:block}
-  .afs-canvas-shell canvas{display:block;max-width:none}
+  .afs-canvas-shell canvas{display:block;max-width:none;user-select:none;-webkit-user-select:none}
+  .afs-canvas-shell{will-change:transform}
   .afs-doc-placeholder{max-width:560px;padding:38px;text-align:center;border:1px dashed var(--border);border-radius:24px;background:var(--bg-card);color:var(--text-muted);display:none}
   .afs-doc-placeholder.active{display:block}
   .afs-doc-placeholder i{font-size:4rem;color:var(--accent1);margin-bottom:12px}
@@ -21791,7 +21797,7 @@ body:not(.light-mode){--aa-auth-bg:#0d1020;--aa-auth-surface:#15192b;--aa-auth-s
     .afs-stage{padding:10px}
   }
 </style>
-<script id="ananas-files-studio-authoritative-v1">
+<script id="ananas-files-studio-authoritative-v2">
 (function(){
   'use strict';
   const $=id=>document.getElementById(id);
@@ -21944,7 +21950,7 @@ body:not(.light-mode){--aa-auth-bg:#0d1020;--aa-auth-surface:#15192b;--aa-auth-s
   }
 
   function cardPreview(f,t){
-    if(isImage(f))return `<img src="${esc(f.url||'')}" alt="${esc(f.name||'')}" loading="lazy" onerror="this.remove()">`;
+    if(isImage(f))return `<img src="${esc(f.url||'')}" alt="${esc(f.name||'')}" loading="lazy" referrerpolicy="no-referrer" onerror="this.style.display='none';this.parentElement.classList.add('image-load-failed')"><div class="afs-doc-icon afs-image-fallback"><i class="fas fa-image"></i></div>`;
     return `<div class="afs-doc-icon"><i class="fas ${t.icon}"></i></div>`;
   }
 
@@ -22166,7 +22172,11 @@ body:not(.light-mode){--aa-auth-bg:#0d1020;--aa-auth-surface:#15192b;--aa-auth-s
 
   async function openStudio(file){
     if(!file||!file.url)return;
-    ensureStudio();studio={...studio,file,courseId:getActiveCourseId()||'global',type:typeOf(file),pdf:null,image:null,page:1,state:readEditState(file,getActiveCourseId()||'global'),tool:'pen',color:$('afsColor')?.value||'#6c5ce7',width:Number($('afsWidth')?.value)||4,scale:1,history:[],future:[],baseUrl:file.url};
+    ensureStudio();
+    studio={...studio,file,courseId:getActiveCourseId()||'global',type:typeOf(file),pdf:null,image:null,page:1,state:readEditState(file,getActiveCourseId()||'global'),tool:'pen',color:$('afsColor')?.value||'#6c5ce7',width:Number($('afsWidth')?.value)||4,scale:1,history:[],future:[],baseUrl:file.url};
+    $('afsDocPlaceholder').classList.remove('active');
+    $('afsCanvasShell').classList.remove('active');
+    $('afsStage')?.scrollTo?.({top:0,left:0,behavior:'auto'});
     studio.state.activePage=Number(studio.state.activePage)||1;studio.page=studio.state.activePage;
     updateStudioMeta();
     const canDownload=file.allowDownload!==false||isAdmin;
@@ -22189,11 +22199,23 @@ body:not(.light-mode){--aa-auth-bg:#0d1020;--aa-auth-surface:#15192b;--aa-auth-s
   }
 
   async function loadImageDocument(file){
-    const shell=$('afsCanvasShell'),ph=$('afsDocPlaceholder');ph.classList.remove('active');shell.classList.add('active');
-    const img=new Image();img.crossOrigin='anonymous';
-    img.onload=()=>{studio.image=img;renderCurrent();};
-    img.onerror=()=>{showUnsupportedDocument({...file,url:file.url},'تعذر تحميل الصورة للتحرير. قد يكون خادم التخزين يمنع طلبات CORS. يمكنك فتح الأصل أو تحميله.');};
-    img.src=file.url;
+    const shell=$('afsCanvasShell'),ph=$('afsDocPlaceholder');
+    ph.classList.remove('active');shell.classList.add('active');
+    studio.image=null;
+    const img=new Image();
+    /* Do NOT force crossOrigin here. Cloudinary delivery may intentionally omit CORS
+       headers; an <img> can still render normally in the browser and the canvas can
+       display that image. Export is handled separately and reports a CORS limitation. */
+    img.decoding='async';
+    img.referrerPolicy='no-referrer';
+    img.onload=()=>{studio.image=img;renderCurrentSafe();};
+    img.onerror=()=>{
+      shell.classList.remove('active');
+      showUnsupportedDocument({...file,url:file.url},'تعذر تحميل الصورة من مصدر التخزين. جرّب فتح الأصل للتأكد من أن الرابط متاح.');
+    };
+    img.src=String(file.url||'');
+    try{if(img.decode) await img.decode();}catch(_){}
+    if(img.complete&&img.naturalWidth>0&&!studio.image){studio.image=img;renderCurrentSafe();}
   }
 
   async function loadPdfDocument(file){
@@ -22247,7 +22269,16 @@ body:not(.light-mode){--aa-auth-bg:#0d1020;--aa-auth-surface:#15192b;--aa-auth-s
       const w=Math.max(1,Math.floor(img.naturalWidth*cos+img.naturalHeight*sin)),h=Math.max(1,Math.floor(img.naturalWidth*sin+img.naturalHeight*cos));
       const factor=calcViewSize(w,h),cw=Math.max(1,Math.floor(w*factor)),ch=Math.max(1,Math.floor(h*factor));
       canvas.width=cw;canvas.height=ch;canvas.style.width=cw+'px';canvas.style.height=ch+'px';shell.style.width=cw+'px';shell.style.height=ch+'px';
-      const ctx=canvas.getContext('2d');ctx.clearRect(0,0,cw,ch);ctx.save();ctx.translate(cw/2,ch/2);ctx.rotate(rad);const dw=img.naturalWidth*factor,dh=img.naturalHeight*factor;ctx.drawImage(img,-dw/2,-dh/2,dw,dh);ctx.restore();drawStrokes(ctx,ps,cw,ch);return;
+      const ctx=canvas.getContext('2d');
+      if(!ctx)return;
+      ctx.clearRect(0,0,cw,ch);
+      ctx.save();ctx.translate(cw/2,ch/2);ctx.rotate(rad);
+      const dw=img.naturalWidth*factor,dh=img.naturalHeight*factor;
+      ctx.drawImage(img,-dw/2,-dh/2,dw,dh);
+      ctx.restore();
+      drawStrokes(ctx,ps,cw,ch);
+      $('afsDocPlaceholder').classList.remove('active');shell.classList.add('active');
+      return;
     }
     if(isPdf(studio.file)&&studio.pdf){
       const page=await studio.pdf.getPage(studio.page),base=page.getViewport({scale:1,rotation:ps.rotation}),factor=calcViewSize(base.width,base.height),vp=page.getViewport({scale:factor,rotation:ps.rotation});
@@ -22333,6 +22364,16 @@ body:not(.light-mode){--aa-auth-bg:#0d1020;--aa-auth-surface:#15192b;--aa-auth-s
       if(editedPreferred&&edited)toast('تعذر تصدير التعديلات بسبب منع الوصول البرمجي إلى المصدر.');
     }
   }
+
+  document.addEventListener('keydown',e=>{
+    if(!$('ananasFileStudio')?.classList.contains('active'))return;
+    if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='s'){e.preventDefault();$('afsStudioSave')?.click();return;}
+    if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='z'){e.preventDefault();$('afsUndo')?.click();return;}
+    if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='y'){e.preventDefault();$('afsRedo')?.click();return;}
+    if(e.key==='Escape'){e.preventDefault();closeStudio();return;}
+    if(e.key==='ArrowLeft'&&isPdf(studio.file)){studio.page=Math.max(1,studio.page-1);studio.state.activePage=studio.page;renderCurrentSafe();renderThumbs();}
+    if(e.key==='ArrowRight'&&isPdf(studio.file)){studio.page=Math.min(studio.pdf?.numPages||studio.page+1,studio.page+1);studio.state.activePage=studio.page;renderCurrentSafe();renderThumbs();}
+  },true);
 
   // Public surface used by existing lesson/file buttons.
   window.openCourseFileViewer=async function(file){await openStudio(file);};
