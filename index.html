@@ -22222,16 +22222,39 @@ body:not(.light-mode){--aa-auth-bg:#0d1020;--aa-auth-surface:#15192b;--aa-auth-s
     const ph=$('afsDocPlaceholder'),shell=$('afsCanvasShell');
     shell.classList.add('active');ph.classList.remove('active');
     if(!window.pdfjsLib){showUnsupportedDocument(file,'محرك PDF غير متاح حاليًا.');return;}
+    const worker='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+    window.pdfjsLib.GlobalWorkerOptions.workerSrc=worker;
+    let lastError=null;
     try{
-      window.pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
-      studio.pdf=await window.pdfjsLib.getDocument({url:file.url,withCredentials:false}).promise;
+      // Attempt 1: let PDF.js load the Cloudinary URL natively.
+      const task=window.pdfjsLib.getDocument({url:String(file.url||''),withCredentials:false});
+      studio.pdf=await task.promise;
+    }catch(firstError){
+      lastError=firstError;
+      // Attempt 2: fetch the PDF once and provide bytes directly to PDF.js.
+      try{
+        const response=await fetch(String(file.url||''),{method:'GET',mode:'cors',credentials:'omit',cache:'no-store'});
+        if(!response.ok)throw new Error(`HTTP ${response.status}`);
+        const buffer=await response.arrayBuffer();
+        studio.pdf=await window.pdfjsLib.getDocument({data:new Uint8Array(buffer)}).promise;
+      }catch(secondError){
+        console.error('PDF viewer direct load failed',firstError);
+        console.error('PDF viewer byte fallback failed',secondError);
+        shell.classList.remove('active');
+        showUnsupportedDocument(file,'تعذر قراءة ملف PDF داخل المحرر. افتح الأصل أولًا للتأكد من أن رابط الملف متاح، وإذا كان الرابط من Cloudinary وتظهر مشكلة في التسليم فتحقق من إعداد Allow delivery of PDF and ZIP files في Security.');
+        return;
+      }
+    }
+    try{
       $('afsPageCount').textContent=String(studio.pdf.numPages);
       studio.state.activePage=Math.min(Math.max(1,studio.page),studio.pdf.numPages);studio.page=studio.state.activePage;
       await renderThumbs();await renderCurrent();
-    }catch(e){
-      console.error('PDF viewer',e);
+      const fallback=$('afsV7PdfFallback');if(fallback)fallback.classList.remove('active');
+      const loading=$('afsV7Loading');if(loading)loading.classList.remove('active');
+    }catch(renderError){
+      console.error('PDF render failed',renderError,lastError||'');
       shell.classList.remove('active');
-      showUnsupportedDocument(file,'تعذر فتح ملف PDF من المصدر. إذا كان الرابط المباشر من Cloudinary لا يفتح أيضًا، فعّل Allow delivery of PDF and ZIP files في إعدادات Security في Cloudinary؛ وإذا كان الرابط يفتح لكن العارض لا، فالمشكلة غالبًا CORS.');
+      showUnsupportedDocument(file,'تم تحميل ملف PDF لكن تعذر رسم الصفحة داخل المحرر. استخدم فتح الأصل لعرضه بالطريقة الأصلية.');
     }
   }
 
@@ -22724,33 +22747,6 @@ ${msg}`)}
   'use strict';
   if(window.__ANANAS_FILE_STUDIO_V7__) return;
   window.__ANANAS_FILE_STUDIO_V7__=true;
-
-  /* PDF.js compatibility shim: first try its native URL loader; if that fails
-     because of range/CORS behavior, fetch the whole file once and feed bytes
-     directly to PDF.js. The existing viewer keeps the same API. */
-  try{
-    if(window.pdfjsLib && !window.pdfjsLib.__ananasV7GetDocumentPatched){
-      const originalGetDocument=window.pdfjsLib.getDocument.bind(window.pdfjsLib);
-      window.pdfjsLib.getDocument=function(source){
-        if(!source || typeof source !== 'object' || !source.url || source.data || source.__ananasNoRetry) return originalGetDocument(source);
-        const first=originalGetDocument(source);
-        first.promise=first.promise.catch(async firstError=>{
-          try{
-            const response=await fetch(String(source.url),{method:'GET',mode:'cors',credentials:'omit',cache:'no-store'});
-            if(!response.ok) throw Error(`HTTP ${response.status}`);
-            const buffer=await response.arrayBuffer();
-            const retry=originalGetDocument({data:new Uint8Array(buffer),__ananasNoRetry:true});
-            return await retry.promise;
-          }catch(retryError){
-            first.__ananasV7RetryError=retryError;
-            throw firstError;
-          }
-        });
-        return first;
-      };
-      window.pdfjsLib.__ananasV7GetDocumentPatched=true;
-    }
-  }catch(e){console.warn('PDF.js V7 compatibility patch',e);}
 
   const $=id=>document.getElementById(id);
   const oldOpen=window.openCourseFileViewer;
