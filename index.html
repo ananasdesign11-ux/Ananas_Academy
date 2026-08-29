@@ -3063,9 +3063,9 @@ to{opacity:1;transform:none}}
 
                     <div class="modal-form aa-auth-form">
                         <label for="emailInput">البريد الإلكتروني</label>
-                        <div class="aa-input-wrap"><i class="fas fa-envelope"></i><input type="email" id="emailInput" placeholder="example@email.com" autocomplete="email"></div>
+                        <div class="aa-input-wrap"><i class="fas fa-envelope"></i><input type="email" id="emailInput" name="ananas-login-email" placeholder="example@email.com" autocomplete="off" inputmode="email"></div>
                         <label for="passInput">كلمة المرور</label>
-                        <div class="aa-input-wrap"><i class="fas fa-lock"></i><input type="password" id="passInput" placeholder="أدخل كلمة المرور" autocomplete="current-password"></div>
+                        <div class="aa-input-wrap"><i class="fas fa-lock"></i><input type="password" id="passInput" name="ananas-login-password" placeholder="أدخل كلمة المرور" autocomplete="new-password"></div>
                         <button class="btn aa-primary-auth-btn" id="emailSignInBtn" type="button"><span>تسجيل الدخول</span><i class="fas fa-arrow-left"></i></button>
                     </div>
 
@@ -3103,9 +3103,9 @@ to{opacity:1;transform:none}}
                         <div class="aa-auth-divider"><span>أو أنشئه بالبريد الإلكتروني</span></div>
                         <div class="modal-form aa-auth-form">
                             <label for="signupEmailInput">البريد الإلكتروني</label>
-                            <div class="aa-input-wrap"><i class="fas fa-envelope"></i><input type="email" id="signupEmailInput" placeholder="example@email.com" autocomplete="off"></div>
+                            <div class="aa-input-wrap"><i class="fas fa-envelope"></i><input type="email" id="signupEmailInput" name="ananas-signup-email" placeholder="example@email.com" autocomplete="off"></div>
                             <label for="signupPassInput">كلمة المرور</label>
-                            <div class="aa-input-wrap"><i class="fas fa-lock"></i><input type="password" id="signupPassInput" placeholder="6 أحرف أو أكثر" autocomplete="off"></div>
+                            <div class="aa-input-wrap"><i class="fas fa-lock"></i><input type="password" id="signupPassInput" name="ananas-signup-password" placeholder="6 أحرف أو أكثر" autocomplete="off"></div>
                             <div class="aa-password-note"><i class="fas fa-circle-info"></i><span>لن يتم إنشاء حساب المنصة حتى تكمل الاسم والجنس وتحفظ بياناتك.</span></div>
                             <button class="btn aa-primary-auth-btn" id="signupNextBtn" type="button"><span>التالي: بياناتي</span><i class="fas fa-arrow-left"></i></button>
                         </div>
@@ -21031,7 +21031,7 @@ window.__aaChatStage14OpenBackgroundEditor=openBackgroundEditor;
     const target=e.target?.closest?.('#authToggleBtn');
     if(target){
       e.preventDefault();e.stopImmediatePropagation();
-      if(currentUser){window.openUserProfilePage?.()||window.aaOpenProfile?.(currentUser.uid,{kind:'self'});}else openAuth();
+      if(currentUser){window.openUserProfilePage?.()||window.aaOpenProfile?.(currentUser.uid,{kind:'self'});}else (window.__aaOpenAuthPopup||openAuth)();
       return;
     }
   },true);
@@ -21149,7 +21149,7 @@ window.__aaChatStage14OpenBackgroundEditor=openBackgroundEditor;
   document.addEventListener('click',function(e){
     const btn=e.target?.closest?.('.course-enroll-action button.btn-outline');
     if(!btn)return;
-    e.preventDefault();e.stopImmediatePropagation();openAuth();
+    e.preventDefault();e.stopImmediatePropagation();(window.__aaOpenAuthPopup||openAuth)();
   },true);
 })();
 </script>
@@ -21320,15 +21320,24 @@ body:not(.light-mode){--aa-auth-bg:#0d1020;--aa-auth-surface:#15192b;--aa-auth-s
       if(prev&&photo)prev.innerHTML=`<img src="${String(photo).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;')}" alt="">`;
     }
   }
+  function clearLoginDraft(){
+    ['emailInput','passInput'].forEach(id=>{const el=$(id);if(el)el.value='';});
+  }
+  function clearSignupDraft(){
+    ['signupEmailInput','signupPassInput','profileName','profilePhone'].forEach(id=>{const el=$(id);if(el)el.value='';});
+    const photo=$('profilePhotoInput');if(photo)photo.value='';
+    const prev=$('profilePhotoPreview');if(prev)prev.innerHTML='<i class="fas fa-user"></i>';
+  }
   function openLogin(prefillEmail='',prefillPassword=''){
     const popup=$('authPopup');if(!popup)return;
     document.body.classList.remove('aa-chat-signing-out');
     popup.classList.add('active');popup.setAttribute('aria-hidden','false');
     signupMode=false;signupCreated=false;googlePending=false;pendingEmail='';pendingPassword='';
+    clearLoginDraft();
     setView('login');updateSignupProgress(1,false);setStatus('');
     if(prefillEmail)$('emailInput').value=prefillEmail;
     if(prefillPassword)$('passInput').value=prefillPassword;
-    $('emailInput')?.focus({preventScroll:true});
+    // لا نعمل focus تلقائيًا حتى لا يعيد المتصفح تعبئة بيانات اعتماد محفوظة عند فتح الصفحة.
     window.__ananasModalStackSync?.();
   }
   async function closeAuth(){
@@ -21340,6 +21349,7 @@ body:not(.light-mode){--aa-auth-bg:#0d1020;--aa-auth-surface:#15192b;--aa-auth-s
       try{const doc=await db.collection('users').doc(currentUser.uid).get();if(!doc.exists)await auth.signOut();}catch(_){try{await auth.signOut();}catch(__){}}
     }
     googlePending=false;pendingEmail='';pendingPassword='';signupMode=false;
+    clearLoginDraft();clearSignupDraft();
     window.__ananasModalStackSync?.();
   }
   function openSignup(email='',password=''){
@@ -21350,7 +21360,6 @@ body:not(.light-mode){--aa-auth-bg:#0d1020;--aa-auth-surface:#15192b;--aa-auth-s
     setView('signup');updateSignupProgress(1,false);setStatus('');
     if(email)$('signupEmailInput').value=email;
     if(password)$('signupPassInput').value=password;
-    $('signupEmailInput')?.focus({preventScroll:true});
   }
   window.triggerAuth=openLogin;
   window.__aaOpenAuthPopup=openLogin;
@@ -21487,13 +21496,13 @@ body:not(.light-mode){--aa-auth-bg:#0d1020;--aa-auth-surface:#15192b;--aa-auth-s
   document.addEventListener('click',e=>{
     const t=e.target?.closest?.('#authToggleBtn');if(!t)return;
     e.preventDefault();e.stopImmediatePropagation();
-    if(currentUser)window.openUserProfilePage?.()||window.aaOpenProfile?.(currentUser.uid,{kind:'self'});else openLogin();
+    if(currentUser)window.openUserProfilePage?.()||window.aaOpenProfile?.(currentUser.uid,{kind:'self'});else (window.__aaOpenAuthPopup||openLogin)();
   },true);
 
   // Course-card login button: one delegated path, resilient to re-rendering.
   document.addEventListener('click',e=>{
     const b=e.target?.closest?.('.course-enroll-action button.btn-outline');if(!b)return;
-    e.preventDefault();e.stopImmediatePropagation();openLogin();
+    e.preventDefault();e.stopImmediatePropagation();(window.__aaOpenAuthPopup||openLogin)();
   },true);
 
   // Escape always closes the full-screen auth page safely.
