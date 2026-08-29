@@ -1456,8 +1456,14 @@ label[for*="En"], input[id*="En"], textarea[id*="En"] { display:none !important;
 .course-file-actions .primary{background:var(--accent-gradient);border-color:transparent;color:#fff}
 .course-files-upload-panel{padding:18px;border:1px solid var(--border);border-radius:20px;background:linear-gradient(135deg,rgba(108,92,231,.07),var(--bg-card));margin-bottom:18px}
 .course-files-upload-grid{display:grid;grid-template-columns:minmax(0,1fr) 230px auto;gap:10px;align-items:end}
+.file-viewer-overlay{position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,.78);display:none;align-items:center;justify-content:center;padding:24px}
+.file-viewer-overlay.active{display:flex}
+.file-viewer-box{width:min(1100px,100%);height:min(88vh,900px);background:var(--bg-card);border:1px solid var(--border);border-radius:22px;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 30px 80px rgba(0,0,0,.35)}
+.file-viewer-head{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 16px;border-bottom:1px solid var(--border)}
+.file-viewer-content{flex:1;min-height:0;background:#111;display:flex;align-items:center;justify-content:center;overflow:auto}
 .file-viewer-content img{max-width:100%;max-height:100%;object-fit:contain}
 .file-viewer-content iframe{width:100%;height:100%;border:0;background:#fff}
+@media(max-width:760px){.quiz-option-row{grid-template-columns:42px minmax(0,1fr) 38px}.truefalse-grid{grid-template-columns:1fr}.course-files-upload-grid{grid-template-columns:1fr}.files-page-grid{grid-template-columns:1fr}.file-viewer-overlay{padding:8px}.file-viewer-box{height:94vh;border-radius:16px}}
 </style>
 
 
@@ -1692,6 +1698,7 @@ label[for*="En"], input[id*="En"], textarea[id*="En"] { display:none !important;
   .custom-alert-modal,
   .gallery-viewer,
   .platform-image-viewer,
+  .file-viewer-overlay,
   .ananas-modal-overlay{
     box-sizing:border-box!important;
   }
@@ -1708,6 +1715,7 @@ label[for*="En"], input[id*="En"], textarea[id*="En"] { display:none !important;
   .custom-alert-modal,
   .gallery-viewer,
   .platform-image-viewer,
+  .file-viewer-overlay,
   .ananas-modal-overlay{
     top:var(--aa-v15-top)!important;
     right:0!important;
@@ -2810,10 +2818,55 @@ to{opacity:1;transform:none}}
                     <div id="assignmentDetailContent"></div>
                 </div>
 
-                <!-- ===== FULL FILES PAGE — AUTHORITATIVE REBUILD ===== -->
-                <div id="courseFilesPage" style="display:none;position:absolute;inset:0;overflow-y:auto;padding:28px;">
-                    <div class="course-files-shell" id="ananasFilesRoot"></div>
-                </div>
+                <!-- ===== FULL FILES PAGE — V13 ===== -->
+                <section id="courseFilesPage" class="aa-files-page-v13" aria-label="مكتبة ملفات الدورة" hidden>
+                    <div class="aa-files-page-inner">
+                        <header class="aa-files-header">
+                            <div class="aa-files-heading">
+                                <div class="aa-files-heading-icon"><i class="fas fa-folder-tree" aria-hidden="true"></i></div>
+                                <div>
+                                    <div class="aa-files-eyebrow">مكتبة الدورة</div>
+                                    <h2>الملفات والموارد</h2>
+                                    <p>ابحث، صفِّ، واعرض ملفات الدورة من مكان واحد.</p>
+                                </div>
+                            </div>
+                            <div class="aa-files-header-actions">
+                                <button type="button" class="full-page-back-btn aa-files-back-btn" id="aaFilesBackBtn">
+                                    <i class="fas fa-arrow-right" aria-hidden="true"></i><span>العودة</span>
+                                </button>
+                                <button type="button" class="aa-files-primary-btn admin-only" id="aaFilesUploadBtn">
+                                    <i class="fas fa-cloud-arrow-up" aria-hidden="true"></i><span>رفع ملف</span>
+                                </button>
+                            </div>
+                        </header>
+
+                        <section class="aa-files-stats" aria-label="إحصاءات الملفات">
+                            <div class="aa-files-stat"><span class="aa-files-stat-icon"><i class="fas fa-layer-group"></i></span><div><b id="aaFilesTotal">0</b><small>إجمالي الملفات</small></div></div>
+                            <div class="aa-files-stat"><span class="aa-files-stat-icon"><i class="fas fa-file-pdf"></i></span><div><b id="aaFilesPdf">0</b><small>ملفات PDF</small></div></div>
+                            <div class="aa-files-stat"><span class="aa-files-stat-icon"><i class="fas fa-image"></i></span><div><b id="aaFilesImages">0</b><small>الصور</small></div></div>
+                            <div class="aa-files-stat"><span class="aa-files-stat-icon"><i class="fas fa-link"></i></span><div><b id="aaFilesLinked">0</b><small>مرتبطة بحصص</small></div></div>
+                        </section>
+
+                        <section class="aa-files-toolbar" aria-label="فلترة الملفات">
+                            <label class="aa-files-search">
+                                <i class="fas fa-magnifying-glass" aria-hidden="true"></i>
+                                <input id="aaFilesSearch" type="search" placeholder="ابحث باسم الملف أو اسم الحصة..." autocomplete="off">
+                                <button type="button" id="aaFilesSearchClear" aria-label="مسح البحث" hidden><i class="fas fa-xmark"></i></button>
+                            </label>
+                            <div class="aa-files-filters">
+                                <label class="aa-files-filter-field"><span>النوع</span><select id="aaFilesTypeFilter"><option value="all">كل الأنواع</option><option value="pdf">PDF</option><option value="image">صور</option><option value="word">Word</option><option value="excel">Excel</option><option value="powerpoint">PowerPoint</option><option value="archive">ملفات مضغوطة</option><option value="other">أخرى</option></select></label>
+                                <label class="aa-files-filter-field"><span>الحصة</span><select id="aaFilesLessonFilter"><option value="all">كل الحصص</option><option value="">ملفات عامة فقط</option></select></label>
+                                <label class="aa-files-filter-field"><span>الترتيب</span><select id="aaFilesSort"><option value="newest">الأحدث أولًا</option><option value="oldest">الأقدم أولًا</option><option value="name">الاسم</option><option value="size">الحجم</option></select></label>
+                            </div>
+                        </section>
+
+                        <div class="aa-files-result-row">
+                            <div id="aaFilesResultCount">0 ملف</div>
+                            <button type="button" class="aa-files-clear-filters" id="aaFilesClearFilters"><i class="fas fa-rotate-left"></i> إعادة ضبط الفلاتر</button>
+                        </div>
+                        <div id="courseFilesPageGrid" class="aa-files-grid" aria-live="polite"></div>
+                    </div>
+                </section>
 
                 <!-- ===== CHAT PAGE — REBUILT FROM SCRATCH ===== -->
                 <div id="courseChatPage" aria-label="دردشة الدورة">
@@ -10044,7 +10097,7 @@ body.light-mode .full-page-card:hover,body.light-mode .lesson-card:hover,body.li
 .course-file-card:hover{transform:translateY(-4px);border-color:rgba(108,92,231,.45);box-shadow:0 18px 40px rgba(108,92,231,.11)}
 .course-file-top{display:flex;gap:13px;align-items:flex-start}.course-file-icon{width:48px;height:48px;border-radius:14px;background:rgba(108,92,231,.1);color:var(--accent1);display:grid;place-items:center;font-size:1.2rem;flex:0 0 auto}.course-file-card.image-file .course-file-icon{background:rgba(46,204,113,.11);color:#2ecc71}.course-file-card.pdf-file .course-file-icon{background:rgba(231,76,60,.1);color:#e74c3c}
 .course-file-name{font-weight:900;line-height:1.45;word-break:break-word}.course-file-meta{margin-top:6px;color:var(--text-muted);font-size:.8rem;line-height:1.7}.course-file-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:14px}.course-file-actions button,.course-file-actions a{min-height:40px;border-radius:12px;border:1px solid var(--border);background:var(--bg-primary);color:var(--text-primary);text-decoration:none;font-family:inherit;font-weight:800;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:6px}.course-file-actions .primary{background:var(--accent-gradient);color:#fff;border-color:transparent}.course-file-actions .danger{grid-column:1/-1;color:#e74c3c;background:rgba(231,76,60,.06);border-color:rgba(231,76,60,.18)}
-
+#courseFileViewer{position:fixed;inset:0;background:rgba(7,10,18,.78);backdrop-filter:blur(12px);display:none;align-items:center;justify-content:center;z-index:12000;padding:20px}#courseFileViewer.active{display:flex}
 .course-file-viewer-shell{width:min(1100px,100%);height:min(90vh,900px);background:var(--bg-card);border:1px solid var(--border);border-radius:24px;box-shadow:0 30px 90px rgba(0,0,0,.4);display:flex;flex-direction:column;overflow:hidden}.course-file-viewer-head{padding:14px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;gap:10px}.course-file-viewer-title{font-weight:900;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.course-file-viewer-body{flex:1;min-height:0;background:#0b0d12;display:grid;place-items:center;overflow:auto}.course-file-viewer-body img{max-width:100%;max-height:100%;object-fit:contain}.course-file-viewer-body iframe{width:100%;height:100%;border:0}.course-file-viewer-placeholder{text-align:center;padding:40px;color:#fff}.course-file-viewer-actions{display:flex;gap:8px}.course-file-viewer-actions a,.course-file-viewer-actions button{min-width:42px;height:40px;padding:0 13px;border-radius:12px;border:1px solid var(--border);background:var(--bg-primary);color:var(--text-primary);text-decoration:none;font-family:inherit;font-weight:800;cursor:pointer}.course-file-viewer-actions .primary{background:var(--accent-gradient);color:#fff;border-color:transparent}
 
 /* ===== Professional option selector ===== */
@@ -10123,18 +10176,18 @@ window.switchCoursePage=function(page){
  return originalSwitch?originalSwitch(page):undefined;
 };
 
-
-
-
-
-
-
-
-
-
-
-
-
+/* ---------- B. File viewer / uploads ---------- */
+window.openCourseFileViewer=function(f){
+ const data=typeof f==='string'?null:f; if(!data?.url)return;
+ let v=$('courseFileViewer'); if(!v){v=document.createElement('div');v.id='courseFileViewer';v.innerHTML='<div class="course-file-viewer-shell"><div class="course-file-viewer-head"><div class="course-file-viewer-title" id="courseFileViewerTitle"></div><div class="course-file-viewer-actions"><a id="courseFileViewerDownload" class="primary" target="_blank" rel="noopener"><i class="fas fa-download"></i> تحميل</a><button type="button" id="courseFileViewerClose"><i class="fas fa-xmark"></i></button></div></div><div id="courseFileViewerBody" class="course-file-viewer-body"></div></div>';document.body.appendChild(v);$('courseFileViewerClose').onclick=()=>v.classList.remove('active');v.addEventListener('click',e=>{if(e.target===v)v.classList.remove('active')});}
+ $('courseFileViewerTitle').textContent=data.name||'ملف'; $('courseFileViewerDownload').href=data.url;
+ const body=$('courseFileViewerBody'), mime=String(data.mime||'').toLowerCase(), url=String(data.url||'');
+ if(mime.startsWith('image/')||/\.(png|jpe?g|gif|webp|bmp|svg)(\?|$)/i.test(url))body.innerHTML=`<img src="${esc(url)}" alt="${esc(data.name||'')}"/>`;
+ else if(mime==='application/pdf'||/\.pdf(\?|$)/i.test(url))body.innerHTML=`<iframe src="${esc(url)}#view=FitH"></iframe>`;
+ else body.innerHTML=`<div class="course-file-viewer-placeholder"><i class="fas fa-file-arrow-down" style="font-size:3rem;display:block;margin-bottom:12px"></i><div>هذا النوع من الملفات يفضّل فتحه أو تحميله.</div><div style="margin-top:12px"><a class="ananas-primary-btn" href="${esc(url)}" target="_blank" rel="noopener">فتح الملف</a></div></div>`;
+ v.classList.add('active');
+};
+window.openFileViewer=window.openCourseFileViewer;
 
 async function uploadAnyCourseFile(file,lessonId=''){
  if(!activeCourseId||!file)return;
@@ -10153,7 +10206,7 @@ window.renderFilesGrid=function(files,box){
  if(!box)return;const list=Array.isArray(files)?files:[];if(!list.length){box.innerHTML='<div style="grid-column:1/-1;padding:70px 20px;text-align:center;color:var(--text-muted)"><i class="fas fa-folder-open" style="font-size:3rem;display:block;margin-bottom:12px;color:var(--accent1)"></i><strong style="display:block;font-size:1.05rem;color:var(--text-primary);margin-bottom:5px">لا توجد ملفات بعد</strong><span>أضف ملفات الدورة أو اربطها بالحصة المناسبة.</span></div>';return;}
  const icon=f=>{const m=String(f?.mime||'').toLowerCase(),n=String(f?.name||'').toLowerCase();if(m.startsWith('image/'))return'fa-image';if(m.includes('pdf')||n.endsWith('.pdf'))return'fa-file-pdf';if(m.includes('word')||/\.docx?$/.test(n))return'fa-file-word';if(m.includes('sheet')||/\.(xlsx?|csv)$/.test(n))return'fa-file-excel';if(m.includes('presentation')||/\.pptx?$/.test(n))return'fa-file-powerpoint';if(m.includes('zip'))return'fa-file-zipper';return'fa-file-lines'};
  const size=n=>{n=Number(n)||0;if(!n)return'الحجم غير متوفر';const u=['بايت','KB','MB','GB'];let i=0;while(n>=1024&&i<u.length-1){n/=1024;i++;}return `${n.toFixed(i?1:0)} ${u[i]}`};
- box.innerHTML=list.map(f=>{const cls=String(f.mime||'').startsWith('image/')?'image-file':String(f.mime||'').includes('pdf')?'pdf-file':'';return `<article class="course-file-card ${cls}" data-file-id="${esc(f.id)}"><div class="course-file-top"><div class="course-file-icon"><i class="fas ${icon(f)}"></i></div><div style="min-width:0;flex:1"><div class="course-file-name">${esc(f.name||'ملف بدون اسم')}</div><div class="course-file-meta">${esc(f.lessonTitle?'مرتبط بـ: '+f.lessonTitle:'ملف عام للدورة')}<br>${esc(size(f.size))}</div></div></div><div class="course-file-actions"><button class="primary" onclick='openCourseFileViewer(${JSON.stringify(f)})'><i class="fas fa-eye"></i> عرض</button>${(f.allowDownload!==false||isAdmin)?`<a href="${esc(f.url||'#')}" target="_blank" rel="noopener" download><i class="fas fa-download"></i> تحميل</a>`:''}${isAdmin?`<button class="danger" onclick="deleteCourseFile('${esc(f.id)}')"><i class="fas fa-trash"></i> حذف الملف</button>`:''}</div></article>`}).join('');
+ box.innerHTML=list.map(f=>{const cls=String(f.mime||'').startsWith('image/')?'image-file':String(f.mime||'').includes('pdf')?'pdf-file':'';return `<article class="course-file-card ${cls}" data-file-id="${esc(f.id)}"><div class="course-file-top"><div class="course-file-icon"><i class="fas ${icon(f)}"></i></div><div style="min-width:0;flex:1"><div class="course-file-name">${esc(f.name||'ملف بدون اسم')}</div><div class="course-file-meta">${esc(f.lessonTitle?'مرتبط بـ: '+f.lessonTitle:'ملف عام للدورة')}<br>${esc(size(f.size))}</div></div></div><div class="course-file-actions"><button class="primary" onclick='openCourseFileViewer(${JSON.stringify(f)})'><i class="fas fa-eye"></i> عرض</button><a href="${esc(f.url||'#')}" target="_blank" rel="noopener" download><i class="fas fa-download"></i> تحميل</a>${isAdmin?`<button class="danger" onclick="deleteCourseFile('${esc(f.id)}')"><i class="fas fa-trash"></i> حذف الملف</button>`:''}</div></article>`}).join('');
 };
 
 /* ---------- C. Lesson file actions, one compact platform button + upload for admin ---------- */
@@ -10528,6 +10581,21 @@ ensureChatLockModalFinal();
 'use strict';
 const $=id=>document.getElementById(id), esc=window.escapeHtml||((v)=>String(v??''));
 function fileAllowedForViewer(f){return !!f && !f.deleted;}
+window.openCourseFileViewer=function(f){
+  if(currentCoursePage==='lessonPlayer'){try{window.pauseLessonForInternalNavigation?.();}catch(_e){}}
+  if(!fileAllowedForViewer(f))return showCustomAlert('غير متاح','هذا الملف لم يعد متاحًا.');
+  let ov=$('fileViewerOverlay');
+  if(!ov){ov=document.createElement('div');ov.id='fileViewerOverlay';ov.className='file-viewer-overlay';ov.innerHTML='<div class="file-viewer-box"><div class="file-viewer-head"><strong id="fileViewerTitle"></strong><div style="display:flex;gap:8px"><a id="fileViewerDownload" class="ananas-primary-btn" target="_blank" rel="noopener"><i class="fas fa-download"></i> تحميل</a><button id="fileViewerClose" type="button" class="ananas-secondary-btn">إغلاق</button></div></div><div id="fileViewerContent" class="file-viewer-content"></div></div>';document.body.appendChild(ov);$('fileViewerClose').onclick=()=>ov.classList.remove('active');ov.addEventListener('click',e=>{if(e.target===ov)ov.classList.remove('active')});}
+  $('fileViewerTitle').textContent=f.name||'ملف';
+  const canDownload=f.allowDownload!==false||isAdmin;
+  const dl=$('fileViewerDownload');dl.style.display=canDownload?'inline-flex':'none';dl.href=f.url||'#';
+  const c=$('fileViewerContent');
+  const t=String(f.mime||'').toLowerCase(), n=String(f.name||'').toLowerCase();
+  if(t.startsWith('image/')||/\.(png|jpe?g|gif|webp|svg|bmp)$/i.test(n))c.innerHTML=`<img src="${esc(f.url)}" alt="${esc(f.name||'')}" style="max-width:100%;max-height:100%;object-fit:contain">`;
+  else if(t.includes('pdf')||/\.pdf$/i.test(n))c.innerHTML=`<iframe src="${esc(f.url)}#toolbar=${canDownload?1:0}" style="width:100%;height:100%;border:0;background:#fff"></iframe>`;
+  else c.innerHTML=`<div style="text-align:center;color:#fff;padding:40px"><i class="fas ${fileIcon(f)}" style="font-size:4rem"></i><h3>${esc(f.name||'ملف')}</h3><p style="opacity:.75">يمكنك فتح الملف من الرابط المتاح${canDownload?' وتحميله.':'.'}</p><a class="ananas-primary-btn" target="_blank" rel="noopener" href="${esc(f.url)}"><i class="fas fa-external-link-alt"></i> فتح الملف</a></div>`;
+  ov.classList.add('active');
+};
 window.loadCourseFilesPage=async function(){
   const box=$('courseFilesPageGrid');if(!box||!activeCourseId)return;box.innerHTML='<div style="grid-column:1/-1;padding:50px;text-align:center;color:var(--text-muted)">جاري تحميل الملفات...</div>';
   try{
@@ -13620,6 +13688,7 @@ const s=document.createElement('style');s.textContent=`
   .custom-alert-modal,
   .gallery-viewer,
   .platform-image-viewer,
+  .file-viewer-overlay{
     scrollbar-width:thin!important;
     scrollbar-color:rgba(108,92,231,.82) rgba(108,92,231,.10)!important;
     -webkit-overflow-scrolling:touch!important;
@@ -13642,7 +13711,8 @@ const s=document.createElement('style');s.textContent=`
   .auth-popup::-webkit-scrollbar,
   .custom-alert-modal::-webkit-scrollbar,
   .gallery-viewer::-webkit-scrollbar,
-  .platform-image-viewer::-webkit-scrollbar{width:7px!important;height:7px!important;}
+  .platform-image-viewer::-webkit-scrollbar,
+  .file-viewer-overlay::-webkit-scrollbar{width:7px!important;height:7px!important;}
   #coursesPage::-webkit-scrollbar-track,
   #courseDetailView::-webkit-scrollbar-track,
   #courseDetailView>*::-webkit-scrollbar-track,
@@ -13658,7 +13728,8 @@ const s=document.createElement('style');s.textContent=`
   .auth-popup::-webkit-scrollbar-track,
   .custom-alert-modal::-webkit-scrollbar-track,
   .gallery-viewer::-webkit-scrollbar-track,
-  .platform-image-viewer::-webkit-scrollbar-track{background:rgba(108,92,231,.08)!important;border-radius:999px!important;}
+  .platform-image-viewer::-webkit-scrollbar-track,
+  .file-viewer-overlay::-webkit-scrollbar-track{background:rgba(108,92,231,.08)!important;border-radius:999px!important;}
   #coursesPage::-webkit-scrollbar-thumb,
   #courseDetailView::-webkit-scrollbar-thumb,
   #courseDetailView>*::-webkit-scrollbar-thumb,
@@ -13674,7 +13745,8 @@ const s=document.createElement('style');s.textContent=`
   .auth-popup::-webkit-scrollbar-thumb,
   .custom-alert-modal::-webkit-scrollbar-thumb,
   .gallery-viewer::-webkit-scrollbar-thumb,
-  .platform-image-viewer::-webkit-scrollbar-thumb{background:rgba(108,92,231,.82)!important;border-radius:999px!important;border:1px solid rgba(255,255,255,.2)!important;}
+  .platform-image-viewer::-webkit-scrollbar-thumb,
+  .file-viewer-overlay::-webkit-scrollbar-thumb{background:rgba(108,92,231,.82)!important;border-radius:999px!important;border:1px solid rgba(255,255,255,.2)!important;}
 
   /* أي عنصر فرعي معروف بأنه حاوية محتوى طويلة يبقى داخل المساحة الآمنة. */
   .aa-mobile-scroll-host{
@@ -13715,7 +13787,7 @@ const s=document.createElement('style');s.textContent=`
         el.classList.add('aa-mobile-scroll-host');
       }
     });
-    document.querySelectorAll('.edit-modal,.auth-popup,.custom-alert-modal,.gallery-viewer,.platform-image-viewer,.profile-self-modal').forEach(el=>{
+    document.querySelectorAll('.edit-modal,.auth-popup,.custom-alert-modal,.gallery-viewer,.platform-image-viewer,.file-viewer-overlay,.profile-self-modal').forEach(el=>{
       if(el)el.classList.add('aa-mobile-scroll-host');
     });
   }
@@ -14314,7 +14386,7 @@ const s=document.createElement('style');s.textContent=`
     '#courseLearningView','#aaRebuiltProfilePage','#ananasCanonicalProfilePage',
     '#ananasV10ProfilePage','#userProfilePage','#profilePage','#quizOverlay',
     '.edit-modal.active','.auth-popup.active','.custom-alert-modal.active',
-    '.gallery-viewer','.platform-image-viewer'
+    '.gallery-viewer','.platform-image-viewer','.file-viewer-overlay'
   ];
 
   function resetOne(el){
@@ -16157,9 +16229,10 @@ body.light-mode #lessonVideoWrapper .aa-speed-value{color:#172033!important;}
     '.custom-alert-modal.active',
     '.gallery-viewer.active',
     '.platform-image-viewer.active',
+    '.file-viewer-overlay.active',
     '.ananas-modal-overlay.active',
     '#quizOverlay.active',
-    '',
+    '#courseFileViewer.active',
     '#enrollTermsPreviewModal.active',
     '#courseAccessSuspendModal.active',
     '#manageCodesModal.active',
@@ -16176,9 +16249,10 @@ body.light-mode #lessonVideoWrapper .aa-speed-value{color:#172033!important;}
     '.custom-alert-modal',
     '.gallery-viewer',
     '.platform-image-viewer',
+    '.file-viewer-overlay',
     '.ananas-modal-overlay',
     '#quizOverlay',
-    '',
+    '#courseFileViewer',
     '#enrollTermsPreviewModal',
     '#courseAccessSuspendModal',
     '#manageCodesModal',
@@ -16208,8 +16282,8 @@ body.light-mode #lessonVideoWrapper .aa-speed-value{color:#172033!important;}
   function isOpen(el){
     if(!(el instanceof HTMLElement) || !el.isConnected)return false;
     return el.matches('.edit-modal.active,.auth-popup.active,.custom-alert-modal.active,'+
-      '.gallery-viewer.active,.platform-image-viewer.active,'+
-      '.ananas-modal-overlay.active,#quizOverlay.active,'+
+      '.gallery-viewer.active,.platform-image-viewer.active,.file-viewer-overlay.active,'+
+      '.ananas-modal-overlay.active,#quizOverlay.active,#courseFileViewer.active,'+
       '#enrollTermsPreviewModal.active,#courseAccessSuspendModal.active,#manageCodesModal.active,'+
       '#codeDetailModalV12.active,#codeExpiryEditModalV12.active,#ananasQuizBuilderV2.active,'+
       '#chatLockModal.active,#ananasProfileEditor.active');
@@ -19031,6 +19105,7 @@ body.aa-chat-signing-out #chatImageLightbox,
 body.aa-chat-signing-out #aaRebuiltProfilePage,
 body.aa-chat-signing-out .platform-image-viewer,
 body.aa-chat-signing-out .gallery-viewer,
+body.aa-chat-signing-out .file-viewer-overlay,
 body.aa-chat-signing-out .ananas-modal-overlay,
 body.aa-chat-signing-out .custom-alert-modal,
 body.aa-chat-signing-out .edit-modal,
@@ -19050,7 +19125,7 @@ body.aa-chat-signing-out .auth-popup{display:none!important;pointer-events:none!
  function cleanup(){
    document.body.classList.add('aa-chat-signing-out');
    document.body.classList.remove('aa-chat-profile-over-lightbox','aa-chat-lightbox-open','aa-chat-image-modal-open','aa-profile-open');
-   document.querySelectorAll('#chatImageLightbox,#aaRebuiltProfilePage,#platformImageViewer,#platformGalleryViewer,.gallery-viewer.active,.platform-image-viewer.active,.ananas-modal-overlay.active,.custom-alert-modal.active,.edit-modal.active,.auth-popup.active').forEach(hideEl);
+   document.querySelectorAll('#chatImageLightbox,#aaRebuiltProfilePage,#platformImageViewer,#platformGalleryViewer,.gallery-viewer.active,.platform-image-viewer.active,.file-viewer-overlay.active,.ananas-modal-overlay.active,.custom-alert-modal.active,.edit-modal.active,.auth-popup.active').forEach(hideEl);
    try{window.closeChatImageLightbox?.();}catch(_){}
    try{window.closePlatformImageViewer?.();}catch(_){}
    try{window.closePlatformGalleryViewer?.();}catch(_){}
@@ -21620,131 +21695,512 @@ body:not(.light-mode){--aa-auth-bg:#0d1020;--aa-auth-surface:#15192b;--aa-auth-s
 })();
 </script>
 
-<!-- ===== FILE VIEWER V10 — VIEW / NAVIGATE / ZOOM ONLY ===== -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
-<style id="ananas-files-v9-css">
-/* File library: keep the existing page and data behavior, fix grid/list responsiveness. */
-#courseFilesPage{position:fixed!important;top:var(--nav-height-desktop)!important;right:0!important;bottom:0!important;left:0!important;width:auto!important;height:auto!important;z-index:9600!important;overflow:auto!important;padding:24px clamp(14px,3vw,44px) 44px!important;background:var(--bg-primary)!important;box-sizing:border-box!important}
-#courseFilesPage.active{display:block!important}
-#courseFilesPage .ananas-files-v8-root{max-width:1440px;margin:0 auto}
-.af8-head{display:flex;align-items:flex-start;justify-content:space-between;gap:18px;flex-wrap:wrap;margin-bottom:18px}
-.af8-kicker{display:inline-flex;align-items:center;gap:7px;color:var(--accent1);font-size:.78rem;font-weight:900;margin-bottom:6px}.af8-title{margin:0;font-size:clamp(1.45rem,2.7vw,2.15rem);font-weight:950;letter-spacing:-.02em}.af8-subtitle{margin:6px 0 0;color:var(--text-muted);line-height:1.8;font-size:.86rem;max-width:820px}.af8-head-actions{display:flex;gap:8px;flex-wrap:wrap}
-.af8-btn{min-height:44px;padding:0 14px;border:1px solid var(--border);border-radius:14px;background:var(--bg-card);color:var(--text-primary);font:inherit;font-weight:900;display:inline-flex;align-items:center;justify-content:center;gap:8px;cursor:pointer;transition:.18s ease;white-space:nowrap}.af8-btn:hover{transform:translateY(-1px);border-color:var(--accent1);color:var(--accent1)}.af8-btn.primary{background:var(--accent-gradient);border-color:transparent;color:#fff;box-shadow:0 10px 24px rgba(108,92,231,.18)}.af8-btn:disabled{opacity:.48;cursor:not-allowed;transform:none}
-.af8-stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:11px;margin-bottom:14px}.af8-stat{border:1px solid var(--border);border-radius:18px;background:var(--bg-card);padding:14px 15px;box-shadow:var(--shadow);min-width:0}.af8-stat strong{font-size:1.35rem;display:block}.af8-stat span{color:var(--text-muted);font-size:.74rem;display:block;margin-top:4px}.af8-stat-top{display:flex;align-items:center;justify-content:space-between;gap:8px}.af8-stat-icon{width:38px;height:38px;border-radius:12px;background:rgba(108,92,231,.1);color:var(--accent1);display:grid;place-items:center}
-.af8-toolbar{border:1px solid var(--border);border-radius:20px;background:var(--bg-card);box-shadow:var(--shadow);padding:12px;margin-bottom:14px}.af8-toolbar-main{display:grid;grid-template-columns:minmax(240px,2fr) repeat(3,minmax(145px,.75fr)) auto;gap:8px;align-items:center}.af8-search{position:relative}.af8-search i{position:absolute;inset-inline-start:13px;top:50%;transform:translateY(-50%);color:var(--text-muted);pointer-events:none}.af8-input,.af8-select{width:100%;height:46px;box-sizing:border-box;border:1px solid var(--border);border-radius:13px;background:var(--bg-primary);color:var(--text-primary);font:inherit;padding:0 12px;outline:none}.af8-search .af8-input{padding-inline-start:40px}.af8-input:focus,.af8-select:focus{border-color:var(--accent1);box-shadow:0 0 0 4px rgba(108,92,231,.1)}.af8-view-toggle{display:flex;gap:5px;justify-content:flex-end}.af8-view-toggle button{width:42px;height:42px;border:1px solid var(--border);border-radius:12px;background:var(--bg-primary);color:var(--text-muted);cursor:pointer}.af8-view-toggle button.active,.af8-view-toggle button:hover{color:var(--accent1);border-color:var(--accent1);background:rgba(108,92,231,.07)}
-.af8-results{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-top:9px;color:var(--text-muted);font-size:.78rem}.af8-chip-row{display:flex;gap:6px;flex-wrap:wrap}.af8-chip{border:1px solid var(--border);border-radius:999px;background:var(--bg-primary);color:var(--text-muted);padding:6px 10px;font:inherit;font-weight:850;cursor:pointer}.af8-chip.active{color:var(--accent1);border-color:rgba(108,92,231,.35);background:rgba(108,92,231,.08)}
-.af8-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:13px;padding-bottom:30px}.af8-grid.list{grid-template-columns:1fr}.af8-card{border:1px solid var(--border);border-radius:20px;background:var(--bg-card);overflow:hidden;box-shadow:var(--shadow);transition:.2s;min-width:0}.af8-card:hover{transform:translateY(-2px);border-color:rgba(108,92,231,.42);box-shadow:0 18px 44px rgba(108,92,231,.1)}.af8-cover{height:160px;background:linear-gradient(145deg,var(--bg-secondary),rgba(108,92,231,.08));display:grid;place-items:center;position:relative;overflow:hidden}.af8-cover img{width:100%;height:100%;object-fit:cover;display:block}.af8-cover .type{position:absolute;top:10px;inset-inline-end:10px;padding:5px 8px;border-radius:999px;background:rgba(8,10,17,.65);color:#fff;font-size:.66rem;font-weight:900;backdrop-filter:blur(8px)}.af8-fav{position:absolute;top:10px;inset-inline-start:10px;width:34px;height:34px;border-radius:11px;border:1px solid rgba(255,255,255,.16);background:rgba(8,10,17,.6);color:#fff;cursor:pointer}.af8-fav.active{color:#ffd166}.af8-doc-icon{font-size:3.2rem;color:var(--accent1)}.af8-card-body{padding:14px}.af8-card-title{font-weight:950;line-height:1.55;word-break:break-word;min-height:45px}.af8-card-meta{display:flex;flex-wrap:wrap;gap:7px;color:var(--text-muted);font-size:.73rem;line-height:1.75;margin-top:7px}.af8-card-badges{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}.af8-badge{display:inline-flex;align-items:center;gap:5px;padding:5px 8px;border-radius:999px;border:1px solid var(--border);background:var(--bg-primary);font-size:.66rem;font-weight:900;color:var(--text-muted)}.af8-badge.readonly{color:#f59e0b;border-color:rgba(245,158,11,.22);background:rgba(245,158,11,.06)}.af8-badge.edited{color:#16a34a;border-color:rgba(22,163,74,.2);background:rgba(22,163,74,.06)}.af8-actions{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-top:12px}.af8-actions button{min-height:40px;border:1px solid var(--border);border-radius:12px;background:var(--bg-primary);color:var(--text-primary);font:inherit;font-weight:900;cursor:pointer}.af8-actions .primary{background:var(--accent-gradient);border-color:transparent;color:#fff}.af8-actions .wide{grid-column:1/-1}.af8-grid.list .af8-card{display:grid;grid-template-columns:230px minmax(0,1fr)}.af8-grid.list .af8-cover{height:100%;min-height:158px}.af8-grid.list .af8-card-body{display:flex;flex-direction:column;justify-content:center}.af8-empty{grid-column:1/-1;padding:72px 20px;text-align:center;border:1px dashed var(--border);border-radius:20px;background:var(--bg-card);color:var(--text-muted)}.af8-empty i{font-size:3rem;color:var(--accent1);display:block;margin-bottom:12px}.af8-empty strong{display:block;color:var(--text-primary);font-size:1.06rem;margin-bottom:4px}
-.af8-upload{position:fixed;inset:0;z-index:260000;background:rgba(8,10,18,.62);backdrop-filter:blur(12px);display:none;align-items:center;justify-content:center;padding:18px}.af8-upload.active{display:flex}.af8-upload-card{width:min(780px,100%);max-height:92vh;overflow:auto;background:var(--bg-card);border:1px solid var(--border);border-radius:26px;box-shadow:0 30px 100px rgba(0,0,0,.32);padding:22px}.af8-upload-head{display:flex;align-items:center;gap:12px;margin-bottom:15px}.af8-upload-icon{width:50px;height:50px;border-radius:16px;background:var(--accent-gradient);color:#fff;display:grid;place-items:center}.af8-upload-head h3{margin:0}.af8-upload-head p{margin:4px 0 0;color:var(--text-muted);font-size:.8rem}.af8-upload-close{margin-inline-start:auto;width:40px;height:40px;border-radius:12px;border:1px solid var(--border);background:var(--bg-secondary);color:var(--text-primary);cursor:pointer}.af8-drop{border:1.5px dashed rgba(108,92,231,.46);border-radius:20px;padding:20px;min-height:150px;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:7px;background:rgba(108,92,231,.025);cursor:pointer}.af8-drop.drag{border-color:var(--accent1);background:rgba(108,92,231,.08)}.af8-drop input{display:none}.af8-drop i{font-size:2rem;color:var(--accent1)}.af8-drop small{color:var(--text-muted);line-height:1.7}.af8-selected-files{width:100%;margin-top:8px;color:var(--text-muted);font-size:.78rem;line-height:1.8}.af8-form{display:grid;grid-template-columns:1.2fr .8fr;gap:10px;margin-top:12px}.af8-field{display:flex;flex-direction:column;gap:7px}.af8-field span{font-weight:850;font-size:.78rem}.af8-field input,.af8-field select{height:45px;border:1px solid var(--border);border-radius:13px;background:var(--bg-primary);color:var(--text-primary);padding:0 11px;font:inherit;outline:0}.af8-toggle{display:flex;align-items:center;gap:12px;justify-content:space-between;margin-top:12px;padding:12px;border:1px solid var(--border);border-radius:15px;background:var(--bg-primary)}.af8-toggle-copy{display:flex;flex-direction:column;gap:3px}.af8-toggle-copy strong{font-size:.8rem}.af8-toggle-copy small{color:var(--text-muted);font-size:.7rem;line-height:1.6}.af8-toggle input{width:18px;height:18px;accent-color:var(--accent1)}.af8-upload-status{min-height:22px;margin-top:9px;color:var(--text-muted);font-size:.76rem}.af8-upload-status.error{color:#dc2626}.af8-upload-status.ok{color:#16a34a}.af8-upload-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:13px}
 
-
-<style id="ananas-files-v10-css">
-/* ===== File viewer V10: viewing/navigation/zoom only ===== */
-#ananasFileViewerV10{position:fixed;inset:0;z-index:265000;display:none;background:#161b24;color:#eef3f8;overflow:hidden;isolation:isolate}
-#ananasFileViewerV10.af10-open{display:block!important}
-.af10-workspace{position:absolute;inset:0;display:grid;grid-template-columns:252px minmax(0,1fr);direction:ltr;overflow:hidden}.af10-workspace.pages-hidden{grid-template-columns:0 minmax(0,1fr)}
-.af10-pages{min-width:0;min-height:0;background:color-mix(in srgb,var(--bg-secondary) 88%,#111 12%);border-inline-end:1px solid var(--border);display:flex;flex-direction:column;direction:rtl;z-index:50;transition:width .22s ease,transform .22s ease}
-.af10-pages.is-hidden{width:0;min-width:0;overflow:hidden;border:0}
-.af10-pages-head{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:13px 12px;border-bottom:1px solid var(--border);flex:0 0 auto;background:color-mix(in srgb,var(--bg-secondary) 94%,transparent)}
-.af10-title{display:flex;align-items:center;gap:9px;min-width:0}.af10-title-icon{width:34px;height:34px;border-radius:10px;display:grid;place-items:center;background:rgba(108,92,231,.12);color:var(--accent1);flex:0 0 auto}.af10-title-copy{min-width:0}.af10-title-copy strong{display:block;font-size:.75rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--text-primary)}.af10-title-copy span{display:block;margin-top:2px;font-size:.64rem;color:var(--text-muted)}
-.af10-icon-btn{width:36px;height:36px;border:1px solid var(--border);border-radius:11px;background:var(--bg-primary);color:var(--text-primary);display:inline-flex;align-items:center;justify-content:center;cursor:pointer;font:inherit;transition:.16s ease;flex:0 0 auto}.af10-icon-btn:hover{border-color:var(--accent1);color:var(--accent1);background:rgba(108,92,231,.07)}.af10-icon-btn:active{transform:scale(.97)}
-.af10-page-search{padding:10px;border-bottom:1px solid var(--border);display:grid;grid-template-columns:minmax(0,1fr) 38px;gap:6px;background:var(--bg-secondary)}
-.af10-page-search input,.af10-page-search select{width:100%;height:38px;border:1px solid var(--border);border-radius:10px;background:var(--bg-primary);color:var(--text-primary);padding:0 9px;font:inherit;outline:0;box-sizing:border-box}.af10-page-search input:focus,.af10-page-search select:focus{border-color:var(--accent1);box-shadow:0 0 0 3px rgba(108,92,231,.10)}
-.af10-page-list{flex:1;min-height:0;overflow:auto;padding:10px;display:flex;flex-direction:column;gap:8px;scrollbar-width:thin;scrollbar-color:rgba(108,92,231,.65) transparent}.af10-page-list::-webkit-scrollbar,.af10-v-scroll::-webkit-scrollbar{width:7px}.af10-page-list::-webkit-scrollbar-thumb,.af10-v-scroll::-webkit-scrollbar-thumb{background:rgba(108,92,231,.55);border-radius:99px}
-.af10-thumb{border:1px solid var(--border);border-radius:13px;background:var(--bg-primary);padding:6px;cursor:pointer;text-align:center;transition:border-color .16s ease,box-shadow .16s ease,transform .16s ease;color:var(--text-primary)}.af10-thumb:hover{border-color:rgba(108,92,231,.55);transform:translateY(-1px)}.af10-thumb.is-active{border-color:var(--accent1);box-shadow:0 0 0 2px rgba(108,92,231,.11)}.af10-thumb-media{height:118px;border-radius:8px;overflow:hidden;display:grid;place-items:center;background:#eef1f5}.af10-thumb-media canvas,.af10-thumb-media img{width:100%;height:100%;object-fit:contain;display:block;background:#fff}.af10-thumb-number{display:block;margin-top:5px;font-size:.64rem;font-weight:900;color:var(--text-muted)}
-.af10-pages-foot{padding:9px;border-top:1px solid var(--border);display:grid;grid-template-columns:1fr 1fr;gap:6px;flex:0 0 auto}.af10-pages-foot button{height:36px;border:1px solid var(--border);border-radius:10px;background:var(--bg-primary);color:var(--text-primary);font:inherit;font-size:.72rem;font-weight:850;cursor:pointer}.af10-pages-foot button:hover{border-color:var(--accent1);color:var(--accent1)}
-.af10-stage{min-width:0;min-height:0;position:relative;overflow:hidden;background:#252b34;direction:rtl}
-body.light-mode #ananasFileViewerV10 .af10-stage{background:#e7eaf0}
-.af10-v-scroll{position:absolute;inset:0;overflow:auto;overscroll-behavior:contain;scroll-behavior:smooth;padding:24px 14px 40px;scrollbar-gutter:stable}
-.af10-doc-stack{display:flex;flex-direction:column;align-items:center;gap:20px;min-width:max-content;padding:0 0 16px}
-.af10-paper{position:relative;background:#fff;box-shadow:0 18px 48px rgba(0,0,0,.24);overflow:hidden;border-radius:2px;transform-origin:center top;transition:width .12s ease,height .12s ease}.af10-paper.loading::after{content:'جاري عرض الصفحة…';position:absolute;inset:0;display:grid;place-items:center;color:#667081;background:#f7f8fa;font-size:.8rem;font-weight:900;z-index:5}.af10-paper canvas{position:absolute;inset:0;display:block;width:100%;height:100%;background:#fff}.af10-paper img{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;background:#fff}.af10-page-no{position:absolute;inset-inline-start:10px;bottom:10px;padding:4px 8px;border-radius:999px;background:rgba(15,23,42,.7);color:#fff;font-size:.6rem;font-weight:900;z-index:6;pointer-events:none}
-.af10-float{position:absolute;z-index:80;display:flex;align-items:center;gap:5px;padding:5px;border:1px solid rgba(255,255,255,.13);background:rgba(10,14,21,.74);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);box-shadow:0 13px 38px rgba(0,0,0,.22);border-radius:14px}.af10-zoom-dock{inset-inline-start:50%;top:12px;transform:translateX(-50%)}.af10-close-dock{inset-inline-end:12px;top:12px}
-.af10-zoom-btn{min-width:38px;height:36px;border:1px solid rgba(255,255,255,.10);border-radius:10px;background:rgba(255,255,255,.05);color:#eef3f8;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;font:inherit;font-weight:900}.af10-zoom-btn:hover{background:rgba(108,92,231,.20);border-color:rgba(108,92,231,.45)}.af10-zoom-label{min-width:58px;text-align:center;font-size:.7rem;font-weight:900;color:#eef3f8}
-.af10-reveal{position:absolute;z-index:90;top:12px;inset-inline-start:12px;display:none}.af10-reveal.is-visible{display:inline-flex}
-.af10-native-fallback{position:absolute;inset:0;display:none;align-items:center;justify-content:center;padding:20px}.af10-native-fallback.is-visible{display:flex}.af10-native-fallback iframe{width:min(1200px,100%);height:min(92vh,100%);border:0;border-radius:12px;background:#fff;box-shadow:0 18px 48px rgba(0,0,0,.22)}
-.af10-status{position:absolute;bottom:14px;inset-inline-start:50%;transform:translateX(-50%);padding:6px 10px;border-radius:999px;background:rgba(10,14,21,.72);color:#eef3f8;font-size:.64rem;font-weight:800;pointer-events:none;z-index:80;white-space:nowrap;max-width:calc(100% - 30px);overflow:hidden;text-overflow:ellipsis}.af10-status:empty{display:none}
-.af10-error{width:min(560px,calc(100% - 36px));padding:22px;border:1px solid var(--border);border-radius:18px;background:var(--bg-card);color:var(--text-muted);text-align:center;box-shadow:var(--shadow);margin:80px auto}.af10-error i{display:block;font-size:2rem;color:#e67e22;margin-bottom:10px}.af10-error strong{display:block;color:var(--text-primary);font-size:1rem;margin-bottom:5px}
-@media(max-width:820px){
- .af10-workspace{grid-template-columns:1fr}.af10-pages{position:absolute;top:0;bottom:0;inset-inline-start:0;width:min(84vw,300px);transform:translateX(-105%);box-shadow:0 0 55px rgba(0,0,0,.35);z-index:120}.af10-pages.is-mobile-open{transform:none}.af10-pages.is-hidden{width:min(84vw,300px);min-width:0;transform:translateX(-105%)}.af10-stage{grid-column:1}.af10-v-scroll{padding:16px 7px 30px}.af10-doc-stack{gap:14px}.af10-float{border-radius:12px}.af10-zoom-dock{top:9px}.af10-close-dock{top:9px;inset-inline-end:9px}.af10-reveal{top:9px;inset-inline-start:9px}.af10-status{bottom:9px;font-size:.6rem}.af10-pages-foot{grid-template-columns:1fr 1fr}.af10-thumb-media{height:112px}}
-@media(max-width:460px){.af10-page-search{grid-template-columns:1fr}.af10-page-search .af10-icon-btn{width:100%;height:34px}.af10-zoom-label{min-width:50px;font-size:.64rem}.af10-zoom-btn{min-width:34px;height:34px}.af10-float{padding:4px}}
-@media(prefers-reduced-motion:reduce){.af10-pages,.af10-paper,.af10-float,.af10-v-scroll{transition:none!important;scroll-behavior:auto!important}}
+<!-- ===== ANANAS FILES PAGE V13 — TARGETED FILES-ONLY REBUILD ===== -->
+<style id="ananas-files-v13-css">
+#courseFilesPage.aa-files-page-v13{
+  position:absolute!important;inset:0!important;z-index:40!important;display:none!important;
+  overflow:auto!important;padding:clamp(18px,3vw,34px)!important;background:var(--bg-primary)!important;
+  color:var(--text-primary);scroll-behavior:smooth;
+}
+#courseFilesPage.aa-files-page-v13.active{display:block!important}
+#courseFilesPage.aa-files-page-v13[hidden]{display:none!important}
+.aa-files-page-inner{width:min(1220px,100%);margin:0 auto;padding-bottom:42px}
+.aa-files-header{display:flex;align-items:center;justify-content:space-between;gap:18px;flex-wrap:wrap;margin-bottom:18px}
+.aa-files-heading{display:flex;align-items:center;gap:14px;min-width:0}
+.aa-files-heading-icon{width:58px;height:58px;flex:0 0 58px;border-radius:18px;background:var(--accent-gradient);color:#fff;display:grid;place-items:center;font-size:1.3rem;box-shadow:0 14px 34px rgba(108,92,231,.22)}
+.aa-files-eyebrow{font-size:.72rem;font-weight:900;letter-spacing:.04em;color:var(--accent1);margin-bottom:2px}
+.aa-files-heading h2{font-size:clamp(1.45rem,2.4vw,2rem);margin:0;font-weight:900}
+.aa-files-heading p{margin:4px 0 0;color:var(--text-muted);font-size:.88rem}
+.aa-files-header-actions{display:flex;align-items:center;gap:9px;flex-wrap:wrap}
+.aa-files-primary-btn{border:1px solid transparent;min-height:45px;padding:0 16px;border-radius:14px;background:var(--accent-gradient);color:#fff;font:inherit;font-weight:900;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:8px;box-shadow:0 10px 24px rgba(108,92,231,.18);transition:.18s}
+.aa-files-primary-btn:hover{transform:translateY(-2px);box-shadow:0 14px 30px rgba(108,92,231,.24)}
+.aa-files-back-btn{min-height:45px}
+.aa-files-stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-bottom:16px}
+.aa-files-stat{min-width:0;padding:15px;border:1px solid var(--border);border-radius:19px;background:var(--bg-card);box-shadow:0 10px 28px rgba(0,0,0,.05);display:flex;align-items:center;gap:11px}
+.aa-files-stat-icon{width:42px;height:42px;flex:0 0 42px;border-radius:13px;background:rgba(108,92,231,.09);color:var(--accent1);display:grid;place-items:center}
+.aa-files-stat b{display:block;font-size:1.28rem;line-height:1.1}
+.aa-files-stat small{display:block;color:var(--text-muted);font-size:.74rem;margin-top:4px;white-space:nowrap}
+.aa-files-toolbar{padding:15px;border:1px solid var(--border);border-radius:20px;background:var(--bg-card);box-shadow:0 10px 28px rgba(0,0,0,.05);margin-bottom:12px}
+.aa-files-search{height:50px;display:flex;align-items:center;gap:10px;padding:0 14px;border:1px solid var(--border);border-radius:15px;background:var(--bg-primary);margin-bottom:12px}
+.aa-files-search:focus-within{border-color:var(--accent1);box-shadow:0 0 0 4px rgba(108,92,231,.10)}
+.aa-files-search>i{color:var(--text-muted)}
+.aa-files-search input{flex:1;min-width:0;border:0;outline:0;background:transparent;color:var(--text-primary);font:inherit}
+.aa-files-search button{width:32px;height:32px;border:0;border-radius:10px;background:transparent;color:var(--text-muted);cursor:pointer}
+.aa-files-search button:hover{background:var(--bg-card);color:var(--accent1)}
+.aa-files-filters{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.aa-files-filter-field{display:flex;flex-direction:column;gap:6px}
+.aa-files-filter-field span{font-size:.74rem;font-weight:900;color:var(--text-muted)}
+.aa-files-filter-field select{height:44px;width:100%;padding:0 11px;border:1px solid var(--border);border-radius:13px;background:var(--bg-primary);color:var(--text-primary);font:inherit;outline:0}
+.aa-files-filter-field select:focus{border-color:var(--accent1);box-shadow:0 0 0 4px rgba(108,92,231,.08)}
+.aa-files-result-row{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:0 2px 11px;color:var(--text-muted);font-size:.8rem}
+.aa-files-clear-filters{border:0;background:transparent;color:var(--accent1);font:inherit;font-weight:800;cursor:pointer;padding:5px 7px;border-radius:9px}
+.aa-files-clear-filters:hover{background:rgba(108,92,231,.07)}
+.aa-files-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:15px}
+.aa-files-card{position:relative;display:flex;flex-direction:column;min-width:0;padding:17px;border:1px solid var(--border);border-radius:21px;background:var(--bg-card);box-shadow:0 12px 32px rgba(0,0,0,.05);transition:transform .2s,border-color .2s,box-shadow .2s;overflow:hidden}
+.aa-files-card:hover{transform:translateY(-4px);border-color:rgba(108,92,231,.48);box-shadow:0 18px 40px rgba(108,92,231,.10)}
+.aa-files-card-head{display:flex;gap:12px;align-items:flex-start;min-width:0}
+.aa-files-card-icon{width:52px;height:52px;flex:0 0 52px;border-radius:15px;background:rgba(108,92,231,.09);color:var(--accent1);display:grid;place-items:center;font-size:1.25rem}
+.aa-files-card-icon.pdf{background:rgba(231,76,60,.09);color:#e74c3c}
+.aa-files-card-icon.image{background:rgba(46,204,113,.09);color:#2ecc71}
+.aa-files-card-copy{min-width:0;flex:1}
+.aa-files-card-name{font-weight:900;line-height:1.5;overflow-wrap:anywhere}
+.aa-files-card-type{display:inline-flex;align-items:center;gap:5px;margin-top:6px;padding:4px 8px;border-radius:999px;background:var(--bg-primary);border:1px solid var(--border);color:var(--text-muted);font-size:.69rem;font-weight:800}
+.aa-files-card-meta{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:13px}
+.aa-files-meta-item{min-width:0;padding:8px 9px;border-radius:12px;background:var(--bg-primary);border:1px solid var(--border)}
+.aa-files-meta-item strong{display:block;font-size:.67rem;color:var(--text-muted);font-weight:700;margin-bottom:3px}
+.aa-files-meta-item span{display:block;font-size:.76rem;font-weight:800;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.aa-files-status{display:flex;align-items:center;gap:6px;margin-top:11px;color:var(--text-muted);font-size:.73rem}
+.aa-files-status i{color:var(--accent1)}
+.aa-files-card-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:14px}
+.aa-files-card-actions>*{min-height:41px;border:1px solid var(--border);border-radius:12px;background:var(--bg-primary);color:var(--text-primary);text-decoration:none;font:inherit;font-size:.77rem;font-weight:900;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:6px}
+.aa-files-card-actions .primary{background:var(--accent-gradient);border-color:transparent;color:#fff}
+.aa-files-card-actions .danger{grid-column:1/-1;color:#e74c3c;background:rgba(231,76,60,.05);border-color:rgba(231,76,60,.18)}
+.aa-files-card-actions>*:hover{transform:translateY(-1px);border-color:var(--accent1)}
+.aa-files-card-actions .primary:hover{border-color:transparent}
+.aa-files-empty{grid-column:1/-1;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:75px 18px;border:1px dashed var(--border);border-radius:22px;background:var(--bg-card);color:var(--text-muted)}
+.aa-files-empty i{font-size:3rem;color:var(--accent1);margin-bottom:13px}
+.aa-files-empty strong{font-size:1rem;color:var(--text-primary)}
+.aa-files-empty span{font-size:.8rem;margin-top:5px;line-height:1.7}
+#aaFileViewerV13{position:fixed;inset:0;z-index:60000;display:none;background:rgba(5,8,14,.96);backdrop-filter:blur(10px);padding:0}
+#aaFileViewerV13.active{display:flex;flex-direction:column}
+#aaFileViewerV13 .aa-viewer-head{height:66px;flex:0 0 66px;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:0 16px;border-bottom:1px solid rgba(255,255,255,.10);background:rgba(10,12,18,.92);color:#fff}
+#aaFileViewerV13 .aa-viewer-title{min-width:0;font-weight:900;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#aaFileViewerV13 .aa-viewer-title small{display:block;color:rgba(255,255,255,.55);font-weight:700;font-size:.68rem;margin-top:2px}
+#aaFileViewerV13 .aa-viewer-actions{display:flex;align-items:center;gap:7px}
+#aaFileViewerV13 .aa-viewer-actions>*{height:40px;border-radius:12px;padding:0 13px;border:1px solid rgba(255,255,255,.12);background:rgba(255,255,255,.05);color:#fff;text-decoration:none;font:inherit;font-weight:800;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:7px}
+#aaFileViewerV13 .aa-viewer-actions .download{background:var(--accent-gradient);border-color:transparent}
+#aaFileViewerV13 .aa-viewer-body{flex:1;min-height:0;display:flex;align-items:center;justify-content:center;overflow:hidden;background:#0a0d13;position:relative}
+#aaFileViewerV13 .aa-viewer-body img{display:block;max-width:100%;max-height:100%;width:auto;height:auto;object-fit:contain}
+#aaFileViewerV13 .aa-viewer-body iframe{width:100%;height:100%;border:0;background:#fff}
+#aaFileViewerV13 .aa-viewer-placeholder{width:min(620px,92%);padding:28px;border:1px solid rgba(255,255,255,.10);border-radius:22px;text-align:center;color:#fff;background:rgba(255,255,255,.04)}
+#aaFileViewerV13 .aa-viewer-placeholder i{font-size:3rem;color:#8b7cff;margin-bottom:13px}
+#aaFileViewerV13 .aa-viewer-placeholder h3{margin:0 0 7px;font-size:1.2rem}
+#aaFileViewerV13 .aa-viewer-placeholder p{margin:0;color:rgba(255,255,255,.64);line-height:1.8;font-size:.82rem}
+#aaFileViewerV13 .aa-viewer-note{position:absolute;left:12px;right:12px;bottom:12px;margin:0;padding:10px 12px;border-radius:14px;background:rgba(9,11,17,.82);backdrop-filter:blur(10px);border:1px solid rgba(255,255,255,.10);color:rgba(255,255,255,.78);font-size:.75rem;line-height:1.8;z-index:3;pointer-events:none}
+#aaFileUploadV13{position:fixed;inset:0;z-index:60010;display:none;align-items:center;justify-content:center;padding:16px;background:rgba(4,7,12,.70);backdrop-filter:blur(12px)}
+#aaFileUploadV13.active{display:flex}
+#aaFileUploadV13 .aa-upload-card{width:min(780px,100%);max-height:min(92vh,900px);overflow:auto;border:1px solid var(--border);border-radius:26px;background:var(--bg-card);box-shadow:0 35px 100px rgba(0,0,0,.36);padding:24px}
+.aa-upload-head{display:flex;align-items:center;gap:13px;padding-inline-end:44px;margin-bottom:18px}
+.aa-upload-head-icon{width:54px;height:54px;border-radius:17px;background:var(--accent-gradient);color:#fff;display:grid;place-items:center;flex:0 0 54px}
+.aa-upload-head h3{margin:0;font-size:1.25rem}.aa-upload-head p{margin:4px 0 0;color:var(--text-muted);font-size:.8rem;line-height:1.7}
+.aa-upload-close{position:absolute;top:13px;inset-inline-end:13px;width:40px;height:40px;border-radius:12px;border:1px solid var(--border);background:var(--bg-secondary);color:var(--text-muted);cursor:pointer}
+.aa-upload-card{position:relative}
+.aa-upload-drop{min-height:175px;border:1.5px dashed rgba(108,92,231,.48);border-radius:20px;background:linear-gradient(145deg,rgba(108,92,231,.07),rgba(9,132,227,.03));display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:22px;cursor:pointer;transition:.18s}
+.aa-upload-drop:hover,.aa-upload-drop.dragover{border-color:var(--accent1);transform:translateY(-1px);box-shadow:0 14px 34px rgba(108,92,231,.10)}
+.aa-upload-drop input{display:none}.aa-upload-drop-icon{width:58px;height:58px;border-radius:18px;background:var(--accent-gradient);color:#fff;display:grid;place-items:center;font-size:1.35rem;margin-bottom:10px}
+.aa-upload-drop strong{font-size:.95rem}.aa-upload-drop span{display:block;margin-top:5px;color:var(--text-muted);font-size:.75rem;line-height:1.7}
+.aa-upload-selected{margin-top:9px;padding:10px 12px;border-radius:14px;background:var(--bg-primary);border:1px solid var(--border);color:var(--text-muted);font-size:.74rem;line-height:1.8;max-height:88px;overflow:auto;word-break:break-word}
+.aa-upload-form{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:14px}
+.aa-upload-field{display:flex;flex-direction:column;gap:6px}
+.aa-upload-field>span{font-size:.78rem;font-weight:900}.aa-upload-field input,.aa-upload-field select{height:46px;border:1px solid var(--border);border-radius:13px;background:var(--bg-primary);color:var(--text-primary);padding:0 12px;font:inherit;outline:0}
+.aa-upload-field input:focus,.aa-upload-field select:focus{border-color:var(--accent1);box-shadow:0 0 0 4px rgba(108,92,231,.08)}
+.aa-upload-check{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:12px;padding:12px 13px;border:1px solid var(--border);border-radius:15px;background:var(--bg-primary)}
+.aa-upload-check-copy strong{display:block;font-size:.79rem}.aa-upload-check-copy small{display:block;margin-top:3px;color:var(--text-muted);font-size:.7rem}
+.aa-upload-check input{width:19px;height:19px;accent-color:var(--accent1)}
+.aa-upload-status{min-height:24px;margin-top:11px;color:var(--text-muted);font-size:.77rem;line-height:1.7}
+.aa-upload-actions{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-top:12px}
+.aa-upload-actions button{min-height:46px;border-radius:14px;font:inherit;font-weight:900;cursor:pointer}
+.aa-upload-primary{border:0;background:var(--accent-gradient);color:#fff}
+.aa-upload-secondary{border:1px solid var(--border);background:var(--bg-secondary);color:var(--text-primary)}
+@media(max-width:860px){.aa-files-stats{grid-template-columns:1fr 1fr}.aa-files-filters{grid-template-columns:1fr 1fr}.aa-upload-form{grid-template-columns:1fr}}
+@media(max-width:620px){#courseFilesPage.aa-files-page-v13{padding:13px!important}.aa-files-heading{align-items:flex-start}.aa-files-heading-icon{width:50px;height:50px;flex-basis:50px;border-radius:15px}.aa-files-header-actions{width:100%}.aa-files-header-actions>*{flex:1}.aa-files-stats{gap:8px}.aa-files-stat{padding:12px}.aa-files-stat-icon{width:38px;height:38px;flex-basis:38px}.aa-files-stat b{font-size:1.08rem}.aa-files-stat small{font-size:.67rem}.aa-files-filters{grid-template-columns:1fr}.aa-files-grid{grid-template-columns:1fr}.aa-files-card-meta{grid-template-columns:1fr 1fr}.aa-files-result-row{align-items:flex-start}.aa-upload-card{padding:17px;border-radius:20px}.aa-upload-actions{grid-template-columns:1fr}.aa-files-card-actions{grid-template-columns:1fr 1fr}}
 </style>
-<script id="ananas-files-v10-js">
+
+<script id="ananas-files-v13-script">
 (function(){
-"use strict";
-if(window.__ananasFilesV10)return;window.__ananasFilesV10=true;
-const $=id=>document.getElementById(id);
-const getDb=()=>{try{return db}catch(_){return window.db||null}};
-const getCourseId=()=>{try{if(typeof activeCourseId!=='undefined'&&activeCourseId)return String(activeCourseId)}catch(_){}return String(window.activeCourseId||'')};
-const getUser=()=>{try{if(typeof currentUser!=='undefined'&&currentUser)return currentUser}catch(_){}return window.currentUser||null};
-const getAdmin=()=>{try{if(typeof isAdmin!=='undefined')return !!isAdmin}catch(_){}return !!window.isAdmin};
-const esc=v=>String(v??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
-const ext=f=>String(f?.name||'').toLowerCase().split('.').pop()||'';
-const isPdf=f=>String(f?.mime||'').toLowerCase().includes('pdf')||ext(f)==='pdf';
-const isImage=f=>String(f?.mime||'').toLowerCase().startsWith('image/')||/^(png|jpe?g|gif|webp|svg|bmp|avif)$/i.test(ext(f));
-const typeOf=f=>{const m=String(f?.mime||'').toLowerCase(),e=ext(f);if(isPdf(f))return{key:'pdf',label:'PDF',icon:'fa-file-pdf'};if(isImage(f))return{key:'image',label:'صورة',icon:'fa-file-image'};if(m.includes('word')||/^(doc|docx|rtf)$/.test(e))return{key:'document',label:'مستند',icon:'fa-file-word'};if(m.includes('sheet')||/^(xls|xlsx|csv)$/.test(e))return{key:'sheet',label:'جدول',icon:'fa-file-excel'};if(m.includes('presentation')||/^(ppt|pptx)$/.test(e))return{key:'presentation',label:'عرض',icon:'fa-file-powerpoint'};if(/^(zip|rar|7z)$/.test(e)||m.includes('zip'))return{key:'archive',label:'أرشيف',icon:'fa-file-zipper'};if(/^(txt|md|json|xml)$/.test(e))return{key:'text',label:'نص',icon:'fa-file-lines'};return{key:'other',label:'ملف',icon:'fa-file-lines'}};
-const fmtSize=n=>{n=Number(n)||0;if(!n)return'—';const u=['بايت','ك.ب','م.ب','ج.ب'];let i=0;while(n>=1024&&i<u.length-1){n/=1024;i++}return `${n.toFixed(i?1:0)} ${u[i]}`};
-const fmtDate=v=>{try{const d=v?.toDate?v.toDate():(v?new Date(v):null);return d&&!isNaN(d.getTime())?d.toLocaleDateString('ar-SA',{year:'numeric',month:'short',day:'numeric'}):'—'}catch(_){return'—'}};
-const fileKey=f=>String(f?.id||f?.asset_id||f?.url||f?.name||'file').replace(/[^a-z0-9_-]/gi,'_');
-const localKey=(f,cid)=>`ananas.files.v8.${cid||'global'}.${fileKey(f)}`;
-const readFavs=cid=>{try{return new Set(JSON.parse(localStorage.getItem(`ananas.files.v8.favs.${cid||'global'}`)||'[]'))}catch(_){return new Set()}};
-const writeFavs=(cid,s)=>{try{localStorage.setItem(`ananas.files.v8.favs.${cid||'global'}`,JSON.stringify([...s]))}catch(_){} };
-const readView=()=>{try{return localStorage.getItem('ananas.files.v8.view')==='list'?'list':'grid'}catch(_){return'grid'}};
-const writeView=v=>{try{localStorage.setItem('ananas.files.v8.view',v)}catch(_){} };
-const toast=msg=>{let t=$('af9Toast');if(!t){t=document.createElement('div');t.id='af9Toast';t.className='af9-toast';document.body.appendChild(t)}t.textContent=msg;t.classList.add('show');clearTimeout(t.__timer);t.__timer=setTimeout(()=>t.classList.remove('show'),2400)};
-let files=[];let listView=readView();let libraryChip='';let viewer=null;
-function ensureLibrary(){const page=$('courseFilesPage');if(!page)return;let root=$('ananasFilesV8Root');if(root)return;page.innerHTML='<div class="ananas-files-v8-root" id="ananasFilesV8Root"></div>';root=$('ananasFilesV8Root');root.innerHTML=`<div class="af8-head"><div><div class="af8-kicker"><i class="fas fa-folder-open"></i> مكتبة الدورة</div><h1 class="af8-title">مركز الملفات</h1><p class="af8-subtitle">عرض الملفات داخل عارض مخصص متكيف مع الكمبيوتر والجوال.</p></div><div class="af8-head-actions"><button class="af8-btn" id="af8BackBtn"><i class="fas fa-arrow-right"></i> العودة</button><button class="af8-btn primary admin-only" id="af8UploadBtn"><i class="fas fa-cloud-arrow-up"></i> رفع ملف</button></div></div><div class="af8-stats" id="af8Stats"></div><div class="af8-toolbar"><div class="af8-toolbar-main"><div class="af8-search"><i class="fas fa-search"></i><input id="af8Search" class="af8-input" type="search" placeholder="ابحث باسم الملف أو الحصة..."></div><select id="af8Type" class="af8-select"><option value="">كل الأنواع</option><option value="pdf">PDF</option><option value="image">صور</option><option value="document">مستندات</option><option value="sheet">جداول</option><option value="presentation">عروض</option><option value="archive">أرشيف</option><option value="text">نصوص</option><option value="other">أخرى</option></select><select id="af8Lesson" class="af8-select"><option value="">كل الحصص</option><option value="__general">ملفات عامة</option></select><select id="af8Sort" class="af8-select"><option value="newest">الأحدث</option><option value="oldest">الأقدم</option><option value="name">الاسم</option><option value="size">الحجم</option></select><div class="af8-view-toggle"><button id="af8GridBtn" class="active" type="button" title="شبكة"><i class="fas fa-grip"></i></button><button id="af8ListBtn" type="button" title="قائمة"><i class="fas fa-list"></i></button></div></div><div class="af8-results"><div class="af8-chip-row" id="af8Chips"><button class="af8-chip active" data-chip="">الكل</button><button class="af8-chip" data-chip="favorites"><i class="fas fa-star"></i> المفضلة</button></div><span id="af8ResultCount">—</span></div></div><div id="af8Grid" class="af8-grid"></div>`;$('af8BackBtn').onclick=()=>window.switchCoursePage?.('dashboard');$('af8UploadBtn').onclick=()=>openUploadModal('');['af8Search','af8Type','af8Lesson','af8Sort'].forEach(id=>$(id)?.addEventListener('input',renderLibrary));$('af8GridBtn').onclick=()=>setListView('grid');$('af8ListBtn').onclick=()=>setListView('list');$('af8Chips').addEventListener('click',e=>{const b=e.target.closest('.af8-chip');if(!b)return;libraryChip=b.dataset.chip||'';$('af8Chips').querySelectorAll('.af8-chip').forEach(x=>x.classList.remove('active'));b.classList.add('active');renderLibrary()});setListView(listView)}
-function setListView(m){listView=m==='list'?'list':'grid';writeView(listView);const g=$('af8Grid');if(g)g.classList.toggle('list',listView==='list');$('af8GridBtn')?.classList.toggle('active',listView==='grid');$('af8ListBtn')?.classList.toggle('active',listView==='list')}
-function populateLessonFilter(){const sel=$('af8Lesson');if(!sel)return;const cur=sel.value,map=new Map();files.forEach(f=>{if(f.lessonId)map.set(String(f.lessonId),f.lessonTitle||'حصة')});sel.innerHTML='<option value="">كل الحصص</option><option value="__general">ملفات عامة</option>';[...map.entries()].sort((a,b)=>a[1].localeCompare(b[1],'ar')).forEach(([id,t])=>{const o=document.createElement('option');o.value=id;o.textContent=t;sel.appendChild(o)});if([...sel.options].some(o=>o.value===cur))sel.value=cur}
-function renderStats(){const t=files.length,p=files.filter(isPdf).length,i=files.filter(isImage).length,b=files.reduce((a,f)=>a+(Number(f.size)||0),0);$('af8Stats').innerHTML=`<div class="af8-stat"><div class="af8-stat-top"><div><strong>${t.toLocaleString('ar-SA')}</strong><span>إجمالي الملفات</span></div><div class="af8-stat-icon"><i class="fas fa-folder-tree"></i></div></div></div><div class="af8-stat"><div class="af8-stat-top"><div><strong>${p.toLocaleString('ar-SA')}</strong><span>ملفات PDF</span></div><div class="af8-stat-icon"><i class="fas fa-file-pdf"></i></div></div></div><div class="af8-stat"><div class="af8-stat-top"><div><strong>${i.toLocaleString('ar-SA')}</strong><span>صور</span></div><div class="af8-stat-icon"><i class="fas fa-images"></i></div></div></div><div class="af8-stat"><div class="af8-stat-top"><div><strong>${fmtSize(b)}</strong><span>الحجم الكلي</span></div><div class="af8-stat-icon"><i class="fas fa-hard-drive"></i></div></div></div>`}
-function coverMarkup(f){const t=typeOf(f);if(isImage(f))return `<img loading="lazy" src="${esc(f.url||'')}" alt="${esc(f.name||'')}" onerror="this.remove();this.parentElement.insertAdjacentHTML('beforeend','<i class=\"fas ${t.icon} af8-doc-icon\"></i>')">`;return `<i class="fas ${t.icon} af8-doc-icon"></i>`}
-function renderLibrary(){const g=$('af8Grid');if(!g)return;setListView(listView);const q=String($('af8Search')?.value||'').trim().toLocaleLowerCase('ar'),type=$('af8Type')?.value||'',lesson=$('af8Lesson')?.value||'',sort=$('af8Sort')?.value||'newest',favs=readFavs(getCourseId());let arr=files.filter(f=>{const t=typeOf(f),hay=`${f.name||''} ${f.lessonTitle||''}`.toLocaleLowerCase('ar');if(q&&!hay.includes(q))return false;if(type&&t.key!==type)return false;if(lesson==='__general'&&f.lessonId)return false;if(lesson&&lesson!=='__general'&&String(f.lessonId||'')!==String(lesson))return false;if(libraryChip==='favorites'&&!favs.has(String(f.id)))return false;return true});arr.sort((a,b)=>{if(sort==='name')return String(a.name||'').localeCompare(String(b.name||''),'ar');if(sort==='size')return (Number(b.size)||0)-(Number(a.size)||0);const ta=a.uploadedAt?.toMillis?a.uploadedAt.toMillis():new Date(a.uploadedAt||0).getTime()||0,tb=b.uploadedAt?.toMillis?b.uploadedAt.toMillis():new Date(b.uploadedAt||0).getTime()||0;return sort==='oldest'?ta-tb:tb-ta});$('af8ResultCount').textContent=`${arr.length.toLocaleString('ar-SA')} ملف`;renderStats();populateLessonFilter();if(!arr.length){g.innerHTML='<div class="af8-empty"><i class="fas fa-folder-open"></i><strong>لا توجد ملفات مطابقة</strong><span>غيّر البحث أو الفلاتر أو أضف ملفًا جديدًا.</span></div>';return}g.innerHTML=arr.map(f=>{const fav=favs.has(String(f.id)),t=typeOf(f),can=f.allowDownload!==false||getAdmin();return `<article class="af8-card" data-id="${esc(f.id)}"><div class="af8-cover">${coverMarkup(f)}<span class="type">${esc(t.label)}</span><button class="af8-fav ${fav?'active':''}" type="button" data-fav="${esc(f.id)}" title="${fav?'إزالة من المفضلة':'إضافة للمفضلة'}"><i class="fas fa-star"></i></button></div><div class="af8-card-body"><div class="af8-card-title">${esc(f.name||'ملف بدون اسم')}</div><div class="af8-card-meta"><span><i class="fas fa-link"></i> ${esc(f.lessonTitle||'ملف عام')}</span><span>•</span><span>${esc(fmtSize(f.size))}</span></div><div class="af8-card-badges">${!can?'<span class="af8-badge readonly"><i class="fas fa-eye"></i> مشاهدة فقط</span>':''}</div><div class="af8-actions"><button class="primary wide" type="button" data-view="${esc(f.id)}"><i class="fas fa-eye"></i> عرض الملف</button>${can?`<button type="button" data-download="${esc(f.id)}"><i class="fas fa-download"></i> تنزيل</button>`:''}${getAdmin()?`<button type="button" data-delete="${esc(f.id)}" style="color:#dc2626"><i class="fas fa-trash"></i> حذف</button>`:''}</div></div></article>`}).join('');g.querySelectorAll('[data-view]').forEach(b=>b.onclick=()=>openViewer(files.find(f=>String(f.id)===String(b.dataset.view))));g.querySelectorAll('[data-download]').forEach(b=>b.onclick=()=>downloadOriginal(files.find(f=>String(f.id)===String(b.dataset.download))));g.querySelectorAll('[data-fav]').forEach(b=>b.onclick=()=>{const s=readFavs(getCourseId()),id=String(b.dataset.fav);s.has(id)?s.delete(id):s.add(id);writeFavs(getCourseId(),s);renderLibrary()});g.querySelectorAll('[data-delete]').forEach(b=>b.onclick=()=>deleteFile(b.dataset.delete))}
-async function loadFiles(){ensureLibrary();const cid=getCourseId(),g=$('af8Grid');if(!cid||!g)return;g.innerHTML='<div class="af8-empty"><i class="fas fa-spinner fa-spin"></i><strong>جاري تحميل الملفات</strong><span>لحظات...</span></div>';try{const d=getDb();if(!d)throw new Error('Firestore غير متاح');const snap=await d.collection('courses').doc(cid).collection('files').get();files=snap.docs.map(x=>({id:x.id,...(x.data()||{})})).filter(f=>!f.deleted);renderLibrary()}catch(e){console.error('files v9 load',e);g.innerHTML='<div class="af8-empty"><i class="fas fa-triangle-exclamation"></i><strong>تعذر تحميل الملفات</strong><span>'+esc(e.message||'تحقق من الاتصال والصلاحيات.')+'</span></div>'}}
-function confirmDelete(msg){if(typeof window.showCustomConfirm==='function')return new Promise(resolve=>window.showCustomConfirm('حذف الملف',msg,()=>resolve(true),()=>resolve(false)));return Promise.resolve(window.confirm(msg))}
-async function deleteFile(id){if(!getAdmin())return;const f=files.find(x=>String(x.id)===String(id));if(!f)return;const ok=await confirmDelete('سيتم إزالة الملف من مكتبة الدورة. الحذف الحقيقي من Cloudinary يتطلب Backend آمنًا، ولن يتم الادعاء بأنه حُذف من التخزين. هل تريد المتابعة؟');if(!ok)return;try{await getDb().collection('courses').doc(getCourseId()).collection('files').doc(String(id)).set({deleted:true,deletedAt:firebase.firestore.FieldValue.serverTimestamp(),deletedBy:getUser()?.uid||''},{merge:true});try{localStorage.removeItem(localKey(f,getCourseId()))}catch(_){}files=files.filter(x=>String(x.id)!==String(id));renderLibrary();toast('تم حذف الملف من المكتبة.')}catch(e){console.error(e);toast('تعذر حذف الملف.')}}
-function uploadModal(){let m=$('af8UploadModal');if(m)return m;m=document.createElement('div');m.id='af8UploadModal';m.className='af8-upload';m.innerHTML=`<div class="af8-upload-card"><div class="af8-upload-head"><div class="af8-upload-icon"><i class="fas fa-cloud-arrow-up"></i></div><div><h3>رفع ملفات جديدة</h3><p>سيُرفع الأصل إلى Cloudinary وتُحفظ بيانات الملف في Firestore.</p></div><button class="af8-upload-close" id="af8UploadClose" type="button"><i class="fas fa-xmark"></i></button></div><label class="af8-drop" id="af8Drop"><input id="af8Input" type="file" multiple accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.zip,.rar,.7z"><i class="fas fa-paperclip"></i><strong id="af8PickerText">اختر الملفات أو اسحبها هنا</strong><small>الصور وPDF والمستندات والجداول والعروض والأرشيفات — الحد الأقصى 25MB للملف</small><div id="af8Selected" class="af8-selected-files"></div></label><div class="af8-form"><label class="af8-field"><span>اسم الملف / العنوان</span><input id="af8Name" type="text" maxlength="180" placeholder="يطبق على كل الملفات المختارة إن كُتب"></label><label class="af8-field"><span>ربط الملفات بحصة</span><select id="af8LessonSelect"><option value="">ملف عام للدورة</option></select></label></div><label class="af8-toggle"><span class="af8-toggle-copy"><strong>السماح للطلاب بتحميل الملفات</strong><small>عند الإيقاف تصبح مشاهدة فقط، وتبقى الملاحظات في حساب كل طالب بشكل منفصل.</small></span><input id="af8AllowDownload" type="checkbox" checked></label><div id="af8UploadStatus" class="af8-upload-status"></div><div class="af8-upload-actions"><button class="af8-btn" type="button" id="af8UploadCancel">إلغاء</button><button class="af8-btn primary" type="button" id="af8UploadSubmit"><i class="fas fa-cloud-arrow-up"></i> بدء الرفع</button></div></div>`;document.body.appendChild(m);const close=()=>m.classList.remove('active');$('af8UploadClose').onclick=close;$('af8UploadCancel').onclick=close;m.addEventListener('click',e=>{if(e.target===m)close()});const input=$('af8Input'),drop=$('af8Drop');input.addEventListener('change',showSelection);['dragenter','dragover'].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.classList.add('drag')}));['dragleave','drop'].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.classList.remove('drag')}));drop.addEventListener('drop',e=>{if(e.dataTransfer?.files?.length){try{input.files=e.dataTransfer.files}catch(_){}showSelection()}});$('af8UploadSubmit').onclick=submit;return m;function showSelection(){const fs=[...input.files||[]];$('af8PickerText').textContent=fs.length?`تم اختيار ${fs.length} ملف`:'اختر الملفات أو اسحبها هنا';$('af8Selected').innerHTML=fs.map(f=>`${esc(f.name)} · ${fmtSize(f.size)}`).join('<br>')}async function submit(){if(!getAdmin()||!getCourseId())return alertUser('غير مسموح','يجب أن تكون مشرفًا داخل دورة.');const fs=[...input.files||[]],custom=$('af8Name').value.trim(),lessonId=$('af8LessonSelect').value||'',allow=$('af8AllowDownload').checked,status=$('af8UploadStatus'),btn=$('af8UploadSubmit');status.className='af8-upload-status';if(!fs.length){status.classList.add('error');status.textContent='اختر ملفًا واحدًا على الأقل.';return}const bad=fs.find(f=>/\.(exe|js|html?|php|sh|bat|cmd|msi|apk|dmg)$/i.test(f.name));if(bad){status.classList.add('error');status.textContent=`نوع غير مسموح: ${bad.name}`;return}const big=fs.find(f=>f.size>25*1024*1024);if(big){status.classList.add('error');status.textContent=`الملف أكبر من 25MB: ${big.name}`;return}let cloudName='',preset='';try{cloudName=String(CLOUDINARY_CLOUD_NAME||'');preset=String(CLOUDINARY_UPLOAD_PRESET||'')}catch(_){}if(!cloudName||!preset){status.classList.add('error');status.textContent='إعدادات Cloudinary غير موجودة.';return}btn.disabled=true;try{let lessonTitle='';if(lessonId){const snap=await getDb().collection('courses').doc(getCourseId()).collection('lessons').doc(lessonId).get();if(snap.exists)lessonTitle=snap.data()?.titleAr||'حصة'}for(let i=0;i<fs.length;i++){const f=fs[i];status.textContent=`جاري رفع ${i+1} من ${fs.length}: ${f.name}`;const fd=new FormData();fd.append('file',f);fd.append('upload_preset',preset);let res;try{res=await fetch(`https://api.cloudinary.com/v1_1/${encodeURIComponent(cloudName)}/auto/upload`,{method:'POST',body:fd})}catch(err){throw new Error('تعذر الاتصال بـ Cloudinary. '+(err?.message||''))}let json={};try{json=await res.json()}catch(_){}if(!res.ok)throw new Error(json?.error?.message||`Cloudinary HTTP ${res.status}`);if(!json.secure_url)throw new Error('لم يُرجع Cloudinary secure_url.');await getDb().collection('courses').doc(getCourseId()).collection('files').add({name:custom||f.name||'ملف',url:json.secure_url,mime:f.type||json.resource_type==='image'&&json.format?`image/${json.format}`:'application/octet-stream',size:f.size||0,lessonId,lessonTitle,allowDownload:!!allow,uploadedAt:firebase.firestore.FieldValue.serverTimestamp(),uploadedBy:getUser()?.uid||'',deleted:false,storageProvider:'cloudinary',public_id:json.public_id||'',resource_type:json.resource_type||'image',format:json.format||ext(f),pages:Number(json.pages)||0,asset_id:json.asset_id||'',version:Number(json.version)||0})}status.className='af8-upload-status ok';status.textContent=`تم رفع ${fs.length} ملف بنجاح.`;input.value='';$('af8Selected').innerHTML='';await loadFiles();setTimeout(close,600)}catch(e){console.error('af8 upload',e);status.className='af8-upload-status error';status.textContent=`فشل الرفع: ${e?.message||String(e)}`}finally{btn.disabled=false}}}
-async function fillUploadLessons(pre=''){const sel=$('af8LessonSelect');if(!sel)return;sel.innerHTML='<option value="">ملف عام للدورة</option>';try{const s=await getDb().collection('courses').doc(getCourseId()).collection('lessons').orderBy('order','asc').get();s.forEach(d=>{const o=document.createElement('option');o.value=d.id;o.textContent=d.data()?.titleAr||'حصة';if(String(d.id)===String(pre))o.selected=true;sel.appendChild(o)})}catch(e){console.warn('fillUploadLessons',e)}}
-function alertUser(t,m){if(typeof window.showCustomAlert==='function')window.showCustomAlert(t,m);else window.alert(`${t}\n${m}`)}
-async function openUploadModal(pre=''){if(!getAdmin()||!getCourseId())return alertUser('غير مسموح','هذه العملية للمشرف داخل دورة فقط.');const m=uploadModal();$('af8Name').value='';$('af8Input').value='';$('af8AllowDownload').checked=true;$('af8UploadStatus').textContent='';$('af8Selected').innerHTML='';$('af8PickerText').textContent='اختر الملفات أو اسحبها هنا';await fillUploadLessons(pre);m.classList.add('active')}
+  'use strict';
+  const $=id=>document.getElementById(id);
+  const esc=v=>String(v??'').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+  const page=$('courseFilesPage');
+  if(!page||window.__ananasFilesV13Loaded)return;
+  window.__ananasFilesV13Loaded=true;
 
+  /* Earlier file patches in this single-file app can rebuild the legacy shell
+     before this final patch executes. Reset only this page to its canonical V13 markup. */
+  page.innerHTML=`<div class="aa-files-page-inner">
+    <header class="aa-files-header">
+      <div class="aa-files-heading">
+        <div class="aa-files-heading-icon"><i class="fas fa-folder-tree" aria-hidden="true"></i></div>
+        <div><div class="aa-files-eyebrow">مكتبة الدورة</div><h2>الملفات والموارد</h2><p>ابحث، صفِّ، واعرض ملفات الدورة من مكان واحد.</p></div>
+      </div>
+      <div class="aa-files-header-actions">
+        <button type="button" class="full-page-back-btn aa-files-back-btn" id="aaFilesBackBtn"><i class="fas fa-arrow-right"></i><span>العودة</span></button>
+        <button type="button" class="aa-files-primary-btn admin-only" id="aaFilesUploadBtn"><i class="fas fa-cloud-arrow-up"></i><span>رفع ملف</span></button>
+      </div>
+    </header>
+    <section class="aa-files-stats" aria-label="إحصاءات الملفات">
+      <div class="aa-files-stat"><span class="aa-files-stat-icon"><i class="fas fa-layer-group"></i></span><div><b id="aaFilesTotal">0</b><small>إجمالي الملفات</small></div></div>
+      <div class="aa-files-stat"><span class="aa-files-stat-icon"><i class="fas fa-file-pdf"></i></span><div><b id="aaFilesPdf">0</b><small>ملفات PDF</small></div></div>
+      <div class="aa-files-stat"><span class="aa-files-stat-icon"><i class="fas fa-image"></i></span><div><b id="aaFilesImages">0</b><small>الصور</small></div></div>
+      <div class="aa-files-stat"><span class="aa-files-stat-icon"><i class="fas fa-link"></i></span><div><b id="aaFilesLinked">0</b><small>مرتبطة بحصص</small></div></div>
+    </section>
+    <section class="aa-files-toolbar" aria-label="فلترة الملفات">
+      <label class="aa-files-search"><i class="fas fa-magnifying-glass"></i><input id="aaFilesSearch" type="search" placeholder="ابحث باسم الملف أو اسم الحصة..." autocomplete="off"><button type="button" id="aaFilesSearchClear" aria-label="مسح البحث" hidden><i class="fas fa-xmark"></i></button></label>
+      <div class="aa-files-filters">
+        <label class="aa-files-filter-field"><span>النوع</span><select id="aaFilesTypeFilter"><option value="all">كل الأنواع</option><option value="pdf">PDF</option><option value="image">صور</option><option value="word">Word</option><option value="excel">Excel</option><option value="powerpoint">PowerPoint</option><option value="archive">ملفات مضغوطة</option><option value="other">أخرى</option></select></label>
+        <label class="aa-files-filter-field"><span>الحصة</span><select id="aaFilesLessonFilter"><option value="all">كل الحصص</option><option value="">ملفات عامة فقط</option></select></label>
+        <label class="aa-files-filter-field"><span>الترتيب</span><select id="aaFilesSort"><option value="newest">الأحدث أولًا</option><option value="oldest">الأقدم أولًا</option><option value="name">الاسم</option><option value="size">الحجم</option></select></label>
+      </div>
+    </section>
+    <div class="aa-files-result-row"><div id="aaFilesResultCount">0 ملف</div><button type="button" class="aa-files-clear-filters" id="aaFilesClearFilters"><i class="fas fa-rotate-left"></i> إعادة ضبط الفلاتر</button></div>
+    <div id="courseFilesPageGrid" class="aa-files-grid" aria-live="polite"></div>
+  </div>`;
+  page.hidden=true;
 
-/* ---------- V10 viewer: display + navigation + zoom only ---------- */
-function makeViewer(){let v=$('ananasFileViewerV10');if(v)return v;v=document.createElement('div');v.id='ananasFileViewerV10';v.innerHTML=`<div class="af10-workspace"><aside class="af10-pages" id="af10Pages"><div class="af10-pages-head"><div class="af10-title"><div class="af10-title-icon"><i class="fas fa-file-lines"></i></div><div class="af10-title-copy"><strong id="af10FileTitle">ملف</strong><span><span id="af10PageCount">1</span> صفحة</span></div></div><button class="af10-icon-btn" id="af10PagesHide" type="button" title="إخفاء قائمة الصفحات"><i class="fas fa-angles-right"></i></button></div><div class="af10-page-search"><input id="af10PageSearch" inputmode="numeric" pattern="[0-9]*" placeholder="رقم الصفحة"><button class="af10-icon-btn" id="af10PageJump" type="button" title="انتقال"><i class="fas fa-location-arrow"></i></button><select id="af10PageSelect" aria-label="اختيار الصفحة"><option value="">اختيار صفحة</option></select></div><div class="af10-page-list" id="af10PageList"></div><div class="af10-pages-foot"><button id="af10PrevPage" type="button"><i class="fas fa-chevron-up"></i> السابقة</button><button id="af10NextPage" type="button">التالية <i class="fas fa-chevron-down"></i></button></div></aside><main class="af10-stage"><div class="af10-float af10-close-dock"><button class="af10-icon-btn" id="af10Close" type="button" title="إغلاق"><i class="fas fa-arrow-right"></i></button></div><div class="af10-float af10-zoom-dock"><button class="af10-zoom-btn" id="af10ZoomOut" type="button" title="تصغير"><i class="fas fa-minus"></i></button><span class="af10-zoom-label" id="af10ZoomLabel">ملاءمة</span><button class="af10-zoom-btn" id="af10ZoomIn" type="button" title="تكبير"><i class="fas fa-plus"></i></button><button class="af10-zoom-btn" id="af10ZoomFit" type="button" title="ملاءمة العرض"><i class="fas fa-expand"></i></button></div><button class="af10-icon-btn af10-reveal" id="af10PagesShow" type="button" title="إظهار قائمة الصفحات"><i class="fas fa-angles-left"></i></button><div class="af10-v-scroll" id="af10Scroll"><div class="af10-doc-stack" id="af10DocStack"></div><div class="af10-native-fallback" id="af10NativeFallback"></div></div><div class="af10-status" id="af10Status"></div></main></div>`;document.body.appendChild(v);const close=()=>closeViewer();$('af10Close').onclick=close;$('af10PagesHide').onclick=hidePages;$('af10PagesShow').onclick=showPages;$('af10ZoomOut').onclick=()=>changeZoom(-0.1);$('af10ZoomIn').onclick=()=>changeZoom(0.1);$('af10ZoomFit').onclick=()=>setZoom('fit');$('af10PageJump').onclick=()=>jumpFromInput();$('af10PageSearch').addEventListener('keydown',e=>{if(e.key==='Enter')jumpFromInput()});$('af10PageSelect').addEventListener('change',e=>{const n=Number(e.target.value);if(n)scrollToPage(n)});$('af10PrevPage').onclick=()=>scrollToPage(Math.max(1,(viewer?.page||1)-1));$('af10NextPage').onclick=()=>scrollToPage(Math.min(viewer?.pageCount||1,(viewer?.page||1)+1));$('af10Scroll').addEventListener('scroll',onScroll,{passive:true});v.addEventListener('click',e=>{if(e.target===v)close()});return v}
-function setStatus(s){const e=$('af10Status');if(e)e.textContent=s||''}
-function hidePages(){if(!viewer)return;const p=$('af10Pages'),w=document.querySelector('#ananasFileViewerV10 .af10-workspace');p.classList.add('is-hidden');p.classList.remove('is-mobile-open');w?.classList.add('pages-hidden');$('af10PagesShow').classList.add('is-visible')}
-function showPages(){if(!viewer)return;const p=$('af10Pages'),w=document.querySelector('#ananasFileViewerV10 .af10-workspace');p.classList.remove('is-hidden');w?.classList.remove('pages-hidden');if(window.matchMedia('(max-width:820px)').matches)p.classList.add('is-mobile-open');$('af10PagesShow').classList.remove('is-visible')}
-function viewerPageState(n){if(!viewer.pageState[n])viewer.pageState[n]={width:0,height:0,rendered:false,thumb:false};return viewer.pageState[n]}
-function isPdfFile(f){return isPdf(f)}
-function viewerUrl(f){return String(f?.url||'')}
-function loadImageNoCors(src){return new Promise((resolve,reject)=>{const im=new Image();im.decoding='async';im.onload=()=>resolve(im);im.onerror=()=>reject(new Error('تعذر تحميل الصورة'));im.src=src})}
-async function loadPdf(){if(!viewer)return false;setStatus('جاري فتح الملف…');if(!window.pdfjsLib)throw new Error('محرك عرض PDF غير متاح');window.pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';const src=viewerUrl(viewer.file);let err=null;try{viewer.pdf=await window.pdfjsLib.getDocument({url:src,withCredentials:false,disableAutoFetch:false,disableStream:false,rangeChunkSize:65536}).promise}catch(e){err=e}if(!viewer.pdf){try{const res=await fetch(src,{mode:'cors',credentials:'omit'});if(!res.ok)throw new Error(`HTTP ${res.status}`);const buf=await res.arrayBuffer();viewer.pdf=await window.pdfjsLib.getDocument({data:buf}).promise}catch(e){err=e}}if(!viewer.pdf)throw new Error('تعذر قراءة ملف PDF من رابط التخزين.');viewer.pageCount=viewer.pdf.numPages;return true}
-function cloudinaryPageUrl(file,n,width=1400){const u=String(file?.url||'');if(!u)return'';try{const x=new URL(u),p=x.pathname.split('/');const oi=p.indexOf('upload');if(oi<0)return'';let after=p.slice(oi+1);const version=after[0]?.match(/^v\d+$/)?after.shift():'';const publicId=after.join('/');const resourceRaw=p[oi-1]==='raw';const base=p.slice(0,oi+1).join('/');const delivery=resourceRaw?base.replace('/raw/upload','/image/upload'):base;return x.origin+delivery.slice(x.origin.length)+'pg_'+n+',f_jpg,q_auto,w_'+width+'/'+(version?version+'/':'')+publicId}catch(_){return''}}
-async function loadCloudPageImage(n,width=1400){const src=cloudinaryPageUrl(viewer.file,n,width);if(!src)throw new Error('تعذر بناء رابط معاينة الصفحة.');return loadImageNoCors(src)}
-function computeFit(w,h){const box=$('af10Scroll')?.getBoundingClientRect();if(!box)return 1;const maxW=Math.max(180,box.width-28);return Math.max(.05,Math.min(1.18,maxW/w))}
-function zoomFactor(){if(!viewer)return 1;return viewer.zoomMode==='fit'?1:viewer.zoom}
-function clearStack(){const s=$('af10DocStack');if(s)s.innerHTML=''}
-function pageShell(n,w,h){const paper=document.createElement('article');paper.className='af10-paper loading';paper.dataset.page=String(n);paper.id=`af10Paper-${n}`;const width=Math.max(40,Math.round(w*zoomFactor())),height=Math.max(40,Math.round(h*zoomFactor()));paper.style.width=width+'px';paper.style.height=height+'px';paper.innerHTML=`<canvas></canvas><span class="af10-page-no">${n}</span>`;$('af10DocStack').appendChild(paper);return paper}
-async function buildPdfShells(){clearStack();const ps=[];for(let n=1;n<=viewer.pageCount;n++){const pg=await viewer.pdf.getPage(n),v0=pg.getViewport({scale:1});const fit=computeFit(v0.width,v0.height);viewer.pageState[n]={width:v0.width,height:v0.height,baseScale:fit,rendered:false,thumb:false};const paper=pageShell(n,v0.width*fit,v0.height*fit);paper.style.width=Math.round(v0.width*fit*zoomFactor())+'px';paper.style.height=Math.round(v0.height*fit*zoomFactor())+'px';ps.push(paper)}return ps}
-async function renderPdfPage(n){if(!viewer?.pdf)return;const state=viewerPageState(n),paper=$(`af10Paper-${n}`),canvas=paper?.querySelector('canvas');if(!paper||!canvas||state.rendered)return;state.rendered=true;paper.classList.add('loading');try{const scale=(state.baseScale||computeFit(state.width,state.height))*zoomFactor();const pg=await viewer.pdf.getPage(n),vp=pg.getViewport({scale});canvas.width=Math.max(1,Math.ceil(vp.width));canvas.height=Math.max(1,Math.ceil(vp.height));paper.style.width=canvas.width+'px';paper.style.height=canvas.height+'px';await pg.render({canvasContext:canvas.getContext('2d',{alpha:false}),viewport:vp}).promise;paper.classList.remove('loading')}catch(e){state.rendered=false;paper.classList.remove('loading');paper.innerHTML=`<div class="af10-error" style="margin:0;height:100%;display:grid;place-items:center;box-sizing:border-box"><div><i class="fas fa-triangle-exclamation"></i><strong>تعذر عرض الصفحة ${n}</strong><div>${esc(e?.message||'تعذر الرسم')}</div></div></div>`}}
-async function renderPdfThumb(n){const b=document.querySelector(`.af10-thumb[data-page="${n}"] .af10-thumb-media`);if(!b||viewerPageState(n).thumb)return;viewerPageState(n).thumb=true;try{const pg=await viewer.pdf.getPage(n),v0=pg.getViewport({scale:1}),scale=Math.min(.20,112/v0.width);const vp=pg.getViewport({scale});const c=document.createElement('canvas');c.width=Math.ceil(vp.width);c.height=Math.ceil(vp.height);await pg.render({canvasContext:c.getContext('2d',{alpha:false}),viewport:vp}).promise;b.replaceChildren(c)}catch(_){viewerPageState(n).thumb=false}}
-async function loadImageFile(){const im=await loadImageNoCors(viewerUrl(viewer.file));viewer.pageCount=1;viewer.pageState[1]={width:im.naturalWidth,height:im.naturalHeight,baseScale:computeFit(im.naturalWidth,im.naturalHeight),rendered:true,thumb:true};clearStack();const p=pageShell(1,im.naturalWidth,im.naturalHeight);p.classList.remove('loading');p.innerHTML='';const img=im.cloneNode(true);img.alt=viewer.file?.name||'صورة';p.appendChild(img);const thumb=document.querySelector('.af10-thumb[data-page="1"] .af10-thumb-media');if(thumb)thumb.replaceChildren(im.cloneNode(true))}
-function buildPagePanel(){const list=$('af10PageList'),sel=$('af10PageSelect');if(!list||!sel||!viewer)return;list.innerHTML='';sel.innerHTML='<option value="">اختيار صفحة</option>';const frag=document.createDocumentFragment(),opts=document.createDocumentFragment();for(let n=1;n<=viewer.pageCount;n++){const b=document.createElement('button');b.type='button';b.className='af10-thumb';b.dataset.page=String(n);b.innerHTML=`<div class="af10-thumb-media"><span style="font-size:.7rem;color:#8a93a2">${n}</span></div><span class="af10-thumb-number">صفحة ${n}</span>`;b.onclick=()=>scrollToPage(n);frag.appendChild(b);const o=document.createElement('option');o.value=String(n);o.textContent=`صفحة ${n}`;opts.appendChild(o)}list.appendChild(frag);sel.appendChild(opts);if(viewer.pdf)for(let n=1;n<=viewer.pageCount;n++)renderPdfThumb(n);else{const b=list.querySelector('.af10-thumb');if(b&&viewer.file)loadImageNoCors(viewerUrl(viewer.file)).then(im=>b.querySelector('.af10-thumb-media')?.replaceChildren(im.cloneNode(true))).catch(()=>{})}}
-function syncActivePage(){if(!viewer)return;document.querySelectorAll('#af10PageList .af10-thumb').forEach(x=>x.classList.toggle('is-active',Number(x.dataset.page)===viewer.page));const s=$('af10PageSelect');if(s)s.value=String(viewer.page);const c=$('af10PageCount');if(c)c.textContent=String(viewer.pageCount);const title=$('af10FileTitle');if(title)title.textContent=viewer.file?.name||'ملف'}
-function scrollToPage(n){if(!viewer)return;n=Math.max(1,Math.min(viewer.pageCount,Number(n)||1));const paper=$(`af10Paper-${n}`);viewer.page=n;syncActivePage();if(paper)$('af10Scroll').scrollTo({top:paper.offsetTop-12,behavior:'smooth'});if(viewer.pdf)renderPdfPage(n).catch(()=>{})}
-function onScroll(){if(!viewer)return;const scroll=$('af10Scroll');if(!scroll)return;let best=1,dist=Infinity;for(let n=Math.max(1,viewer.page-3);n<=Math.min(viewer.pageCount,viewer.page+3);n++){const p=$(`af10Paper-${n}`);if(!p)continue;const d=Math.abs((p.offsetTop-scroll.scrollTop)-12);if(d<dist){dist=d;best=n}}viewer.page=best;syncActivePage();if(viewer.pdf){for(let n=Math.max(1,best-2);n<=Math.min(viewer.pageCount,best+2);n++)renderPdfPage(n).catch(()=>{})}}
-function jumpFromInput(){const n=Number(($('af10PageSearch')?.value||'').replace(/\D/g,''));if(n)scrollToPage(n)}
-function setZoom(mode){if(!viewer)return;if(mode==='fit'){viewer.zoomMode='fit';viewer.zoom=1;$('af10ZoomLabel').textContent='ملاءمة'}else{viewer.zoomMode='fixed';viewer.zoom=Math.max(.6,Math.min(2,Number(mode)));$('af10ZoomLabel').textContent=Math.round(viewer.zoom*100)+'%'}if(viewer.pdf){for(const n of Object.keys(viewer.pageState))viewer.pageState[n].rendered=false;renderAllVisible();}else{const p=$('af10Paper-1');if(p){const st=viewerPageState(1),im=p.querySelector('img');const scale=(st.baseScale||computeFit(st.width,st.height))*zoomFactor();p.style.width=Math.round(st.width*scale)+'px';p.style.height=Math.round(st.height*scale)+'px';if(im)im.style.width='100%';im.style.height='100%'}}syncActivePage()}
-function changeZoom(delta){if(!viewer)return;const cur=viewer.zoomMode==='fit'?1:viewer.zoom;setZoom(Math.max(.6,Math.min(2,Math.round((cur+delta)*10)/10)))}
-function renderAllVisible(){if(!viewer?.pdf)return;const best=viewer.page||1;for(let n=Math.max(1,best-2);n<=Math.min(viewer.pageCount,best+2);n++)renderPdfPage(n).catch(()=>{})}
-function showNativeFallback(msg){const fb=$('af10NativeFallback');if(!fb)return;fb.innerHTML=`<iframe src="${esc(viewerUrl(viewer.file))}" title="${esc(viewer.file?.name||'ملف')}"></iframe>`;fb.classList.add('is-visible');clearStack();setStatus(msg||'تم فتح العرض الأصلي للملف');viewer.pageCount=1;viewer.page=1;syncActivePage()}
-async function openViewer(file){if(!file?.url)return;if(viewer)closeViewer();const v=makeViewer();viewer={file,page:1,pageCount:1,pageState:{},pdf:null,zoomMode:'fit',zoom:1,active:true};v.classList.add('af10-open');document.body.classList.add('aa-file-viewer-open');document.body.style.overflow='hidden';$('af10NativeFallback').classList.remove('is-visible');$('af10NativeFallback').innerHTML='';showPages();syncActivePage();setStatus('');try{if(isImage(file)){await loadImageFile()}else if(isPdfFile(file)){try{await loadPdf();await buildPdfShells()}catch(e){try{if(Number(file.pages)>0){viewer.pageCount=Number(file.pages);clearStack();for(let n=1;n<=viewer.pageCount;n++){const im=await loadCloudPageImage(n,1400);viewer.pageState[n]={width:im.naturalWidth,height:im.naturalHeight,baseScale:computeFit(im.naturalWidth,im.naturalHeight),rendered:true,thumb:true};const p=pageShell(n,im.naturalWidth,im.naturalHeight);p.classList.remove('loading');p.innerHTML='';p.appendChild(im)}}else throw e}catch(e2){showNativeFallback('تعذر تشغيل محرك الصفحات، لذلك تم فتح المعاينة الأصلية للملف.')}}}else{showNativeFallback('هذا النوع من الملفات لا يدعم تقسيم الصفحات داخل العارض.')}buildPagePanel();syncActivePage();if(viewer.pdf)renderAllVisible();if(window.matchMedia('(max-width:820px)').matches)hidePages();setTimeout(()=>{$('af10PageSearch')?.focus({preventScroll:true})},50)}catch(e){console.error('file viewer v10',e);const stack=$('af10DocStack');if(stack)stack.innerHTML=`<div class="af10-error"><i class="fas fa-triangle-exclamation"></i><strong>تعذر عرض الملف</strong><div>${esc(e?.message||'حدث خطأ غير معروف أثناء العرض.')}</div></div>`;setStatus('تعذر العرض')}}
-function closeViewer(){const v=$('ananasFileViewerV10');if(!v)return;viewer=null;v.classList.remove('af10-open');document.querySelector('#ananasFileViewerV10 .af10-workspace')?.classList.remove('pages-hidden');$('af10DocStack').innerHTML='';$('af10PageList').innerHTML='';$('af10PageSelect').innerHTML='<option value="">اختيار صفحة</option>';$('af10NativeFallback').classList.remove('is-visible');$('af10NativeFallback').innerHTML='';document.body.classList.remove('aa-file-viewer-open');document.body.style.overflow=''}
-function downloadOriginal(file){if(!file)return;const allow=file.allowDownload!==false||getAdmin();if(!allow){toast('هذا الملف للمشاهدة فقط.');return}try{const a=document.createElement('a');a.href=file.url;a.target='_blank';a.rel='noopener';a.download=file.name||'file';document.body.appendChild(a);a.click();a.remove()}catch(_){window.open(file.url,'_blank','noopener')}}
-document.addEventListener('keydown',e=>{if(!viewer?.active)return;if(e.key==='Escape'){e.preventDefault();closeViewer();return}if(['INPUT','TEXTAREA','SELECT'].includes(document.activeElement?.tagName))return;if(e.key==='+'||e.key==='='){e.preventDefault();changeZoom(.1)}else if(e.key==='-'||e.key==='_'){e.preventDefault();changeZoom(-.1)}else if(e.key==='0'){e.preventDefault();setZoom('fit')}else if(e.key==='PageDown'||e.key==='ArrowDown'){e.preventDefault();scrollToPage(Math.min(viewer.pageCount,viewer.page+1))}else if(e.key==='PageUp'||e.key==='ArrowUp'){e.preventDefault();scrollToPage(Math.max(1,viewer.page-1))}},true);
-const oldSwitch=window.switchCoursePage;if(typeof oldSwitch==='function'&&!oldSwitch.__afsV10){const wrap=function(page){const r=oldSwitch.apply(this,arguments);if(page==='files'){const done=()=>{ensureLibrary();const p=$('courseFilesPage');p.style.display='block';p.classList.add('active');loadFiles()};if(r&&typeof r.then==='function')return r.then(x=>{done();return x});setTimeout(done,0)}else $('courseFilesPage')?.classList.remove('active');return r};wrap.__afsV10=true;wrap.__original=oldSwitch;window.switchCoursePage=wrap}
-window.openCourseFileViewer=openViewer;window.openFileViewer=openViewer;window.openCourseFileUploadModal=openUploadModal;window.loadCourseFilesPage=loadFiles;window.renderFilesGrid=(arr)=>{files=(arr||[]).filter(f=>f&&!f.deleted);ensureLibrary();renderLibrary()};window.deleteCourseFile=deleteFile;
-const originalLessonActions=window.renderLessonRelatedActions;if(typeof originalLessonActions==='function'&&!window.__afsV10Lesson){window.__afsV10Lesson=true;window.renderLessonRelatedActions=async function(courseId,lessonId){await originalLessonActions.apply(this,arguments);const area=$('lessonRelatedActions');if(!area)return;area.querySelectorAll('[data-afs-v10-file-action]').forEach(x=>x.remove());try{const snap=await getDb().collection('courses').doc(courseId).collection('files').get();const fs=snap.docs.map(d=>({id:d.id,...(d.data()||{})})).filter(f=>!f.deleted&&String(f.lessonId||'')===String(lessonId));const view=document.createElement('button');view.type='button';view.className='related-action';view.dataset.afsV10FileAction='1';view.innerHTML=`<i class="fas fa-folder-open"></i> ملفات الحصة${fs.length?` (${fs.length})`:''}`;view.onclick=()=>{if(fs.length===1)openViewer(fs[0]);else{window.switchCoursePage?.('files');setTimeout(()=>{files=fs;ensureLibrary();renderLibrary()},70)}};area.appendChild(view);if(getAdmin()){const up=document.createElement('button');up.type='button';up.className='related-action';up.dataset.afsV10FileAction='1';up.innerHTML='<i class="fas fa-cloud-arrow-up"></i> رفع ملف للحصة';up.onclick=()=>openUploadModal(lessonId);area.appendChild(up)}}catch(e){console.warn('lesson files v10',e)}}}
-ensureLibrary();if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',()=>loadFiles(),{once:true});else if(getCourseId())loadFiles();
+  let allFiles=[];
+  let lessonMap=new Map();
+  let viewer=null;
+  let uploadModal=null;
+
+  const fileName=f=>String(f?.name||'ملف بدون اسم');
+  const fileMime=f=>String(f?.mime||'').toLowerCase();
+  const fileExt=f=>{
+    const n=fileName(f).toLowerCase();
+    const m=n.match(/\.([a-z0-9]+)$/i);
+    return m?m[1]:'';
+  };
+  const typeOf=f=>{
+    const m=fileMime(f),e=fileExt(f);
+    if(m.includes('pdf')||e==='pdf')return 'pdf';
+    if(m.startsWith('image/')||/^(png|jpe?g|gif|webp|svg|bmp|avif)$/.test(e))return 'image';
+    if(m.includes('word')||/^(doc|docx)$/.test(e))return 'word';
+    if(m.includes('sheet')||/^(xls|xlsx|csv)$/.test(e))return 'excel';
+    if(m.includes('presentation')||/^(ppt|pptx)$/.test(e))return 'powerpoint';
+    if(m.includes('zip')||m.includes('compressed')||/^(zip|rar|7z)$/.test(e))return 'archive';
+    return 'other';
+  };
+  const typeLabel=t=>({pdf:'PDF',image:'صورة',word:'Word',excel:'Excel',powerpoint:'PowerPoint',archive:'ملف مضغوط',other:'ملف'})[t]||'ملف';
+  const iconOf=t=>({pdf:'fa-file-pdf',image:'fa-file-image',word:'fa-file-word',excel:'fa-file-excel',powerpoint:'fa-file-powerpoint',archive:'fa-file-zipper',other:'fa-file-lines'})[t]||'fa-file-lines';
+  const sizeOf=n=>{
+    n=Number(n)||0;if(!n)return'الحجم غير متوفر';
+    const u=['بايت','كيلوبايت','ميجابايت','جيجابايت'];let i=0;
+    while(n>=1024&&i<u.length-1){n/=1024;i++}
+    return `${n.toFixed(i?1:0)} ${u[i]}`;
+  };
+  const dateOf=v=>{
+    try{
+      const d=v?.toDate?v.toDate():(v?new Date(v):null);
+      return d&&!isNaN(d)?d.toLocaleDateString('ar-SA',{year:'numeric',month:'short',day:'numeric'}):'—';
+    }catch(_){return'—'}
+  };
+  const timeOf=v=>{
+    try{
+      const d=v?.toDate?v.toDate():(v?new Date(v):null);
+      return d&&!isNaN(d)?d.getTime():0;
+    }catch(_){return 0}
+  };
+  const viewUrl=f=>{
+    let u=String(f?.url||'');
+    if(typeOf(f)==='pdf' && /\/image\/upload\//i.test(u) && !/\.pdf(?:[?#]|$)/i.test(u)){
+      const hash=u.indexOf('#'),q=u.indexOf('?');
+      const cut=(hash>=0&&q>=0)?Math.min(hash,q):(hash>=0?hash:(q>=0?q:u.length));
+      u=u.slice(0,cut)+'.pdf'+u.slice(cut);
+    }
+    return u;
+  };
+
+  function ensureViewer(){
+    if(viewer)return viewer;
+    viewer=document.createElement('div');
+    viewer.id='aaFileViewerV13';
+    viewer.innerHTML=`<div class="aa-viewer-head">
+      <div class="aa-viewer-title" id="aaViewerTitle"></div>
+      <div class="aa-viewer-actions">
+        <a id="aaViewerDownload" class="download" target="_blank" rel="noopener"><i class="fas fa-download"></i><span>تحميل</span></a>
+        <button type="button" id="aaViewerClose"><i class="fas fa-xmark"></i><span>إغلاق</span></button>
+      </div>
+    </div><div class="aa-viewer-body" id="aaViewerBody"></div>`;
+    document.body.appendChild(viewer);
+    $('aaViewerClose').onclick=closeViewer;
+    viewer.addEventListener('click',e=>{if(e.target===viewer)closeViewer()});
+    document.addEventListener('keydown',e=>{if(e.key==='Escape'&&viewer?.classList.contains('active'))closeViewer()});
+    return viewer;
+  }
+  function closeViewer(){viewer?.classList.remove('active');document.body.style.overflow='';}
+  function openViewer(f){
+    if(!f?.url)return;
+    if(f.deleted===true)return showCustomAlert?.('غير متاح','هذا الملف لم يعد متاحًا.');
+    const v=ensureViewer(),t=typeOf(f),u=viewUrl(f),canDownload=f.allowDownload!==false||isAdmin;
+    $('aaViewerTitle').innerHTML=`<span>${esc(fileName(f))}</span><small>${esc(f.lessonTitle?`مرتبط بـ ${f.lessonTitle}`:'ملف عام للدورة')} · ${esc(typeLabel(t))} · ${esc(sizeOf(f.size))}</small>`;
+    const dl=$('aaViewerDownload');
+    dl.href=u||'#';dl.style.display=canDownload?'inline-flex':'none';
+    const body=$('aaViewerBody');
+    if(t==='image'){
+      body.innerHTML=`<img src="${esc(u)}" alt="${esc(fileName(f))}">`;
+    }else if(t==='pdf'){
+      body.innerHTML=`<iframe title="${esc(fileName(f))}" src="${esc(u)}#toolbar=${canDownload?1:0}&view=FitH"></iframe>`;
+      const note=document.createElement('div');note.className='aa-viewer-note';note.innerHTML='<i class="fas fa-circle-info"></i> إذا لم يظهر PDF هنا أو لا يفتح من رابط Cloudinary نفسه، يجب تفعيل <strong>Allow delivery of PDF and ZIP files</strong> من إعدادات أمان Cloudinary. لا يمكن لواجهة الموقع تجاوز حظر التسليم من Cloudinary.';
+      body.appendChild(note);
+    }else if(t==='word'||t==='excel'||t==='powerpoint'){
+      const office=`https://view.officeapps.live.com/op/view.aspx?src=${encodeURIComponent(u)}`;
+      body.innerHTML=`<iframe title="${esc(fileName(f))}" src="${esc(office)}"></iframe>`;
+    }else{
+      body.innerHTML=`<div class="aa-viewer-placeholder"><i class="fas ${iconOf(t)}"></i><h3>${esc(fileName(f))}</h3><p>هذا النوع لا يملك عارضًا أصليًا موثوقًا داخل المتصفح. يمكنك فتحه في تبويب مستقل أو تحميله حسب الصلاحية.</p>${u?`<div style="margin-top:14px;display:flex;gap:8px;justify-content:center;flex-wrap:wrap"><a class="aa-files-primary-btn" target="_blank" rel="noopener" href="${esc(u)}"><i class="fas fa-arrow-up-right-from-square"></i> فتح الملف</a>${canDownload?`<a class="aa-files-primary-btn" target="_blank" rel="noopener" href="${esc(u)}"><i class="fas fa-download"></i> تحميل</a>`:''}</div>`:''}</div>`;
+    }
+    v.classList.add('active');document.body.style.overflow='hidden';
+  }
+  window.openCourseFileViewer=openViewer;
+  window.openFileViewer=openViewer;
+
+  function ensureUploadModal(){
+    if(uploadModal)return uploadModal;
+    uploadModal=document.createElement('div');
+    uploadModal.id='aaFileUploadV13';
+    uploadModal.innerHTML=`<div class="aa-upload-card">
+      <button type="button" class="aa-upload-close" id="aaUploadClose" aria-label="إغلاق"><i class="fas fa-xmark"></i></button>
+      <div class="aa-upload-head"><div class="aa-upload-head-icon"><i class="fas fa-cloud-arrow-up"></i></div><div><h3>رفع ملف جديد</h3><p>اختر ملفًا أو عدة ملفات، ثم حدّد الاسم والحصة وصلاحية التحميل.</p></div></div>
+      <label class="aa-upload-drop" id="aaUploadDrop" for="aaUploadInput"><input id="aaUploadInput" type="file" multiple accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.zip,.rar,.7z"><div class="aa-upload-drop-icon"><i class="fas fa-paperclip"></i></div><strong id="aaUploadPickLabel">اختر الملفات</strong><span>صور · PDF · Word · Excel · PowerPoint · ملفات مضغوطة<br>حتى 25 ميجابايت للملف الواحد</span></label>
+      <div id="aaUploadSelected" class="aa-upload-selected">لم يتم اختيار ملفات بعد.</div>
+      <div class="aa-upload-form">
+        <label class="aa-upload-field"><span>اسم الملف / العنوان</span><input id="aaUploadName" type="text" placeholder="اتركه فارغًا لاستخدام الاسم الأصلي"><small style="color:var(--text-muted);font-size:.68rem">يُستخدم للاختيار المفرد.</small></label>
+        <label class="aa-upload-field"><span>ربط الملف بحصة</span><select id="aaUploadLesson"><option value="">ملف عام للدورة</option></select></label>
+      </div>
+      <label class="aa-upload-check"><span class="aa-upload-check-copy"><strong>السماح للطلاب بتحميل الملف</strong><small>عند إلغاء الخيار يمكن للطالب العرض فقط.</small></span><input id="aaUploadAllowDownload" type="checkbox" checked></label>
+      <div id="aaUploadStatus" class="aa-upload-status"></div>
+      <div class="aa-upload-actions"><button type="button" class="aa-upload-secondary" id="aaUploadCancel">إلغاء</button><button type="button" class="aa-upload-primary" id="aaUploadSubmit"><i class="fas fa-cloud-arrow-up"></i> رفع الملفات</button></div>
+    </div>`;
+    document.body.appendChild(uploadModal);
+    const close=()=>uploadModal.classList.remove('active');
+    $('aaUploadClose').onclick=close;$('aaUploadCancel').onclick=close;
+    uploadModal.addEventListener('click',e=>{if(e.target===uploadModal)close()});
+    const input=$('aaUploadInput'),drop=$('aaUploadDrop');
+    const sync=()=>{
+      const fs=[...(input.files||[])];
+      $('aaUploadPickLabel').textContent=fs.length?`تم اختيار ${fs.length} ملف`:'اختر الملفات';
+      $('aaUploadSelected').textContent=fs.length?fs.map(f=>`${f.name} · ${sizeOf(f.size)}`).join(' • '):'لم يتم اختيار ملفات بعد.';
+    };
+    input.addEventListener('change',sync);
+    ['dragenter','dragover'].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.classList.add('dragover')}));
+    ['dragleave','drop'].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.classList.remove('dragover')}));
+    drop.addEventListener('drop',e=>{
+      const dt=e.dataTransfer;if(!dt?.files?.length)return;
+      try{input.files=dt.files;sync()}catch(_){input.dispatchEvent(new Event('change'))}
+    });
+    $('aaUploadSubmit').onclick=submitUploads;
+    return uploadModal;
+  }
+
+  async function populateUploadLessons(selected=''){
+    const sel=$('aaUploadLesson');if(!sel)return;
+    sel.innerHTML='<option value="">ملف عام للدورة</option>';
+    try{
+      const snap=await db.collection('courses').doc(activeCourseId).collection('lessons').get();
+      const list=snap.docs.map(d=>({id:d.id,...(d.data()||{})})).sort((a,b)=>Number(a.order||0)-Number(b.order||0));
+      list.forEach(x=>{lessonMap.set(x.id,x);const o=document.createElement('option');o.value=x.id;o.textContent=x.titleAr||x.title||'حصة';if(String(x.id)===String(selected))o.selected=true;sel.appendChild(o)});
+    }catch(e){console.warn('files lessons',e)}
+  }
+
+  function openUpload(selected=''){
+    if(!isAdmin||!activeCourseId)return;
+    const m=ensureUploadModal();
+    $('aaUploadInput').value='';$('aaUploadName').value='';$('aaUploadAllowDownload').checked=true;$('aaUploadStatus').textContent='';$('aaUploadSelected').textContent='لم يتم اختيار ملفات بعد.';$('aaUploadPickLabel').textContent='اختر الملفات';
+    populateUploadLessons(selected);m.classList.add('active');
+  }
+  window.openCourseFileUploadModal=openUpload;
+
+  async function uploadCourseFileV13(file,lessonId,customName,allowDownload){
+    const banned=/\.((exe|js|mjs|cjs|html?|php|asp|aspx|sh|bat|cmd|msi|apk|dmg|com|scr))$/i.test(file.name);
+    if(banned)throw new Error(`نوع الملف غير مسموح: ${file.name}`);
+    if(file.size>25*1024*1024)throw new Error(`الملف أكبر من 25 ميجابايت: ${file.name}`);
+    const url=await uploadImage(file);
+    if(!url)throw new Error(`تعذر رفع الملف إلى Cloudinary: ${file.name}`);
+    const lesson=lessonId?lessonMap.get(lessonId):null;
+    const data={
+      name:(customName&&arguments.length===4)?customName:file.name,
+      url,mime:file.type||'',size:file.size||0,lessonId:lessonId||'',lessonTitle:lesson?.titleAr||lesson?.title||'',
+      allowDownload:allowDownload!==false,uploadedAt:firebase.firestore.FieldValue.serverTimestamp(),
+      uploadedBy:currentUser?.uid||'',storageProvider:'cloudinary',deleted:false
+    };
+    await db.collection('courses').doc(activeCourseId).collection('files').add(data);
+    return data;
+  }
+
+  async function submitUploads(){
+    if(!isAdmin||!activeCourseId)return;
+    const input=$('aaUploadInput'),files=[...(input.files||[])],lessonId=$('aaUploadLesson').value||'',customName=$('aaUploadName').value.trim(),allow=$('aaUploadAllowDownload').checked,status=$('aaUploadStatus'),btn=$('aaUploadSubmit');
+    if(!files.length)return showCustomAlert?.('تنبيه','اختر ملفًا واحدًا على الأقل.');
+    btn.disabled=true;status.textContent=`جاري رفع ${files.length} ملف...`;
+    try{
+      await populateUploadLessons(lessonId);
+      for(let i=0;i<files.length;i++){
+        const title=files.length===1?customName:'';
+        await uploadCourseFileV13(files[i],lessonId,title,allow);
+        status.textContent=`تم رفع ${i+1} من ${files.length}`;
+      }
+      input.value='';$('aaUploadName').value='';$('aaUploadSelected').textContent='لم يتم اختيار ملفات بعد.';$('aaUploadPickLabel').textContent='اختر الملفات';
+      uploadModal.classList.remove('active');
+      await loadFiles();
+      if(activeLessonId)try{await window.renderLessonRelatedActions?.(activeCourseId,activeLessonId)}catch(_){}
+      showCustomAlert?.('تم الرفع','تمت إضافة الملفات إلى مكتبة الدورة بنجاح.');
+    }catch(e){
+      console.error('files upload',e);status.textContent=e?.message||'تعذر رفع الملفات.';
+      showCustomAlert?.('خطأ في رفع الملفات',e?.message||'تعذر رفع الملفات. تحقق من الاتصال والصلاحيات.');
+    }finally{btn.disabled=false}
+  }
+
+  function classifySearch(f,q){
+    if(!q)return true;
+    const hay=`${fileName(f)} ${f.lessonTitle||''} ${typeLabel(typeOf(f))}`.toLocaleLowerCase();
+    return hay.includes(q.toLocaleLowerCase());
+  }
+  function filtered(){
+    const q=$('aaFilesSearch')?.value.trim()||'';
+    const ty=$('aaFilesTypeFilter')?.value||'all';
+    const lesson=$('aaFilesLessonFilter')?.value??'all';
+    const sort=$('aaFilesSort')?.value||'newest';
+    let arr=allFiles.filter(f=>!f.deleted&&classifySearch(f,q)&&(ty==='all'||typeOf(f)===ty)&&(lesson==='all'||String(f.lessonId||'')===String(lesson)));
+    arr.sort((a,b)=>{
+      if(sort==='name')return fileName(a).localeCompare(fileName(b),'ar');
+      if(sort==='size')return (Number(b.size)||0)-(Number(a.size)||0);
+      const ad=timeOf(a.uploadedAt),bd=timeOf(b.uploadedAt);
+      return sort==='oldest'?ad-bd:bd-ad;
+    });
+    return arr;
+  }
+
+  function renderStats(){
+    const live=allFiles.filter(f=>!f.deleted);
+    $('aaFilesTotal').textContent=live.length.toLocaleString('ar-SA');
+    $('aaFilesPdf').textContent=live.filter(f=>typeOf(f)==='pdf').length.toLocaleString('ar-SA');
+    $('aaFilesImages').textContent=live.filter(f=>typeOf(f)==='image').length.toLocaleString('ar-SA');
+    $('aaFilesLinked').textContent=live.filter(f=>String(f.lessonId||'')).length.toLocaleString('ar-SA');
+  }
+
+  function renderLessonsFilter(){
+    const sel=$('aaFilesLessonFilter'),current=sel?.value||'all';
+    if(!sel)return;
+    const map=new Map();
+    allFiles.filter(f=>!f.deleted&&f.lessonId).forEach(f=>map.set(String(f.lessonId),f.lessonTitle||lessonMap.get(f.lessonId)?.titleAr||'حصة'));
+    sel.innerHTML='<option value="all">كل الحصص</option><option value="">ملفات عامة فقط</option>'+[...map.entries()].sort((a,b)=>String(a[1]).localeCompare(String(b[1]),'ar')).map(([id,name])=>`<option value="${esc(id)}">${esc(name)}</option>`).join('');
+    if([...sel.options].some(o=>o.value===current))sel.value=current;
+  }
+
+  function renderGrid(){
+    const box=$('courseFilesPageGrid');if(!box)return;
+    const arr=filtered();$('aaFilesResultCount').textContent=`${arr.length.toLocaleString('ar-SA')} ملف`;
+    $('aaFilesSearchClear').hidden=!($('aaFilesSearch').value.trim());
+    if(!arr.length){box.innerHTML=`<div class="aa-files-empty"><i class="fas fa-folder-open"></i><strong>${allFiles.filter(f=>!f.deleted).length?'لا توجد نتائج مطابقة':'لا توجد ملفات بعد'}</strong><span>${allFiles.filter(f=>!f.deleted).length?'جرّب تغيير كلمة البحث أو الفلاتر المختارة.':'ابدأ برفع أول ملف للدورة باستخدام زر «رفع ملف».'}</span></div>`;return;}
+    box.innerHTML=arr.map(f=>{
+      const t=typeOf(f),can=f.allowDownload!==false||isAdmin;
+      const lesson=f.lessonTitle||'ملف عام للدورة';
+      return `<article class="aa-files-card" data-file-id="${esc(f.id)}">
+        <div class="aa-files-card-head"><div class="aa-files-card-icon ${t}"><i class="fas ${iconOf(t)}"></i></div><div class="aa-files-card-copy"><div class="aa-files-card-name">${esc(fileName(f))}</div><span class="aa-files-card-type"><i class="fas ${iconOf(t)}"></i>${esc(typeLabel(t))}</span></div></div>
+        <div class="aa-files-card-meta">
+          <div class="aa-files-meta-item"><strong>الحصة</strong><span title="${esc(lesson)}">${esc(lesson)}</span></div>
+          <div class="aa-files-meta-item"><strong>الحجم</strong><span>${esc(sizeOf(f.size))}</span></div>
+        </div>
+        <div class="aa-files-status"><i class="fas ${f.allowDownload===false?'fa-eye':'fa-download'}"></i>${f.allowDownload===false?'المشاهدة فقط':'متاح للتحميل'} · ${esc(dateOf(f.uploadedAt))}</div>
+        <div class="aa-files-card-actions">
+          <button type="button" class="primary" data-aa-file-view="${esc(f.id)}"><i class="fas fa-eye"></i> عرض</button>
+          ${can?`<a target="_blank" rel="noopener" download href="${esc(viewUrl(f))}"><i class="fas fa-download"></i> تحميل</a>`:'<span></span>'}
+          ${isAdmin?`<button type="button" class="danger" data-aa-file-delete="${esc(f.id)}"><i class="fas fa-trash"></i> حذف الملف</button>`:''}
+        </div>
+      </article>`;
+    }).join('');
+  }
+
+  async function loadFiles(){
+    const box=$('courseFilesPageGrid');if(!box||!activeCourseId)return;
+    box.innerHTML='<div class="aa-files-empty"><i class="fas fa-spinner fa-spin"></i><strong>جاري تحميل الملفات...</strong><span>يتم جلب مكتبة الدورة.</span></div>';
+    try{
+      const snap=await db.collection('courses').doc(activeCourseId).collection('files').get();
+      allFiles=snap.docs.map(d=>({id:d.id,...(d.data()||{})})).filter(f=>f&&f.deleted!==true);
+      renderStats();renderLessonsFilter();renderGrid();
+    }catch(e){
+      console.error('load course files',e);
+      box.innerHTML='<div class="aa-files-empty"><i class="fas fa-triangle-exclamation"></i><strong>تعذر تحميل الملفات</strong><span>تحقق من الاتصال وصلاحيات الوصول إلى ملفات الدورة.</span></div>';
+    }
+  }
+  window.loadCourseFilesPage=loadFiles;
+
+  window.renderFilesGrid=function(files,box){
+    if(!box)return;
+    const arr=(files||[]).filter(f=>f&&!f.deleted);
+    if(box.id!=='courseFilesPageGrid'){ // Preserve legacy renderers outside the main page.
+      const t=x=>typeOf(x),size=x=>sizeOf(x);
+      box.innerHTML=arr.length?arr.map(f=>`<article class="course-file-card"><div class="course-file-icon"><i class="fas ${iconOf(t(f))}"></i></div><div class="course-file-name">${esc(fileName(f))}</div><div class="course-file-meta">${esc(f.lessonTitle||'ملف عام للدورة')}<br>${esc(size(f.size))}</div><div class="course-file-actions"><button type="button" class="primary" onclick='openCourseFileViewer(${JSON.stringify(f)})'><i class="fas fa-eye"></i> عرض</button>${f.allowDownload!==false||isAdmin?`<a href="${esc(viewUrl(f))}" target="_blank" rel="noopener" download><i class="fas fa-download"></i> تحميل</a>`:''}</div></article>`).join(''):'<div class="files-empty-state"><i class="fas fa-folder-open"></i><strong>لا توجد ملفات</strong></div>';
+      return;
+    }
+    allFiles=arr;renderStats();renderLessonsFilter();renderGrid();
+  };
+
+  window.deleteCourseFile=async function(id){
+    if(!isAdmin||!activeCourseId)return showCustomAlert?.('غير مسموح','حذف الملفات متاح للمشرف فقط.');
+    const ref=db.collection('courses').doc(activeCourseId).collection('files').doc(id),snap=await ref.get().catch(()=>null);
+    if(!snap?.exists)return showCustomAlert?.('غير موجود','الملف غير موجود.');
+    const remove=async()=>{
+      try{
+        await ref.update({deleted:true,deletedAt:firebase.firestore.FieldValue.serverTimestamp(),deletedBy:currentUser?.uid||''});
+        await loadFiles();showCustomAlert?.('تم الحذف','تم حذف الملف من مكتبة الدورة.');
+      }catch(e){console.error(e);showCustomAlert?.('خطأ','تعذر حذف الملف.')}
+    };
+    if(typeof showCustomConfirm==='function')showCustomConfirm('حذف الملف','سيتم إخفاء الملف عن مكتبة الدورة. هل تريد المتابعة؟',remove,()=>{});
+    else if(confirm('هل تريد حذف هذا الملف؟'))remove();
+  };
+
+  function bindEvents(){
+    ['aaFilesSearch','aaFilesTypeFilter','aaFilesLessonFilter','aaFilesSort'].forEach(id=>$(id)?.addEventListener('input',renderGrid));
+    $('aaFilesSearchClear')?.addEventListener('click',()=>{$('aaFilesSearch').value='';renderGrid()});
+    $('aaFilesClearFilters')?.addEventListener('click',()=>{
+      $('aaFilesSearch').value='';$('aaFilesTypeFilter').value='all';$('aaFilesLessonFilter').value='all';$('aaFilesSort').value='newest';renderGrid();
+    });
+    $('aaFilesUploadBtn')?.addEventListener('click',()=>openUpload(''));
+    $('aaFilesBackBtn')?.addEventListener('click',()=>{
+      const ctx=window.__lessonReturnContext;
+      if(ctx?.courseId&&ctx?.lessonId){window.__lessonReturnContext=null;return window.resumeLessonFromInternalPage?.(ctx.courseId,ctx.lessonId,true);}
+      window.switchCoursePage?.('dashboard');
+    });
+    $('courseFilesPageGrid')?.addEventListener('click',e=>{
+      const view=e.target.closest('[data-aa-file-view]');if(view){const f=allFiles.find(x=>x.id===view.dataset.aaFileView);if(f)openViewer(f);return;}
+      const del=e.target.closest('[data-aa-file-delete]');if(del){window.deleteCourseFile(del.dataset.aaFileDelete);return;}
+    });
+    document.addEventListener('click',e=>{
+      const b=e.target.closest?.('[data-ananas-file-upload-lesson]');
+      if(b){e.preventDefault();e.stopPropagation();openUpload(b.dataset.ananasFileUploadLesson||activeLessonId||'');}
+    },true);
+  }
+  bindEvents();
+
+  const baseSwitch=window.switchCoursePage;
+  window.switchCoursePage=function(route){
+    if(route==='files'){
+      if(!activeCourseId)return;
+      if(currentCoursePage==='lessonPlayer'){window.__lessonReturnContext={courseId:activeCourseId,lessonId:activeLessonId};try{pauseLessonForInternalNavigation?.()}catch(_){}}
+      currentCoursePage='files';
+      try{closeAllCourseSections?.()}catch(_){}
+      page.hidden=false;page.classList.add('active');page.style.display='block';
+      loadFiles();try{window.persistCourseState?.()}catch(_){}
+      return;
+    }
+    page.classList.remove('active');page.hidden=true;page.style.display='none';
+    return typeof baseSwitch==='function'?baseSwitch(route):undefined;
+  };
+
+  const baseLessonActions=window.renderLessonRelatedActions;
+  if(typeof baseLessonActions==='function'&&!window.__ananasFilesLessonActionsV13){
+    window.__ananasFilesLessonActionsV13=true;
+    window.renderLessonRelatedActions=async function(courseId,lessonId){
+      await baseLessonActions.apply(this,arguments);
+      const area=$('lessonRelatedActions');if(!area)return;
+      area.querySelectorAll('[data-aa-lesson-file-action]').forEach(x=>x.remove());
+      try{
+        const snap=await db.collection('courses').doc(courseId).collection('files').get();
+        const files=snap.docs.map(d=>({id:d.id,...(d.data()||{})})).filter(f=>!f.deleted&&String(f.lessonId||'')===String(lessonId));
+        const view=document.createElement('button');view.type='button';view.className='related-action';view.dataset.aaLessonFileAction='1';
+        view.innerHTML=`<i class="fas fa-folder-open"></i> ملفات الحصة${files.length?` (${files.length})`:''}`;
+        view.onclick=()=>{if(files.length===1)return openViewer(files[0]);window.switchCoursePage('files');setTimeout(()=>{if($('aaFilesLessonFilter')){$('aaFilesLessonFilter').value=String(lessonId);renderGrid()}},120)};
+        area.appendChild(view);
+        if(isAdmin){const up=document.createElement('button');up.type='button';up.className='related-action';up.dataset.aaLessonFileAction='1';up.innerHTML='<i class="fas fa-cloud-arrow-up"></i> رفع ملف للحصة';up.onclick=()=>openUpload(lessonId);area.appendChild(up);}
+      }catch(e){console.warn('lesson files',e)}
+    };
+  }
+
+  if(!page.hidden&&page.classList.contains('active'))loadFiles();
+  // Keep the files page hidden on startup until the course router opens it.
+  page.hidden=true;page.classList.remove('active');page.style.display='none';
 })();
 </script>
+
 </body>
 </html>
