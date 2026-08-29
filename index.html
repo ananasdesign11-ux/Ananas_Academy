@@ -21663,5 +21663,226 @@ body:not(.light-mode){--aa-auth-bg:#0d1020;--aa-auth-surface:#15192b;--aa-auth-s
 })();
 </script>
 
+<!-- ===== ANANAS URL ROUTING: HASH HISTORY + REFRESH RESTORE ===== -->
+<script id="ananas-url-routing-v1">
+(function(){
+  'use strict';
+  if(window.__ananasUrlRoutingV1) return;
+  window.__ananasUrlRoutingV1 = true;
+
+  const ROUTE_PREFIX = '#';
+  let restoring = false;
+  let lastRoute = '';
+  let restoreTimer = 0;
+
+  const enc = v => encodeURIComponent(String(v ?? ''));
+  const dec = v => {
+    try { return decodeURIComponent(v || ''); } catch(_) { return v || ''; }
+  };
+  const byId = id => document.getElementById(id);
+
+  function normalizeRoute(raw){
+    let h = String(raw || '').trim();
+    if(h === '#' || h === '') return {type:'courses'};
+    if(h.startsWith('#')) h = h.slice(1);
+    h = h.replace(/^\/+|\/+$/g,'');
+    if(!h || h === 'home' || h === 'courses') return {type:'courses'};
+
+    const parts = h.split('/').map(dec);
+    if(parts[0] === 'profile') return {type:'profile'};
+    if(parts[0] !== 'course' || !parts[1]) return {type:'courses'};
+
+    const courseId = parts[1];
+    if(parts.length === 2) return {type:'course',courseId,page:'overview'};
+    const page = parts[2] || 'overview';
+    if(page === 'lesson' && parts[3]) return {type:'lesson',courseId,lessonId:parts[3]};
+    if(page === 'quiz' && parts[3]) return {type:'quiz',courseId,quizId:parts[3]};
+    if(page === 'assignment' && parts[3]) return {type:'assignment',courseId,assignmentId:parts[3]};
+    if(['overview','dashboard','learning','quizzes','assignments','files','chat'].includes(page)) return {type:'course',courseId,page};
+    return {type:'course',courseId,page:'overview'};
+  }
+
+  function routeString(route){
+    if(!route || route.type === 'courses') return '#courses';
+    if(route.type === 'profile') return '#profile';
+    if(route.type === 'lesson') return `#course/${enc(route.courseId)}/lesson/${enc(route.lessonId)}`;
+    if(route.type === 'quiz') return `#course/${enc(route.courseId)}/quiz/${enc(route.quizId)}`;
+    if(route.type === 'assignment') return `#course/${enc(route.courseId)}/assignment/${enc(route.assignmentId)}`;
+    return `#course/${enc(route.courseId)}/${enc(route.page || 'overview')}`;
+  }
+
+  function currentRoute(){
+    if(byId('aaRebuiltProfilePage')?.classList.contains('active')) return {type:'profile'};
+    if(byId('userProfilePage')?.classList.contains('active')) return {type:'profile'};
+    const cid = window.activeCourseId || (typeof activeCourseId !== 'undefined' ? activeCourseId : null);
+    if(cid){
+      const page = typeof currentCoursePage !== 'undefined' ? currentCoursePage : 'overview';
+      const lid = window.activeLessonId || (typeof activeLessonId !== 'undefined' ? activeLessonId : null);
+      const qid = window.activeQuizId || (typeof activeQuizId !== 'undefined' ? activeQuizId : null);
+      const aid = window.activeAssignmentDetailId || null;
+      if(page === 'lessonPlayer' && lid) return {type:'lesson',courseId:cid,lessonId:lid};
+      if(qid && byId('quizOverlay')?.classList.contains('active')) return {type:'quiz',courseId:cid,quizId:qid};
+      if(aid && byId('courseAssignmentDetailPage')?.classList.contains('active')) return {type:'assignment',courseId:cid,assignmentId:aid};
+      return {type:'course',courseId:cid,page:page === 'lessonPlayer' ? 'learning' : page || 'overview'};
+    }
+    return {type:'courses'};
+  }
+
+  function setRoute(route, mode='push'){
+    const next = routeString(route);
+    if(next === lastRoute || next === window.location.hash) {
+      lastRoute = next;
+      return;
+    }
+    lastRoute = next;
+    if(mode === 'replace') history.replaceState({ananasRoute:next},'',next);
+    else history.pushState({ananasRoute:next},'',next);
+  }
+
+  function syncRoute(mode='push'){
+    if(restoring) return;
+    setRoute(currentRoute(),mode);
+  }
+
+  async function restoreRoute(route){
+    if(!route) return;
+    restoring = true;
+    try{
+      if(route.type === 'courses'){
+        try{ window.mobileNavigate?.('courses'); }catch(_){}
+        return;
+      }
+
+      if(route.type === 'profile'){
+        if(typeof currentUser !== 'undefined' && currentUser){
+          await window.openUserProfilePage?.();
+        } else {
+          window.triggerAuth?.();
+        }
+        return;
+      }
+
+      const cid = route.courseId;
+      if(!cid) return;
+      if(typeof currentUser !== 'undefined' && !currentUser){
+        window.triggerAuth?.();
+        return;
+      }
+
+      if(typeof window.openCourse === 'function'){
+        await window.openCourse(cid);
+      } else if(typeof openCourse === 'function'){
+        await openCourse(cid);
+      }
+
+      if(route.type === 'lesson'){
+        if(typeof window.openLessonPlayer === 'function') await window.openLessonPlayer(cid,route.lessonId);
+        else if(typeof openLessonPlayer === 'function') await openLessonPlayer(cid,route.lessonId);
+      }else if(route.type === 'quiz'){
+        if(typeof window.openQuiz === 'function') await window.openQuiz(cid,route.quizId);
+      }else if(route.type === 'assignment'){
+        if(typeof window.openAssignmentDetail === 'function') await window.openAssignmentDetail(cid,route.assignmentId);
+      }else if(route.page && route.page !== 'overview'){
+        if(typeof window.switchCoursePage === 'function') window.switchCoursePage(route.page);
+        else if(typeof switchCoursePage === 'function') switchCoursePage(route.page);
+      }
+    }catch(e){
+      console.warn('Ananas URL route restore failed:',e);
+      try{window.mobileNavigate?.('courses');}catch(_){}
+      setRoute({type:'courses'},'replace');
+    }finally{
+      restoring = false;
+      // Keep the requested deep link when authentication is required; the existing
+      // auth listener will retry the same URL after the user signs in.
+      lastRoute = routeString(route);
+      if((route.type==='courses' || route.type==='profile' || (typeof currentUser !== 'undefined' && currentUser)) && lastRoute !== window.location.hash){
+        history.replaceState({ananasRoute:lastRoute},'',lastRoute);
+      }
+    }
+  }
+
+  function scheduleRestore(){
+    clearTimeout(restoreTimer);
+    restoreTimer=setTimeout(async()=>{
+      const route=normalizeRoute(window.location.hash);
+      await restoreRoute(route);
+    },80);
+  }
+
+  function wrap(name, after){
+    const original=window[name];
+    if(typeof original!=='function' || original.__ananasUrlRouteWrapped) return;
+    const wrapped=function(){
+      const args=arguments;
+      const result=original.apply(this,args);
+      const finish=()=>{try{after?.(args,result);}catch(e){console.warn('URL route sync:',e)}};
+      if(result && typeof result.then==='function') result.then(finish,finish); else setTimeout(finish,0);
+      return result;
+    };
+    wrapped.__ananasUrlRouteWrapped=true;
+    wrapped.__original=original;
+    window[name]=wrapped;
+  }
+
+  // Public top-level navigation.
+  wrap('mobileNavigate',(args)=>{
+    if(String(args[0])==='courses') syncRoute();
+    else if(['overview','learning','quizzes','assignments','chat'].includes(String(args[0]))) syncRoute();
+  });
+
+  // Course + deep course pages.
+  wrap('openCourse',()=>syncRoute());
+  wrap('switchCoursePage',(args)=>{
+    const page=String(args[0]||'');
+    if(['overview','dashboard','learning','quizzes','assignments','files','chat'].includes(page)) syncRoute();
+  });
+  wrap('openLessonPlayer',()=>syncRoute());
+  wrap('openQuiz',()=>syncRoute());
+  wrap('openAssignmentDetail',()=>syncRoute());
+
+  // Profile routes. Both names exist in different generations of this file.
+  wrap('aaOpenProfile',()=>syncRoute());
+  wrap('openUserProfilePage',()=>syncRoute());
+
+  // Refresh/back-forward support.
+  window.addEventListener('popstate',()=>scheduleRestore());
+  window.addEventListener('hashchange',()=>scheduleRestore());
+
+  // If the application signs in after a protected deep link, retry its route.
+  const routeAuth = (typeof auth !== 'undefined' && auth && typeof auth.onAuthStateChanged==='function') ? auth : window.auth;
+  if(routeAuth && typeof routeAuth.onAuthStateChanged==='function'){
+    try{
+      routeAuth.onAuthStateChanged(()=>{
+        const h=String(window.location.hash||'');
+        if(h && h !== '#courses' && h !== '#profile') scheduleRestore();
+      });
+    }catch(_){}
+  }
+
+  // Initial URL. Replace an empty URL with an explicit courses route.
+  const initial=normalizeRoute(window.location.hash);
+  lastRoute=routeString(initial);
+  if(!window.location.hash) history.replaceState({ananasRoute:'#courses'},'', '#courses');
+  if(initial.type !== 'courses' || window.location.hash === '#courses') scheduleRestore();
+
+  // Keep the address bar synchronized with navigation initiated by existing code paths
+  // that are not one of the wrapped public functions (e.g. direct card handlers).
+  const observer=new MutationObserver(()=>{
+    if(restoring) return;
+    const route=routeString(currentRoute());
+    if(route!==lastRoute) setRoute(currentRoute());
+  });
+  if(document.body) observer.observe(document.body,{subtree:true,attributes:true,attributeFilter:['class','style']});
+
+  window.__ananasUrlRouting={
+    parse:normalizeRoute,
+    get:currentRoute,
+    set:(route,mode)=>setRoute(route,mode),
+    restore:restoreRoute,
+    sync:syncRoute
+  };
+})();
+</script>
+
 </body>
 </html>
