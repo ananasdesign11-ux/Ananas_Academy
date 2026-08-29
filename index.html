@@ -5559,7 +5559,8 @@ to{opacity:1;transform:none}}
             return new Date(Date.UTC(Number(m[1]),Number(m[2])-1,Number(m[3]),Number(m[4])-3,Number(m[5])));
         }
         async function openChatLockDialog(){
-            if(!isAdmin||!activeCourseId)return;
+            const courseId=currentCourseId();
+    if(!isAdmin||!courseId)return;
             const now=new Date(); const pad=n=>String(n).padStart(2,'0');
             const start=document.getElementById('chatLockStartInput'),end=document.getElementById('chatLockEndInput'),reason=document.getElementById('chatLockReasonInput');
             if(start){start.value=`${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())}T${pad(now.getHours())}:${pad(now.getMinutes())}`;}
@@ -21850,6 +21851,7 @@ body:not(.light-mode){--aa-auth-bg:#0d1020;--aa-auth-surface:#15192b;--aa-auth-s
 
   let allFiles=[];
   let lessonMap=new Map();
+  const currentCourseId=()=>{try{return (typeof activeCourseId!=='undefined'&&activeCourseId)||window.activeCourseId||null}catch(_){return window.activeCourseId||null}};
   let viewer=null;
   let uploadModal=null;
 
@@ -21983,9 +21985,10 @@ body:not(.light-mode){--aa-auth-bg:#0d1020;--aa-auth-surface:#15192b;--aa-auth-s
 
   async function populateUploadLessons(selected=''){
     const sel=$('aaUploadLesson');if(!sel)return;
+    const courseId=currentCourseId();if(!courseId)return;
     sel.innerHTML='<option value="">ملف عام للدورة</option>';
     try{
-      const snap=await db.collection('courses').doc(activeCourseId).collection('lessons').get();
+      const snap=await db.collection('courses').doc(courseId).collection('lessons').get();
       const list=snap.docs.map(d=>({id:d.id,...(d.data()||{})})).sort((a,b)=>Number(a.order||0)-Number(b.order||0));
       list.forEach(x=>{lessonMap.set(x.id,x);const o=document.createElement('option');o.value=x.id;o.textContent=x.titleAr||x.title||'حصة';if(String(x.id)===String(selected))o.selected=true;sel.appendChild(o)});
     }catch(e){console.warn('files lessons',e)}
@@ -22000,6 +22003,8 @@ body:not(.light-mode){--aa-auth-bg:#0d1020;--aa-auth-surface:#15192b;--aa-auth-s
   window.openCourseFileUploadModal=openUpload;
 
   async function uploadCourseFileV13(file,lessonId,customName,allowDownload){
+    const courseId=currentCourseId();
+    if(!courseId)throw new Error('الدورة الحالية غير محددة.');
     const banned=/\.((exe|js|mjs|cjs|html?|php|asp|aspx|sh|bat|cmd|msi|apk|dmg|com|scr))$/i.test(file.name);
     if(banned)throw new Error(`نوع الملف غير مسموح: ${file.name}`);
     if(file.size>25*1024*1024)throw new Error(`الملف أكبر من 25 ميجابايت: ${file.name}`);
@@ -22012,12 +22017,13 @@ body:not(.light-mode){--aa-auth-bg:#0d1020;--aa-auth-surface:#15192b;--aa-auth-s
       allowDownload:allowDownload!==false,uploadedAt:firebase.firestore.FieldValue.serverTimestamp(),
       uploadedBy:currentUser?.uid||'',storageProvider:'cloudinary',deleted:false
     };
-    await db.collection('courses').doc(activeCourseId).collection('files').add(data);
+    await db.collection('courses').doc(courseId).collection('files').add(data);
     return data;
   }
 
   async function submitUploads(){
-    if(!isAdmin||!activeCourseId)return;
+    const courseId=currentCourseId();
+    if(!isAdmin||!courseId)return;
     const input=$('aaUploadInput'),files=[...(input.files||[])],lessonId=$('aaUploadLesson').value||'',customName=$('aaUploadName').value.trim(),allow=$('aaUploadAllowDownload').checked,status=$('aaUploadStatus'),btn=$('aaUploadSubmit');
     if(!files.length)return showCustomAlert?.('تنبيه','اختر ملفًا واحدًا على الأقل.');
     btn.disabled=true;status.textContent=`جاري رفع ${files.length} ملف...`;
@@ -22101,15 +22107,15 @@ body:not(.light-mode){--aa-auth-bg:#0d1020;--aa-auth-surface:#15192b;--aa-auth-s
   }
 
   async function loadFiles(){
-    const box=$('courseFilesPageGrid');if(!box||!activeCourseId)return;
+    const box=$('courseFilesPageGrid'),courseId=currentCourseId();if(!box||!courseId)return;
     box.innerHTML='<div class="aa-files-empty"><i class="fas fa-spinner fa-spin"></i><strong>جاري تحميل الملفات...</strong><span>يتم جلب مكتبة الدورة.</span></div>';
     try{
-      const snap=await db.collection('courses').doc(activeCourseId).collection('files').get();
-      allFiles=snap.docs.map(d=>({id:d.id,...(d.data()||{})})).filter(f=>f&&f.deleted!==true);
+      const snap=await db.collection('courses').doc(courseId).collection('files').get();
+      allFiles=snap.docs.map(d=>({id:d.id,...(d.data()||{})})).filter(f=>f&&f.deleted!==true&&f.url);
       renderStats();renderLessonsFilter();renderGrid();
     }catch(e){
       console.error('load course files',e);
-      box.innerHTML='<div class="aa-files-empty"><i class="fas fa-triangle-exclamation"></i><strong>تعذر تحميل الملفات</strong><span>تحقق من الاتصال وصلاحيات الوصول إلى ملفات الدورة.</span></div>';
+      box.innerHTML=`<div class="aa-files-empty"><i class="fas fa-triangle-exclamation"></i><strong>تعذر تحميل الملفات</strong><span>${esc(e?.message||'تحقق من الاتصال وصلاحيات الوصول إلى ملفات الدورة.')}</span></div>`;
     }
   }
   window.loadCourseFilesPage=loadFiles;
@@ -22165,7 +22171,8 @@ body:not(.light-mode){--aa-auth-bg:#0d1020;--aa-auth-surface:#15192b;--aa-auth-s
   const baseSwitch=window.switchCoursePage;
   window.switchCoursePage=function(route){
     if(route==='files'){
-      if(!activeCourseId)return;
+      const courseId=currentCourseId();
+      if(!courseId)return;
       if(currentCoursePage==='lessonPlayer'){window.__lessonReturnContext={courseId:activeCourseId,lessonId:activeLessonId};try{pauseLessonForInternalNavigation?.()}catch(_){}}
       currentCoursePage='files';
       try{closeAllCourseSections?.()}catch(_){}
