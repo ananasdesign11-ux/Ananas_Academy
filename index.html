@@ -4226,24 +4226,17 @@ to{opacity:1;transform:none}}
         window.triggerAuth = triggerAuth;
 
         // Final delegated handler for course-card login buttons.
-        // This survives any later re-render/replacement of the course cards.
+        // Use exactly the same authentication-page opener as the top navigation
+        // button. Stop older document-level click handlers from touching the
+        // popup, which previously caused the double/ghost transition state.
         if (!window.__aaCourseLoginDelegatedHandler) {
             window.__aaCourseLoginDelegatedHandler = true;
             document.addEventListener('click', function(event) {
                 const button = event.target?.closest?.('.course-login-btn');
                 if (!button) return;
                 event.preventDefault();
-                event.stopPropagation();
-                const popup = document.getElementById('authPopup');
-                if (!popup) return;
-                document.body.classList.remove('aa-chat-signing-out');
-                popup.classList.add('active');
-                popup.style.setProperty('display', 'block', 'important');
-                popup.style.setProperty('pointer-events', 'auto', 'important');
-                document.getElementById('authStep1')?.style.setProperty('display', 'block');
-                document.getElementById('authStep2')?.style.setProperty('display', 'none');
-                const status = document.getElementById('authStatus');
-                if (status) status.textContent = '';
+                event.stopImmediatePropagation();
+                (window.__aaOpenAuthPopup || window.triggerAuth)?.();
             }, true);
         }
 
@@ -20959,10 +20952,11 @@ window.__aaChatStage14OpenBackgroundEditor=openBackgroundEditor;
     #authPopup .aa-country-wrap select{text-align:right;padding-left:38px!important;}
   }
 </style>
+<script>window.__ananasAuthPageV2Disabled=true;</script>
 <script id="ananas-auth-page-v2-js">
 (function(){
   'use strict';
-  if(window.__ananasAuthPageV2)return;
+  if(window.__ananasAuthPageV2 || window.__ananasAuthPageV2Disabled)return;
   window.__ananasAuthPageV2=true;
 
   const $=id=>document.getElementById(id);
@@ -21513,6 +21507,12 @@ body:not(.light-mode){--aa-auth-bg:#0d1020;--aa-auth-surface:#15192b;--aa-auth-s
 })();
 </script>
 
+
+<style id="ananas-auth-course-transition-fix-css">
+#authPopup.auth-popup{isolation:isolate!important;background:var(--aa-auth-bg,#f7f8fc)!important;opacity:1!important;animation:none!important;}
+#authPopup .aa-auth-main-panel{background:var(--aa-auth-bg,#f7f8fc)!important;backdrop-filter:none!important;}
+#authPopup .aa-auth-brand-panel{background:linear-gradient(148deg,#111431 0%,#202457 52%,#0c1737 100%)!important;}
+</style>
 
 <style id="ananas-auth-refinement-v4-css">
 /* Auth refinement V4: fixed brand pane, independent scroll, original logo colors, searchable country picker. */
