@@ -4668,7 +4668,7 @@ to{opacity:1;transform:none}}
                 const image = course.image
                     ? `<img src="${escapeHtml(course.image)}" alt="" loading="lazy" decoding="async" fetchpriority="low">`
                     : `<i class="fas ${escapeHtml(course.imgIcon || 'fa-graduation-cap')}"></i>`;
-                const admin = isAdmin ? `<div class="admin-actions-overlay" aria-label="إجراءات الدورة"><button type="button" class="btn-icon" onclick="editCourse('${course.id}')" title="تعديل الدورة" aria-label="تعديل الدورة"><i class="fas fa-pen-to-square" aria-hidden="true"></i></button><button type="button" class="btn-icon delete" onclick="deleteCourse('${course.id}')" title="حذف الدورة" aria-label="حذف الدورة"><i class="fas fa-trash-can" aria-hidden="true"></i></button></div>` : '';
+                const admin = isAdmin ? `<div class="admin-actions-overlay admin-only" aria-label="إجراءات الدورة"><button type="button" class="btn-icon" onclick="editCourse('${course.id}')" title="تعديل الدورة" aria-label="تعديل الدورة"><i class="fas fa-pen-to-square" aria-hidden="true"></i></button><button type="button" class="btn-icon delete" onclick="deleteCourse('${course.id}')" title="حذف الدورة" aria-label="حذف الدورة"><i class="fas fa-trash-can" aria-hidden="true"></i></button></div>` : '';
                 return `<div class="course-card" data-course-id="${escapeHtml(course.id)}">
                     <div class="course-img">${image}</div>${admin}
                     <div class="course-body">
@@ -4750,6 +4750,7 @@ to{opacity:1;transform:none}}
         });
 
         window.editCourse = function(courseId) {
+            if(!isAdmin) return showCustomAlert('غير مسموح', 'تعديل الدورات متاح للمشرف فقط.');
             editingCourseId = courseId;
             const course = coursesData.find(c => c.id === courseId);
             if (!course) return;
@@ -4764,6 +4765,7 @@ to{opacity:1;transform:none}}
         };
 
         window.saveCourse = async function() {
+            if(!isAdmin) return showCustomAlert('غير مسموح', 'حفظ الدورات متاح للمشرف فقط.');
             const titleAr = safeGetValue('addCourseTitleAr');
             const titleEn = safeGetValue('addCourseTitleEn');
             const descAr = safeGetValue('addCourseDescAr');
@@ -6068,6 +6070,7 @@ to{opacity:1;transform:none}}
             
             const originalSave = window.saveLesson;
             window.saveLesson = async function() {
+                if(!isAdmin) return showCustomAlert('غير مسموح', 'حفظ الحصص متاح للمشرف فقط.');
                 const titleAr = safeGetValue('addLessonTitleAr');
                 const titleEn = safeGetValue('addLessonTitleEn');
                 const type = document.getElementById('addLessonType').value;
@@ -8609,6 +8612,7 @@ to{opacity:1;transform:none}}
         }
 
         window.createNewCode = async function() {
+            if(!isAdmin) return showCustomAlert('غير مسموح','إنشاء أكواد الدورة متاح للمشرف فقط.');
             if(!activeCourseId) return;
             const codeVal = safeGetValue('newCodeInput').trim();
             const normalizedCode = codeVal.toUpperCase().replace(/\s+/g, '');
@@ -9268,6 +9272,7 @@ to{opacity:1;transform:none}}
         });
 
         window.saveCoursePageTexts = async function() {
+            if(!isAdmin) return showCustomAlert('غير مسموح', 'حفظ نصوص الدورات متاح للمشرف فقط.');
             const updates = {};
             const ids = [
                 'editCPTCoursesPageTitleAr', 'editCPTCoursesPageTitleEn',
@@ -22598,5 +22603,171 @@ body.light-mode #coursesPage .course-card:hover{
   }
 }
 </style>
+
+
+<!-- ===== ADMIN ACTION SECURITY GUARD =====
+     Layered client-side authorization. Server-side Firestore rules remain authoritative. -->
+<style id="aa-admin-action-security-css">
+    /* Administrative controls stay hidden until the verified admin state is known. */
+    .admin-only{display:none !important;}
+    .admin-only.show{display:flex !important;}
+    button.admin-only.show{display:inline-flex !important;}
+    [hidden].admin-only{display:none !important;}
+    .aa-admin-ui-blocked,
+    .aa-admin-ui-blocked *{pointer-events:none !important;user-select:none !important;}
+    .aa-admin-ui-blocked{opacity:.92 !important;}
+</style>
+<script id="aa-admin-action-security-js">
+(function(){
+    'use strict';
+    if(window.__aaAdminActionSecurityGuardV2)return;
+    window.__aaAdminActionSecurityGuardV2=true;
+
+    const $=id=>document.getElementById(id);
+    const deny=()=>{ try{showCustomAlert('غير مسموح','هذا الإجراء متاح للمشرف فقط.');}catch(_){alert('هذا الإجراء متاح للمشرف فقط.');} };
+    let verifySeq=0;
+
+    /* Fresh authorization check from the same admin registry used by the app. */
+    async function verifyAdminSession(){
+        const seq=++verifySeq;
+        try{
+            const user=(typeof auth!=='undefined'&&auth?.currentUser)||
+                       (typeof currentUser!=='undefined'?currentUser:null);
+            if(!user?.uid||!user?.email)return false;
+            const adminSnap=await db.collection('admins').doc('main').get();
+            if(seq!==verifySeq)return false;
+            const emails=Array.isArray(adminSnap.data()?.adminEmails)?adminSnap.data().adminEmails:[];
+            const ok=emails.some(e=>String(e||'').trim().toLowerCase()===String(user.email||'').trim().toLowerCase());
+            if(typeof isAdmin!=='undefined')isAdmin=ok;
+            window.__aaVerifiedAdmin=ok;
+            return ok;
+        }catch(e){
+            console.warn('admin authorization check failed',e);
+            window.__aaVerifiedAdmin=false;
+            return false;
+        }
+    }
+    window.__aaVerifyAdminSession=verifyAdminSession;
+    const isAdminFast=()=>{
+        try{
+            return !!((typeof isAdmin!=='undefined'&&isAdmin) || window.__aaVerifiedAdmin) &&
+                   !!((typeof currentUser!=='undefined'&&currentUser) || auth?.currentUser);
+        }catch(_){return !!window.__aaVerifiedAdmin;}
+    };
+
+    const ADMIN_MODAL_IDS=[
+        'addCourseModal','addLessonModal','addQuizModal','addAssignmentModal',
+        'manageCodesModal','codeUsersModal','termsEditorModal','courseAccessSuspendModal',
+        'chatLockModal','editCoursePageTextsModal','aaChatAdminModal'
+    ];
+
+    function closeAndDisableUnauthorizedUi(){
+        const allowed=isAdminFast();
+        document.querySelectorAll('.admin-only.show').forEach(el=>{
+            if(!allowed){el.classList.remove('show');el.hidden=true;el.setAttribute('aria-hidden','true');}
+        });
+        ADMIN_MODAL_IDS.forEach(id=>{
+            const modal=$(id);if(!modal)return;
+            if(!allowed){
+                modal.classList.remove('active','open');
+                modal.setAttribute('aria-hidden','true');
+                modal.classList.add('aa-admin-ui-blocked');
+                modal.querySelectorAll('input,textarea,select,button,[contenteditable="true"]').forEach(el=>{
+                    if(!el.dataset.aaAdminOriginalDisabled)el.dataset.aaAdminOriginalDisabled=el.disabled?'1':'0';
+                    el.disabled=true;
+                    el.setAttribute('aria-disabled','true');
+                });
+            }else{
+                modal.classList.remove('aa-admin-ui-blocked');
+                modal.removeAttribute('aria-hidden');
+                modal.querySelectorAll('input,textarea,select,button,[contenteditable="true"]').forEach(el=>{
+                    if(el.dataset.aaAdminOriginalDisabled==='0'){el.disabled=false;el.removeAttribute('aria-disabled');}
+                });
+            }
+        });
+    }
+    window.__aaCloseUnauthorizedAdminUi=closeAndDisableUnauthorizedUi;
+
+    /* Never allow an admin-marked UI action to open or execute for a non-admin. */
+    document.addEventListener('click',async function(e){
+        const target=e.target?.closest?.('button,[role="button"],a,[onclick]');
+        if(!target || target.dataset.aaAdminVerifiedClick==='1')return;
+        const adminMarked=target.matches('.admin-only,[data-admin-action="1"]') ||
+            !!target.closest('.admin-controls,.admin-actions,.admin-actions-overlay,[data-admin-only="1"]');
+        if(!adminMarked)return;
+        e.preventDefault();e.stopImmediatePropagation();
+        if(await verifyAdminSession()){
+            /* Re-dispatch is intentionally avoided: inline/programmatic handlers may already
+               have been intercepted. Existing buttons should use their own handlers after the
+               current verified admin state has been restored. */
+            try{target.dataset.aaAdminVerifiedClick='1';target.click();}catch(_){}
+            setTimeout(()=>{try{delete target.dataset.aaAdminVerifiedClick;}catch(_){}},0);
+        }else deny();
+    },true);
+
+    /* Guard known entry points before they can open an admin editor. */
+    const guardedNames=[
+        'editCourse','saveCourse','deleteCourse',
+        'editLesson','saveLesson','deleteLesson',
+        'editQuiz','saveQuiz','deleteQuiz',
+        'editAssignment','saveAssignment','deleteAssignment',
+        'saveCoursePageTexts','createNewCode','deleteEnrollmentCode',
+        'openTermsEditor','saveTermsEditor',
+        'openChatLockDialog','saveChatLockSettings'
+    ];
+    const wrapEntryPoints=()=>{
+        guardedNames.forEach(name=>{
+            const fn=window[name];
+            if(typeof fn!=='function'||fn.__aaAdminGuardedV2)return;
+            /* Already wrapped by this guard. */
+        });
+    };
+
+    function installGuard(name,fn){
+        if(typeof fn!=='function'||fn.__aaAdminGuardedV2)return fn;
+        const wrapped=async function(){
+            const ok=await verifyAdminSession();
+            if(!ok){deny();return;}
+            /* Re-check the live session immediately before entering the original UI/mutation. */
+            if(!isAdminFast()){deny();return;}
+            return fn.apply(this,arguments);
+        };
+        wrapped.__aaAdminGuardedV2=true;
+        wrapped.__aaOriginal=fn;
+        return wrapped;
+    }
+
+    function refreshFunctionGuards(){
+        guardedNames.forEach(name=>{
+            const fn=window[name];
+            if(typeof fn==='function'&&!fn.__aaAdminGuardedV2){window[name]=installGuard(name,fn);}
+        });
+    }
+    refreshFunctionGuards();
+    [0,100,400,1000,2500].forEach(ms=>setTimeout(refreshFunctionGuards,ms));
+
+    /* Any dynamically opened admin modal is immediately closed/locked if authorization is lost. */
+    if(typeof MutationObserver==='function'){
+        const observer=new MutationObserver(()=>{
+            closeAndDisableUnauthorizedUi();
+            refreshFunctionGuards();
+        });
+        observer.observe(document.body,{subtree:true,childList:true,attributes:true,attributeFilter:['class','style','hidden']});
+    }
+
+    /* Revoke admin UI immediately when authentication changes. */
+    try{
+        auth?.onAuthStateChanged?.(async user=>{
+            if(!user){window.__aaVerifiedAdmin=false;}
+            else await verifyAdminSession();
+            closeAndDisableUnauthorizedUi();
+            refreshFunctionGuards();
+        });
+    }catch(_){ }
+
+    closeAndDisableUnauthorizedUi();
+})();
+</script>
+
 </body>
 </html>
