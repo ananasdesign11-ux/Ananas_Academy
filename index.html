@@ -23134,5 +23134,221 @@ body.light-mode #coursesPage .course-card:hover{
 .aa-final-thumb canvas{display:block!important;width:100%!important;height:auto!important;max-width:100%!important;object-fit:contain!important;image-rendering:auto!important;user-select:none!important;-webkit-user-drag:none!important;}
 .aa-final-thumb span{display:block!important;flex:0 0 auto!important;white-space:nowrap!important;line-height:1.2!important;}
 </style>
+
+<!-- ===== FINAL PATCH: INSTANT COURSE EJECTION + HARD MODAL INVALIDATION ===== -->
+<script id="final-instant-course-ejection-modal-guard">
+(function(){
+  'use strict';
+  if(window.__aaFinalInstantAccessGuard)return;
+  window.__aaFinalInstantAccessGuard=true;
+
+  const $=id=>document.getElementById(id);
+  const same=(a,b)=>String(a||'')===String(b||'');
+  const asDate=v=>{try{return v?.toDate?v.toDate():(v?new Date(v):null)}catch(_){return null}};
+
+  /* Every forced exit gets a monotonically increasing token. Any stale modal
+     callback carrying an older token is ignored and cannot open an in-course UI. */
+  let accessToken=0;
+  window.__aaAccessTerminatedCourse=null;
+  window.__aaAccessTerminationToken=0;
+
+  function invalidateCourseUi(courseId){
+    accessToken++;
+    window.__aaAccessTerminatedCourse=String(courseId||window.activeCourseId||'');
+    window.__aaAccessTerminationToken=accessToken;
+
+    /* Stop/destroy every in-course surface before navigating away. */
+    try{window.__ananasPauseAndSaveLesson?.('access-terminated',true);}catch(_){ }
+    try{stopLessonForNavigation?.();}catch(_){ }
+    try{destroyLessonVideo?.();}catch(_){ }
+    try{if(document.fullscreenElement)document.exitFullscreen?.().catch?.(()=>{});}catch(_){ }
+
+    /* Explicitly include the confirmation dialog. It is a custom-alert-modal,
+       but it is listed separately so no later selector change can leave it open. */
+    const selectors=[
+      '#customConfirmModal',
+      '#customAlertModal',
+      '#xpDeletionChoiceModal',
+      '#quizOverlay',
+      '#enrollCodeModal',
+      '#enrollTermsPreviewModal',
+      '#courseAccessSuspendModal',
+      '#manageCodesModal',
+      '#codeDetailModalV12',
+      '#codeExpiryEditModalV12',
+      '#courseFileViewer',
+      '.gallery-viewer',
+      '.platform-image-viewer',
+      '.file-viewer-overlay',
+      '.ananas-modal-overlay',
+      '.edit-modal',
+      '.auth-popup',
+      '.custom-alert-modal'
+    ];
+    try{
+      document.querySelectorAll(selectors.join(',')).forEach(el=>{
+        el.classList.remove('active','open','show','is-opening','is-zoomed');
+        el.setAttribute?.('aria-hidden','true');
+        el.style.removeProperty('display');
+      });
+    }catch(_){ }
+
+    try{
+      document.body.classList.remove(
+        'aa-chat-image-modal-open','aa-chat-lightbox-open','aa-chat-profile-over-lightbox',
+        'aa-profile-open','aa-v9-modal-locked','aa-chat-signing-out'
+      );
+      document.documentElement.classList.remove('aa-v9-modal-locked');
+    }catch(_){ }
+
+    /* Clear every route/state flag that could restore an in-course page. */
+    try{window.__openingCourseFromCourses=false;window.__restoringCourseRoute=false;}catch(_){ }
+    try{window.__lessonReturnContext=null;window.__aaLessonReturnPoint=null;}catch(_){ }
+    try{activeCourseId=null;activeLessonId=null;activeQuizId=null;activeQuizData=null;window.activeAssignmentDetailId=null;currentCoursePage='courses';}catch(_){ }
+
+    /* Make all course layers inert/hidden before the final navigation call. */
+    try{
+      document.querySelectorAll('#courseDetailView > *').forEach(el=>{
+        el.classList.remove('active');
+        if('style' in el)el.style.display='none';
+      });
+      const cp=$('courseDetailView');if(cp)cp.style.display='none';
+      const courses=$('coursesPage');if(courses)courses.style.display='block';
+    }catch(_){ }
+
+    try{window.mobileNavigate?.('courses');}catch(_){ }
+    try{document.querySelector('#coursesNavBtn')?.classList.add('active');}catch(_){ }
+    try{window.refreshUserEnrollmentMap?.(true);}catch(_){ }
+    try{window.updateCourseActionButtons?.();}catch(_){ }
+    try{window.renderCourses?.();}catch(_){ }
+  }
+  window.__aaInstantCourseEject=invalidateCourseUi;
+
+  /* Single authoritative live access listener. Important difference from the
+     previous version: enrollmentActive:false is an immediate ejection, not
+     merely a card refresh. */
+  window.watchCourseAccess=function(courseId){
+    if(!currentUser||!courseId||isAdmin)return;
+    const cid=String(courseId);
+    try{window.__aaExpiryUnsub?.();}catch(_){ }
+    try{window.__aaExpiryCodeUnsub?.();}catch(_){ }
+    try{window.__aaExpiryTimers?.forEach?.(t=>clearTimeout(t));}catch(_){ }
+    window.__aaExpiryTimers=[];
+
+    const er=db.collection('users').doc(currentUser.uid).collection('enrolledCourses').doc(cid);
+    window.__aaExpiryUnsub=er.onSnapshot(async snap=>{
+      if(!snap.exists){
+        if(same(window.activeCourseId,cid))invalidateCourseUi(cid);
+        else {try{await refreshMainCourseButtons?.()}catch(_){ }}
+        return;
+      }
+      const e=snap.data()||{};
+
+      /* Stopped/deleted access: eject immediately, even when the code document
+         has not changed yet. This is the fastest Firestore signal available. */
+      if(e.enrollmentActive===false || e.accessBlocked===true){
+        if(same(window.activeCourseId,cid))invalidateCourseUi(cid);
+        else {try{await refreshMainCourseButtons?.()}catch(_){ }}
+        return;
+      }
+
+      const codeId=String(e.codeId||'');
+      if(!codeId)return;
+      const cr=db.collection('courses').doc(cid).collection('codes').doc(codeId);
+      try{window.__aaExpiryCodeUnsub?.()}catch(_){ }
+      try{window.__aaExpiryTimers?.forEach?.(t=>clearTimeout(t));}catch(_){ }
+      window.__aaExpiryTimers=[];
+
+      window.__aaExpiryCodeUnsub=cr.onSnapshot(async cs=>{
+        if(!cs.exists){
+          if(same(window.activeCourseId,cid))invalidateCourseUi(cid);
+          else {try{await er.set({enrollmentActive:false,codeDeleted:true,accessBlocked:false,codeId:null,codeUsed:null},{merge:true});}catch(_){ }}
+          return;
+        }
+        const c=cs.data()||{},now=Date.now();
+        const until=asDate(c.suspendedUntil),end=asDate(c.endTime);
+
+        if(c.disabled===true && (!until || until.getTime()>now)){
+          if(same(window.activeCourseId,cid))invalidateCourseUi(cid);
+          return;
+        }
+        if(end && !isNaN(end.getTime())){
+          const ms=end.getTime()-now;
+          if(ms<=0){
+            if(same(window.activeCourseId,cid))invalidateCourseUi(cid);
+            return;
+          }
+          window.__aaExpiryTimers.push(setTimeout(()=>window.watchCourseAccess?.(cid),ms+20));
+        }
+        const block=(Array.isArray(c.blockedUsers)?c.blockedUsers:[]).find(x=>String(typeof x==='string'?x:x?.uid)===String(currentUser.uid));
+        if(block){
+          const bu=asDate(block.suspendedUntil);
+          if(!bu||bu.getTime()>now){
+            if(same(window.activeCourseId,cid))invalidateCourseUi(cid);
+            return;
+          }
+          window.__aaExpiryTimers.push(setTimeout(()=>window.watchCourseAccess?.(cid),Math.max(50,bu.getTime()-now+20)));
+        }
+      });
+    },err=>console.warn('instant course access watcher',err));
+  };
+
+  /* Re-arm the authoritative listener every time the course is entered. */
+  const oldOpenCourseContent=window.openCourseContent;
+  if(typeof oldOpenCourseContent==='function'&&!oldOpenCourseContent.__aaInstantGuardWrapped){
+    const wrapped=async function(courseId){
+      const r=await oldOpenCourseContent.apply(this,arguments);
+      if(currentUser&&!isAdmin&&same(window.activeCourseId,courseId)){window.__aaAccessTerminatedCourse=null;window.watchCourseAccess(courseId);}
+      return r;
+    };
+    wrapped.__aaInstantGuardWrapped=true;
+    wrapped.__original=oldOpenCourseContent;
+    window.openCourseContent=wrapped;
+  }
+
+  /* Prevent a stale quiz confirmation callback from entering the quiz after a
+     forced exit. We check live Firestore access again immediately before the
+     quiz is opened, not just when its card was clicked. */
+  const oldOpenQuiz=window.openQuiz;
+  if(typeof oldOpenQuiz==='function'&&!oldOpenQuiz.__aaInstantGuardWrapped){
+    const wrapped=async function(courseId,quizId,...rest){
+      const token=accessToken;
+      if(!currentUser||isAdmin)return oldOpenQuiz.apply(this,arguments);
+      if(!same(window.activeCourseId,courseId))return;
+      if(window.__aaAccessTerminatedCourse===String(courseId))return;
+      const ref=db.collection('users').doc(currentUser.uid).collection('enrolledCourses').doc(String(courseId));
+      try{
+        const snap=await ref.get(),e=snap.exists?(snap.data()||{}):{};
+        if(!snap.exists||e.enrollmentActive===false||e.accessBlocked===true)return;
+        if(token!==accessToken || window.__aaAccessTerminatedCourse===String(courseId))return;
+      }catch(_){return;}
+      return oldOpenQuiz.apply(this,arguments);
+    };
+    wrapped.__aaInstantGuardWrapped=true;
+    wrapped.__original=oldOpenQuiz;
+    window.openQuiz=wrapped;
+  }
+
+  /* Also neutralize any already-registered confirmation action after ejection:
+     clicking "نعم" while the old dialog is being torn down cannot reopen a quiz. */
+  document.addEventListener('click',async e=>{
+    const yes=e.target?.closest?.('#customConfirmYesBtn');
+    if(!yes)return;
+    const cid=window.__aaAccessTerminatedCourse;
+    if(!cid||!currentUser||isAdmin)return;
+    const modal=$('customConfirmModal');
+    if(!modal?.classList.contains('active'))return;
+    try{
+      const snap=await db.collection('users').doc(currentUser.uid).collection('enrolledCourses').doc(String(cid)).get();
+      const d=snap.exists?(snap.data()||{}):{};
+      if(!snap.exists||d.enrollmentActive===false||d.accessBlocked===true){
+        e.preventDefault();e.stopImmediatePropagation();
+        modal.classList.remove('active');modal.setAttribute('aria-hidden','true');
+      }
+    }catch(_){e.preventDefault();e.stopImmediatePropagation();modal.classList.remove('active');}
+  },true);
+
+})();
+</script>
 </body>
 </html>
