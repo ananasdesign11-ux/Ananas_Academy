@@ -3174,19 +3174,9 @@ to{opacity:1;transform:none}}
                     <div class="lesson-player-layout">
                         <main class="lesson-player-main">
                             <div class="lesson-player-topbar">
-                                <div class="lesson-player-topbar-start">
-                                    <button type="button" class="btn btn-outline lesson-player-nav-btn" id="backToLessonsBtn" aria-label="العودة إلى الحصص" title="العودة إلى الحصص">
-                                        <i class="fas fa-arrow-right"></i><span>الحصص</span>
-                                    </button>
-                                </div>
-                                <div class="lesson-player-topbar-end">
-                                    <button type="button" class="btn btn-outline lesson-player-nav-btn" id="toggleLessonSidebarBtn" aria-expanded="true" aria-controls="lessonPlayerSidebarPanel" title="إظهار أو إخفاء قائمة الحصص">
-                                        <i class="fas fa-list"></i><span>قائمة الحصص</span>
-                                    </button>
-                                    <button type="button" class="btn btn-outline lesson-player-nav-btn lesson-player-close-btn" id="closeLessonPlayerBtn" aria-label="إغلاق الحصة" title="إغلاق الحصة">
-                                        <i class="fas fa-xmark"></i><span>إغلاق</span>
-                                    </button>
-                                </div>
+                                <button class="btn btn-outline lesson-player-back-icon" id="backToLessonsBtn" aria-label="العودة إلى الحصص" title="العودة إلى الحصص" style="padding:0; border-radius:50%; border:1px solid var(--border); background:rgba(255,255,255,.92); color:var(--text-muted); cursor:pointer;">
+                                    <i class="fas fa-chevron-left"></i>
+                                </button>
                             </div>
 
                             <div class="video-player-wrapper lesson-video-sticky" id="lessonVideoWrapper" tabindex="0" aria-label="مشغل الحصة">
@@ -3237,7 +3227,7 @@ to{opacity:1;transform:none}}
                             <input type="file" id="lessonFilesUploadInput" accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.zip" multiple style="display:none">
                         </main>
 
-                        <aside class="lesson-player-sidebar" id="lessonPlayerSidebarPanel">
+                        <aside class="lesson-player-sidebar">
                             <div class="lesson-sidebar-header">
                                 <strong>حصص الدورة</strong>
                                 <span id="lessonSidebarCount"></span>
@@ -4509,41 +4499,36 @@ to{opacity:1;transform:none}}
                         return bv - av;
                     });
                     coursesData = nextCourses;
-                    // Reconcile displayed counters with the real subcollections.
-                    // Lesson count is derived from lessons; quiz count is derived from
-                    // courses/{courseId}/quizzes instead of trusting the cached course.quizzes field.
-                    await Promise.all(coursesData.map(async course => {
-                        try {
-                            const [ls, qs] = await Promise.all([
-                                db.collection('courses').doc(course.id).collection('lessons').get(),
-                                db.collection('courses').doc(course.id).collection('quizzes').get()
-                            ]);
-                            let mins = 0;
-                            let lessonCount = 0;
-                            ls.forEach(d => {
-                                if ((d.data() || {}).deleted === true) return;
-                                lessonCount++;
-                                mins += getLessonDurationMinutes(d.data());
-                            });
-                            const liveQuizCount = qs.docs.filter(d => d.data()?.deleted !== true).length;
-                            course.lessons = lessonCount;
-                            course.totalMinutes = mins;
-                            course.hours = mins / 60;
-                            course.quizzes = liveQuizCount;
-                            await db.collection('courses').doc(course.id).set({
-                                lessons:lessonCount,
-                                totalMinutes:mins,
-                                hours:course.hours,
-                                quizzes:liveQuizCount
-                            },{merge:true});
-                        } catch(e) {
-                            console.warn('تعذر مزامنة عدادات الدورة:',course.id,e);
-                        }
-                    }));
+                    // Render the course list immediately from the course documents.
+                    // Expensive subcollection reconciliation is intentionally moved to the background
+                    // so the first paint and navigation are not blocked by one request per subcollection.
                     coursesLastLoadedAt = Date.now();
                     coursesLastLoadedUid = uid;
                     try { sessionStorage.setItem('ananas_courses_cache', JSON.stringify({at:coursesLastLoadedAt,data:coursesData})); } catch(e) {}
                     renderCourses();
+
+                    // Refresh counts silently after the first paint and persist only when values changed.
+                    Promise.all(coursesData.map(async course => {
+                        try {
+                            const [ls, qs] = await Promise.all([
+                                window.__aaGetCourseCollectionSnapshot?.(course.id,'lessons') || db.collection('courses').doc(course.id).collection('lessons').get(),
+                                window.__aaGetCourseCollectionSnapshot?.(course.id,'quizzes') || db.collection('courses').doc(course.id).collection('quizzes').get()
+                            ]);
+                            let mins = 0, lessonCount = 0;
+                            ls.forEach(d => {
+                                if ((d.data() || {}).deleted === true) return;
+                                lessonCount++; mins += getLessonDurationMinutes(d.data());
+                            });
+                            const liveQuizCount = qs.docs.filter(d => d.data()?.deleted !== true).length;
+                            const changed = Number(course.lessons||0)!==lessonCount || Number(course.totalMinutes||0)!==mins || Number(course.quizzes||0)!==liveQuizCount;
+                            course.lessons = lessonCount; course.totalMinutes = mins; course.hours = mins/60; course.quizzes = liveQuizCount;
+                            if(changed){
+                                await db.collection('courses').doc(course.id).set({lessons:lessonCount,totalMinutes:mins,hours:course.hours,quizzes:liveQuizCount},{merge:true}).catch(()=>{});
+                                try { sessionStorage.setItem('ananas_courses_cache', JSON.stringify({at:Date.now(),data:coursesData})); } catch(e) {}
+                                renderCourses();
+                            }
+                        } catch(e) { console.warn('تعذر تحديث عدادات الدورة:',course.id,e); }
+                    })).catch(()=>{});
                 } catch (error) {
                     console.error('Error loading courses:', error);
                     // Keep cached/visible cards intact on transient Firebase failures.
@@ -4849,8 +4834,20 @@ to{opacity:1;transform:none}}
 
             // ===== Course access suspension check (linked to the CODE used for this enrollment) =====
             const enrollmentRef = db.collection('users').doc(currentUser.uid).collection('enrolledCourses').doc(courseId);
-            const existingEnrollment = await enrollmentRef.get();
-            const existingEnrollmentData = existingEnrollment.exists ? (existingEnrollment.data() || {}) : {};
+            // Reuse the enrollment map already loaded during authentication whenever it is fresh.
+            // Fall back to Firestore only when the map has not been loaded for this user yet.
+            const mapReady = enrollmentMapLoadedUid === currentUser.uid && (Date.now() - enrollmentMapLoadedAt) < 30000;
+            let existingEnrollment = null, existingEnrollmentData = {};
+            if (mapReady) {
+                existingEnrollmentData = userEnrollmentMap[courseId] || {};
+                existingEnrollment = { exists: !!userEnrollmentMap[courseId], data: ()=>existingEnrollmentData };
+            } else {
+                existingEnrollment = await enrollmentRef.get();
+                existingEnrollmentData = existingEnrollment.exists ? (existingEnrollment.data() || {}) : {};
+                if (existingEnrollment.exists && existingEnrollmentData.enrollmentActive !== false) userEnrollmentMap[courseId] = existingEnrollmentData;
+                enrollmentMapLoadedUid = currentUser.uid;
+                enrollmentMapLoadedAt = Date.now();
+            }
             // Preserve the enrollment document after a code expires or is deleted.
             // Only an explicitly inactive record is treated as unsubscribed.
             let isEnrolled = existingEnrollment.exists && existingEnrollmentData.enrollmentActive !== false;
@@ -5099,7 +5096,7 @@ to{opacity:1;transform:none}}
         async function openCourseContent(courseId) {
             const course = coursesData.find(c => c.id === courseId);
             if (!course) return;
-            if (!isAdmin && currentUser) {
+            if (!isAdmin && currentUser && !(window.__aaCourseAccessVerified && String(window.__aaCourseAccessVerified.courseId)===String(courseId) && String(window.__aaCourseAccessVerified.uid)===String(currentUser.uid) && Date.now()-Number(window.__aaCourseAccessVerified.at||0)<5000)) {
                 const accessRef = db.collection('users').doc(currentUser.uid).collection('enrolledCourses').doc(courseId);
                 const accessSnap = await accessRef.get();
                 if (accessSnap.exists && accessSnap.data().accessBlocked === true) {
@@ -5148,18 +5145,16 @@ to{opacity:1;transform:none}}
                 if (meta) meta.innerHTML = `<i class=\"fas fa-clock\"></i> ${formatCourseDurationFromMinutes(result.totalMinutes)}`;
                 try { sessionStorage.setItem('ananas_courses_cache', JSON.stringify({at:Date.now(),data:coursesData})); } catch(e) {}
             }).catch(e => console.warn('تعذر تحديث مدة الدورة مباشرة:', courseId, e));
-            try {
-                const quizCountSnap = await window.__aaGetCourseCollectionSnapshot(courseId,'quizzes');
+            window.__aaGetCourseCollectionSnapshot(courseId,'quizzes').then(quizCountSnap=>{
                 const liveQuizCount = quizCountSnap.docs.filter(d => d.data()?.deleted !== true).length;
-                document.getElementById('ovQuizzes').textContent = liveQuizCount;
-                if (Number(course.quizzes) !== liveQuizCount) {
-                    course.quizzes = liveQuizCount;
-                    await db.collection('courses').doc(courseId).set({quizzes:liveQuizCount},{merge:true}).catch(()=>{});
-                    try { sessionStorage.setItem('ananas_courses_cache', JSON.stringify({at:Date.now(),data:coursesData})); } catch(e) {}
+                const quizEl=document.getElementById('ovQuizzes');
+                if(quizEl) quizEl.textContent=liveQuizCount;
+                if(Number(course.quizzes)!==liveQuizCount){
+                    course.quizzes=liveQuizCount;
+                    db.collection('courses').doc(courseId).set({quizzes:liveQuizCount},{merge:true}).catch(()=>{});
+                    try{sessionStorage.setItem('ananas_courses_cache',JSON.stringify({at:Date.now(),data:coursesData}));}catch(e){}
                 }
-            } catch(e) {
-                console.warn('تعذر تحديث عداد اختبارات الدورة:', courseId, e);
-            }
+            }).catch(e=>console.warn('تعذر تحديث عداد اختبارات الدورة:',courseId,e));
             
             // Switch Views: always reset every course sub-view before showing the overview.
             // This prevents a previously-open dashboard/page from remaining visible underneath
@@ -5177,10 +5172,6 @@ to{opacity:1;transform:none}}
             document.getElementById('courseChatPage').style.display = 'none';
             document.getElementById('courseAssignmentDetailPage')?.classList.remove('active');
             currentCoursePage = 'overview';
-            // Explicit entry from the course catalog must win over any persisted in-course route.
-            if (window.__openingCourseFromCourses) {
-                try { persistCourseState(); } catch (e) {}
-            }
             
             // Reset video & sidebar
             if(ytPlayer) {
@@ -9056,40 +9047,39 @@ to{opacity:1;transform:none}}
                 if(previousUid && previousUid!==String(user.uid)) window.__aaResetChatForAccount?.();
                 updateAuthAccountButton(user, currentUserProfile);
                 
-                try {
-                    const adminDoc = await db.collection('admins').doc('main').get();
-                    if (adminDoc.exists) {
-                        const adminEmails = adminDoc.data().adminEmails || [];
-                        isAdmin = adminEmails.includes(user.email);
-                    } else { isAdmin = false; }
-                } catch (e) { isAdmin = false; }
+                const adminRead = db.collection('admins').doc('main').get().catch(e=>{ console.warn('تعذر تحميل صلاحيات المشرف:',e); return null; });
+                const userRead = db.collection('users').doc(user.uid).get().catch(e=>{ console.warn('تعذر تحميل ملف المستخدم:',e); return null; });
+                const [adminDoc, userDoc] = await Promise.all([adminRead, userRead]);
+                if (adminDoc?.exists) {
+                    const adminEmails = adminDoc.data().adminEmails || [];
+                    isAdmin = adminEmails.includes(user.email);
+                } else {
+                    isAdmin = false;
+                }
                 document.querySelectorAll('.admin-only').forEach(el => {
                     if (isAdmin) el.classList.add('show'); else el.classList.remove('show');
                 });
                 document.querySelectorAll('[data-course-admin-actions="1"]').forEach(el => el.classList.toggle('show', !!isAdmin));
 
-                try {
-                    const userDoc = await db.collection('users').doc(user.uid).get();
-                    if (userDoc.exists) {
-                        currentUserProfile = userDoc.data() || {};
-                        updateAuthAccountButton(user, currentUserProfile);
-                        if (authPopup) authPopup.classList.remove('active');
-                    } else {
-                        currentUserProfile = { uid:user.uid, email:user.email || '', displayName:user.displayName || '' };
-                        if (authPopup) authPopup.classList.add('active');
-                        if (authStep1) authStep1.style.display = 'none'; if (authStep2) authStep2.style.display = 'block';
-                        const emailInput = document.getElementById('emailInput'); if (emailInput) emailInput.value = '';
-                        const passInput = document.getElementById('passInput'); if (passInput) passInput.value = '';
-                        const profilePhone = document.getElementById('profilePhone'); if (profilePhone) profilePhone.value = '';
-                        const profileGender = document.getElementById('profileGender'); if (profileGender) profileGender.value = 'male';
-                        const profileName = document.getElementById('profileName');
-                        if (profileName) {
-                            if (user.displayName) profileName.value = user.displayName;
-                            else profileName.value = '';
-                        }
-                        if (authStatus) authStatus.textContent = 'Complete your data to finish registration';
+                if (userDoc?.exists) {
+                    currentUserProfile = userDoc.data() || {};
+                    updateAuthAccountButton(user, currentUserProfile);
+                    if (authPopup) authPopup.classList.remove('active');
+                } else {
+                    currentUserProfile = { uid:user.uid, email:user.email || '', displayName:user.displayName || '' };
+                    if (authPopup) authPopup.classList.add('active');
+                    if (authStep1) authStep1.style.display = 'none'; if (authStep2) authStep2.style.display = 'block';
+                    const emailInput = document.getElementById('emailInput'); if (emailInput) emailInput.value = '';
+                    const passInput = document.getElementById('passInput'); if (passInput) passInput.value = '';
+                    const profilePhone = document.getElementById('profilePhone'); if (profilePhone) profilePhone.value = '';
+                    const profileGender = document.getElementById('profileGender'); if (profileGender) profileGender.value = 'male';
+                    const profileName = document.getElementById('profileName');
+                    if (profileName) {
+                        if (user.displayName) profileName.value = user.displayName;
+                        else profileName.value = '';
                     }
-                } catch (error) { console.error(error); }
+                    if (authStatus) authStatus.textContent = 'Complete your data to finish registration';
+                }
                 renderCourses();
                 refreshUserEnrollmentMap(true).then(() => updateCourseActionButtons()).catch(()=>{});
                 setTimeout(restoreLastCourseRoute, 350);
@@ -9201,33 +9191,28 @@ to{opacity:1;transform:none}}
         // 9. التهيئة النهائية واخفاء شاشة التحميل
         // ================================================================
         (async function init() {
-            // Load the courses immediately and independently from remote text settings.
-            // This prevents the courses page from staying empty until another action
-            // (such as creating a new course) triggers loadCourses().
+            // First paint depends on the course list only. Text settings continue in parallel.
             const coursesPromise = loadCourses(false).catch(error => {
                 console.error('Initial courses load failed:', error);
             });
-
-            // Translations are loaded in parallel so a slow/failed texts document
-            // can never block the first courses render.
             const translationsPromise = loadTranslations().catch(error => {
                 console.error('Initial translations load failed:', error);
             });
 
-            await Promise.allSettled([coursesPromise, translationsPromise]);
-
-            // Re-render once after translations are ready, without another Firebase read.
+            await coursesPromise;
             renderCourses();
             updateCourseActionButtons();
 
-            // Hide Loading Screen with a smooth fade, without delaying the interactive UI.
             const loadingScreen = document.getElementById('loadingScreen');
             if (loadingScreen) {
                 loadingScreen.classList.add('fade-out');
-                setTimeout(() => {
-                    loadingScreen.style.display = 'none';
-                }, 350);
+                setTimeout(() => { loadingScreen.style.display = 'none'; }, 350);
             }
+
+            translationsPromise.then(() => {
+                renderCourses();
+                updateCourseActionButtons();
+            });
         })();
 
         // ================================================================
@@ -16660,7 +16645,7 @@ body.light-mode #lessonVideoWrapper .aa-speed-value{color:#172033!important;}
      - Keeps a very short 2.5s freshness window so repeated navigation feels instant
        without turning the UI into a stale cache.
   */
-  const TTL=2500;
+  const TTL=30000;
   const store=window.__aaCourseReadCache=window.__aaCourseReadCache||new Map();
   function key(courseId,collection){return `${String(courseId)}::${collection}`;}
   window.__aaInvalidateCourseReadCache=function(courseId,collection){
@@ -22288,9 +22273,6 @@ body:not(.light-mode){--aa-auth-bg:#0d1020;--aa-auth-surface:#15192b;--aa-auth-s
 
 /* Keep the viewer drawer anchored physically to the right regardless of RTL direction. */
 #aaFinalViewer .aa-final-drawer,#aaFinalViewer .aa-final-drawer-overlay{direction:rtl;}
-
-/* Static thumbnail images: each page is a single raster snapshot, never a live PDF canvas. */
-#aaFinalViewer .aa-final-thumb img{display:block!important;width:100%!important;height:auto!important;max-width:100%!important;object-fit:contain!important;border-radius:8px;background:#fff;user-select:none!important;-webkit-user-drag:none!important;pointer-events:none!important;}
 </style>
 <script id="ananas-files-final-js">
 (function(){
@@ -22345,11 +22327,11 @@ function downloadFile(f){
 async function ensurePdf(){if(pdfLib)return pdfLib;if(window.pdfjsLib)return window.pdfjsLib;pdfLib=await import('https://cdn.jsdelivr.net/npm/pdfjs-dist@6.2.108/build/pdf.min.mjs');pdfLib=pdfLib?.default||pdfLib;try{pdfLib.GlobalWorkerOptions.workerSrc='https://cdn.jsdelivr.net/npm/pdfjs-dist@6.2.108/build/pdf.worker.min.mjs'}catch(_){}return pdfLib}
 function sourceForPdf(f){const u=String(f?.url||'');if(/\.pdf(?:[?#]|$)/i.test(u))return u;return u}
 async function openViewer(f){if(!f?.url||f.deleted)return;current=f;const v=viewerMarkup();resetViewer();setViewerHeader(f,fileType(f));toggleDrawer(false);v.classList.add('active');document.body.style.overflow='hidden';const t=fileType(f);if(t==='pdf'){await openPdf(f);return}if(t==='image'){$('aaFinalPages').innerHTML=`<div class="aa-final-image-wrap"><img src="${esc(f.url)}" alt="${esc(fileName(f))}"></div>`;return}if(t==='text'){try{const r=await fetch(f.url,{mode:'cors'});if(!r.ok)throw Error();$('aaFinalPages').innerHTML=`<div class="aa-final-text-wrap">${esc(await r.text())}</div>`}catch(_){showGeneric('تعذر عرض الملف','لا يمكن قراءة محتوى هذا الملف داخل الموقع.')}return}showGeneric('المعاينة الداخلية غير متاحة','هذا النوع من الملفات لا يملك عارضًا داخليًا مخصصًا داخل الموقع.')}
-async function openPdf(f){const pages=$('aaFinalPages');pages.innerHTML='<div class="aa-final-page-loading"><div class="aa-final-page-loading-inner"><i class="fas fa-spinner fa-spin"></i><strong>جاري تجهيز الصفحات...</strong></div></div>';try{const lib=await ensurePdf(),task=lib.getDocument({url:sourceForPdf(f)});pdfDoc=await task.promise;const token=++renderToken;$('aaFinalPageTotal').textContent=`/ ${pdfDoc.numPages}`;$('aaFinalDrawerCount').textContent=`${pdfDoc.numPages} صفحة`;pages.innerHTML='';for(let i=1;i<=pdfDoc.numPages;i++){const s=document.createElement('section');s.className='aa-final-pdf-page';s.id=`aaFinalPage_${i}`;s.dataset.page=String(i);s.innerHTML='<div class="aa-final-page-loading"><div class="aa-final-page-loading-inner"><i class="fas fa-spinner fa-spin"></i><span>جاري تجهيز الصفحة...</span></div></div>';pages.appendChild(s)}buildThumbs();await renderPage(1,token);for(let i=2;i<=pdfDoc.numPages;i++)renderPage(i,token);(async()=>{for(let i=1;i<=pdfDoc.numPages;i++){if(token!==renderToken)break;try{const p=await pdfDoc.getPage(i);await renderThumb(i,p)}catch(_){}}})();updateViewerScroll()}catch(e){console.error('final pdf viewer',e);showGeneric('تعذر عرض ملف PDF','تعذر قراءة ملف PDF من الرابط الحالي. تأكد من أن Cloudinary يسمح بتسليم PDF.')}}
+async function openPdf(f){const pages=$('aaFinalPages');pages.innerHTML='<div class="aa-final-page-loading"><div class="aa-final-page-loading-inner"><i class="fas fa-spinner fa-spin"></i><strong>جاري تجهيز الصفحات...</strong></div></div>';try{const lib=await ensurePdf(),task=lib.getDocument({url:sourceForPdf(f)});pdfDoc=await task.promise;const token=++renderToken;$('aaFinalPageTotal').textContent=`/ ${pdfDoc.numPages}`;$('aaFinalDrawerCount').textContent=`${pdfDoc.numPages} صفحة`;pages.innerHTML='';for(let i=1;i<=pdfDoc.numPages;i++){const s=document.createElement('section');s.className='aa-final-pdf-page';s.id=`aaFinalPage_${i}`;s.dataset.page=String(i);s.innerHTML='<div class="aa-final-page-loading"><div class="aa-final-page-loading-inner"><i class="fas fa-spinner fa-spin"></i><span>جاري تجهيز الصفحة...</span></div></div>';pages.appendChild(s)}buildThumbs();await renderPage(1,token);for(let i=2;i<=pdfDoc.numPages;i++)renderPage(i,token);updateViewerScroll()}catch(e){console.error('final pdf viewer',e);showGeneric('تعذر عرض ملف PDF','تعذر قراءة ملف PDF من الرابط الحالي. تأكد من أن Cloudinary يسمح بتسليم PDF.')}}
 function getPageWidth(){const sc=$('aaFinalScroll');return Math.max(360,Math.min(980,sc.clientWidth-50))}
-async function renderPage(n,token){if(!pdfDoc||token!==renderToken)return;const holder=$(`aaFinalPage_${n}`);if(!holder)return;try{const p=await pdfDoc.getPage(n),scale=Math.max(.25,Math.min(4,pdfScale)),base=p.getViewport({scale:1}),vp=p.getViewport({scale}),dpr=Math.min(window.devicePixelRatio||1.6,2),canvas=document.createElement('canvas');canvas.width=Math.ceil(vp.width*dpr);canvas.height=Math.ceil(vp.height*dpr);canvas.style.width=vp.width+'px';canvas.style.height=vp.height+'px';const ctx=canvas.getContext('2d',{alpha:false});await p.render({canvasContext:ctx,viewport:p.getViewport({scale:scale*dpr})}).promise;holder.innerHTML='';holder.appendChild(canvas)}catch(e){console.error('render page',n,e);holder.innerHTML='<div class="aa-final-page-loading"><div class="aa-final-page-loading-inner"><i class="fas fa-triangle-exclamation"></i><span>تعذر عرض الصفحة</span></div></div>'}}
-async function renderThumb(n,p){const b=$(`aaFinalThumb_${n}`);if(!b)return;try{const img=b.querySelector('img');if(!img)return;const hostWidth=Math.max(150,Math.min(360,b.clientWidth||260));const base=p.getViewport({scale:1});const cssScale=Math.max(.18,Math.min(.42,hostWidth/base.width));const dpr=Math.min(window.devicePixelRatio||1.5,2);const renderScale=cssScale*dpr;const vp=p.getViewport({scale:renderScale});const c=document.createElement('canvas');c.width=Math.ceil(vp.width);c.height=Math.ceil(vp.height);const ctx=c.getContext('2d',{alpha:false});if(!ctx)return;ctx.imageSmoothingEnabled=true;ctx.imageSmoothingQuality='high';await p.render({canvasContext:ctx,viewport:vp,background:'#ffffff'}).promise;const dataUrl=c.toDataURL('image/jpeg',0.88);img.src=dataUrl;img.width=Math.ceil(base.width*cssScale);img.height=Math.ceil(base.height*cssScale);img.setAttribute('aria-hidden','true');img.draggable=false;c.width=1;c.height=1}catch(_){} }
-function buildThumbs(){const list=$('aaFinalDrawerList');list.innerHTML='';for(let i=1;i<=pdfDoc.numPages;i++){const b=document.createElement('button');b.type='button';b.className='aa-final-thumb';b.id=`aaFinalThumb_${i}`;b.setAttribute('aria-label',`الانتقال إلى الصفحة ${i}`);b.innerHTML=`<img alt="" aria-hidden="true" draggable="false"><span aria-hidden="true">صفحة ${i}</span>`;b.onclick=()=>{gotoPage(i,true);toggleDrawer(false)};list.appendChild(b)}}
+async function renderPage(n,token){if(!pdfDoc||token!==renderToken)return;const holder=$(`aaFinalPage_${n}`);if(!holder)return;try{const p=await pdfDoc.getPage(n),scale=Math.max(.25,Math.min(4,pdfScale)),base=p.getViewport({scale:1}),vp=p.getViewport({scale}),dpr=Math.min(window.devicePixelRatio||1.6,2),canvas=document.createElement('canvas');canvas.width=Math.ceil(vp.width*dpr);canvas.height=Math.ceil(vp.height*dpr);canvas.style.width=vp.width+'px';canvas.style.height=vp.height+'px';const ctx=canvas.getContext('2d',{alpha:false});await p.render({canvasContext:ctx,viewport:p.getViewport({scale:scale*dpr})}).promise;holder.innerHTML='';holder.appendChild(canvas);renderThumb(n,p)}catch(e){console.error('render page',n,e);holder.innerHTML='<div class="aa-final-page-loading"><div class="aa-final-page-loading-inner"><i class="fas fa-triangle-exclamation"></i><span>تعذر عرض الصفحة</span></div></div>'}}
+async function renderThumb(n,p){const b=$(`aaFinalThumb_${n}`);if(!b)return;try{const c=b.querySelector('canvas'),vp=p.getViewport({scale:.2});c.width=Math.ceil(vp.width);c.height=Math.ceil(vp.height);await p.render({canvasContext:c.getContext('2d',{alpha:false}),viewport:vp}).promise}catch(_){} }
+function buildThumbs(){const list=$('aaFinalDrawerList');list.innerHTML='';for(let i=1;i<=pdfDoc.numPages;i++){const b=document.createElement('button');b.type='button';b.className='aa-final-thumb';b.id=`aaFinalThumb_${i}`;b.innerHTML=`<canvas></canvas><span>الصفحة ${i}</span>`;b.onclick=()=>{gotoPage(i,true);toggleDrawer(false)};list.appendChild(b)}}
 function gotoPage(n,focus){if(!pdfDoc)return;const page=Math.max(1,Math.min(pdfDoc.numPages,Math.round(Number(n)||1)));activePage=page;$('aaFinalPageInput').value=String(page);const el=$(`aaFinalPage_${page}`);if(el)el.scrollIntoView({behavior:focus?'smooth':'auto',block:'start'});updateThumbs(page);renderPage(page,renderToken)}
 function updateThumbs(n){document.querySelectorAll('#aaFinalDrawerList .aa-final-thumb.active').forEach(x=>x.classList.remove('active'));$(`aaFinalThumb_${n}`)?.classList.add('active')}
 function updateViewerScroll(){if(!pdfDoc)return;const sc=$('aaFinalScroll'),marker=sc.scrollTop+sc.clientHeight*.22;let best=1,dist=Infinity;document.querySelectorAll('.aa-final-pdf-page').forEach(el=>{const d=Math.abs(el.offsetTop-marker);if(d<dist){dist=d;best=Number(el.dataset.page)||best}});activePage=best;$('aaFinalPageInput').value=String(best);updateThumbs(best);const max=sc.scrollHeight-sc.clientHeight;$('aaFinalProgress').style.width=(max>0?Math.min(100,Math.max(0,sc.scrollTop/max*100)):100)+'%'}
@@ -22621,253 +22603,5 @@ body.light-mode #coursesPage .course-card:hover{
   }
 }
 </style>
-
-<script id="aa-files-lesson-final-v25">
-(function(){
-  'use strict';
-  const $=id=>document.getElementById(id);
-  const esc=v=>window.escapeHtml?escapeHtml(String(v??'')):String(v??'').replace(/[&<>\"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',"'":'&#39;'}[c]));
-  const courseId=()=>window.activeCourseId||window.__activeCourseId||(typeof activeCourseId!=='undefined'?activeCourseId:null);
-  const currentLessonId=()=>window.activeLessonId||(typeof activeLessonId!=='undefined'?activeLessonId:null);
-  let lessonViewerReturn=null;
-  let multiModal=null;
-
-  async function linkedLessonFiles(cid,lid){
-    if(!cid||!lid||!window.db)return [];
-    try{
-      const snap=await db.collection('courses').doc(cid).collection('files').get();
-      return snap.docs.map(d=>({id:d.id,...(d.data()||{})})).filter(f=>!f.deleted&&f.url&&String(f.lessonId||'')===String(lid));
-    }catch(e){
-      console.warn('lesson files lookup',e);
-      return [];
-    }
-  }
-
-  function fileTypeLabel(f){
-    const m=String(f?.mime||'').toLowerCase(),n=String(f?.name||'').toLowerCase();
-    if(m.includes('pdf')||/\.pdf(?:$|[?#])/.test(n))return 'PDF';
-    if(m.startsWith('image/')||/\.(png|jpe?g|gif|webp|bmp|svg)(?:$|[?#])/.test(n))return 'صورة';
-    if(m.startsWith('text/')||/\.txt(?:$|[?#])/.test(n))return 'نص';
-    if(/\.(docx?|xlsx?|pptx?)$/i.test(n))return 'مستند';
-    return 'ملف';
-  }
-  function fileIconClass(f){
-    const t=fileTypeLabel(f);
-    return t==='PDF'?'fa-file-pdf':t==='صورة'?'fa-image':t==='نص'?'fa-file-lines':t==='مستند'?'fa-file-lines':'fa-file-lines';
-  }
-  function formatSize(n){n=Number(n)||0;if(!n)return'الحجم غير معروف';const u=['بايت','KB','MB','GB'];let i=0;while(n>=1024&&i<u.length-1){n/=1024;i++;}return `${n.toFixed(i?1:0)} ${u[i]}`}
-
-  function ensureMultiModal(){
-    if(multiModal)return multiModal;
-    multiModal=document.createElement('div');
-    multiModal.id='aaLessonFilesPicker';
-    multiModal.className='aa-lesson-files-picker';
-    multiModal.innerHTML=`<div class="aa-lesson-files-picker-card" role="dialog" aria-modal="true" aria-labelledby="aaLessonFilesPickerTitle">
-      <div class="aa-lesson-files-picker-head">
-        <div><span class="aa-lesson-files-picker-kicker">ملفات الحصة</span><strong id="aaLessonFilesPickerTitle">اختر الملف الذي تريد فتحه</strong></div>
-        <button type="button" id="aaLessonFilesPickerClose" class="aa-lesson-files-picker-close" aria-label="إغلاق"><i class="fas fa-xmark"></i></button>
-      </div>
-      <div id="aaLessonFilesPickerList" class="aa-lesson-files-picker-list"></div>
-    </div>`;
-    document.body.appendChild(multiModal);
-    $('aaLessonFilesPickerClose').onclick=()=>multiModal.classList.remove('active');
-    multiModal.addEventListener('click',e=>{if(e.target===multiModal)multiModal.classList.remove('active')});
-    return multiModal;
-  }
-
-  function openMultiModal(files){
-    const m=ensureMultiModal(),list=$('aaLessonFilesPickerList');
-    list.innerHTML=files.map(f=>`<button type="button" class="aa-lesson-file-option" data-file-id="${esc(f.id)}">
-      <span class="aa-lesson-file-option-icon"><i class="fas ${fileIconClass(f)}"></i></span>
-      <span class="aa-lesson-file-option-copy"><strong>${esc(f.name||'ملف')}</strong><small>${esc(fileTypeLabel(f))} · ${esc(formatSize(f.size))}</small></span>
-      <i class="fas fa-angle-left aa-lesson-file-option-arrow"></i>
-    </button>`).join('');
-    list.querySelectorAll('[data-file-id]').forEach(btn=>btn.addEventListener('click',()=>{
-      const f=files.find(x=>String(x.id)===String(btn.dataset.fileId));
-      m.classList.remove('active');
-      if(f)window.openCourseFileViewer?.(f);
-    }));
-    m.classList.add('active');
-  }
-
-  function rememberLessonReturn(){
-    const cid=courseId(),lid=currentLessonId();
-    if(cid&&lid)lessonViewerReturn={courseId:cid,lessonId:lid};
-  }
-
-  /* Only files-related action UI is replaced. Quiz/assignment actions remain owned by the existing renderer. */
-  const previousLessonActions=window.renderLessonRelatedActions;
-  if(typeof previousLessonActions==='function'&&!window.__aaLessonFilesFinalV25){
-    window.__aaLessonFilesFinalV25=true;
-    window.renderLessonRelatedActions=async function(cid,lid){
-      await previousLessonActions.apply(this,arguments);
-      const area=$('lessonRelatedActions');
-      if(!area)return;
-      area.querySelectorAll('[data-ananas-file-action],.ananas-generated-file-action,[data-aa-lesson-files-v25]').forEach(x=>x.remove());
-      const files=await linkedLessonFiles(cid,lid);
-      if(files.length){
-        const btn=document.createElement('button');
-        btn.type='button';
-        btn.className='related-action';
-        btn.dataset.aaLessonFilesV25='1';
-        btn.innerHTML=`<i class="fas fa-folder-open"></i> ملفات الحصة <span class="aa-lesson-files-count">${files.length}</span>`;
-        btn.onclick=e=>{
-          e.preventDefault();e.stopPropagation();
-          rememberLessonReturn();
-          if(files.length===1)window.openCourseFileViewer?.(files[0]);
-          else openMultiModal(files);
-        };
-        area.appendChild(btn);
-      }
-      if(window.isAdmin || typeof isAdmin!=='undefined'&&isAdmin){
-        const up=document.createElement('button');
-        up.type='button';
-        up.className='related-action';
-        up.dataset.aaLessonFilesV25='upload';
-        up.innerHTML='<i class="fas fa-cloud-arrow-up"></i> رفع ملف للحصة';
-        up.onclick=()=>document.getElementById('lessonFilesUploadInput')?.click();
-        area.appendChild(up);
-      }
-    };
-  }
-
-  /* Mark viewers opened from a lesson, then let the site's existing viewer do the actual opening. */
-  const previousOpen=window.openCourseFileViewer;
-  if(typeof previousOpen==='function'&&!window.__aaLessonViewerWrapV25){
-    window.__aaLessonViewerWrapV25=true;
-    window.openCourseFileViewer=function(f){
-      if(typeof currentCoursePage!=='undefined'&&currentCoursePage==='lessonPlayer')rememberLessonReturn();
-      return previousOpen.apply(this,arguments);
-    };
-    window.openFileViewer=window.openCourseFileViewer;
-  }
-
-  function resumeLessonAfterViewer(){
-    const ctx=lessonViewerReturn;
-    lessonViewerReturn=null;
-    if(!ctx?.courseId||!ctx?.lessonId)return;
-    setTimeout(()=>{
-      try{window.resumeLessonFromInternalPage?.(ctx.courseId,ctx.lessonId,true);}catch(e){console.warn('resume lesson after file viewer',e)}
-    },0);
-  }
-
-  /* Capture close/escape before/alongside the existing viewer close handler. */
-  document.addEventListener('click',e=>{
-    const close=e.target.closest?.('#aaFinalClose,#aaFinalDrawerClose');
-    if(close && close.id==='aaFinalClose' && lessonViewerReturn){setTimeout(resumeLessonAfterViewer,0)}
-  },true);
-  document.addEventListener('keydown',e=>{
-    const v=$('aaFinalViewer');
-    if(e.key==='Escape'&&v?.classList.contains('active')&&lessonViewerReturn){
-      const drawer=$('aaFinalDrawer');
-      if(drawer?.classList.contains('open'))return;
-      setTimeout(resumeLessonAfterViewer,0);
-    }
-  },true);
-
-  /* 100% means fit-to-current-device width. Higher/lower zoom remains a multiplier of that fitted width. */
-  function syncViewerFitWidth(){
-    const sc=$('aaFinalScroll'),v=$('aaFinalViewer');
-    if(!sc||!v)return;
-    const mobile=window.innerWidth<=700;
-    const width=Math.max(280,Math.floor(sc.clientWidth-(mobile?0:48)));
-    v.style.setProperty('--aa-fit-page-width',width+'px');
-  }
-  function syncViewerZoom(){
-    const v=$('aaFinalViewer');
-    if(!v)return;
-    const input=$('aaFinalZoomInput');
-    const pct=Math.max(25,Math.min(400,Number(input?.value)||100));
-    v.style.setProperty('--aa-user-zoom',String(pct/100));
-  }
-  function syncViewerScale(){syncViewerFitWidth();syncViewerZoom();}
-  document.addEventListener('click',e=>{
-    if(e.target.closest?.('#aaFinalZoomIn,#aaFinalZoomOut,#aaFinalZoomReset'))setTimeout(syncViewerScale,0);
-  },true);
-  document.addEventListener('change',e=>{
-    if(e.target?.id==='aaFinalZoomInput')setTimeout(syncViewerScale,0);
-  },true);
-  document.addEventListener('keydown',e=>{
-    if(e.target?.id==='aaFinalZoomInput'&&e.key==='Enter')setTimeout(syncViewerScale,0);
-  },true);
-  window.addEventListener('resize',syncViewerScale,{passive:true});
-  const viewerObserver=new MutationObserver(()=>syncViewerScale());
-  viewerObserver.observe(document.body,{childList:true,subtree:true});
-  syncViewerScale();
-})();
-</script>
-<style id="aa-files-lesson-final-v25-css">
-/* Lesson file action: visible only when at least one linked file exists. */
-.aa-lesson-files-count{display:inline-grid;place-items:center;min-width:21px;height:21px;padding:0 5px;border-radius:999px;background:rgba(108,92,231,.12);color:var(--accent1);font-size:.72rem;line-height:1;font-weight:900;}
-/* Multiple-file picker: one clean card per file, stacked vertically. */
-.aa-lesson-files-picker{position:fixed;inset:0;z-index:13050;display:none;align-items:center;justify-content:center;padding:18px;background:rgba(5,8,15,.62);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);}
-.aa-lesson-files-picker.active{display:flex;}
-.aa-lesson-files-picker-card{width:min(620px,calc(100vw - 28px));max-height:min(760px,calc(100vh - 32px));display:flex;flex-direction:column;overflow:hidden;background:var(--bg-card);border:1px solid var(--border);border-radius:26px;box-shadow:0 30px 90px rgba(0,0,0,.30);}
-.aa-lesson-files-picker-head{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:18px 20px;border-bottom:1px solid var(--border);background:var(--bg-secondary);}
-.aa-lesson-files-picker-head>div{min-width:0;display:flex;flex-direction:column;gap:4px;}
-.aa-lesson-files-picker-kicker{font-size:.7rem;color:var(--accent1);font-weight:900;letter-spacing:.04em;}
-.aa-lesson-files-picker-head strong{font-size:1rem;color:var(--text-primary);}
-.aa-lesson-files-picker-close{width:38px;height:38px;flex:0 0 38px;border:1px solid var(--border);border-radius:12px;background:var(--bg-card);color:var(--text-muted);cursor:pointer;display:grid;place-items:center;}
-.aa-lesson-files-picker-close:hover{color:var(--accent1);border-color:var(--accent1);}
-.aa-lesson-files-picker-list{padding:14px;display:flex;flex-direction:column;gap:9px;overflow:auto;}
-.aa-lesson-file-option{width:100%;display:flex;align-items:center;gap:12px;padding:12px;border:1px solid var(--border);border-radius:17px;background:var(--bg-secondary);color:var(--text-primary);font-family:inherit;text-align:right;cursor:pointer;transition:.2s ease;}
-.aa-lesson-file-option:hover{transform:translateY(-1px);border-color:var(--accent1);background:color-mix(in srgb,var(--bg-secondary) 92%,var(--accent1) 8%);}
-.aa-lesson-file-option-icon{width:44px;height:44px;flex:0 0 44px;border-radius:13px;display:grid;place-items:center;background:rgba(108,92,231,.10);color:var(--accent1);font-size:1.05rem;}
-.aa-lesson-file-option-copy{min-width:0;flex:1;display:flex;flex-direction:column;gap:3px;}
-.aa-lesson-file-option-copy strong{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:.84rem;}
-.aa-lesson-file-option-copy small{color:var(--text-muted);font-size:.72rem;}
-.aa-lesson-file-option-arrow{color:var(--text-muted);font-size:.75rem;}
-/* Device-fit zoom: 100% is the current device's fitted page width; zoom multiplies it. */
-#aaFinalViewer .aa-final-pages-scroll{overflow:auto!important;}
-#aaFinalViewer .aa-final-pdf-page{width:max-content!important;min-width:100%!important;}
-#aaFinalViewer .aa-final-pdf-page canvas{width:calc(var(--aa-fit-page-width, 360px) * var(--aa-user-zoom, 1))!important;max-width:none!important;height:auto!important;display:block!important;}
-#aaFinalViewer .aa-final-pages{align-items:center!important;min-width:100%!important;}
-@media(max-width:700px){
-  .aa-lesson-files-picker{padding:10px;align-items:flex-end;}
-  .aa-lesson-files-picker-card{width:100%;max-height:82vh;border-radius:24px 24px 18px 18px;}
-  .aa-lesson-files-picker-head{padding:15px 16px;}
-  .aa-lesson-files-picker-list{padding:10px;}
-  #aaFinalViewer .aa-final-pdf-page canvas{width:calc(var(--aa-fit-page-width, 320px) * var(--aa-user-zoom, 1))!important;}
-}
-</style>
-
-<style id="aa-final-thumb-raster-fix">
-/* PDF thumbnails are pure raster snapshots: no text layer, no reflow, exact page ratio. */
-.aa-final-thumb{display:flex!important;flex-direction:column!important;align-items:center!important;justify-content:flex-start!important;gap:5px!important;overflow:hidden!important;}
-.aa-final-thumb canvas{display:block!important;width:100%!important;height:auto!important;max-width:100%!important;object-fit:contain!important;image-rendering:auto!important;user-select:none!important;-webkit-user-drag:none!important;}
-.aa-final-thumb span{display:block!important;flex:0 0 auto!important;white-space:nowrap!important;line-height:1.2!important;}
-</style>
-
-<style id="ananas-unified-theme-final">
-:root{--ananas-accent:var(--accent1);--ananas-radius:18px;--ananas-control-h:44px;--ananas-control-radius:13px;--ananas-border:color-mix(in srgb,var(--border) 88%,var(--accent1) 12%)}
-.btn,.full-page-back-btn,.course-page-back-btn,.lesson-player-nav-btn,.related-action,.assignment-upload-btn,.code-action-btn,.aa-files-back-btn,.aa-files-primary-btn{font-family:'Cairo',sans-serif;font-weight:800;border-radius:var(--ananas-control-radius);transition:transform .2s ease,border-color .2s ease,background .2s ease,box-shadow .2s ease,color .2s ease}
-.full-page-back-btn,.course-page-back-btn,.lesson-player-nav-btn,.related-action,.assignment-upload-btn,.code-action-btn,.aa-files-back-btn{min-height:var(--ananas-control-h);display:inline-flex;align-items:center;justify-content:center;gap:8px;border:1px solid var(--ananas-border);background:var(--bg-secondary);color:var(--text-primary);padding:0 14px;box-shadow:0 6px 18px rgba(0,0,0,.045)}
-.full-page-back-btn:hover,.course-page-back-btn:hover,.lesson-player-nav-btn:hover,.related-action:hover,.assignment-upload-btn:hover,.code-action-btn:hover,.aa-files-back-btn:hover{transform:translateY(-1px);border-color:color-mix(in srgb,var(--accent1) 42%,var(--border) 58%);background:color-mix(in srgb,var(--accent1) 7%,var(--bg-secondary) 93%);color:var(--accent1)}
-.full-page-card,.lesson-card,.dashboard-btn,.assignment-work-card,.course-overview .overview-hero,.course-overview .overview-stats .stat-item{border-radius:var(--ananas-radius)!important;border-color:var(--ananas-border)!important;box-shadow:0 10px 30px rgba(0,0,0,.055)!important}
-#courseLessonsPage .page-title,#courseQuizzesPage .page-title,#courseAssignmentsPage .page-title,#courseFilesPage .aa-files-header{min-height:56px;margin-bottom:18px!important;padding-bottom:14px!important;border-bottom:1px solid var(--ananas-border)!important}
-#courseDetailView #courseLessonPlayerPage{padding-top:0!important}
-#courseDetailView #courseLessonPlayerPage .lesson-player-layout{position:relative;display:flex;min-height:100%;height:100%;gap:0}
-#courseDetailView #courseLessonPlayerPage .lesson-player-main{min-width:0;transition:width .32s ease,flex-basis .32s ease,padding .32s ease}
-#courseDetailView #courseLessonPlayerPage .lesson-player-topbar{position:sticky;top:0;z-index:50;width:100%;min-height:58px;padding:8px 0 10px;display:flex;align-items:center;justify-content:space-between;gap:10px;background:linear-gradient(180deg,var(--bg-primary) 78%,transparent)}
-.lesson-player-topbar-start,.lesson-player-topbar-end{display:flex;align-items:center;gap:8px;min-width:0}.lesson-player-nav-btn{min-height:40px!important;height:40px!important;padding:0 12px!important;border-radius:12px!important;white-space:nowrap}.lesson-player-nav-btn i{font-size:.9rem}
-#courseDetailView #courseLessonPlayerPage .lesson-video-sticky{width:100%!important;max-width:none!important;margin:0 auto 16px!important;border-radius:18px!important;transition:max-width .32s ease,width .32s ease,box-shadow .32s ease}
-#courseDetailView #courseLessonPlayerPage .lesson-player-sidebar{width:350px!important;flex:0 0 350px!important;overflow:hidden!important;transition:flex-basis .32s ease,width .32s ease,opacity .22s ease,border-color .22s ease}
-#courseDetailView #courseLessonPlayerPage .lesson-player-layout.sidebar-collapsed .lesson-player-sidebar{width:0!important;flex-basis:0!important;opacity:0;pointer-events:none;border-color:transparent!important}
-#courseDetailView #courseLessonPlayerPage .lesson-player-layout.sidebar-collapsed .lesson-player-main{padding-inline:0!important}
-#courseDetailView #courseLessonPlayerPage .lesson-player-layout.sidebar-collapsed .lesson-video-sticky{width:min(1180px,100%)!important;max-width:1180px!important}
-#courseDetailView #courseLessonPlayerPage .lesson-sidebar-header{padding:13px 14px;border-bottom:1px solid var(--ananas-border);background:var(--bg-secondary)}
-#courseDetailView #courseLessonPlayerPage .lesson-player-item{border-width:1px;border-radius:13px;background:var(--bg-card)}
-#courseDetailView #courseLessonPlayerPage .lesson-player-item.active{background:color-mix(in srgb,var(--accent1) 11%,var(--bg-card) 89%)}
-#courseDetailView #courseChatPage{padding:0!important;background:var(--bg-primary)!important}#courseDetailView #courseChatPage .chat-rebuilt-shell{height:100%;min-height:0;border:0;border-radius:0;background:var(--bg-primary)}#courseDetailView #courseChatPage .chat-topbar{min-height:58px!important;padding:8px 14px!important;border-bottom:1px solid var(--ananas-border)}#courseDetailView #courseChatPage .chat-topbar-btn{width:40px!important;height:40px!important;border-radius:12px!important}
-@media(max-width:1024px){#courseDetailView #courseLessonPlayerPage .lesson-player-layout{height:auto;min-height:100%}#courseDetailView #courseLessonPlayerPage .lesson-player-sidebar{width:100%!important;flex-basis:auto!important;opacity:1}#courseDetailView #courseLessonPlayerPage .lesson-player-layout.sidebar-collapsed .lesson-player-sidebar{width:100%!important;flex-basis:0!important;max-height:0!important;opacity:0}.lesson-player-nav-btn span{display:none}.lesson-player-nav-btn{width:42px!important;padding:0!important}}
-</style>
-<script id="ananas-navigation-theme-final-js">
-(function(){'use strict';if(window.__ananasNavigationThemeFinal)return;window.__ananasNavigationThemeFinal=true;const $=id=>document.getElementById(id);
-const logo=document.querySelector('.navbar .logo');if(logo&&!logo.dataset.ananasHomeHook){logo.dataset.ananasHomeHook='1';logo.addEventListener('click',e=>{e.preventDefault();try{window.mobileNavigate?.('courses')}catch(_){}})}
-const toggle=$('toggleLessonSidebarBtn'),panel=$('lessonPlayerSidebarPanel'),layout=panel?.closest('.lesson-player-layout');if(toggle&&layout&&!toggle.dataset.ananasSidebarHook){toggle.dataset.ananasSidebarHook='1';toggle.addEventListener('click',e=>{e.preventDefault();const collapsed=layout.classList.toggle('sidebar-collapsed');toggle.setAttribute('aria-expanded',collapsed?'false':'true');requestAnimationFrame(()=>window.dispatchEvent(new Event('resize')));})}
-const closeLesson=$('closeLessonPlayerBtn');if(closeLesson&&!closeLesson.dataset.ananasCloseHook){closeLesson.dataset.ananasCloseHook='1';closeLesson.addEventListener('click',e=>{e.preventDefault();try{window.switchCoursePage?.('learning')}catch(_){}})}
-})();
-</script>
-
 </body>
 </html>
