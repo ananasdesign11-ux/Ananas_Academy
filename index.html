@@ -11073,9 +11073,7 @@ window.loadCourseFilesPage=async function(){
 
 /* Replace only the file-related action buttons beneath a lesson. */
 const baseRender=window.renderLessonRelatedActions;
-if(baseRender&&!window.__lessonFileActionFinal){window.__lessonFileActionFinal=true;window.renderLessonRelatedActions=async function(courseId,lessonId){await baseRender.apply(this,arguments);const area=$('lessonRelatedActions');if(!area)return;area.querySelectorAll('[data-ananas-file-action],.ananas-generated-file-action').forEach(x=>x.remove());try{const snap=await db.collection('courses').doc(courseId).collection('files').get();const files=snap.docs.map(d=>({id:d.id,...(d.data()||{})})).filter(x=>!x.deleted&&String(x.lessonId||'')===String(lessonId)&&x.url);
-if(files.length){const view=document.createElement('button');view.type='button';view.className='related-action ananas-generated-file-action';view.dataset.ananasFileAction='1';view.innerHTML=`<i class="fas fa-folder-open"></i> ملفات الحصة (${files.length})`;view.onclick=()=>{window.switchCoursePage?.('files');setTimeout(()=>{const box=$('courseFilesPageGrid');if(box)window.renderFilesGrid?.(files,box)},80);};area.appendChild(view);}
-if(isAdmin){const up=document.createElement('button');up.type='button';up.className='related-action ananas-generated-file-action';up.dataset.ananasFileUploadLesson=lessonId;up.innerHTML='<i class="fas fa-cloud-arrow-up"></i> رفع ملف للحصة';area.appendChild(up);}}catch(e){console.warn(e);}};}
+if(baseRender&&!window.__lessonFileActionFinal){window.__lessonFileActionFinal=true;window.renderLessonRelatedActions=async function(courseId,lessonId){await baseRender.apply(this,arguments);const area=$('lessonRelatedActions');if(!area)return;area.querySelectorAll('[data-ananas-file-action],.ananas-generated-file-action').forEach(x=>x.remove());try{const snap=await db.collection('courses').doc(courseId).collection('files').get();const files=snap.docs.map(d=>({id:d.id,...(d.data()||{})})).filter(x=>!x.deleted&&String(x.lessonId||'')===String(lessonId));const view=document.createElement('button');view.type='button';view.className='related-action ananas-generated-file-action';view.dataset.ananasFileAction='1';view.innerHTML=`<i class="fas fa-folder-open"></i> ملفات الحصة${files.length?` (${files.length})`:''}`;view.onclick=()=>{window.switchCoursePage?.('files');setTimeout(()=>{const box=$('courseFilesPageGrid');if(box){box.innerHTML='';const list=files; if(!list.length)box.innerHTML='<div class="files-empty-state"><i class="fas fa-folder-open"></i><strong>لا توجد ملفات مرتبطة بهذه الحصة</strong></div>';else box.innerHTML=list.map(f=>`<article class="course-file-card"><div class="course-file-icon"><i class="fas ${fileIcon(f)}"></i></div><div class="course-file-name">${esc(f.name||'ملف')}</div><div class="course-file-meta">مرتبط بـ: ${esc(f.lessonTitle||'الحصة')}<br>${esc(fileSize(f.size))}</div><div class="course-file-actions"><button class="primary" type="button" onclick='openCourseFileViewer(${JSON.stringify(f)})'><i class="fas fa-eye"></i> عرض</button>${f.allowDownload!==false||isAdmin?`<a href="${esc(f.url)}" target="_blank" rel="noopener" download><i class="fas fa-download"></i> تحميل</a>`:''}</div></article>`).join('');}},80);};area.appendChild(view);if(isAdmin){const up=document.createElement('button');up.type='button';up.className='related-action ananas-generated-file-action';up.dataset.ananasFileUploadLesson=lessonId;up.innerHTML='<i class="fas fa-cloud-arrow-up"></i> رفع ملف للحصة';area.appendChild(up);}}catch(e){console.warn(e);}};}
 
 /* Include course file uploads in activity feeds, while still excluding deleted files. */
 const oldGetEffective=window.getEffectiveProfileData;
@@ -22276,20 +22274,6 @@ body:not(.light-mode){--aa-auth-bg:#0d1020;--aa-auth-surface:#15192b;--aa-auth-s
 
 /* Keep the viewer drawer anchored physically to the right regardless of RTL direction. */
 #aaFinalViewer .aa-final-drawer,#aaFinalViewer .aa-final-drawer-overlay{direction:rtl;}
-
-<style id="aa-final-viewer-fit-100-fix">
-#aaFinalViewer .aa-final-pages-scroll{overflow:auto!important;}
-#aaFinalViewer .aa-final-pages{width:100%!important;min-width:0!important;align-items:center!important;}
-#aaFinalViewer .aa-final-pdf-page{min-width:0!important;justify-content:center!important;flex:0 0 auto!important;}
-#aaFinalViewer .aa-final-pdf-page canvas{max-width:none!important;}
-@media(max-width:650px){
-  #aaFinalViewer .aa-final-pages{padding:0 0 28px!important;gap:14px!important;}
-  #aaFinalViewer .aa-final-pdf-page{margin:0!important;}
-}
-@media(min-width:651px){
-  #aaFinalViewer .aa-final-pages{padding:18px 18px 40px!important;gap:18px!important;}
-}
-</style>
 </style>
 <script id="ananas-files-final-js">
 (function(){
@@ -22345,9 +22329,8 @@ async function ensurePdf(){if(pdfLib)return pdfLib;if(window.pdfjsLib)return win
 function sourceForPdf(f){const u=String(f?.url||'');if(/\.pdf(?:[?#]|$)/i.test(u))return u;return u}
 async function openViewer(f){if(!f?.url||f.deleted)return;current=f;const v=viewerMarkup();resetViewer();setViewerHeader(f,fileType(f));toggleDrawer(false);v.classList.add('active');document.body.style.overflow='hidden';const t=fileType(f);if(t==='pdf'){await openPdf(f);return}if(t==='image'){$('aaFinalPages').innerHTML=`<div class="aa-final-image-wrap"><img src="${esc(f.url)}" alt="${esc(fileName(f))}"></div>`;return}if(t==='text'){try{const r=await fetch(f.url,{mode:'cors'});if(!r.ok)throw Error();$('aaFinalPages').innerHTML=`<div class="aa-final-text-wrap">${esc(await r.text())}</div>`}catch(_){showGeneric('تعذر عرض الملف','لا يمكن قراءة محتوى هذا الملف داخل الموقع.')}return}showGeneric('المعاينة الداخلية غير متاحة','هذا النوع من الملفات لا يملك عارضًا داخليًا مخصصًا داخل الموقع.')}
 async function openPdf(f){const pages=$('aaFinalPages');pages.innerHTML='<div class="aa-final-page-loading"><div class="aa-final-page-loading-inner"><i class="fas fa-spinner fa-spin"></i><strong>جاري تجهيز الصفحات...</strong></div></div>';try{const lib=await ensurePdf(),task=lib.getDocument({url:sourceForPdf(f)});pdfDoc=await task.promise;const token=++renderToken;$('aaFinalPageTotal').textContent=`/ ${pdfDoc.numPages}`;$('aaFinalDrawerCount').textContent=`${pdfDoc.numPages} صفحة`;pages.innerHTML='';for(let i=1;i<=pdfDoc.numPages;i++){const s=document.createElement('section');s.className='aa-final-pdf-page';s.id=`aaFinalPage_${i}`;s.dataset.page=String(i);s.innerHTML='<div class="aa-final-page-loading"><div class="aa-final-page-loading-inner"><i class="fas fa-spinner fa-spin"></i><span>جاري تجهيز الصفحة...</span></div></div>';pages.appendChild(s)}buildThumbs();await renderPage(1,token);for(let i=2;i<=pdfDoc.numPages;i++)renderPage(i,token);updateViewerScroll()}catch(e){console.error('final pdf viewer',e);showGeneric('تعذر عرض ملف PDF','تعذر قراءة ملف PDF من الرابط الحالي. تأكد من أن Cloudinary يسمح بتسليم PDF.')}}
-function getViewerTargetWidth(){const sc=$('aaFinalScroll');if(!sc)return 800;const mobile=window.matchMedia?.('(max-width:650px)').matches;const available=Math.max(280,sc.clientWidth-(mobile?0:36));return mobile?available:Math.min(1180,available)}
-function getPageFitScale(baseWidth){const target=getViewerTargetWidth();return baseWidth>0?target/baseWidth:1}
-async function renderPage(n,token){if(!pdfDoc||token!==renderToken)return;const holder=$(`aaFinalPage_${n}`);if(!holder)return;try{const p=await pdfDoc.getPage(n),base=p.getViewport({scale:1}),fitScale=getPageFitScale(base.width),scale=Math.max(.25,Math.min(4,fitScale*pdfScale)),vp=p.getViewport({scale}),dpr=Math.min(window.devicePixelRatio||1.6,2),canvas=document.createElement('canvas');canvas.width=Math.ceil(vp.width*dpr);canvas.height=Math.ceil(vp.height*dpr);canvas.style.width=vp.width+'px';canvas.style.height=vp.height+'px';canvas.style.maxWidth='none';const ctx=canvas.getContext('2d',{alpha:false});await p.render({canvasContext:ctx,viewport:p.getViewport({scale:scale*dpr})}).promise;holder.innerHTML='';holder.style.width=Math.max(getViewerTargetWidth(),vp.width)+'px';holder.appendChild(canvas);renderThumb(n,p)}catch(e){console.error('render page',n,e);holder.innerHTML='<div class="aa-final-page-loading"><div class="aa-final-page-loading-inner"><i class="fas fa-triangle-exclamation"></i><span>تعذر عرض الصفحة</span></div></div>'}}
+function getPageWidth(){const sc=$('aaFinalScroll');return Math.max(360,Math.min(980,sc.clientWidth-50))}
+async function renderPage(n,token){if(!pdfDoc||token!==renderToken)return;const holder=$(`aaFinalPage_${n}`);if(!holder)return;try{const p=await pdfDoc.getPage(n),scale=Math.max(.25,Math.min(4,pdfScale)),base=p.getViewport({scale:1}),vp=p.getViewport({scale}),dpr=Math.min(window.devicePixelRatio||1.6,2),canvas=document.createElement('canvas');canvas.width=Math.ceil(vp.width*dpr);canvas.height=Math.ceil(vp.height*dpr);canvas.style.width=vp.width+'px';canvas.style.height=vp.height+'px';const ctx=canvas.getContext('2d',{alpha:false});await p.render({canvasContext:ctx,viewport:p.getViewport({scale:scale*dpr})}).promise;holder.innerHTML='';holder.appendChild(canvas);renderThumb(n,p)}catch(e){console.error('render page',n,e);holder.innerHTML='<div class="aa-final-page-loading"><div class="aa-final-page-loading-inner"><i class="fas fa-triangle-exclamation"></i><span>تعذر عرض الصفحة</span></div></div>'}}
 async function renderThumb(n,p){const b=$(`aaFinalThumb_${n}`);if(!b)return;try{const c=b.querySelector('canvas'),vp=p.getViewport({scale:.2});c.width=Math.ceil(vp.width);c.height=Math.ceil(vp.height);await p.render({canvasContext:c.getContext('2d',{alpha:false}),viewport:vp}).promise}catch(_){} }
 function buildThumbs(){const list=$('aaFinalDrawerList');list.innerHTML='';for(let i=1;i<=pdfDoc.numPages;i++){const b=document.createElement('button');b.type='button';b.className='aa-final-thumb';b.id=`aaFinalThumb_${i}`;b.innerHTML=`<canvas></canvas><span>الصفحة ${i}</span>`;b.onclick=()=>{gotoPage(i,true);toggleDrawer(false)};list.appendChild(b)}}
 function gotoPage(n,focus){if(!pdfDoc)return;const page=Math.max(1,Math.min(pdfDoc.numPages,Math.round(Number(n)||1)));activePage=page;$('aaFinalPageInput').value=String(page);const el=$(`aaFinalPage_${page}`);if(el)el.scrollIntoView({behavior:focus?'smooth':'auto',block:'start'});updateThumbs(page);renderPage(page,renderToken)}
@@ -22621,5 +22604,139 @@ body.light-mode #coursesPage .course-card:hover{
   }
 }
 </style>
+
+
+<!-- ===== FINAL FILE/LESSON INTEGRATION PATCH ===== -->
+<style id="aa-file-lesson-text-final-css">
+#aaLessonFilesChooser{position:fixed;inset:0;z-index:140500;display:none;align-items:center;justify-content:center;padding:18px;background:rgba(4,7,14,.64);backdrop-filter:blur(14px)}
+#aaLessonFilesChooser.active{display:flex}
+.aa-lesson-files-dialog{width:min(760px,100%);max-height:min(84vh,760px);overflow:hidden;border:1px solid var(--border);border-radius:26px;background:var(--bg-card);color:var(--text-primary);box-shadow:0 35px 100px rgba(0,0,0,.30);display:flex;flex-direction:column}
+.aa-lesson-files-dialog-head{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:18px 20px;border-bottom:1px solid var(--border);background:linear-gradient(135deg,rgba(108,92,231,.08),transparent)}
+.aa-lesson-files-dialog-title{display:flex;align-items:center;gap:12px;min-width:0}.aa-lesson-files-dialog-title-icon{width:44px;height:44px;display:grid;place-items:center;border-radius:14px;background:var(--accent-gradient);color:#fff;flex:0 0 auto}.aa-lesson-files-dialog-title strong{display:block;font-size:1rem}.aa-lesson-files-dialog-title span{display:block;color:var(--text-muted);font-size:.76rem;margin-top:3px}
+.aa-lesson-files-dialog-close{width:40px;height:40px;border:1px solid var(--border);border-radius:12px;background:var(--bg-secondary);color:var(--text-primary);cursor:pointer;display:grid;place-items:center;flex:0 0 auto}
+.aa-lesson-files-dialog-body{padding:16px;overflow:auto;display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:12px}
+.aa-lesson-file-option{appearance:none;width:100%;text-align:inherit;border:1px solid var(--border);border-radius:18px;background:var(--bg-secondary);color:var(--text-primary);padding:14px;cursor:pointer;transition:transform .18s ease,border-color .18s ease,box-shadow .18s ease;display:flex;align-items:flex-start;gap:12px}
+.aa-lesson-file-option:hover{transform:translateY(-3px);border-color:var(--accent1);box-shadow:0 12px 28px rgba(108,92,231,.12)}
+.aa-lesson-file-option-icon{width:46px;height:46px;display:grid;place-items:center;border-radius:14px;background:rgba(108,92,231,.10);color:var(--accent1);font-size:1.05rem;flex:0 0 auto}.aa-lesson-file-option-copy{min-width:0;display:grid;gap:5px}.aa-lesson-file-option-name{font-weight:900;line-height:1.45;overflow-wrap:anywhere}.aa-lesson-file-option-meta{color:var(--text-muted);font-size:.72rem;line-height:1.6}.aa-lesson-file-option-badge{display:inline-flex;width:max-content;align-items:center;gap:5px;padding:4px 7px;border-radius:999px;background:rgba(108,92,231,.08);color:var(--accent1);font-size:.66rem;font-weight:800}
+#aaFinalViewer .aa-final-pdf-page{position:relative;overflow:visible}
+#aaFinalViewer .aa-final-text-layer{position:absolute;inset:0;overflow:hidden;line-height:1;user-select:text;-webkit-user-select:text;pointer-events:auto}
+#aaFinalViewer .aa-final-text-layer span{position:absolute;white-space:pre;transform-origin:0 0;color:transparent;cursor:text}
+#aaFinalViewer .aa-final-text-layer span::selection{background:rgba(108,92,231,.28)}
+.aa-final-plain-text{width:min(100%,980px);min-height:100%;margin:0 auto;padding:28px clamp(18px,4vw,46px);white-space:pre-wrap;word-break:break-word;overflow-wrap:anywhere;background:var(--bg-card);color:var(--text-primary);font:500 1rem/1.95 ui-monospace,SFMono-Regular,Consolas,"Liberation Mono",monospace;border-inline:1px solid var(--border)}
+@media(max-width:680px){#aaLessonFilesChooser{padding:10px}.aa-lesson-files-dialog{max-height:90vh;border-radius:21px}.aa-lesson-files-dialog-body{grid-template-columns:1fr;padding:12px}.aa-final-plain-text{padding:20px 15px;font-size:.9rem}}
+</style>
+<script id="aa-final-file-lesson-text-js">
+(function(){
+'use strict';
+const $=id=>document.getElementById(id);
+const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const fileName=f=>String(f?.name||f?.originalName||'ملف بدون اسم');
+const fileMime=f=>String(f?.mime||f?.resourceType||'').toLowerCase();
+const fileType=f=>{const m=fileMime(f),n=fileName(f).toLowerCase();if(m.includes('pdf')||/\.pdf(?:$|[?#])/.test(n))return'pdf';if(m.startsWith('image/')||/\.(png|jpe?g|gif|webp|bmp|svg)(?:$|[?#])/.test(n))return'image';if(m.startsWith('text/')||/\.(txt|md|csv|log|json|xml|css)(?:$|[?#])/.test(n))return'text';return'other'};
+const fileIcon=t=>t==='pdf'?'fa-file-pdf':t==='image'?'fa-image':t==='text'?'fa-file-lines':'fa-file-lines';
+const size=n=>{n=Number(n)||0;if(!n)return'—';const u=['بايت','KB','MB','GB'];let i=0;while(n>=1024&&i<u.length-1){n/=1024;i++}return `${n.toFixed(i?1:0)} ${u[i]}`};
+const lessonIdNow=()=>String(window.activeLessonId||((typeof activeLessonId!=='undefined')?activeLessonId:'')||'');
+const courseNow=()=>String(window.activeCourseId||((typeof activeCourseId!=='undefined')?activeCourseId:'')||'');
+function ensureChooser(){
+ let m=$('aaLessonFilesChooser'); if(m)return m;
+ m=document.createElement('div');m.id='aaLessonFilesChooser';m.innerHTML=`<div class="aa-lesson-files-dialog" role="dialog" aria-modal="true" aria-labelledby="aaLessonFilesTitle"><header class="aa-lesson-files-dialog-head"><div class="aa-lesson-files-dialog-title"><div class="aa-lesson-files-dialog-title-icon"><i class="fas fa-folder-open"></i></div><div><strong id="aaLessonFilesTitle">ملفات الحصة</strong><span id="aaLessonFilesCount">0 ملف</span></div></div><button type="button" class="aa-lesson-files-dialog-close" id="aaLessonFilesChooserClose" aria-label="إغلاق"><i class="fas fa-xmark"></i></button></header><div id="aaLessonFilesChooserBody" class="aa-lesson-files-dialog-body"></div></div>`;
+ document.body.appendChild(m);$('aaLessonFilesChooserClose').onclick=()=>m.classList.remove('active');m.addEventListener('click',e=>{if(e.target===m)m.classList.remove('active')});return m;
+}
+function openChooser(files){
+ const m=ensureChooser(),body=$('aaLessonFilesChooserBody');$('aaLessonFilesCount').textContent=`${files.length.toLocaleString('ar-SA')} ملف`;body.innerHTML=files.map((f,i)=>{const t=fileType(f),meta=[fileType(f)==='other'?'ملف':fileType(f).toUpperCase(),size(f.size)].filter(Boolean).join(' · ');return `<button type="button" class="aa-lesson-file-option" data-chooser-file="${esc(f.id||i)}"><span class="aa-lesson-file-option-icon"><i class="fas ${fileIcon(t)}"></i></span><span class="aa-lesson-file-option-copy"><span class="aa-lesson-file-option-name">${esc(fileName(f))}</span><span class="aa-lesson-file-option-badge"><i class="fas fa-file"></i>${esc(meta)}</span><span class="aa-lesson-file-option-meta">اضغط لفتح الملف داخل العارض</span></span></button>`}).join('');
+ body.querySelectorAll('[data-chooser-file]').forEach(b=>b.onclick=()=>{const f=files.find(x=>String(x.id||'')===String(b.dataset.chooserFile));m.classList.remove('active');if(f)window.openCourseFileViewer(f)});m.classList.add('active');
+}
+async function getLessonFiles(courseId,lessonId){if(!courseId||!lessonId)return[];try{const snap=await db.collection('courses').doc(courseId).collection('files').get();return snap.docs.map(d=>({id:d.id,...(d.data()||{})})).filter(f=>!f.deleted&&f.url&&String(f.lessonId||'')===String(lessonId))}catch(e){console.warn('lesson files',e);return[]}}
+function rememberLessonReturn(){if((typeof currentCoursePage!=='undefined')&&currentCoursePage==='lessonPlayer'){window.__aaFileViewerReturn={courseId:courseNow(),lessonId:lessonIdNow()}}else if(window.currentCoursePage==='lessonPlayer'){window.__aaFileViewerReturn={courseId:courseNow(),lessonId:lessonIdNow()}}}
+function restoreLesson(){const ctx=window.__aaFileViewerReturn;window.__aaFileViewerReturn=null;if(!ctx?.courseId||!ctx?.lessonId)return false;try{window.currentCoursePage='learning'}catch(_){}try{$('fileViewerOverlay')?.classList.remove('active')}catch(_){}try{const r=window.resumeLessonFromInternalPage?.(ctx.courseId,ctx.lessonId,true);if(r!==undefined)return true}catch(_){}try{window.openLessonPlayer?.(ctx.courseId,ctx.lessonId);return true}catch(_){}return false}
+const originalRender=window.renderLessonRelatedActions;
+window.renderLessonRelatedActions=async function(courseId,lessonId){
+ try{await originalRender?.apply(this,arguments)}catch(e){console.warn('lesson related base',e)}
+ const area=$('lessonRelatedActions');if(!area)return;
+ area.querySelectorAll('[data-aa-final-lesson-file]').forEach(x=>x.remove());
+ const files=await getLessonFiles(courseId,lessonId);
+ if(!files.length)return;
+ const b=document.createElement('button');b.type='button';b.className='related-action';b.dataset.aaFinalLessonFile='1';b.innerHTML=`<i class="fas fa-folder-open"></i> ملفات الحصة${files.length>1?` (${files.length})`:''}`;b.onclick=()=>{rememberLessonReturn();if(files.length===1)window.openCourseFileViewer(files[0]);else openChooser(files)};area.appendChild(b);
+};
+const oldOpen=window.openCourseFileViewer;
+window.openCourseFileViewer=function(f){rememberLessonReturn();return oldOpen?.apply(this,arguments)};
+const oldClose=window.closeCourseFileViewer;
+window.closeCourseFileViewer=function(){const r=oldClose?.apply(this,arguments);setTimeout(()=>restoreLesson(),0);return r};
+const oldDownload=window.downloadFile;
+if(typeof oldDownload==='function'){window.downloadFile=function(f){if(f&&f.allowDownload===false)return;return oldDownload.apply(this,arguments)}}
+/* Read plain-text files directly inside the viewer. */
+const oldOpenViewer=window.openCourseFileViewer;
+window.openCourseFileViewer=async function(f){
+ rememberLessonReturn();
+ const t=fileType(f);
+ if(t!=='text')return oldOpenViewer?.apply(this,arguments);
+ const viewer=$('aaFinalViewer')||document.querySelector('#aaFinalViewer');
+ if(!viewer)return oldOpenViewer?.apply(this,arguments);
+ try{viewer.classList.add('active');document.body.style.overflow='hidden';const title=$('aaFinalTitle'),sub=$('aaFinalSub'),pages=$('aaFinalPages'),pageBox=$('aaFinalPageBox'),zoom=$('aaFinalZoomGroup'),thumbs=$('aaFinalThumbs'),download=$('aaFinalDownload');if(title)title.textContent=fileName(f);if(sub)sub.textContent=f.lessonTitle||'ملف نصي';if(pageBox)pageBox.style.display='none';if(zoom)zoom.style.display='none';if(thumbs)thumbs.style.display='none';if(download)download.style.display=f.allowDownload===false?'none':'inline-grid';if(pages)pages.innerHTML='<div class="aa-final-page-loading"><div class="aa-final-page-loading-inner"><i class="fas fa-spinner fa-spin"></i><strong>جاري قراءة الملف...</strong></div></div>';const r=await fetch(f.url,{mode:'cors'});if(!r.ok)throw Error('HTTP '+r.status);const text=await r.text();pages.innerHTML=`<article class="aa-final-plain-text">${esc(text)}</article>`;window.__aaFinalTextCurrent=f;return}catch(e){console.warn('text file viewer',e);try{showGeneric('تعذر قراءة الملف','لا يمكن قراءة الملف النصي من الرابط الحالي داخل الموقع.')}catch(_){ } }
+};
+/* Enhance PDF pages with a real selectable text layer when the PDF contains text objects. */
+const originalRenderPage=window.__aaFinalOriginalRenderPage;
+if(!originalRenderPage && typeof window.renderPage==='function')window.__aaFinalOriginalRenderPage=window.renderPage;
+function installPdfTextHook(){
+ const scriptMarker='aa-pdf-text-hook-v1';if(document.querySelector('#'+scriptMarker))return;const marker=document.createElement('meta');marker.id=scriptMarker;document.head.appendChild(marker);
+}
+/* Patch the final viewer's local renderPage through a post-render observer. */
+let textObserverStarted=false;
+function startTextLayerObserver(){if(textObserverStarted)return;textObserverStarted=true;const pages=$('aaFinalPages');if(!pages)return;const obs=new MutationObserver(()=>{if(!window.pdfjsLib||!window.__aaFinalPdfTextEnabled)return;});obs.observe(pages,{childList:true,subtree:true});window.__aaFinalPdfTextObserver=obs}
+/* Re-open PDFs with a selectable text layer. The viewer's PDF object is local to its
+   implementation, so this hook loads the same source through PDF.js and overlays text
+   on the already-rendered canvas using that canvas' actual CSS scale. */
+const authoritativeOpen=window.openCourseFileViewer;
+window.openCourseFileViewer=async function(f){
+ const t=fileType(f);if(t!=='pdf')return authoritativeOpen?.apply(this,arguments);
+ rememberLessonReturn();window.__aaFinalCurrentFile=f;window.__aaFinalPdfTextEnabled=true;
+ const result=await authoritativeOpen?.apply(this,arguments);startTextLayerObserver();
+ setTimeout(()=>enhancePdfTextLayers(),90);setTimeout(()=>enhancePdfTextLayers(),650);return result;
+};
+let aaTextPdfDoc=null,aaTextPdfUrl='';
+async function getTextPdfDoc(){
+ const f=window.__aaFinalCurrentFile;if(!f?.url)return null;
+ const url=String(f.url);if(aaTextPdfDoc&&aaTextPdfUrl===url)return aaTextPdfDoc;
+ const lib=await import('https://cdn.jsdelivr.net/npm/pdfjs-dist@6.2.108/build/pdf.min.mjs');
+ aaTextPdfDoc=await lib.getDocument({url}).promise;aaTextPdfUrl=url;window.__aaTextPdfLib=lib;return aaTextPdfDoc;
+}
+async function enhancePdfTextLayers(){
+ const v=$('aaFinalViewer');if(!v||!v.classList.contains('active')||!window.__aaFinalPdfTextEnabled)return;
+ try{
+   const doc=await getTextPdfDoc();if(!doc)return;
+   const lib=window.__aaTextPdfLib;
+   for(let n=1;n<=doc.numPages;n++){
+     const holder=$(`aaFinalPage_${n}`);if(!holder||holder.querySelector('.aa-final-text-layer'))continue;
+     const canvas=holder.querySelector('canvas');if(!canvas)continue;
+     const page=await doc.getPage(n);
+     const base=page.getViewport({scale:1});
+     const cssWidth=canvas.getBoundingClientRect().width||canvas.clientWidth||base.width;
+     const scale=cssWidth/base.width;
+     const viewport=page.getViewport({scale});
+     const content=await page.getTextContent();
+     if(!content.items?.some(x=>x.str))continue;
+     const layer=document.createElement('div');layer.className='aa-final-text-layer';
+     layer.style.width=viewport.width+'px';layer.style.height=viewport.height+'px';
+     for(const item of content.items){
+       if(!item.str)continue;
+       const tr=lib?.Util?.transform?lib.Util.transform(viewport.transform,item.transform):null;if(!tr)continue;
+       const fontHeight=Math.max(1,Math.hypot(tr[2],tr[3]));
+       const span=document.createElement('span');span.textContent=item.str;
+       span.style.left=tr[4]+'px';span.style.top=(tr[5]-fontHeight)+'px';
+       span.style.fontSize=fontHeight+'px';
+       const sx=Math.max(.01,Math.hypot(tr[0],tr[1])/fontHeight);span.style.transform=`scaleX(${sx})`;
+       layer.appendChild(span);
+     }
+     holder.appendChild(layer);
+   }
+ }catch(e){console.warn('pdf text layer',e)}
+}
+window.__aaEnhancePdfTextLayers=enhancePdfTextLayers;
+/* Make the final viewer close restore the lesson. */
+$('aaFinalViewer')?.addEventListener('click',e=>{if(e.target.closest('#aaFinalClose'))setTimeout(()=>restoreLesson(),30)},true);
+installPdfTextHook();
+})();
+</script>
+
 </body>
 </html>
