@@ -3065,7 +3065,7 @@ to{opacity:1;transform:none}}
 
     <nav class="navbar">
         <div class="container nav-container">
-            <a href="#coursesPage" class="logo" aria-label="الصفحة الرئيسية">
+            <a href="#coursesPage" class="logo">
                 <img class="logo-img" id="siteLogo" src="https://i.postimg.cc/q7Frnj7k/image.png" alt="Ananas Academy">
                 <span class="logo-text" id="logoText"></span>
             </a>
@@ -3174,9 +3174,19 @@ to{opacity:1;transform:none}}
                     <div class="lesson-player-layout">
                         <main class="lesson-player-main">
                             <div class="lesson-player-topbar">
-                                <button class="btn btn-outline lesson-player-back-icon" id="backToLessonsBtn" aria-label="العودة إلى الحصص" title="العودة إلى الحصص" style="padding:0; border-radius:50%; border:1px solid var(--border); background:rgba(255,255,255,.92); color:var(--text-muted); cursor:pointer;">
-                                    <i class="fas fa-chevron-left"></i>
-                                </button>
+                                <div class="lesson-player-topbar-start">
+                                    <button type="button" class="btn btn-outline lesson-player-nav-btn" id="backToLessonsBtn" aria-label="العودة إلى الحصص" title="العودة إلى الحصص">
+                                        <i class="fas fa-arrow-right"></i><span>الحصص</span>
+                                    </button>
+                                </div>
+                                <div class="lesson-player-topbar-end">
+                                    <button type="button" class="btn btn-outline lesson-player-nav-btn" id="toggleLessonSidebarBtn" aria-expanded="true" aria-controls="lessonPlayerSidebarPanel" title="إظهار أو إخفاء قائمة الحصص">
+                                        <i class="fas fa-list"></i><span>قائمة الحصص</span>
+                                    </button>
+                                    <button type="button" class="btn btn-outline lesson-player-nav-btn lesson-player-close-btn" id="closeLessonPlayerBtn" aria-label="إغلاق الحصة" title="إغلاق الحصة">
+                                        <i class="fas fa-xmark"></i><span>إغلاق</span>
+                                    </button>
+                                </div>
                             </div>
 
                             <div class="video-player-wrapper lesson-video-sticky" id="lessonVideoWrapper" tabindex="0" aria-label="مشغل الحصة">
@@ -3227,7 +3237,7 @@ to{opacity:1;transform:none}}
                             <input type="file" id="lessonFilesUploadInput" accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.zip" multiple style="display:none">
                         </main>
 
-                        <aside class="lesson-player-sidebar">
+                        <aside class="lesson-player-sidebar" id="lessonPlayerSidebarPanel">
                             <div class="lesson-sidebar-header">
                                 <strong>حصص الدورة</strong>
                                 <span id="lessonSidebarCount"></span>
@@ -5104,37 +5114,13 @@ to{opacity:1;transform:none}}
             }
 
             activeCourseId = courseId;
-            currentCoursePage = 'overview';
-
-            // Establish the entry route immediately so a previously-open dashboard/page
-            // can never flash while the course metadata/subcollections are loading.
             document.getElementById('coursesGridContainer').style.display = 'none';
             const coursesHeader = document.getElementById('coursesListPageHeader');
             if (coursesHeader) coursesHeader.classList.add('course-list-header-hidden');
-
             const view = document.getElementById('courseDetailView');
-            const entryOverviewView = document.getElementById('courseOverviewContainer');
-            const entryDashboardView = document.getElementById('courseDashboard');
-
-            if (view) {
-                view.style.display = 'flex';
-                view.setAttribute('data-aa-course-view', 'overview');
-            }
-            if (entryOverviewView) {
-                entryOverviewView.classList.add('active');
-                entryOverviewView.style.setProperty('display', 'block', 'important');
-                entryOverviewView.style.setProperty('visibility', 'visible', 'important');
-                entryOverviewView.style.setProperty('pointer-events', 'auto', 'important');
-            }
-            if (entryDashboardView) {
-                entryDashboardView.classList.remove('active');
-                entryDashboardView.style.setProperty('display', 'none', 'important');
-                entryDashboardView.style.setProperty('visibility', 'hidden', 'important');
-                entryDashboardView.style.setProperty('pointer-events', 'none', 'important');
-            }
+            if (view) view.style.display = 'flex';
             setMobileNavActive('overview');
-            try { persistCourseState(); } catch(e) {}
-
+            
             const t = translations[currentLang] || translations['ar'] || {};
             document.getElementById('courseDetailTitle').textContent = course.titleAr || '';
             document.getElementById('courseDetailSubtitle').textContent = course.descAr || '';
@@ -5191,6 +5177,10 @@ to{opacity:1;transform:none}}
             document.getElementById('courseChatPage').style.display = 'none';
             document.getElementById('courseAssignmentDetailPage')?.classList.remove('active');
             currentCoursePage = 'overview';
+            // Explicit entry from the course catalog must win over any persisted in-course route.
+            if (window.__openingCourseFromCourses) {
+                try { persistCourseState(); } catch (e) {}
+            }
             
             // Reset video & sidebar
             if(ytPlayer) {
@@ -22847,70 +22837,35 @@ body.light-mode #coursesPage .course-card:hover{
 .aa-final-thumb canvas{display:block!important;width:100%!important;height:auto!important;max-width:100%!important;object-fit:contain!important;image-rendering:auto!important;user-select:none!important;-webkit-user-drag:none!important;}
 .aa-final-thumb span{display:block!important;flex:0 0 auto!important;white-space:nowrap!important;line-height:1.2!important;}
 </style>
-<style id="aa-unified-theme-final-v1">
-:root{--aa-primary:#6c5ce7;--aa-secondary:#0984e3;--aa-accent-gradient:linear-gradient(135deg,var(--aa-primary),var(--aa-secondary));--aa-radius-sm:10px;--aa-radius-md:14px;--aa-radius-lg:20px;--aa-control-size:42px;--aa-control-shadow:0 8px 24px rgba(0,0,0,.10)}
-body{background:var(--bg-primary);color:var(--text-primary)}
-body.light-mode{--aa-surface:#fff;--aa-surface-2:#f7f8fb}
-.btn,.full-page-back-btn,.course-overview .btn-start-course,.course-overview .admin-codes-btn .btn-icon,.lesson-related-actions .related-action,.assignment-upload-btn,.assignment-card-button,.code-action-btn,.code-suspend-select-all,.chat-admin-tools button,.chat-input-group button,.quiz-actions .btn,.quiz-start-screen .btn-start,.quiz-start-screen .btn-cancel,.dashboard-btn{font-family:inherit}
-.btn,.full-page-back-btn,.assignment-upload-btn,.assignment-card-button,.code-action-btn,.code-suspend-select-all,.lesson-related-actions .related-action,.chat-admin-tools button,.quiz-actions .btn,.quiz-start-screen .btn-start,.quiz-start-screen .btn-cancel{min-height:var(--aa-control-size);border-radius:var(--aa-radius-md)}
-.btn,.full-page-back-btn,.assignment-upload-btn,.assignment-card-button,.code-action-btn,.code-suspend-select-all,.lesson-related-actions .related-action,.chat-admin-tools button,.quiz-actions .btn-prev,.quiz-start-screen .btn-cancel{background:var(--bg-secondary);color:var(--text-primary)}
-.btn-primary,.course-overview .btn-start-course,.quiz-actions .btn-next,.quiz-start-screen .btn-start,.chat-input-group button:not(.btn-upload){background:var(--aa-accent-gradient);color:#fff;border-color:transparent}
-.btn:not(:disabled):hover,.full-page-back-btn:hover,.assignment-upload-btn:hover,.assignment-card-button:hover,.code-action-btn:hover,.code-suspend-select-all:hover,.lesson-related-actions .related-action:hover,.chat-admin-tools button:hover,.quiz-actions .btn:not(:disabled):hover,.quiz-start-screen .btn-start:hover,.quiz-start-screen .btn-cancel:hover,.course-overview .btn-start-course:hover{transform:translateY(-1px);border-color:color-mix(in srgb,var(--aa-primary) 42%,var(--border) 58%);box-shadow:var(--aa-control-shadow)}
-.nav-btn{width:var(--aa-control-size);height:var(--aa-control-size);min-width:var(--aa-control-size);border-radius:var(--aa-radius-md);display:inline-flex;align-items:center;justify-content:center}
-.lesson-card-admin button,.admin-actions-overlay .btn-icon,.lesson-player-item .num,.assignment-submitter-avatar,.aa-lesson-files-picker-close,.aa-lesson-file-option-icon,.icon-select-list .icon-opt{border-radius:var(--aa-radius-md)}
-.nav-btn,.lesson-card-admin button,.admin-actions-overlay .btn-icon,.aa-lesson-files-picker-close{transition:transform .18s ease,background .18s ease,color .18s ease,border-color .18s ease,box-shadow .18s ease}
-.nav-btn:hover,.lesson-card-admin button:hover,.admin-actions-overlay .btn-icon:hover,.aa-lesson-files-picker-close:hover{transform:translateY(-1px)}
-.navbar{background:color-mix(in srgb,var(--bg-secondary) 92%,transparent);border-bottom:1px solid var(--border);box-shadow:0 6px 24px rgba(0,0,0,.08)}
-.logo{min-height:var(--aa-control-size);padding:3px 5px;border-radius:var(--aa-radius-md)}
-.logo:hover{background:color-mix(in srgb,var(--aa-primary) 8%,transparent)}
-.logo-img{height:42px}.logo-text{font-size:1.25rem}
-.full-page-card,.lesson-card,.assignment-work-card,.overview-hero,.course-overview .overview-stats .stat-item,.dashboard-btn,.sidebar-lesson-item,.sidebar-quiz-item,.lesson-completion-status,.code-suspend-form,.code-suspend-users,.quiz-container,.option-item,.question-area .q-wrap,.aa-lesson-files-picker-card{border-radius:var(--aa-radius-lg);border:1px solid var(--border);box-shadow:0 10px 30px rgba(0,0,0,.055)}
-.full-page-card,.lesson-card,.assignment-work-card,.overview-hero,.course-overview .overview-stats .stat-item,.dashboard-btn,.sidebar-lesson-item,.sidebar-quiz-item,.lesson-completion-status,.code-suspend-form,.code-suspend-users,.quiz-container,.option-item,.question-area .q-wrap,.aa-lesson-files-picker-card{background:var(--bg-card)}
-.course-overview .overview-hero{max-width:1080px;margin:0 auto 20px;padding:clamp(24px,4vw,40px)}
-.course-overview .overview-hero img{border-radius:var(--aa-radius-lg)}
-.course-overview .overview-stats .stat-item{border-radius:var(--aa-radius-md)}
-#courseDashboard{gap:8px;max-width:1080px;margin-inline:auto}
-#courseDashboard h2{margin-bottom:6px!important;color:var(--text-primary)!important;font-size:clamp(1.35rem,2.2vw,1.9rem)!important}
-.dashboard-grid{width:100%;max-width:980px;gap:16px;margin-top:16px}
-.dashboard-btn{min-height:170px;padding:28px 20px;border-width:1px;border-radius:var(--aa-radius-lg)}
-.dashboard-btn:hover{transform:translateY(-3px);border-color:color-mix(in srgb,var(--aa-primary) 48%,var(--border) 52%);box-shadow:0 16px 36px rgba(0,0,0,.10)}
-.dashboard-btn i{font-size:2.5rem}
-#coursesPage .course-card{border-radius:var(--aa-radius-lg)!important;box-shadow:0 10px 30px rgba(0,0,0,.055)!important}
-#coursesPage .course-card:hover{transform:translateY(-5px)!important;box-shadow:0 18px 38px rgba(0,0,0,.10)!important}
-#coursesPage .course-actions .btn,#coursesPage .course-meta > span,#coursesPage .course-price{border-radius:var(--aa-radius-md)!important}
-#courseQuizzesPage .page-title,#courseAssignmentsPage .page-title,#courseChatPage .page-title,.assignment-detail-page .page-title,.lesson-player-topbar{min-height:48px}
-.full-page-back-btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:0 15px;white-space:nowrap}
-.lesson-card:hover,.full-page-card:hover{border-color:color-mix(in srgb,var(--aa-primary) 34%,var(--border) 66%)}
-.lesson-card-thumb{background:linear-gradient(145deg,var(--bg-secondary),color-mix(in srgb,var(--bg-card) 86%,var(--aa-primary) 14%))}
-.lesson-player-item{border-radius:var(--aa-radius-md)}
-.lesson-player-item.active,.sidebar-lesson-item.active,.sidebar-quiz-item.active{border-color:var(--aa-primary);background:color-mix(in srgb,var(--aa-primary) 10%,var(--bg-card) 90%)}
-input,textarea,select{font-family:inherit}
-.auth-popup .modal-form input,.auth-popup .modal-form select,.edit-modal input,.edit-modal textarea,.edit-modal select,.chat-input-group input,.icon-search{border-radius:var(--aa-radius-md);border-color:var(--border);background:var(--bg-secondary)}
-.auth-popup .modal-form input:focus,.auth-popup .modal-form select:focus,.edit-modal input:focus,.edit-modal textarea:focus,.edit-modal select:focus,.chat-input-group input:focus,.icon-search:focus{outline:none;border-color:color-mix(in srgb,var(--aa-primary) 58%,var(--border) 42%);box-shadow:0 0 0 3px color-mix(in srgb,var(--aa-primary) 14%,transparent)}
-.auth-popup,.edit-modal,.custom-alert-box{border-radius:var(--aa-radius-lg);border-color:var(--border);box-shadow:0 24px 70px rgba(0,0,0,.24)}
-.chat-msg{border-radius:14px}
-.chat-input-group button{min-height:var(--aa-control-size);border-radius:var(--aa-radius-md)}
-.chat-input-group .btn-upload{width:var(--aa-control-size);height:var(--aa-control-size);min-height:var(--aa-control-size);border-radius:var(--aa-radius-md)}
-.aa-lesson-files-picker-card{border-radius:var(--aa-radius-lg)!important}
-.aa-lesson-file-option{border-radius:var(--aa-radius-md)}
-:where(button,.btn,a,input,textarea,select):focus-visible{outline:2px solid color-mix(in srgb,var(--aa-primary) 78%,#fff 22%);outline-offset:2px}
-@media(max-width:700px){:root{--aa-control-size:42px;--aa-radius-lg:18px}.logo-img{height:38px}.logo-text{font-size:1.08rem}.dashboard-grid{grid-template-columns:1fr 1fr;gap:12px;margin-top:12px}.dashboard-btn{min-height:138px;padding:22px 14px}.dashboard-btn i{font-size:2.1rem}.dashboard-btn span{font-size:1.05rem}.full-page-back-btn{min-height:40px;padding:0 12px}}
-@media(max-width:430px){.dashboard-grid{grid-template-columns:1fr}.dashboard-btn{min-height:112px;flex-direction:row;justify-content:flex-start;gap:14px;text-align:start}.dashboard-btn i{font-size:1.8rem}}
+
+<style id="ananas-unified-theme-final">
+:root{--ananas-accent:var(--accent1);--ananas-radius:18px;--ananas-control-h:44px;--ananas-control-radius:13px;--ananas-border:color-mix(in srgb,var(--border) 88%,var(--accent1) 12%)}
+.btn,.full-page-back-btn,.course-page-back-btn,.lesson-player-nav-btn,.related-action,.assignment-upload-btn,.code-action-btn,.aa-files-back-btn,.aa-files-primary-btn{font-family:'Cairo',sans-serif;font-weight:800;border-radius:var(--ananas-control-radius);transition:transform .2s ease,border-color .2s ease,background .2s ease,box-shadow .2s ease,color .2s ease}
+.full-page-back-btn,.course-page-back-btn,.lesson-player-nav-btn,.related-action,.assignment-upload-btn,.code-action-btn,.aa-files-back-btn{min-height:var(--ananas-control-h);display:inline-flex;align-items:center;justify-content:center;gap:8px;border:1px solid var(--ananas-border);background:var(--bg-secondary);color:var(--text-primary);padding:0 14px;box-shadow:0 6px 18px rgba(0,0,0,.045)}
+.full-page-back-btn:hover,.course-page-back-btn:hover,.lesson-player-nav-btn:hover,.related-action:hover,.assignment-upload-btn:hover,.code-action-btn:hover,.aa-files-back-btn:hover{transform:translateY(-1px);border-color:color-mix(in srgb,var(--accent1) 42%,var(--border) 58%);background:color-mix(in srgb,var(--accent1) 7%,var(--bg-secondary) 93%);color:var(--accent1)}
+.full-page-card,.lesson-card,.dashboard-btn,.assignment-work-card,.course-overview .overview-hero,.course-overview .overview-stats .stat-item{border-radius:var(--ananas-radius)!important;border-color:var(--ananas-border)!important;box-shadow:0 10px 30px rgba(0,0,0,.055)!important}
+#courseLessonsPage .page-title,#courseQuizzesPage .page-title,#courseAssignmentsPage .page-title,#courseFilesPage .aa-files-header{min-height:56px;margin-bottom:18px!important;padding-bottom:14px!important;border-bottom:1px solid var(--ananas-border)!important}
+#courseDetailView #courseLessonPlayerPage{padding-top:0!important}
+#courseDetailView #courseLessonPlayerPage .lesson-player-layout{position:relative;display:flex;min-height:100%;height:100%;gap:0}
+#courseDetailView #courseLessonPlayerPage .lesson-player-main{min-width:0;transition:width .32s ease,flex-basis .32s ease,padding .32s ease}
+#courseDetailView #courseLessonPlayerPage .lesson-player-topbar{position:sticky;top:0;z-index:50;width:100%;min-height:58px;padding:8px 0 10px;display:flex;align-items:center;justify-content:space-between;gap:10px;background:linear-gradient(180deg,var(--bg-primary) 78%,transparent)}
+.lesson-player-topbar-start,.lesson-player-topbar-end{display:flex;align-items:center;gap:8px;min-width:0}.lesson-player-nav-btn{min-height:40px!important;height:40px!important;padding:0 12px!important;border-radius:12px!important;white-space:nowrap}.lesson-player-nav-btn i{font-size:.9rem}
+#courseDetailView #courseLessonPlayerPage .lesson-video-sticky{width:100%!important;max-width:none!important;margin:0 auto 16px!important;border-radius:18px!important;transition:max-width .32s ease,width .32s ease,box-shadow .32s ease}
+#courseDetailView #courseLessonPlayerPage .lesson-player-sidebar{width:350px!important;flex:0 0 350px!important;overflow:hidden!important;transition:flex-basis .32s ease,width .32s ease,opacity .22s ease,border-color .22s ease}
+#courseDetailView #courseLessonPlayerPage .lesson-player-layout.sidebar-collapsed .lesson-player-sidebar{width:0!important;flex-basis:0!important;opacity:0;pointer-events:none;border-color:transparent!important}
+#courseDetailView #courseLessonPlayerPage .lesson-player-layout.sidebar-collapsed .lesson-player-main{padding-inline:0!important}
+#courseDetailView #courseLessonPlayerPage .lesson-player-layout.sidebar-collapsed .lesson-video-sticky{width:min(1180px,100%)!important;max-width:1180px!important}
+#courseDetailView #courseLessonPlayerPage .lesson-sidebar-header{padding:13px 14px;border-bottom:1px solid var(--ananas-border);background:var(--bg-secondary)}
+#courseDetailView #courseLessonPlayerPage .lesson-player-item{border-width:1px;border-radius:13px;background:var(--bg-card)}
+#courseDetailView #courseLessonPlayerPage .lesson-player-item.active{background:color-mix(in srgb,var(--accent1) 11%,var(--bg-card) 89%)}
+#courseDetailView #courseChatPage{padding:0!important;background:var(--bg-primary)!important}#courseDetailView #courseChatPage .chat-rebuilt-shell{height:100%;min-height:0;border:0;border-radius:0;background:var(--bg-primary)}#courseDetailView #courseChatPage .chat-topbar{min-height:58px!important;padding:8px 14px!important;border-bottom:1px solid var(--ananas-border)}#courseDetailView #courseChatPage .chat-topbar-btn{width:40px!important;height:40px!important;border-radius:12px!important}
+@media(max-width:1024px){#courseDetailView #courseLessonPlayerPage .lesson-player-layout{height:auto;min-height:100%}#courseDetailView #courseLessonPlayerPage .lesson-player-sidebar{width:100%!important;flex-basis:auto!important;opacity:1}#courseDetailView #courseLessonPlayerPage .lesson-player-layout.sidebar-collapsed .lesson-player-sidebar{width:100%!important;flex-basis:0!important;max-height:0!important;opacity:0}.lesson-player-nav-btn span{display:none}.lesson-player-nav-btn{width:42px!important;padding:0!important}}
 </style>
-<script id="aa-unified-home-logo-navigation-v1">
-(function(){
-  'use strict';
-  const logo=document.querySelector('.navbar .logo');
-  if(!logo||logo.__aaHomeNavBound)return;
-  logo.__aaHomeNavBound=true;
-  logo.addEventListener('click',function(e){
-    e.preventDefault();
-    try{
-      if(typeof window.closeUserProfileAndGo==='function')window.closeUserProfileAndGo('courses');
-      else if(typeof window.mobileNavigate==='function')window.mobileNavigate('courses');
-    }catch(_){}
-    try{window.location.hash='#coursesPage';}catch(_){}
-  },true);
+<script id="ananas-navigation-theme-final-js">
+(function(){'use strict';if(window.__ananasNavigationThemeFinal)return;window.__ananasNavigationThemeFinal=true;const $=id=>document.getElementById(id);
+const logo=document.querySelector('.navbar .logo');if(logo&&!logo.dataset.ananasHomeHook){logo.dataset.ananasHomeHook='1';logo.addEventListener('click',e=>{e.preventDefault();try{window.mobileNavigate?.('courses')}catch(_){}})}
+const toggle=$('toggleLessonSidebarBtn'),panel=$('lessonPlayerSidebarPanel'),layout=panel?.closest('.lesson-player-layout');if(toggle&&layout&&!toggle.dataset.ananasSidebarHook){toggle.dataset.ananasSidebarHook='1';toggle.addEventListener('click',e=>{e.preventDefault();const collapsed=layout.classList.toggle('sidebar-collapsed');toggle.setAttribute('aria-expanded',collapsed?'false':'true');requestAnimationFrame(()=>window.dispatchEvent(new Event('resize')));})}
+const closeLesson=$('closeLessonPlayerBtn');if(closeLesson&&!closeLesson.dataset.ananasCloseHook){closeLesson.dataset.ananasCloseHook='1';closeLesson.addEventListener('click',e=>{e.preventDefault();try{window.switchCoursePage?.('learning')}catch(_){}})}
 })();
 </script>
 
