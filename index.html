@@ -4891,6 +4891,7 @@ body.light-mode #fullPageAssignmentsContainer .assignment-full-card>div:first-ch
             if (!currentUser) return `<button type="button" class="btn btn-outline course-login-btn">تسجيل الدخول</button>`;
             const enrollment = userEnrollmentMap[courseId];
             if (enrollment && enrollment.enrollmentActive !== false) return `<button class="btn btn-primary" onclick="openCourse('${courseId}')">الدخول للدورة</button>`;
+            // The user must go through the normal code-entry flow again after a deleted/ended code.
             return `<button class="btn btn-primary" onclick="openCourse('${courseId}')">الاشتراك في الدورة</button>`;
         }
 
@@ -9862,14 +9863,25 @@ body.light-mode #fullPageAssignmentsContainer .assignment-full-card>div:first-ch
         const er=await db.collection('users').doc(currentUser.uid).collection('enrolledCourses').doc(courseId).get();
         if(er.exists){
           const en=er.data()||{};
-          if(en.codeDeleted===true || en.accessBlocked===true){
+          const enrollmentActive=en.enrollmentActive !== false;
+          // An inactive enrollment is intentionally allowed through: this is the normal
+          // "الاشتراك في الدورة" path and must open the existing code-entry modal again.
+          if(!enrollmentActive){
+            // This is an intentional re-subscription state. Clear stale access flags
+            // before entering the normal code-entry flow.
+            try{
+              await er.set({accessBlocked:false,accessBlockReason:null,blockedUntil:null,blockReason:null,codeDeleted:false,codeId:null,codeUsed:null},{merge:true});
+            }catch(e){}
+            return __oldOpenCourse.apply(this,arguments);
+          }
+          if(enrollmentActive && (en.codeDeleted===true || en.accessBlocked===true)){
             return showCustomAlert('لا يمكن الدخول',en.accessBlockReason||'اشتراكك في هذه الدورة موقوف حاليًا.');
           }
-          if(en.codeId){
+          if(enrollmentActive && en.codeId){
             const cs=await db.collection('courses').doc(courseId).collection('codes').doc(en.codeId).get();
             if(!cs.exists){
-              await er.set({codeDeleted:true,accessBlocked:true,accessBlockReason:'تم حذف كود الاشتراك المرتبط بهذا الحساب. يجب استخدام كود جديد.',accessUpdatedAt:firebase.firestore.FieldValue.serverTimestamp()},{merge:true});
-              return showCustomAlert('لا يمكن الدخول','تم حذف كود الاشتراك المرتبط بهذا الحساب. يجب استخدام كود جديد للاشتراك مرة أخرى.');
+              await er.set({enrollmentActive:false,codeDeleted:true,accessBlocked:false,accessBlockReason:null,codeId:null,codeUsed:null,accessUpdatedAt:firebase.firestore.FieldValue.serverTimestamp()},{merge:true});
+              // Continue to the ordinary enrollment flow instead of showing a deleted-code error.
             }
           }
         }
@@ -14340,19 +14352,26 @@ const s=document.createElement('style');s.textContent=`
       this.disabled=true;this.textContent='جاري إيقاف الكود...';
       const ss=await ref.get();if(!ss.exists)throw new Error('الكود غير موجود');
       const c=ss.data()||{};
-      // تحديث حالة الكود أولًا حتى يلتقطه watchCourseAccess فورًا عبر Firestore.
-      await ref.update({disabled:true,isSuspended:true,status:'suspended',state:'suspended',suspensionStatus:'suspended',suspendedUntil:until?firebase.firestore.Timestamp.fromDate(until):null,suspensionReason:reason||null,suspensionMode:mode,suspensionUpdatedAt:firebase.firestore.FieldValue.serverTimestamp(),suspensionUpdatedBy:currentUser?.uid||null});
-      // حدّث حسابات المستخدمين بالتوازي؛ لا نجعل هذه الخطوة تؤخر/تعطل الإيقاف نفسه.
+      // Update the code and the affected enrollments at the same time, so the
+      // subscriber's live listeners can react without waiting for a second phase.
+      const codePatch={disabled:true,isSuspended:true,status:'suspended',state:'suspended',suspensionStatus:'suspended',suspendedUntil:until?firebase.firestore.Timestamp.fromDate(until):null,suspensionReason:reason||null,suspensionMode:mode,suspensionUpdatedAt:firebase.firestore.FieldValue.serverTimestamp(),suspensionUpdatedBy:currentUser?.uid||null};
       const uids=(c.usedBy||[]).map(x=>String(typeof x==='string'?x:x?.uid||'')).filter(Boolean);
       const batch=db.batch();
       for(const uid of uids){
         const er=db.collection('users').doc(uid).collection('enrolledCourses').doc(activeCourseId);
         batch.set(er,{accessBlocked:true,blockedUntil:until?firebase.firestore.Timestamp.fromDate(until):null,blockReason:reason||'تم إيقاف كود الاشتراك.',accessBlockReason:reason||'تم إيقاف كود الاشتراك.',accessUpdatedAt:firebase.firestore.FieldValue.serverTimestamp()},{merge:true});
       }
-      if(uids.length)batch.commit().catch(e=>console.warn('تعذر تحديث حالات الحسابات بعد إيقاف الكود:',e));
+      // Write the enrollment block first. The student's live enrollment listener
+      // can therefore eject them as soon as this write reaches Firestore, without
+      // waiting for the code document or any admin-side rendering work.
+      if(uids.length) await batch.commit();
+      // Keep the code state consistent; this second write is not on the critical
+      // ejection path for the already-blocked subscribers.
+      await ref.update(codePatch);
       $v12('courseAccessSuspendModal').classList.remove('active');
-      try{await window.loadCodesForCourse(activeCourseId);}catch(_){}
-      try{await window.__codeDetail(activeCourseId,id);}catch(_){}
+      // Refresh the admin UI without making the suspension wait on rendering work.
+      window.loadCodesForCourse?.(activeCourseId).catch?.(e=>console.warn('تحديث قائمة الأكواد:',e));
+      window.__codeDetail?.(activeCourseId,id);
       showCustomAlert?.('تم الإيقاف',until?`تم إيقاف الكود حتى ${until.toLocaleString('ar-SA',{timeZone:'Asia/Riyadh'})}.`:'تم إيقاف الكود حتى تلغي الإيقاف يدويًا.');
     }catch(e){console.error(e);showCustomAlert?.('خطأ','تعذر إيقاف الكود: '+e.message);}finally{this.disabled=false;this.textContent='إيقاف الكود';}
   };}
@@ -14647,6 +14666,11 @@ const s=document.createElement('style');s.textContent=`
       }
       const e=snap.data()||{};
       if(e.enrollmentActive===false){ await refreshMainCourseButtons(); return; }
+      // React immediately if the admin-side suspension batch reaches the enrollment first.
+      if(e.accessBlocked===true){
+        if(String(window.activeCourseId||'')===String(courseId)) window.aaEjectFromCourse?.(e.accessBlockReason||'تم إيقاف دخولك إلى هذه الدورة.');
+        return;
+      }
       const codeId=String(e.codeId||'');
       if(!codeId){ return; }
       const cr=db.collection('courses').doc(courseId).collection('codes').doc(codeId);
@@ -14793,8 +14817,12 @@ const s=document.createElement('style');s.textContent=`
         const codeData=snap.data()||{};
         // الأرشفة حماية إضافية وليست شرطًا لنجاح الحذف؛ فشلها لا يجب أن يمنع حذف الكود.
         try{await archiveCode(courseId,codeData,'deleted');}catch(e){console.warn('تعذر أرشفة الكود قبل حذفه، سيتم متابعة الحذف:',e)}
-        // اجعل الاشتراك غير فعال أولًا، حتى يتحول زر الدورة مباشرةً إلى "الاشتراك".
-        await deactivateEnrollmentsForCode(courseId,codeId,codeData,'deleted');
+        // اجعل الاشتراك غير فعال وامسح أي أعلام منع قديمة أولًا، حتى يتحول زر
+        // الدورة إلى "الاشتراك في الدورة" وتعود عملية الدخول إلى نافذة إدخال كود جديد.
+        const linkedUids=[...new Set((Array.isArray(codeData?.usedBy)?codeData.usedBy:[]).map(x=>uidOf(x)).filter(Boolean))];
+        for(const uid of linkedUids){
+          await deactivateEnrollmentPreservingData(courseId,uid,codeId,codeData,'deleted');
+        }
         await ref.delete();
         await refreshMainCourseButtons();
         try{await window.loadCodesForCourse?.(courseId);}catch(_){}
