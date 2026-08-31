@@ -13417,11 +13417,7 @@ html.aa-v9-modal-locked{overflow:hidden!important;}
 `;
 document.head.appendChild(mobileCSS);
 
-/* ---------- Lock the background while ANY actual popup/modal is open ---------- */
-function modalIsOpen(){return !!document.querySelector('.edit-modal.active,.auth-popup.active,.custom-alert-modal.active,#quizOverlay.active');}
-function syncModalLock(){document.body.classList.toggle('aa-v9-modal-locked',modalIsOpen());document.documentElement.classList.toggle('aa-v9-modal-locked',modalIsOpen());}
-const modalObs=new MutationObserver(syncModalLock);modalObs.observe(document.body,{subtree:true,attributes:true,attributeFilter:['class','style','hidden']});
-syncModalLock();
+/* ---------- Background modal lock is implemented by the final global lock below. ---------- */
 
 /* ---------- If profile page becomes visible, always keep directory admin-only and hide viewed card. ---------- */nsetInterval;
 const v9Tick=setInterval(()=>{enforceDirectoryAdmin();hideViewedDirectoryCard();syncModalLock();},700);
@@ -13429,6 +13425,8 @@ window.__aaV9Cleanup=()=>clearInterval(v9Tick);
 
 })();
 </script>
+
+
 
 <script>
 (function(){
@@ -24200,7 +24198,7 @@ body.light-mode #coursesPage .course-card:hover{
 
 
 <style id="aa-global-modal-background-lock-css">
-/* تثبيت الصفحة الرئيسية بالكامل أثناء فتح أي نافذة منبثقة، مع إبقاء النافذة نفسها تفاعلية. */
+/* قفل شامل: لا تمر حركة أو ضغط أو سحب إلى التطبيق خلف النافذة. */
 html.aa-global-modal-locked,
 body.aa-global-modal-locked{
   overflow:hidden!important;
@@ -24209,7 +24207,9 @@ body.aa-global-modal-locked{
 body.aa-global-modal-locked > .aa-global-modal-shield{
   position:fixed!important;
   inset:0!important;
-  z-index:199999!important;
+  width:100vw!important;
+  height:100dvh!important;
+  z-index:2147483000!important;
   display:block!important;
   background:transparent!important;
   pointer-events:auto!important;
@@ -24219,7 +24219,36 @@ body:not(.aa-global-modal-locked) > .aa-global-modal-shield{
   display:none!important;
   pointer-events:none!important;
 }
-/* لا نسمح للصفحة الخلفية بأي حركة/تمدد بصري أثناء القفل. */
+/* كل نافذة مفتوحة تكون فوق طبقة الحماية، حتى لو كان لها z-index قديم منخفض. */
+html.aa-global-modal-locked .edit-modal.active,
+html.aa-global-modal-locked .auth-popup.active,
+html.aa-global-modal-locked .custom-alert-modal.active,
+html.aa-global-modal-locked .gallery-viewer.active,
+html.aa-global-modal-locked .platform-image-viewer.active,
+html.aa-global-modal-locked .file-viewer-overlay.active,
+html.aa-global-modal-locked .ananas-modal-overlay.active,
+html.aa-global-modal-locked #quizOverlay.active,
+html.aa-global-modal-locked #courseFileViewer.active,
+html.aa-global-modal-locked #enrollTermsPreviewModal.active,
+html.aa-global-modal-locked #courseAccessSuspendModal.active,
+html.aa-global-modal-locked #manageCodesModal.active,
+html.aa-global-modal-locked #codeDetailModalV12.active,
+html.aa-global-modal-locked #codeExpiryEditModalV12.active,
+html.aa-global-modal-locked #ananasQuizBuilderV2.active,
+html.aa-global-modal-locked #chatLockModal.active,
+html.aa-global-modal-locked #ananasProfileEditor.active,
+html.aa-global-modal-locked #chatImageLightbox.active,
+html.aa-global-modal-locked #aaChatAdminModal.open,
+html.aa-global-modal-locked #aaFinalViewer.active,
+html.aa-global-modal-locked #aaFinalUpload.active{
+  z-index:2147483001!important;
+  pointer-events:auto!important;
+}
+html.aa-global-modal-locked .aa-final-drawer,
+html.aa-global-modal-locked .aa-final-drawer-overlay{
+  pointer-events:auto!important;
+}
+/* لا نسمح للصفحة الخلفية بأي تمدد أو overscroll أثناء القفل. */
 html.aa-global-modal-locked .navbar,
 html.aa-global-modal-locked .mobile-bottom-nav,
 html.aa-global-modal-locked #coursesPage,
@@ -24261,7 +24290,11 @@ html.aa-global-modal-locked #aaRebuiltProfilePage{
     '#codeExpiryEditModalV12.active',
     '#ananasQuizBuilderV2.active',
     '#chatLockModal.active',
-    '#ananasProfileEditor.active'
+    '#ananasProfileEditor.active',
+    '#chatImageLightbox.active',
+    '#aaChatAdminModal.open',
+    '#aaFinalViewer.active',
+    '#aaFinalUpload.active'
   ].join(',');
 
   let shield=null;
@@ -24311,6 +24344,7 @@ html.aa-global-modal-locked #aaRebuiltProfilePage{
       const sh=ensureShield();
       sh.style.display='block';
       positionShield();
+      document.querySelectorAll(MODAL_SELECTOR).forEach(el=>el.style.setProperty('z-index','2147483001','important'));
       try{body.style.setProperty('--aa-locked-scroll-y',`-${restoreScrollY}px`);}catch(_){ }
     }else{
       if(shield)shield.style.display='none';
@@ -24321,13 +24355,8 @@ html.aa-global-modal-locked #aaRebuiltProfilePage{
 
   function positionShield(){
     if(!shield)return;
-    const modal=topModal();
-    let z=199999;
-    if(modal){
-      const raw=parseInt(getComputedStyle(modal).zIndex,10);
-      if(Number.isFinite(raw) && raw>z-1)z=Math.max(1000,raw-1);
-    }
-    shield.style.setProperty('z-index',String(z),'important');
+    /* Fixed high layer; active modal rules above it guarantee the modal remains usable. */
+    shield.style.setProperty('z-index','2147483000','important');
   }
 
   function sync(){
