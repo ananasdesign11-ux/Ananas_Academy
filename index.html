@@ -23654,5 +23654,198 @@ body.light-mode #coursesPage .course-card:hover{
 })();
 </script>
 
+
+<!-- ===== FINAL SUBSCRIPTION ACCESS / ADMIN UI CORRECTION ===== -->
+<script id="final-subscription-access-correction">
+(function(){
+  'use strict';
+  if(window.__aaFinalSubscriptionCorrection)return;
+  window.__aaFinalSubscriptionCorrection=true;
+
+  const $=id=>document.getElementById(id);
+  const toDate=v=>{try{return v?.toDate?v.toDate():(v?new Date(v):null)}catch(_){return null}};
+  const uidFrom=v=>String(typeof v==='string'?v:(v?.uid||'')).trim();
+  const enrollmentRef=(courseId,uid)=>db.collection('users').doc(String(uid)).collection('enrolledCourses').doc(String(courseId));
+  const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const formatUntil=d=>d?d.toLocaleString('ar-SA',{timeZone:'Asia/Riyadh'}):'حتى يتم إلغاء الإيقاف يدويًا';
+
+  function suspensionIsActive(e){
+    if(!e || e.subscriptionSuspended!==true)return false;
+    const until=toDate(e.subscriptionSuspendedUntil);
+    return !until || until.getTime()>Date.now();
+  }
+  function subscriptionReason(e){return String(e?.subscriptionSuspensionReason||e?.blockReason||e?.accessBlockReason||'').trim();}
+  function subscriptionStatusText(e){
+    if(suspensionIsActive(e))return 'موقوف';
+    if(e?.subscriptionDeleted===true || e?.enrollmentActive===false)return 'محذوف';
+    return 'نشط';
+  }
+
+  /* Reliable live binding: keep one listener for the currently open course.
+     The interval only checks whether binding is needed; Firestore delivers the actual state change in realtime. */
+  async function ensureLiveSubscriptionBinding(){
+    const courseId=window.activeCourseId||activeCourseId;
+    const uid=currentUser?.uid;
+    if(!courseId || !uid || isAdmin)return;
+    if(window.__aaSubscriptionLiveCourse===String(courseId) && window.__aaSubscriptionLiveUid===String(uid) && window.__aaSubscriptionLiveUnsub)return;
+    try{window.__aaSubscriptionLiveUnsub?.();}catch(_){ }
+    window.__aaSubscriptionLiveUnsub=null;
+    window.__aaSubscriptionLiveCourse=String(courseId);
+    window.__aaSubscriptionLiveUid=String(uid);
+    const ref=enrollmentRef(courseId,uid);
+    window.__aaSubscriptionLiveUnsub=ref.onSnapshot(async snap=>{
+      if(String(window.activeCourseId||activeCourseId||'')!==String(courseId))return;
+      const e=snap.exists?(snap.data()||{}):null;
+      if(!e || e.enrollmentActive===false || e.subscriptionDeleted===true){
+        await window.__aaFinalSubscriptionEject?.(e?buildDeletionMessageLocal(e):'تم إنهاء اشتراكك في هذه الدورة.');
+        return;
+      }
+      if(suspensionIsActive(e)){
+        await window.__aaFinalSubscriptionEject?.(buildSuspensionMessageLocal(e));
+      }
+    },err=>console.warn('subscription live listener',err));
+  }
+
+  function buildSuspensionMessageLocal(e){
+    const until=formatUntil(toDate(e?.subscriptionSuspendedUntil));
+    const reason=subscriptionReason(e);
+    return `اشتراكك في هذه الدورة موقوف حاليًا.\nينتهي الإيقاف: ${until}${reason?`\nالسبب: ${reason}`:''}`;
+  }
+  function buildDeletionMessageLocal(e){
+    const reason=String(e?.subscriptionDeletedReason||e?.previousSubscriptionEndReason||'').trim();
+    return `تم حذف اشتراكك في هذه الدورة.${reason?`\nالسبب: ${reason}`:''}`;
+  }
+
+  window.__aaFinalSubscriptionEject=async function(message){
+    if(window.__aaFinalSubscriptionEjecting)return;
+    window.__aaFinalSubscriptionEjecting=true;
+    try{
+      try{window.__ananasPauseAndSaveLesson?.('subscription-access-change',true);}catch(_){ }
+      try{window.__accessUnsubs?.forEach?.(fn=>{try{fn()}catch(_){}});}catch(_){ }
+      try{window.__aaExpiryUnsub?.();}catch(_){ }
+      try{window.__aaExpiryCodeUnsub?.();}catch(_){ }
+      try{window.__aaExpiryTimers?.forEach?.(t=>clearTimeout(t));}catch(_){ }
+      try{window.__aaExpiryTimers=[];}catch(_){ }
+      try{window.__aaSubscriptionLiveUnsub?.();}catch(_){ }
+      window.__aaSubscriptionLiveUnsub=null;
+      document.querySelectorAll(
+        '.edit-modal.active,.auth-popup.active,.custom-alert-modal.active,'+
+        '.gallery-viewer.active,.platform-image-viewer.active,.file-viewer-overlay.active,'+
+        '.ananas-modal-overlay.active,#quizOverlay.active,#courseFileViewer.active,'+
+        '#enrollTermsPreviewModal.active,#courseAccessSuspendModal.active,#manageCodesModal.active,'+
+        '#codeDetailModalV12.active,#codeExpiryEditModalV12.active,#ananasQuizBuilderV2.active,'+
+        '#chatLockModal.active,#ananasProfileEditor.active'
+      ).forEach(el=>el.classList.remove('active'));
+      try{window.aaEjectFromCourse?.(message);}catch(_){ }
+      try{await refreshUserEnrollmentMap?.(true);}catch(_){ }
+      try{updateCourseActionButtons?.();}catch(_){ }
+    }finally{
+      window.__aaFinalSubscriptionEjecting=false;
+    }
+  };
+
+  /* Replace the admin detail renderer only at its output boundary.
+     The underlying code document remains untouched by subscription suspension. */
+  const oldDetail=window.__codeDetail;
+  if(typeof oldDetail==='function'&&!oldDetail.__aaSubscriptionDetailWrapped){
+    const wrappedDetail=async function(courseId,codeId){
+      const result=await oldDetail.apply(this,arguments);
+      try{
+        const codeSnap=await db.collection('courses').doc(String(courseId)).collection('codes').doc(String(codeId)).get();
+        if(!codeSnap.exists)return result;
+        const c=codeSnap.data()||{};
+        const infos=Array.isArray(c.usedByInfo)?c.usedByInfo:[];
+        const uid=String(infos[0]?.uid||c.usedBy?.[0]||'');
+        if(!uid)return result;
+        const es=await enrollmentRef(courseId,uid).get();
+        const e=es.exists?(es.data()||{}):{};
+        const status=subscriptionStatusText(e);
+        const statusEls=document.querySelectorAll('#codeDetailBodyV12 .code-detail-item-v12');
+        statusEls.forEach(item=>{
+          const label=item.querySelector('strong');
+          if(label && label.textContent.trim()==='حالة الكود'){
+            label.textContent='حالة الاشتراك';
+            const span=item.querySelector('span');
+            if(span){
+              span.textContent=status;
+              span.className=suspensionIsActive(e)?'code-detail-status-suspended':status==='محذوف'?'code-detail-status-expired':'code-detail-status-active';
+            }
+          }
+        });
+        const noteHost=document.querySelector('#codeDetailBodyV12 .code-detail-grid-v12');
+        if(noteHost){
+          noteHost.querySelectorAll('.aa-subscription-detail-note').forEach(x=>x.remove());
+          if(suspensionIsActive(e)){
+            const note=document.createElement('div');
+            note.className='code-detail-extra-note aa-subscription-detail-note';
+            note.innerHTML=`<i class="fas fa-clock"></i> ينتهي الإيقاف: ${esc(formatUntil(toDate(e.subscriptionSuspendedUntil)))}${subscriptionReason(e)?`<br><i class="fas fa-circle-info"></i> السبب: ${esc(subscriptionReason(e))}`:''}`;
+            noteHost.appendChild(note);
+          }else if(e.subscriptionDeleted===true || e.enrollmentActive===false){
+            const note=document.createElement('div');
+            note.className='code-detail-extra-note aa-subscription-detail-note';
+            note.style.borderColor='rgba(231,76,60,.25)';
+            note.innerHTML=`<i class="fas fa-user-minus"></i> تم حذف هذا الاشتراك من هذه الدورة${e.subscriptionDeletedReason?`<br><i class="fas fa-circle-info"></i> السبب: ${esc(e.subscriptionDeletedReason)}`:''}`;
+            noteHost.appendChild(note);
+          }
+        }
+        const actionButtons=document.querySelectorAll('#codeDetailBodyV12 .code-detail-actions-v12 button');
+        actionButtons.forEach(btn=>{
+          const text=btn.querySelector('span');
+          if(!text)return;
+          const current=text.textContent.trim();
+          if(current==='إيقاف الكود'||current==='إلغاء الإيقاف'){
+            if(e.subscriptionDeleted===true || e.enrollmentActive===false){
+              btn.disabled=true;text.textContent='لا يوجد اشتراك';
+            }else{
+              text.textContent=suspensionIsActive(e)?'إلغاء إيقاف الاشتراك':'إيقاف الاشتراك';
+              btn.querySelector('i')?.classList.remove('fa-circle-stop','fa-circle-play');
+              btn.querySelector('i')?.classList.add(suspensionIsActive(e)?'fa-circle-play':'fa-circle-stop');
+            }
+          }
+          if(current==='حذف الكود')text.textContent='حذف الاشتراك';
+        });
+      }catch(err){console.warn('subscription detail ui correction',err)}
+      return result;
+    };
+    wrapped.__aaSubscriptionDetailWrapped=true;
+    wrapped.__original=oldDetail;
+    window.__codeDetail=wrapped;
+  }
+
+  /* Keep the main course card state synchronized with the subscription state. */
+  const oldGetAction=window.getCourseActionHTML;
+  if(typeof oldGetAction==='function'){
+    window.__aaSubscriptionActionHook=true;
+  }
+
+  /* Re-check binding cheaply while a student is inside a course. */
+  if(!window.__aaSubscriptionBindingTimer){
+    window.__aaSubscriptionBindingTimer=setInterval(()=>{
+      if(document.hidden||isAdmin||!currentUser||!window.activeCourseId)return;
+      ensureLiveSubscriptionBinding();
+    },300);
+  }
+
+  // Bind as soon as an enrollment session is restored/opened.
+  const originalOpen=window.openCourseContent;
+  if(typeof originalOpen==='function'&&!originalOpen.__aaFinalSubscriptionOpenHook){
+    const wrappedOpen=async function(courseId){
+      const result=await originalOpen.apply(this,arguments);
+      if(currentUser&&!isAdmin&&String(window.activeCourseId||'')===String(courseId))ensureLiveSubscriptionBinding();
+      return result;
+    };
+    wrappedOpen.__aaFinalSubscriptionOpenHook=true;
+    wrappedOpen.__original=originalOpen;
+    window.openCourseContent=wrappedOpen;
+  }
+
+  // When the admin suspends/removes the selected subscription, force the detail modal to refresh.
+  document.addEventListener('click',e=>{
+    const b=e.target?.closest?.('#confirmCourseSuspendBtn');
+    if(b)setTimeout(()=>{if(window.__aaSubscriptionSuspendTarget?.courseId&&window.__aaSubscriptionSuspendTarget?.codeId)window.__codeDetail?.(window.__aaSubscriptionSuspendTarget.courseId,window.__aaSubscriptionSuspendTarget.codeId);},80);
+  },true);
+})();
+</script>
+
 </body>
 </html>
