@@ -22770,7 +22770,7 @@ const $=id=>document.getElementById(id);
 const esc=x=>window.escapeHtml?escapeHtml(String(x??'')):String(x??'').replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','\"':'&quot;'}[c]));
 let allFiles=[], current=null, pdfDoc=null, pdfLib=null, pdfScale=1, activePage=1, renderToken=0, viewerEl=null;
 let pdfBaseRenderScale=1, pdfRerenderTimer=0, pdfLazyObserver=null;
-const AA_PDF_CACHE_DB='ananas-file-viewer-cache-v2';
+const AA_PDF_CACHE_DB='ananas-file-viewer-cache-v3';
 const AA_PDF_CACHE_STORE='pdfs';
 const AA_PDF_MEM_CACHE=new Map();
 const courseId=()=>window.activeCourseId||window.__activeCourseId||(typeof activeCourseId!=='undefined'?activeCourseId:null);
@@ -22857,38 +22857,71 @@ function downloadFile(f){
  try{window.location.href=target;}catch(e){console.warn('file attachment download',e);window.open(target,'_self');}
  setTimeout(()=>{if(btn){btn.disabled=false;btn.innerHTML=old||'<i class="fas fa-download"></i>'; }},1800);
 }
-async function ensurePdf(){if(pdfLib)return pdfLib;if(window.pdfjsLib)return window.pdfjsLib;pdfLib=await import('https://cdn.jsdelivr.net/npm/pdfjs-dist@6.2.108/build/pdf.min.mjs');pdfLib=pdfLib?.default||pdfLib;try{pdfLib.GlobalWorkerOptions.workerSrc='https://cdn.jsdelivr.net/npm/pdfjs-dist@6.2.108/build/pdf.worker.min.mjs'}catch(_){}return pdfLib}
-function sourceForPdf(f){const u=String(f?.url||'');if(/\.pdf(?:[?#]|$)/i.test(u))return u;return u}
+async function ensurePdf(){
+  if(window.pdfjsLib){
+    try{window.pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js'}catch(_){ }
+    return window.pdfjsLib;
+  }
+  if(pdfLib)return pdfLib;
+  throw new Error('pdfjs-unavailable');
+}
+function sourceForPdf(f){return String(f?.url||'')}
 function cacheKeyForPdf(url){try{return new URL(url,location.href).href}catch(_){return String(url||'')}}
 function openPdfCacheDb(){return new Promise((resolve,reject)=>{try{const req=indexedDB.open(AA_PDF_CACHE_DB,1);req.onupgradeneeded=()=>{const db=req.result;if(!db.objectStoreNames.contains(AA_PDF_CACHE_STORE))db.createObjectStore(AA_PDF_CACHE_STORE)};req.onsuccess=()=>resolve(req.result);req.onerror=()=>reject(req.error||new Error('indexeddb-open'))}catch(e){reject(e)}})}
 async function getCachedPdfBytes(url){
   const key=cacheKeyForPdf(url);
   if(AA_PDF_MEM_CACHE.has(key))return AA_PDF_MEM_CACHE.get(key);
-  try{const db=await openPdfCacheDb();const value=await new Promise((resolve,reject)=>{const tx=db.transaction(AA_PDF_CACHE_STORE,'readonly'),req=tx.objectStore(AA_PDF_CACHE_STORE).get(key);req.onsuccess=()=>resolve(req.result?.bytes||null);req.onerror=()=>reject(req.error)});db.close();if(value){const bytes=value instanceof ArrayBuffer?new Uint8Array(value):new Uint8Array(value);AA_PDF_MEM_CACHE.set(key,bytes);return bytes}}catch(_){}
+  try{
+    const db=await openPdfCacheDb();
+    const value=await new Promise((resolve,reject)=>{const tx=db.transaction(AA_PDF_CACHE_STORE,'readonly'),req=tx.objectStore(AA_PDF_CACHE_STORE).get(key);req.onsuccess=()=>resolve(req.result?.bytes||null);req.onerror=()=>reject(req.error)});
+    db.close();
+    if(value){
+      const bytes=value instanceof ArrayBuffer?new Uint8Array(value):new Uint8Array(value);
+      if(bytes.byteLength>=5 && String.fromCharCode(...bytes.subarray(0,5))==='%PDF-'){AA_PDF_MEM_CACHE.set(key,bytes);return bytes;}
+    }
+  }catch(_){ }
   return null;
+}
+async function deleteCachedPdf(url){
+  const key=cacheKeyForPdf(url);AA_PDF_MEM_CACHE.delete(key);
+  try{const db=await openPdfCacheDb();await new Promise(resolve=>{const tx=db.transaction(AA_PDF_CACHE_STORE,'readwrite');tx.objectStore(AA_PDF_CACHE_STORE).delete(key);tx.oncomplete=resolve;tx.onerror=resolve});db.close()}catch(_){ }
 }
 async function putCachedPdfBytes(url,bytes){
   const key=cacheKeyForPdf(url);
-  try{AA_PDF_MEM_CACHE.set(key,bytes);const db=await openPdfCacheDb();await new Promise((resolve,reject)=>{const tx=db.transaction(AA_PDF_CACHE_STORE,'readwrite');tx.objectStore(AA_PDF_CACHE_STORE).put({bytes:bytes.buffer.slice(bytes.byteOffset,bytes.byteOffset+bytes.byteLength),savedAt:Date.now()},key);tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error)});db.close()}catch(_){}
+  try{
+    const copy=new Uint8Array(bytes);
+    AA_PDF_MEM_CACHE.set(key,copy);
+    if(copy.byteLength<5 || String.fromCharCode(...copy.subarray(0,5))!=='%PDF-')return;
+    const db=await openPdfCacheDb();
+    await new Promise((resolve,reject)=>{const tx=db.transaction(AA_PDF_CACHE_STORE,'readwrite');tx.objectStore(AA_PDF_CACHE_STORE).put({bytes:copy.buffer.slice(copy.byteOffset,copy.byteOffset+copy.byteLength),savedAt:Date.now()},key);tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error||new Error('indexeddb-put'))});
+    db.close();
+  }catch(_){ }
 }
 async function loadPdfBytesCached(url){
-  const cached=await getCachedPdfBytes(url);if(cached)return cached;
-  const res=await fetch(url,{mode:'cors',credentials:'omit',cache:'default'});if(!res.ok)throw new Error('pdf-fetch-'+res.status);
+  const cached=await getCachedPdfBytes(url);
+  if(cached)return cached;
+  const res=await fetch(url,{mode:'cors',credentials:'omit',cache:'no-store'});
+  if(!res.ok)throw new Error('pdf-fetch-'+res.status);
   const bytes=new Uint8Array(await res.arrayBuffer());
-  if(bytes.byteLength>0)putCachedPdfBytes(url,bytes);
+  if(bytes.byteLength<5 || String.fromCharCode(...bytes.subarray(0,5))!=='%PDF-')throw new Error('pdf-invalid-response');
+  putCachedPdfBytes(url,bytes);
   return bytes;
 }
-async function openViewer(f){if(!f?.url||f.deleted)return;current=f;const v=viewerMarkup();resetViewer();setViewerHeader(f,fileType(f));toggleDrawer(false);v.classList.add('active');document.body.style.overflow='hidden';const t=fileType(f);if(t==='pdf'){await openPdf(f);return}if(t==='image'){$('aaFinalPages').innerHTML=`<div class="aa-final-image-wrap"><img src="${esc(f.url)}" alt="${esc(fileName(f))}"></div>`;return}if(t==='text'){try{const r=await fetch(f.url,{mode:'cors'});if(!r.ok)throw Error();$('aaFinalPages').innerHTML=`<div class="aa-final-text-wrap">${esc(await r.text())}</div>`}catch(_){showGeneric('تعذر عرض الملف','لا يمكن قراءة محتوى هذا الملف داخل الموقع.')}return}showGeneric('المعاينة الداخلية غير متاحة','هذا النوع من الملفات لا يملك عارضًا داخليًا مخصصًا داخل الموقع.')}
 async function openPdf(f){
   const pages=$('aaFinalPages');
-  pages.innerHTML='<div class="aa-final-page-loading"><div class="aa-final-page-loading-inner"><i class="fas fa-spinner fa-spin"></i><strong>جاري تجهيز الصفحات...</strong></div></div>';
+  pages.innerHTML='<div class="aa-final-page-loading"><div class="aa-final-page-loading-inner"><i class="fas fa-spinner fa-spin"></i><strong>جاري تجهيز الملف...</strong></div></div>';
+  const source=sourceForPdf(f);
+  let lib;
+  try{lib=await ensurePdf();}catch(e){console.error('pdf library unavailable',e);showGeneric('تعذر عرض ملف PDF','مكوّن عرض PDF غير متاح في هذه الصفحة.');return}
+  let doc=null,cacheData=null;
+  try{cacheData=await loadPdfBytesCached(source)}catch(e){console.warn('pdf cache/network bytes unavailable, trying direct source',e);}
   try{
-    const lib=await ensurePdf();
-    const source=sourceForPdf(f);
-    let data=null;
-    try{data=await loadPdfBytesCached(source)}catch(_){data=null}
-    const task=data?lib.getDocument({data,disableAutoFetch:true,disableStream:true,disableFontFace:false}):lib.getDocument({url:source,disableAutoFetch:false,disableStream:false});
-    pdfDoc=await task.promise;
+    if(cacheData){
+      try{doc=await lib.getDocument({data:cacheData,disableAutoFetch:false,disableStream:false}).promise;}
+      catch(e){console.warn('cached pdf failed, invalidating and retrying original',e);await deleteCachedPdf(source);doc=null;}
+    }
+    if(!doc)doc=await lib.getDocument({url:source,withCredentials:false,disableAutoFetch:false,disableStream:false}).promise;
+    pdfDoc=doc;
     pdfBaseRenderScale=1;
     const token=++renderToken;
     $('aaFinalPageTotal').textContent=`/ ${pdfDoc.numPages}`;
@@ -22896,40 +22929,20 @@ async function openPdf(f){
     pages.innerHTML='';
     const frag=document.createDocumentFragment();
     for(let i=1;i<=pdfDoc.numPages;i++){
-      const node=document.createElement('section');
-      node.className='aa-final-pdf-page';
-      node.id=`aaFinalPage_${i}`;
-      node.dataset.page=String(i);
-      node.innerHTML='<div class="aa-final-page-loading"><div class="aa-final-page-loading-inner"><i class="fas fa-spinner fa-spin"></i><span>جاري تجهيز الصفحة...</span></div></div>';
-      frag.appendChild(node);
+      const node=document.createElement('section');node.className='aa-final-pdf-page';node.id=`aaFinalPage_${i}`;node.dataset.page=String(i);
+      node.innerHTML='<div class="aa-final-page-loading"><div class="aa-final-page-loading-inner"><i class="fas fa-spinner fa-spin"></i><span>سيتم تجهيزها عند الاقتراب منها...</span></div></div>';frag.appendChild(node);
     }
     pages.appendChild(frag);
-    buildThumbs();
-    bindPdfLazyRendering(token);
-    await renderPage(1,token);
-    renderNeighborPages(1,token);
-    (async()=>{for(let i=1;i<=Math.min(pdfDoc.numPages,4);i++){if(token!==renderToken)break;try{const pg=await pdfDoc.getPage(i);await renderThumb(i,pg)}catch(_){}}})();
+    buildThumbs();bindPdfLazyRendering(token);await renderPage(1,token);renderNeighborPages(1,token);
+    (async()=>{for(let i=1;i<=Math.min(pdfDoc.numPages,3);i++){if(token!==renderToken)break;try{const pg=await pdfDoc.getPage(i);await renderThumb(i,pg)}catch(_){}}})();
     updateViewerScroll();
   }catch(e){
     console.error('final pdf viewer',e);
-    showGeneric('تعذر عرض ملف PDF','تعذر قراءة ملف PDF من الرابط الحالي. تأكد من أن الملف متاح من الرابط الحالي.');
+    try{if(pdfDoc)await pdfDoc.destroy?.()}catch(_){ }
+    pdfDoc=null;
+    showGeneric('تعذر عرض ملف PDF','تعذر قراءة الملف من الرابط الحالي. سيتم استخدام الرابط الأصلي مباشرة عند إعادة المحاولة.');
   }
 }
-function bindPdfLazyRendering(token){if(pdfLazyObserver){try{pdfLazyObserver.disconnect()}catch(_){}}const root=$('aaFinalScroll');if(!root||!window.IntersectionObserver)return;pdfLazyObserver=new IntersectionObserver(entries=>{for(const entry of entries){if(entry.isIntersecting){const n=Number(entry.target.dataset.page)||1;renderPage(n,token);renderPage(n-1,token);renderPage(n+1,token)} }},{root,rootMargin:'900px 0px',threshold:.01});document.querySelectorAll('#aaFinalPages .aa-final-pdf-page').forEach(el=>pdfLazyObserver.observe(el))}
-function renderNeighborPages(n,token){[n-1,n+1,n+2].forEach(x=>{if(x>=1&&x<=pdfDoc.numPages)renderPage(x,token)})}
-function getPageWidth(){const sc=$('aaFinalScroll');return Math.max(280,Math.min(860,sc.clientWidth-(window.innerWidth<=700?18:50)))}
-function devicePixelRatioSafe(){return Math.min(window.devicePixelRatio||1,1.35)}
-function gestureVisualScale(){return Math.max(.5,Math.min(2.15,pdfScale||1))}
-function setGestureZoom(pct){
-  if(!pdfDoc)return;
-  const z=Math.max(.5,Math.min(2.15,(Number(pct)||100)/100));
-  const v=$('aaFinalViewer');
-  if(!v)return;
-  v.style.setProperty('--aa-gesture-zoom',String(z));
-  v.classList.add('aa-gesture-zooming','aa-final-gesture-live');
-  const input=$('aaFinalZoomInput');if(input)input.value=String(Math.round(z*100));
-}
-function clearGestureZoom(){const v=$('aaFinalViewer');if(v)v.classList.remove('aa-gesture-zooming','aa-final-gesture-live')}
 function bindPdfLazyRendering(token){
   try{pdfLazyObserver?.disconnect()}catch(_){}
   const root=$('aaFinalScroll');
@@ -24432,10 +24445,6 @@ body.light-mode #coursesPage .course-card:hover{
 })();
 </script>
 
-</body>
-</html>
-
-
 <style id="aa-final-viewer-mobile-performance">
 #aaFinalViewer .aa-final-pages-scroll{touch-action:pan-y pinch-zoom;overscroll-behavior-y:contain;-webkit-overflow-scrolling:touch;}
 #aaFinalViewer .aa-final-pages{contain:layout style paint;transform:translateZ(0);will-change:contents;}
@@ -24544,3 +24553,6 @@ body.light-mode #coursesPage .course-card:hover{
   #aaFinalViewer .aa-final-page-box{height:38px!important;min-height:38px!important}
 }
 </style>
+
+</body>
+</html>
