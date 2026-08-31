@@ -8748,18 +8748,37 @@ body.light-mode #fullPageAssignmentsContainer .assignment-full-card>div:first-ch
                     const info=courseSuspendUsersCache.find(x=>String(x.uid)===String(uid))||{};
                     return {uid:String(uid),name:info.name||'مستخدم',email:info.email||'',suspendedUntil:until?until.toISOString():null,reason:reason||null};
                 });
-                const codeRef=db.collection('courses').doc(activeCourseId).collection('codes').doc(courseSuspendTargetCodeId);
+                const courseId=String(activeCourseId);
+                const codeRef=db.collection('courses').doc(courseId).collection('codes').doc(courseSuspendTargetCodeId);
                 const latestCodeSnap=await codeRef.get();
                 const latestBlocked=latestCodeSnap.exists&&Array.isArray(latestCodeSnap.data()?.blockedUsers)?latestCodeSnap.data().blockedUsers:[];
                 const keep=latestBlocked.filter(x=>!selectedUids.includes(String(typeof x==='string'?x:x?.uid)));
                 const blockedUsers=keep.concat(selectedBlockedUsers);
-                await codeRef.update({
+
+                // Write the per-user access block and the code's blockedUsers list
+                // in the same Firestore batch. The student's enrollment listener
+                // can therefore eject the user immediately, without waiting for
+                // the code document listener or any admin-side UI refresh.
+                const batch=db.batch();
+                batch.update(codeRef,{
                     blockedUsers,
                     userSuspensionUpdatedAt:firebase.firestore.FieldValue.serverTimestamp(),
                     userSuspensionUpdatedBy:currentUser?.uid||null
                 });
+                for(const uid of selectedUids){
+                    const enrollmentRef=db.collection('users').doc(String(uid)).collection('enrolledCourses').doc(courseId);
+                    batch.set(enrollmentRef,{
+                        accessBlocked:true,
+                        blockedUntil:until?firebase.firestore.Timestamp.fromDate(until):null,
+                        blockReason:reason||'تم إيقاف دخولك إلى هذه الدورة.',
+                        accessBlockReason:reason||'تم إيقاف دخولك إلى هذه الدورة.',
+                        accessUpdatedAt:firebase.firestore.FieldValue.serverTimestamp()
+                    },{merge:true});
+                }
+                await batch.commit();
+
                 document.getElementById('courseAccessSuspendModal').classList.remove('active');
-                await loadCodesForCourse(activeCourseId);
+                await loadCodesForCourse(courseId);
                 showCustomAlert('تم الإيقاف','تم إيقاف الحسابات المحددة بالمدة التي اخترتها.');
             }catch(e){showCustomAlert('خطأ','تعذر إيقاف الكود: '+e.message);}
             finally{btn.disabled=false;btn.textContent=btn.dataset.originalText||'إيقاف الكود';}
@@ -23244,12 +23263,26 @@ body.light-mode #coursesPage .course-card:hover{
       }
       const e=snap.data()||{};
 
-      /* Stopped/deleted access: eject immediately, even when the code document
-         has not changed yet. This is the fastest Firestore signal available. */
+      /* Stopped/deleted access: eject immediately. A timed block is restored
+         automatically once blockedUntil has passed; permanent blocks/deletions
+         keep the existing immediate-deny behavior. */
       if(e.enrollmentActive===false || e.accessBlocked===true){
-        if(same(window.activeCourseId,cid))invalidateCourseUi(cid);
-        else {try{await refreshMainCourseButtons?.()}catch(_){ }}
-        return;
+        if(e.accessBlocked===true){
+          const blockedUntil=asDate(e.blockedUntil);
+          if(blockedUntil && blockedUntil.getTime()<=Date.now()){
+            try{
+              await er.set({accessBlocked:false,blockedUntil:null,blockReason:null,accessBlockReason:null,accessUpdatedAt:firebase.firestore.FieldValue.serverTimestamp()},{merge:true});
+            }catch(_){ }
+          }else{
+            if(same(window.activeCourseId,cid))invalidateCourseUi(cid);
+            else {try{await refreshMainCourseButtons?.()}catch(_){ }}
+            return;
+          }
+        }else{
+          if(same(window.activeCourseId,cid))invalidateCourseUi(cid);
+          else {try{await refreshMainCourseButtons?.()}catch(_){ }}
+          return;
+        }
       }
 
       const codeId=String(e.codeId||'');
