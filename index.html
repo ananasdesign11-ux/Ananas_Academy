@@ -23595,34 +23595,31 @@ body.light-mode #coursesPage .course-card:hover{
       if(currentUser&&!isAdmin){
         try{
           const {ref,exists,data}=await getEnrollment(courseId,currentUser.uid);
-
-          // Deleted/inactive subscriptions are treated exactly like an account
-          // that is not subscribed: open the normal code-entry flow.
-          // Clear stale access flags left by older versions so they cannot
-          // intercept the normal enrollment modal.
-          if(exists && (data.subscriptionDeleted===true || data.enrollmentActive===false)){
-            const staleAccess=
-              data.accessBlocked===true ||
-              data.subscriptionSuspended===true ||
-              data.blockedUntil!=null ||
-              data.subscriptionSuspendedUntil!=null;
-            if(staleAccess){
-              await ref.set({
-                accessBlocked:false,
-                blockedUntil:null,
-                blockReason:null,
-                accessBlockReason:null,
-                subscriptionSuspended:false,
-                subscriptionSuspendedUntil:null,
-                subscriptionSuspensionReason:null,
-                subscriptionSuspensionMode:null
-              },{merge:true}).catch(()=>{});
+          if(exists){
+            // Deleted/inactive subscriptions must always use the normal code-entry flow.
+            // Clear legacy access flags first because older guards may still inspect them.
+            if(data.enrollmentActive===false || data.subscriptionDeleted===true){
+              if(data.accessBlocked===true || data.codeDeleted===true || data.subscriptionDeleted===true){
+                try{
+                  await ref.set({
+                    enrollmentActive:false,
+                    subscriptionDeleted:true,
+                    accessBlocked:false,
+                    blockedUntil:null,
+                    blockReason:null,
+                    accessBlockReason:null,
+                    codeDeleted:false,
+                    subscriptionSuspended:false,
+                    subscriptionSuspendedUntil:null,
+                    subscriptionSuspensionReason:null
+                  },{merge:true});
+                }catch(_){}
+              }
+              return oldOpenCourseSubscription.apply(this,arguments);
             }
-            return oldOpenCourseSubscription.apply(this,arguments);
-          }
-
-          if(exists && data.enrollmentActive!==false && isSuspendedEnrollment(data)){
-            return showCustomAlert?.('تم إيقاف اشتراكك',buildSuspensionMessage(data));
+            if(isSuspendedEnrollment(data)){
+              return showCustomAlert?.('تم إيقاف اشتراكك',buildSuspensionMessage(data));
+            }
           }
         }catch(_){}
       }
