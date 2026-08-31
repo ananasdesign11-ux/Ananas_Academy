@@ -13417,7 +13417,11 @@ html.aa-v9-modal-locked{overflow:hidden!important;}
 `;
 document.head.appendChild(mobileCSS);
 
-/* ---------- Background modal lock is implemented by the final global lock below. ---------- */
+/* ---------- Lock the background while ANY actual popup/modal is open ---------- */
+function modalIsOpen(){return !!document.querySelector('.edit-modal.active,.auth-popup.active,.custom-alert-modal.active,#quizOverlay.active');}
+function syncModalLock(){document.body.classList.toggle('aa-v9-modal-locked',modalIsOpen());document.documentElement.classList.toggle('aa-v9-modal-locked',modalIsOpen());}
+const modalObs=new MutationObserver(syncModalLock);modalObs.observe(document.body,{subtree:true,attributes:true,attributeFilter:['class','style','hidden']});
+syncModalLock();
 
 /* ---------- If profile page becomes visible, always keep directory admin-only and hide viewed card. ---------- */nsetInterval;
 const v9Tick=setInterval(()=>{enforceDirectoryAdmin();hideViewedDirectoryCard();syncModalLock();},700);
@@ -13425,8 +13429,6 @@ window.__aaV9Cleanup=()=>clearInterval(v9Tick);
 
 })();
 </script>
-
-
 
 <script>
 (function(){
@@ -24195,217 +24197,107 @@ body.light-mode #coursesPage .course-card:hover{
 })();
 </script>
 
-
-
-<style id="aa-global-modal-background-lock-css">
-/* قفل شامل: لا تمر حركة أو ضغط أو سحب إلى التطبيق خلف النافذة. */
-html.aa-global-modal-locked,
-body.aa-global-modal-locked{
-  overflow:hidden!important;
-  overscroll-behavior:none!important;
-}
-body.aa-global-modal-locked > .aa-global-modal-shield{
-  position:fixed!important;
-  inset:0!important;
-  width:100vw!important;
-  height:100dvh!important;
-  z-index:2147483000!important;
-  display:block!important;
-  background:transparent!important;
-  pointer-events:auto!important;
-  touch-action:none!important;
-}
-body:not(.aa-global-modal-locked) > .aa-global-modal-shield{
-  display:none!important;
-  pointer-events:none!important;
-}
-/* كل نافذة مفتوحة تكون فوق طبقة الحماية، حتى لو كان لها z-index قديم منخفض. */
-html.aa-global-modal-locked .edit-modal.active,
-html.aa-global-modal-locked .auth-popup.active,
-html.aa-global-modal-locked .custom-alert-modal.active,
-html.aa-global-modal-locked .gallery-viewer.active,
-html.aa-global-modal-locked .platform-image-viewer.active,
-html.aa-global-modal-locked .file-viewer-overlay.active,
-html.aa-global-modal-locked .ananas-modal-overlay.active,
-html.aa-global-modal-locked #quizOverlay.active,
-html.aa-global-modal-locked #courseFileViewer.active,
-html.aa-global-modal-locked #enrollTermsPreviewModal.active,
-html.aa-global-modal-locked #courseAccessSuspendModal.active,
-html.aa-global-modal-locked #manageCodesModal.active,
-html.aa-global-modal-locked #codeDetailModalV12.active,
-html.aa-global-modal-locked #codeExpiryEditModalV12.active,
-html.aa-global-modal-locked #ananasQuizBuilderV2.active,
-html.aa-global-modal-locked #chatLockModal.active,
-html.aa-global-modal-locked #ananasProfileEditor.active,
-html.aa-global-modal-locked #chatImageLightbox.active,
-html.aa-global-modal-locked #aaChatAdminModal.open,
-html.aa-global-modal-locked #aaFinalViewer.active,
-html.aa-global-modal-locked #aaFinalUpload.active{
-  z-index:2147483001!important;
-  pointer-events:auto!important;
-}
-html.aa-global-modal-locked .aa-final-drawer,
-html.aa-global-modal-locked .aa-final-drawer-overlay{
-  pointer-events:auto!important;
-}
-/* لا نسمح للصفحة الخلفية بأي تمدد أو overscroll أثناء القفل. */
-html.aa-global-modal-locked .navbar,
-html.aa-global-modal-locked .mobile-bottom-nav,
-html.aa-global-modal-locked #coursesPage,
-html.aa-global-modal-locked #courseDetailView,
-html.aa-global-modal-locked #aaRebuiltProfilePage{
-  overscroll-behavior:none!important;
-}
-@media(max-width:768px){
-  html.aa-global-modal-locked,
-  body.aa-global-modal-locked{
-    position:fixed!important;
-    width:100%!important;
-    height:100%!important;
-    overflow:hidden!important;
-    touch-action:none!important;
-  }
-}
-</style>
-<script id="aa-global-modal-background-lock-js">
-(function(){
-  'use strict';
-  if(window.__aaGlobalModalBackgroundLock)return;
-  window.__aaGlobalModalBackgroundLock=true;
-
-  const MODAL_SELECTOR=[
-    '.edit-modal.active',
-    '.auth-popup.active',
-    '.custom-alert-modal.active',
-    '.gallery-viewer.active',
-    '.platform-image-viewer.active',
-    '.file-viewer-overlay.active',
-    '.ananas-modal-overlay.active',
-    '#quizOverlay.active',
-    '#courseFileViewer.active',
-    '#enrollTermsPreviewModal.active',
-    '#courseAccessSuspendModal.active',
-    '#manageCodesModal.active',
-    '#codeDetailModalV12.active',
-    '#codeExpiryEditModalV12.active',
-    '#ananasQuizBuilderV2.active',
-    '#chatLockModal.active',
-    '#ananasProfileEditor.active',
-    '#chatImageLightbox.active',
-    '#aaChatAdminModal.open',
-    '#aaFinalViewer.active',
-    '#aaFinalUpload.active'
-  ].join(',');
-
-  let shield=null;
-  let locked=false;
-  let restoreScrollY=0;
-  let syncQueued=false;
-
-  function getOpenModals(){
-    return [...document.querySelectorAll(MODAL_SELECTOR)].filter(el=>el instanceof HTMLElement && el.isConnected);
-  }
-
-  function topModal(){
-    const list=getOpenModals();
-    if(!list.length)return null;
-    list.sort((a,b)=>{
-      const za=parseInt(getComputedStyle(a).zIndex,10); const zb=parseInt(getComputedStyle(b).zIndex,10);
-      return (Number.isFinite(zb)?zb:0)-(Number.isFinite(za)?za:0);
-    });
-    return list[0];
-  }
-
-  function ensureShield(){
-    if(shield&&shield.isConnected)return shield;
-    shield=document.createElement('div');
-    shield.className='aa-global-modal-shield';
-    shield.setAttribute('aria-hidden','true');
-    shield.addEventListener('click',e=>{e.preventDefault();e.stopImmediatePropagation();},{capture:true});
-    shield.addEventListener('pointerdown',e=>{e.preventDefault();e.stopImmediatePropagation();},{capture:true});
-    shield.addEventListener('touchstart',e=>{e.preventDefault();e.stopImmediatePropagation();},{capture:true,passive:false});
-    shield.addEventListener('touchmove',e=>{e.preventDefault();e.stopImmediatePropagation();},{capture:true,passive:false});
-    shield.addEventListener('wheel',e=>{e.preventDefault();e.stopImmediatePropagation();},{capture:true,passive:false});
-    document.body.appendChild(shield);
-    return shield;
-  }
-
-  function setLock(next){
-    if(next===locked){
-      if(next)positionShield();
-      return;
-    }
-    locked=next;
-    const html=document.documentElement, body=document.body;
-    html.classList.toggle('aa-global-modal-locked',next);
-    body.classList.toggle('aa-global-modal-locked',next);
-    if(next){
-      restoreScrollY=window.scrollY||window.pageYOffset||0;
-      const sh=ensureShield();
-      sh.style.display='block';
-      positionShield();
-      document.querySelectorAll(MODAL_SELECTOR).forEach(el=>el.style.setProperty('z-index','2147483001','important'));
-      try{body.style.setProperty('--aa-locked-scroll-y',`-${restoreScrollY}px`);}catch(_){ }
-    }else{
-      if(shield)shield.style.display='none';
-      try{window.scrollTo(0,restoreScrollY);}catch(_){ }
-      body.style.removeProperty('--aa-locked-scroll-y');
-    }
-  }
-
-  function positionShield(){
-    if(!shield)return;
-    /* Fixed high layer; active modal rules above it guarantee the modal remains usable. */
-    shield.style.setProperty('z-index','2147483000','important');
-  }
-
-  function sync(){
-    syncQueued=false;
-    const open=getOpenModals();
-    setLock(open.length>0);
-  }
-  function queueSync(){
-    if(syncQueued)return;
-    syncQueued=true;
-    requestAnimationFrame(sync);
-  }
-
-  /* أحداث الصفحة خارج أي نافذة مفتوحة لا تتجاوز طبقة الحماية. */
-  function outsideModalTarget(target){
-    if(!(target instanceof Element))return true;
-    return !target.closest(MODAL_SELECTOR);
-  }
-  document.addEventListener('click',e=>{if(locked&&outsideModalTarget(e.target)){e.preventDefault();e.stopImmediatePropagation();}},true);
-  document.addEventListener('dblclick',e=>{if(locked&&outsideModalTarget(e.target)){e.preventDefault();e.stopImmediatePropagation();}},true);
-  document.addEventListener('contextmenu',e=>{if(locked&&outsideModalTarget(e.target)){e.preventDefault();e.stopImmediatePropagation();}},true);
-  document.addEventListener('pointerdown',e=>{if(locked&&outsideModalTarget(e.target)){e.preventDefault();e.stopImmediatePropagation();}},true);
-  document.addEventListener('pointermove',e=>{if(locked&&outsideModalTarget(e.target)){e.preventDefault();e.stopImmediatePropagation();}},true);
-  document.addEventListener('touchstart',e=>{if(locked&&outsideModalTarget(e.target)){e.preventDefault();e.stopImmediatePropagation();}}, {capture:true,passive:false});
-  document.addEventListener('touchmove',e=>{if(locked&&outsideModalTarget(e.target)){e.preventDefault();e.stopImmediatePropagation();}}, {capture:true,passive:false});
-  document.addEventListener('touchend',e=>{if(locked&&outsideModalTarget(e.target)){e.preventDefault();e.stopImmediatePropagation();}}, {capture:true,passive:false});
-  document.addEventListener('wheel',e=>{if(locked&&outsideModalTarget(e.target)){e.preventDefault();e.stopImmediatePropagation();}}, {capture:true,passive:false});
-  document.addEventListener('scroll',()=>{if(locked && window.scrollY!==restoreScrollY)window.scrollTo(0,restoreScrollY);},true);
-  document.addEventListener('keydown',e=>{
-    if(!locked)return;
-    const modal=topModal();
-    if(modal && modal.contains(e.target))return;
-    /* مفاتيح الصفحة الرئيسية لا تعمل أثناء القفل؛ المفاتيح داخل النافذة تبقى طبيعية. */
-    e.preventDefault();
-    e.stopImmediatePropagation();
-  },true);
-
-  const observer=new MutationObserver(queueSync);
-  function start(){
-    observer.observe(document.body,{subtree:true,childList:true,attributes:true,attributeFilter:['class','style','hidden','aria-hidden']});
-    sync();
-    window.addEventListener('resize',queueSync,{passive:true});
-    window.addEventListener('orientationchange',queueSync,{passive:true});
-  }
-  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',start,{once:true});
-  else start();
-  window.__aaSyncGlobalModalBackgroundLock=sync;
-})();
-</script>
-
 </body>
 </html>
+
+
+<style id="aa-final-viewer-mobile-toolbar-fix">
+/* Mobile-only viewer toolbar layout fix. Functionality untouched. */
+@media (max-width: 650px){
+  #aaFinalViewer .aa-final-viewer-top{
+    height:auto!important;
+    min-height:0!important;
+    padding:8px 9px!important;
+    display:grid!important;
+    grid-template-columns:minmax(0,1fr)!important;
+    grid-template-rows:auto auto!important;
+    align-items:center!important;
+    justify-content:stretch!important;
+    gap:7px!important;
+    overflow:visible!important;
+  }
+  #aaFinalViewer .aa-final-viewer-title{
+    display:none!important;
+  }
+  #aaFinalViewer .aa-final-viewer-side{
+    position:static!important;
+    top:auto!important;
+    left:auto!important;
+    right:auto!important;
+    width:100%!important;
+    height:auto!important;
+    min-width:0!important;
+    display:flex!important;
+    align-items:center!important;
+    gap:7px!important;
+    flex-wrap:nowrap!important;
+    overflow-x:auto!important;
+    overflow-y:hidden!important;
+    scrollbar-width:none!important;
+    -webkit-overflow-scrolling:touch!important;
+    overscroll-behavior-x:contain!important;
+    padding:1px 0!important;
+  }
+  #aaFinalViewer .aa-final-viewer-side::-webkit-scrollbar{display:none!important;width:0!important;height:0!important}
+  #aaFinalViewer .aa-final-viewer-side.end{
+    grid-row:1!important;
+    grid-column:1!important;
+    justify-content:flex-start!important;
+  }
+  #aaFinalViewer .aa-final-viewer-side.start{
+    grid-row:2!important;
+    grid-column:1!important;
+    justify-content:flex-end!important;
+    direction:ltr!important;
+  }
+  #aaFinalViewer .aa-final-viewer-side > *,
+  #aaFinalViewer .aa-final-zoom-box,
+  #aaFinalViewer .aa-final-page-box{
+    flex:0 0 auto!important;
+  }
+  #aaFinalViewer .aa-final-icon-btn{
+    width:40px!important;
+    min-width:40px!important;
+    height:40px!important;
+    min-height:40px!important;
+    padding:0!important;
+  }
+  #aaFinalViewer .aa-final-zoom-box{
+    display:flex!important;
+    align-items:center!important;
+    gap:5px!important;
+    flex:0 0 auto!important;
+  }
+  #aaFinalViewer .aa-final-zoom-edit{
+    height:40px!important;
+    min-width:64px!important;
+    padding:0 6px!important;
+  }
+  #aaFinalViewer .aa-final-zoom-edit input{
+    width:44px!important;
+    min-width:44px!important;
+    font-size:.74rem!important;
+  }
+  #aaFinalViewer .aa-final-page-box{
+    height:40px!important;
+    min-height:40px!important;
+    padding:0 7px!important;
+    gap:4px!important;
+  }
+  #aaFinalViewer .aa-final-page-box input{
+    width:48px!important;
+    min-width:48px!important;
+    height:31px!important;
+    font-size:.78rem!important;
+  }
+  #aaFinalViewer .aa-final-page-box span{font-size:.68rem!important;white-space:nowrap!important}
+}
+
+@media (max-width: 390px){
+  #aaFinalViewer .aa-final-viewer-top{padding:7px!important;gap:6px!important}
+  #aaFinalViewer .aa-final-viewer-side{gap:6px!important}
+  #aaFinalViewer .aa-final-icon-btn{width:38px!important;min-width:38px!important;height:38px!important;min-height:38px!important}
+  #aaFinalViewer .aa-final-zoom-edit{height:38px!important;min-width:60px!important}
+  #aaFinalViewer .aa-final-page-box{height:38px!important;min-height:38px!important}
+}
+</style>
