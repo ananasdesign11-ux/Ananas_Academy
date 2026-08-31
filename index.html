@@ -23594,7 +23594,33 @@ body.light-mode #coursesPage .course-card:hover{
     const wrapped=async function(courseId){
       if(currentUser&&!isAdmin){
         try{
-          const {exists,data}=await getEnrollment(courseId,currentUser.uid);
+          const {ref,exists,data}=await getEnrollment(courseId,currentUser.uid);
+
+          // Deleted/inactive subscriptions are treated exactly like an account
+          // that is not subscribed: open the normal code-entry flow.
+          // Clear stale access flags left by older versions so they cannot
+          // intercept the normal enrollment modal.
+          if(exists && (data.subscriptionDeleted===true || data.enrollmentActive===false)){
+            const staleAccess=
+              data.accessBlocked===true ||
+              data.subscriptionSuspended===true ||
+              data.blockedUntil!=null ||
+              data.subscriptionSuspendedUntil!=null;
+            if(staleAccess){
+              await ref.set({
+                accessBlocked:false,
+                blockedUntil:null,
+                blockReason:null,
+                accessBlockReason:null,
+                subscriptionSuspended:false,
+                subscriptionSuspendedUntil:null,
+                subscriptionSuspensionReason:null,
+                subscriptionSuspensionMode:null
+              },{merge:true}).catch(()=>{});
+            }
+            return oldOpenCourseSubscription.apply(this,arguments);
+          }
+
           if(exists && data.enrollmentActive!==false && isSuspendedEnrollment(data)){
             return showCustomAlert?.('تم إيقاف اشتراكك',buildSuspensionMessage(data));
           }
