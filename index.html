@@ -23438,20 +23438,16 @@ body.light-mode #coursesPage .course-card:hover{
 
     showSubscriptionDeleteConfirm(
       'حذف الاشتراك',
-      'سيتم حذف اشتراك هذا الحساب من هذه الدورة فقط. سيبقى كود الاشتراك موجودًا ويمكن استخدامه لحساب آخر وفق شروطه. هل أنت متأكد؟',
+      'سيتم حذف اشتراك هذا الحساب من هذه الدورة وحذف كود الاشتراك المرتبط به نهائيًا. لن يمكن إنشاء أو استخدام هذا الكود مرة أخرى. هل أنت متأكد؟',
       async reason=>{
         const latestRef=db.collection('courses').doc(courseId).collection('codes').doc(codeId);
         const latestSnap=await latestRef.get();
         if(!latestSnap.exists) throw new Error('الكود غير موجود.');
         const latest=latestSnap.data()||{};
-        const currentUsed=Array.isArray(latest.usedBy)?latest.usedBy: [];
         const currentInfo=Array.isArray(latest.usedByInfo)?latest.usedByInfo:[];
-        const nextUsed=currentUsed.filter(x=>String(x)!==String(uid));
-        const nextInfo=currentInfo.filter(x=>String(x?.uid)!==String(uid));
-        const blocked=(Array.isArray(latest.blockedUsers)?latest.blockedUsers:[]).filter(x=>uidFrom(x)!==String(uid));
         const revoked=Array.isArray(latest.revokedUsers)?latest.revokedUsers.slice():[];
+        const inf=currentInfo.find(x=>String(x?.uid)===String(uid))||{};
         if(!revoked.some(x=>uidFrom(x)===String(uid))){
-          const inf=currentInfo.find(x=>String(x?.uid)===String(uid))||{};
           revoked.push({
             uid:String(uid),
             name:String(inf.name||''),
@@ -23460,20 +23456,31 @@ body.light-mode #coursesPage .course-card:hover{
             reason:reason||null
           });
         }
+
+        // Archive the exact code first inside the same Firestore batch, then delete the code.
+        // The archive is the permanent uniqueness lock used by isCodePermanentlyArchived().
+        const normalized=normCode(latest.normalizedCode||latest.code);
+        if(!normalized) throw new Error('تعذر تحديد قيمة الكود لحظره نهائيًا.');
+        const archiveRef=db.collection('courses').doc(courseId).collection('codeArchive').doc(normalized);
         const enrollmentRef=db.collection('users').doc(String(uid)).collection('enrolledCourses').doc(String(courseId));
         const batch=db.batch();
-        batch.update(latestRef,{
-          usedCount:Math.max(0,Number(latest.usedCount||0)-(currentUsed.some(x=>String(x)===String(uid))?1:0)),
-          usedBy:nextUsed,
-          usedByInfo:nextInfo,
-          blockedUsers:blocked,
-          revokedUsers:revoked,
-          updatedAt:firebase.firestore.FieldValue.serverTimestamp()
-        });
+        batch.set(archiveRef,{
+          normalizedCode:normalized,
+          code:latest.code||normalized,
+          reason:'subscription-deleted',
+          deletedWithSubscription:true,
+          deletedSubscriptionUid:String(uid),
+          deletedAt:firebase.firestore.FieldValue.serverTimestamp(),
+          deletedBy:currentUser?.uid||null,
+          originalCodeId:String(codeId),
+          originalUsedBy:Array.isArray(latest.usedBy)?latest.usedBy.slice():[],
+          originalUsedByInfo:currentInfo.slice(),
+          revokedUsers:revoked
+        },{merge:true});
         batch.set(enrollmentRef,{
           enrollmentActive:false,
           previousCodeId:dataOr(latest.codeId,codeId),
-          previousCode: String(latest.code||dataOr('', '')),
+          previousCode:String(latest.code||''),
           subscriptionDeleted:true,
           subscriptionDeletedReason:reason||null,
           subscriptionDeletedAt:firebase.firestore.FieldValue.serverTimestamp(),
@@ -23489,17 +23496,19 @@ body.light-mode #coursesPage .course-card:hover{
           subscriptionSuspensionMode:null,
           subscriptionSuspensionUpdatedAt:firebase.firestore.FieldValue.serverTimestamp(),
           subscriptionSuspensionUpdatedBy:currentUser?.uid||null,
-          codeDeleted:false,
+          codeDeleted:true,
           codeId:null,
           codeUsed:null,
           accessUpdatedAt:firebase.firestore.FieldValue.serverTimestamp()
         },{merge:true});
+        batch.delete(latestRef);
         await batch.commit();
 
         await refreshCourseCards();
         await window.loadCodesForCourse?.(courseId);
-        await window.__codeDetail?.(courseId,codeId);
-        try{ await window.__aaRefreshSubscriptionDetail?.(courseId,codeId,uid); }catch(_){}
+
+        // The deleted code no longer has a detail document; close its detail view instead.
+        document.getElementById('codeDetailModalV12')?.classList.remove('active');
 
         // The user's live enrollment listener sees the document update and ejects in the same change cycle.
         if(currentOpenCourseId()===String(courseId) && !isAdmin){
@@ -23510,7 +23519,7 @@ body.light-mode #coursesPage .course-card:hover{
           }));
         }else{
           showCustomAlert?.('تم حذف الاشتراك',
-            `تم حذف اشتراك الحساب من هذه الدورة.${reason?`\nالسبب: ${reason}`:''}`
+            `تم حذف الاشتراك والكود المرتبط به نهائيًا. لن يمكن استخدام الكود مرة أخرى.${reason?`\nالسبب: ${reason}`:''}`
           );
         }
       }
