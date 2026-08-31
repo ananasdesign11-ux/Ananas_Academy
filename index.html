@@ -3278,50 +3278,6 @@ body.light-mode #fullPageAssignmentsContainer .assignment-full-card>div:first-ch
 }
 </style>
 
-
-<style id="aa-global-modal-background-lock-css-v1">
-html.aa-modal-background-locked,
-body.aa-modal-background-locked{
-  overscroll-behavior:none !important;
-  touch-action:none !important;
-}
-/* Freeze only the real application shell. Popup roots live outside these areas and remain interactive. */
-body.aa-modal-background-locked > .navbar,
-body.aa-modal-background-locked > #coursesPage,
-body.aa-modal-background-locked > #mobileBottomNav,
-body.aa-modal-background-locked > #courseDetailView{
-  pointer-events:none !important;
-}
-/* Popup roots stay interactive, including their own scrolling and touch gestures. */
-.custom-alert-modal.active,
-.edit-modal.active,
-.auth-popup.active,
-.ananas-modal-overlay.active,
-.profile-self-modal.active,
-#quizOverlay.active,
-#userProfileModal.active,
-#userProfilePage.active,
-#aaRebuiltProfilePage.active,
-#ananasV10ProfilePage.active,
-#ananasPrivateProfileOverlay.active,
-#ananasCanonicalProfilePage.active,
-#aaCoursePortfolioModal.active,
-#aaProfileSelfEditModal.active,
-#aaProfileSelfWorkModal.active,
-#aaProfileWorkModal.active,
-#aaProfileEditModal.active,
-#ananasFileUploadModal.active,
-#aaChatAdminModal.open,
-#aaFinalViewer.active,
-.gallery-viewer.active,
-.platform-image-viewer.active,
-.file-viewer-overlay.active,
-.aa-chat-image-preview-modal.active,
-[role="dialog"][aria-modal="true"]{
-  pointer-events:auto !important;
-  touch-action:auto !important;
-}
-</style>
 </head>
 <body class="light-mode">
     
@@ -3391,14 +3347,6 @@ body.aa-modal-background-locked > #courseDetailView{
                 <button class="auth-btn" id="authToggleBtn"><i class="fas fa-user"></i> <span id="authLabel"></span></button>
             </div>
         </div>
-    </nav>
-
-    <!-- ===== MOBILE BOTTOM NAVIGATION ===== -->
-    <nav id="mobileBottomNav" class="mobile-bottom-nav" aria-label="التنقل السفلي">
-        <button type="button" class="mobile-nav-item active" data-page="courses" aria-label="الدورات">
-            <i class="fas fa-graduation-cap" aria-hidden="true"></i>
-            <span id="mobileCoursesLabel">الدورات</span>
-        </button>
     </nav>
 
     <!-- ===== COURSES PAGE ===== -->
@@ -7661,17 +7609,10 @@ body.aa-modal-background-locked > #courseDetailView{
             const previewTime=document.getElementById('lessonSeekPreviewTime');
             if(!wrap||!fill||!thumb||wrap.dataset.scrubberBound==='1')return;
             wrap.dataset.scrubberBound='1';
-            /* Keep touch gestures on the scrubber from being interpreted as page scrolling. */
-            wrap.style.touchAction='none';
-            let dragging=false,pointerId=null,pendingRatio=0,rafId=0,previewRequest=0,previewReady=false,previewTarget=0,lastCommitAt=0,lastCommitRatio=-1;
+            let dragging=false,pointerId=null,pendingRatio=0,rafId=0,previewRequest=0,previewReady=false,previewTarget=0;
             const clampRatio=r=>Math.max(0,Math.min(1,Number(r)||0));
             const getDuration=()=>Number(lessonPlayer?.getDuration?.()||lessonWatchState.duration||0);
-            const ratioFromEvent=ev=>{
-                const rect=wrap.getBoundingClientRect();
-                const x=Number(ev?.clientX);
-                if(!Number.isFinite(x))return pendingRatio;
-                return clampRatio((x-rect.left)/Math.max(1,rect.width));
-            };
+            const ratioFromEvent=ev=>{const rect=wrap.getBoundingClientRect();return clampRatio((Number(ev.clientX)-rect.left)/Math.max(1,rect.width));};
             const paintScrub=ratio=>{
                 const d=getDuration(),t=d>0?d*ratio:0,pct=(ratio*100).toFixed(3)+'%';
                 fill.style.width=pct;thumb.style.left=pct;wrap.setAttribute('aria-valuenow',String(Math.round(ratio*100)));
@@ -7721,29 +7662,9 @@ body.aa-modal-background-locked > #courseDetailView{
             const commitRatio=ratio=>{
                 if(!lessonPlayerReady||!lessonPlayer)return;
                 const d=getDuration();if(d<=0)return;
-                const r=clampRatio(ratio),target=d*r;
-                const now=Date.now();
-                if(now-lastCommitAt<80 && Math.abs(r-lastCommitRatio)<0.002)return;
-                lastCommitAt=now;lastCommitRatio=r;window.__allowedLessonSeekUntil=now+1800;
-                try{
-                    let seekResult;
-                    if(typeof setLessonCurrentTime==='function') seekResult=setLessonCurrentTime(target);
-                    else if(lessonPlayerType==='html5'&&lessonHtmlVideo){ lessonHtmlVideo.currentTime=target; seekResult=true; }
-                    else if(typeof lessonPlayer.seekTo==='function') seekResult=lessonPlayer.seekTo(target,true);
-                    window.__lessonResumePosition=target;
-                    lessonWatchState.lastObservedPosition=target;
-                    updateLessonControls();
-                    const saveAfterSeek=()=>{
-                        window.__lessonResumePosition=target;
-                        lessonWatchState.lastObservedPosition=target;
-                        updateLessonControls();
-                        window.saveLessonProgressNow?.();
-                    };
-                    if(seekResult && typeof seekResult.then==='function') seekResult.then(saveAfterSeek).catch(()=>{});
-                    else setTimeout(saveAfterSeek,120);
-                }catch(err){
-                    console.warn('lesson scrub seek failed',err);
-                }
+                const target=d*clampRatio(ratio);window.__allowedLessonSeekUntil=Date.now()+1500;
+                try{lessonPlayer.seekTo(target,true);}catch(err){try{lessonPlayer.seekTo(target);}catch(_){} }
+                window.__lessonResumePosition=target;lessonWatchState.lastObservedPosition=target;updateLessonControls();window.saveLessonProgressNow?.();
             };
             wrap.addEventListener('pointerdown',ev=>{
                 if(!lessonPlayerReady||!lessonPlayer||ev.button>0)return;
@@ -7766,22 +7687,9 @@ body.aa-modal-background-locked > #courseDetailView{
             };
             wrap.addEventListener('pointerup',finish,{passive:false});
             wrap.addEventListener('pointercancel',finish,{passive:false});
-            /* Do not seek again from the synthetic mobile click fired after pointerup.
-               pointerup already commits the exact touch position. */
-            wrap.addEventListener('click',ev=>{
-                if(ev.pointerType==='touch'){
-                    ev.preventDefault();
-                    ev.stopImmediatePropagation();
-                }
-            },true);
-            wrap.addEventListener('lostpointercapture',ev=>{
-                if(!dragging||ev.pointerId!==pointerId)return;
-                /* Losing capture means the gesture was cancelled (for example by
-                   the browser/OS). Never commit a stale/zero position here. */
-                dragging=false;pointerId=null;wrap.classList.remove('dragging');
-                if(rafId){cancelAnimationFrame(rafId);rafId=0;}
-                releasePreview();
-            },{capture:true});
+            wrap.addEventListener('lostpointercapture',()=>{
+                if(!dragging)return;const ratio=clampRatio(pendingRatio);dragging=false;pointerId=null;wrap.classList.remove('dragging');commitRatio(ratio);releasePreview();
+            });
             window.addEventListener('resize',()=>{if(dragging)positionPreview(pendingRatio);},{passive:true});
             window.addEventListener('orientationchange',()=>{setTimeout(()=>{if(dragging)positionPreview(pendingRatio);},60);},{passive:true});
             window.__lessonSeekScrubber={isDragging:()=>dragging};
@@ -10757,8 +10665,6 @@ body.light-mode .full-page-card:hover,body.light-mode .lesson-card:hover,body.li
 
 /* ---------- Video progress: force a live, RTL-safe, paint-stable progress bar ---------- */
 .lesson-platform-controls .progress-bar-wrap{
-  touch-action:none !important;
-  -ms-touch-action:none !important;
   direction:ltr !important;
   overflow:visible !important;
   isolation:isolate;
@@ -13469,9 +13375,8 @@ html,body{max-width:100%;overflow-x:hidden;}
 }
 
 /* Generic modal/popup background lock: never scroll the page behind an open dialog. */
-body.aa-v9-modal-locked{overflow:hidden!important;overscroll-behavior:none!important;}
-html.aa-v9-modal-locked{overflow:hidden!important;overscroll-behavior:none!important;}
-.edit-modal.active,.auth-popup.active,.custom-alert-modal.active,.gallery-viewer.active,.platform-image-viewer.active,.file-viewer-overlay.active,.ananas-modal-overlay.active,.profile-self-modal.active,#quizOverlay.active,[role="dialog"]{overscroll-behavior:contain;}
+body.aa-v9-modal-locked{overflow:hidden!important;touch-action:none!important;}
+html.aa-v9-modal-locked{overflow:hidden!important;}
 .edit-modal.active,.auth-popup.active,.custom-alert-modal.active,#quizOverlay.active{overscroll-behavior:contain;}
 .edit-modal.active,.auth-popup.active{overflow-y:auto!important;}
 .custom-alert-modal.active{overflow:auto!important;}
@@ -13484,58 +13389,9 @@ html.aa-v9-modal-locked{overflow:hidden!important;overscroll-behavior:none!impor
 document.head.appendChild(mobileCSS);
 
 /* ---------- Lock the background while ANY actual popup/modal is open ---------- */
-const AA_MODAL_SELECTOR=[
-  '.edit-modal.active','.auth-popup.active','.custom-alert-modal.active',
-  '.gallery-viewer.active','.platform-image-viewer.active','.file-viewer-overlay.active',
-  '.ananas-modal-overlay.active','.profile-self-modal.active','#quizOverlay.active',
-  '[role=\"dialog\"]:not([aria-hidden=\"true\"])',
-  '.modal.active','.popup.active','.overlay.open'
-].join(',');
-function modalIsOpen(){return !!document.querySelector(AA_MODAL_SELECTOR);}
-function activeModalElement(target){
-  try{return target?.closest?.(AA_MODAL_SELECTOR)||null;}catch(_){return null;}
-}
-let aaLockedScrollY=0,aaModalScrollLocked=false;
-function syncModalLock(){
-  const open=modalIsOpen();
-  document.body.classList.toggle('aa-v9-modal-locked',open);
-  document.documentElement.classList.toggle('aa-v9-modal-locked',open);
-  if(open&&!aaModalScrollLocked){
-    aaLockedScrollY=window.scrollY||window.pageYOffset||0;
-    aaModalScrollLocked=true;
-    document.body.style.setProperty('top',`-${aaLockedScrollY}px`,'important');
-    document.body.style.setProperty('position','fixed','important');
-    document.body.style.setProperty('left','0','important');
-    document.body.style.setProperty('right','0','important');
-    document.body.style.setProperty('width','100%','important');
-  }else if(!open&&aaModalScrollLocked){
-    aaModalScrollLocked=false;
-    document.body.style.removeProperty('top');
-    document.body.style.removeProperty('position');
-    document.body.style.removeProperty('left');
-    document.body.style.removeProperty('right');
-    document.body.style.removeProperty('width');
-    window.scrollTo(0,aaLockedScrollY);
-  }
-}
-function preventBackgroundGesture(e){
-  if(!modalIsOpen())return;
-  if(activeModalElement(e.target))return;
-  e.preventDefault();
-  e.stopImmediatePropagation();
-}
-const modalObs=new MutationObserver(syncModalLock);
-modalObs.observe(document.body,{subtree:true,attributes:true,attributeFilter:['class','style','hidden']});
-window.addEventListener('wheel',preventBackgroundGesture,{capture:true,passive:false});
-window.addEventListener('touchmove',preventBackgroundGesture,{capture:true,passive:false});
-window.addEventListener('touchstart',e=>{if(modalIsOpen()&&!activeModalElement(e.target)){e.preventDefault();e.stopImmediatePropagation();}},{capture:true,passive:false});
-window.addEventListener('gesturestart',preventBackgroundGesture,{capture:true,passive:false});
-window.addEventListener('keydown',e=>{
-  if(!modalIsOpen()||activeModalElement(e.target))return;
-  if(['ArrowUp','ArrowDown','PageUp','PageDown','Home','End',' ','Spacebar'].includes(e.key)){
-    e.preventDefault();e.stopImmediatePropagation();
-  }
-},{capture:true});
+function modalIsOpen(){return !!document.querySelector('.edit-modal.active,.auth-popup.active,.custom-alert-modal.active,#quizOverlay.active');}
+function syncModalLock(){document.body.classList.toggle('aa-v9-modal-locked',modalIsOpen());document.documentElement.classList.toggle('aa-v9-modal-locked',modalIsOpen());}
+const modalObs=new MutationObserver(syncModalLock);modalObs.observe(document.body,{subtree:true,attributes:true,attributeFilter:['class','style','hidden']});
 syncModalLock();
 
 /* ---------- If profile page becomes visible, always keep directory admin-only and hide viewed card. ---------- */nsetInterval;
@@ -17402,89 +17258,6 @@ body.light-mode #lessonVideoWrapper .aa-speed-value{color:#172033!important;}
   else start();
 
   window.__ananasModalStackSync=sync;
-})();
-</script>
-
-<style id="ananas-modal-background-lock">
-/* Keep the complete page behind an open modal inert; scrolling inside the modal remains allowed. */
-html.aa-modal-background-locked,
-body.aa-modal-background-locked{
-  overflow:hidden!important;
-  overscroll-behavior:none!important;
-}
-body.aa-modal-background-locked{
-  touch-action:none!important;
-}
-.edit-modal.active,
-.auth-popup.active,
-.custom-alert-modal.active,
-.gallery-viewer.active,
-.platform-image-viewer.active,
-.file-viewer-overlay.active,
-.ananas-modal-overlay.active,
-#quizOverlay.active,
-#courseFileViewer.active,
-#enrollTermsPreviewModal.active,
-#courseAccessSuspendModal.active,
-#manageCodesModal.active,
-#codeDetailModalV12.active,
-#codeExpiryEditModalV12.active,
-#ananasQuizBuilderV2.active,
-#chatLockModal.active,
-#ananasProfileEditor.active{
-  touch-action:auto!important;
-  overscroll-behavior:contain!important;
-}
-</style>
-
-<script id="ananas-modal-background-lock-controller">
-(function(){
-  'use strict';
-  if(window.__ananasModalBackgroundLockController)return;
-  window.__ananasModalBackgroundLockController=true;
-
-  const modalSelector=
-    '.edit-modal.active,.auth-popup.active,.custom-alert-modal.active,'+
-    '.gallery-viewer.active,.platform-image-viewer.active,.file-viewer-overlay.active,'+
-    '.ananas-modal-overlay.active,#quizOverlay.active,#courseFileViewer.active,'+
-    '#enrollTermsPreviewModal.active,#courseAccessSuspendModal.active,#manageCodesModal.active,'+
-    '#codeDetailModalV12.active,#codeExpiryEditModalV12.active,#ananasQuizBuilderV2.active,'+
-    '#chatLockModal.active,#ananasProfileEditor.active,.profile-self-modal.active';
-
-  const isModalOpen=()=>!!document.querySelector(modalSelector);
-
-  function sync(){
-    const locked=isModalOpen();
-    document.documentElement.classList.toggle('aa-modal-background-locked',locked);
-    document.body.classList.toggle('aa-modal-background-locked',locked);
-  }
-
-  function allowInsideOpenModal(target){
-    return !!target?.closest?.(modalSelector);
-  }
-
-  function blockBackgroundEvent(e){
-    if(!isModalOpen() || allowInsideOpenModal(e.target))return;
-    e.preventDefault();
-    e.stopPropagation();
-    e.stopImmediatePropagation();
-  }
-
-  ['pointerdown','pointerup','mousedown','mouseup','click','dblclick','contextmenu',
-   'touchstart','touchmove','touchend','wheel','dragstart'].forEach(type=>{
-    document.addEventListener(type,blockBackgroundEvent,true);
-  });
-
-  const observer=new MutationObserver(sync);
-  function start(){
-    if(!document.body)return;
-    observer.observe(document.body,{subtree:true,childList:true,attributes:true,attributeFilter:['class','style','hidden']});
-    sync();
-  }
-  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',start,{once:true});
-  else start();
-
-  window.__ananasModalBackgroundLockSync=sync;
 })();
 </script>
 
@@ -22846,6 +22619,7 @@ body:not(.light-mode){--aa-auth-bg:#0d1020;--aa-auth-surface:#15192b;--aa-auth-s
 <!-- ===== ANANAS FILES PAGE — FINAL REBUILD ===== -->
 <style id="ananas-files-final-css">
 /* The file viewer/page is intentionally self-contained. */
+#mobileBottomNav{display:none !important}
 #courseFilesPage.aa-files-final{
   position:absolute!important; inset:0!important; z-index:40!important;
   display:none!important; overflow:auto!important; padding:clamp(20px,3vw,38px)!important;
@@ -24211,163 +23985,6 @@ body.light-mode #coursesPage .course-card:hover{
     const b=e.target?.closest?.('#confirmCourseSuspendBtn');
     if(b)setTimeout(()=>{if(window.__aaSubscriptionSuspendTarget?.courseId&&window.__aaSubscriptionSuspendTarget?.codeId)window.__codeDetail?.(window.__aaSubscriptionSuspendTarget.courseId,window.__aaSubscriptionSuspendTarget.codeId);},80);
   },true);
-})();
-</script>
-
-<script id="aa-global-modal-background-lock-v1">
-(function(){
-  'use strict';
-  if(window.__aaGlobalModalBackgroundLockV1) return;
-  window.__aaGlobalModalBackgroundLockV1=true;
-
-  const MODAL_SELECTORS=[
-    '.custom-alert-modal.active',
-    '.edit-modal.active',
-    '.auth-popup.active',
-    '.ananas-modal-overlay.active',
-    '#quizOverlay.active',
-    '#userProfileModal.active',
-    '#userProfilePage.active',
-    '#aaRebuiltProfilePage.active',
-    '#ananasV10ProfilePage.active',
-    '#ananasPrivateProfileOverlay.active',
-    '#ananasCanonicalProfilePage.active',
-    '#aaCoursePortfolioModal.active',
-    '#aaProfileSelfEditModal.active',
-    '#aaProfileSelfWorkModal.active',
-    '#aaProfileWorkModal.active',
-    '#aaProfileEditModal.active',
-    '#ananasFileUploadModal.active',
-    '#aaChatAdminModal.open',
-    '#aaFinalViewer.active',
-    '.gallery-viewer.active',
-    '.platform-image-viewer.active',
-    '.file-viewer-overlay.active',
-    '.aa-chat-image-preview-modal.active',
-    '.profile-self-modal.active',
-    '[role="dialog"][aria-modal="true"]:not([hidden]):not([aria-hidden="true"])'
-  ];
-
-  const state={
-    locked:false,
-    bodyOverflow:'',
-    bodyPaddingRight:'',
-    scrollY:0,
-    active:null,
-    raf:0
-  };
-
-  const visible=el=>{
-    if(!el||el.hidden)return false;
-    const cs=getComputedStyle(el);
-    if(cs.display==='none'||cs.visibility==='hidden'||Number(cs.opacity)===0)return false;
-    const r=el.getBoundingClientRect();
-    return r.width>0&&r.height>0;
-  };
-
-  function getOpenModals(){
-    const all=[];
-    for(const sel of MODAL_SELECTORS){
-      document.querySelectorAll(sel).forEach(el=>{if(visible(el)&&!all.includes(el))all.push(el);});
-    }
-    /* Catch future/dynamically-created popup roots without touching ordinary page elements. */
-    document.body?.children && Array.from(document.body.children).forEach(el=>{
-      if(all.includes(el)||!visible(el))return;
-      const cs=getComputedStyle(el), z=parseInt(cs.zIndex,10);
-      const token=(String(el.id||'')+' '+String(el.className||'')).toLowerCase();
-      const popupLike=/(modal|popup|overlay|lightbox|viewer|dialog)/.test(token);
-      const openLike=el.classList.contains('active')||el.classList.contains('open')||el.getAttribute('aria-modal')==='true';
-      if(cs.position==='fixed' && Number.isFinite(z) && z>=1000 && popupLike && openLike) all.push(el);
-    });
-    return all;
-  }
-
-  function topModal(){
-    const list=getOpenModals();
-    if(!list.length)return null;
-    list.sort((a,b)=>{
-      const za=parseInt(getComputedStyle(a).zIndex,10);const zb=parseInt(getComputedStyle(b).zIndex,10);
-      const aa=Number.isFinite(za)?za:0,bb=Number.isFinite(zb)?zb:0;
-      return aa-bb || (a.compareDocumentPosition(b)&Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1);
-    });
-    return list[list.length-1];
-  }
-
-  function isInsideModal(target,modal){
-    return !!modal && (target===modal || modal.contains(target));
-  }
-
-  function lock(){
-    if(state.locked)return;
-    state.locked=true;
-    state.active=topModal();
-    state.scrollY=window.scrollY||window.pageYOffset||0;
-    state.bodyOverflow=document.body.style.overflow;
-    state.bodyPaddingRight=document.body.style.paddingRight;
-    const scrollbarGap=Math.max(0,window.innerWidth-document.documentElement.clientWidth);
-    document.body.classList.add('aa-modal-background-locked');
-    document.documentElement.classList.add('aa-modal-background-locked');
-    if(scrollbarGap>0)document.body.style.paddingRight=scrollbarGap+'px';
-    document.body.style.overflow='hidden';
-    window.scrollTo(0,state.scrollY);
-  }
-
-  function unlock(){
-    if(!state.locked)return;
-    state.locked=false;
-    state.active=null;
-    document.body.classList.remove('aa-modal-background-locked');
-    document.documentElement.classList.remove('aa-modal-background-locked');
-    document.body.style.overflow=state.bodyOverflow;
-    document.body.style.paddingRight=state.bodyPaddingRight;
-    window.scrollTo(0,state.scrollY);
-  }
-
-  function sync(){
-    const modal=topModal();
-    if(modal){
-      if(!state.locked)lock();
-      else state.active=modal;
-    }else unlock();
-  }
-
-  const blockedKeys=new Set(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','PageUp','PageDown','Home','End',' ','Spacebar']);
-  const stopOutside=e=>{
-    const modal=state.active&&visible(state.active)?state.active:topModal();
-    if(!modal){unlock();return;}
-    state.active=modal;
-    if(isInsideModal(e.target,modal))return;
-    e.preventDefault();
-    e.stopImmediatePropagation();
-  };
-
-  document.addEventListener('wheel',stopOutside,{capture:true,passive:false});
-  document.addEventListener('touchmove',stopOutside,{capture:true,passive:false});
-  document.addEventListener('pointerdown',stopOutside,{capture:true,passive:false});
-  document.addEventListener('mousedown',stopOutside,{capture:true,passive:false});
-  document.addEventListener('click',stopOutside,{capture:true,passive:false});
-  document.addEventListener('dblclick',stopOutside,{capture:true,passive:false});
-  document.addEventListener('contextmenu',stopOutside,{capture:true,passive:false});
-  document.addEventListener('keydown',e=>{
-    const modal=state.active&&visible(state.active)?state.active:topModal();
-    if(!modal){unlock();return;}
-    if(isInsideModal(e.target,modal))return;
-    if(blockedKeys.has(e.key)||e.key==='Tab'){
-      e.preventDefault();
-      e.stopImmediatePropagation();
-    }
-  },true);
-
-  const observer=new MutationObserver(()=>{
-    cancelAnimationFrame(state.raf);
-    state.raf=requestAnimationFrame(sync);
-  });
-  observer.observe(document.documentElement,{subtree:true,childList:true,attributes:true,attributeFilter:['class','style','hidden','aria-hidden','open']});
-
-  window.addEventListener('resize',()=>{if(state.locked)window.scrollTo(0,state.scrollY);},{passive:true});
-  window.addEventListener('scroll',()=>{if(state.locked&&Math.abs((window.scrollY||0)-state.scrollY)>0)window.scrollTo(0,state.scrollY);},{passive:true});
-
-  sync();
 })();
 </script>
 
