@@ -7661,6 +7661,8 @@ body.aa-modal-background-locked > #courseDetailView{
             const previewTime=document.getElementById('lessonSeekPreviewTime');
             if(!wrap||!fill||!thumb||wrap.dataset.scrubberBound==='1')return;
             wrap.dataset.scrubberBound='1';
+            /* Keep touch gestures on the scrubber from being interpreted as page scrolling. */
+            wrap.style.touchAction='none';
             let dragging=false,pointerId=null,pendingRatio=0,rafId=0,previewRequest=0,previewReady=false,previewTarget=0,lastCommitAt=0,lastCommitRatio=-1;
             const clampRatio=r=>Math.max(0,Math.min(1,Number(r)||0));
             const getDuration=()=>Number(lessonPlayer?.getDuration?.()||lessonWatchState.duration||0);
@@ -7764,18 +7766,22 @@ body.aa-modal-background-locked > #courseDetailView{
             };
             wrap.addEventListener('pointerup',finish,{passive:false});
             wrap.addEventListener('pointercancel',finish,{passive:false});
+            /* Do not seek again from the synthetic mobile click fired after pointerup.
+               pointerup already commits the exact touch position. */
             wrap.addEventListener('click',ev=>{
-                if(dragging)return;
-                if(!lessonPlayerReady||!lessonPlayer)return;
-                const ratio=ratioFromEvent(ev);
-                showPreviewForRatio(ratio);
-                commitRatio(ratio);
-                setTimeout(releasePreview,90);
-                ev.preventDefault();
-            },{passive:false});
-            wrap.addEventListener('lostpointercapture',()=>{
-                if(!dragging)return;const ratio=clampRatio(pendingRatio);dragging=false;pointerId=null;wrap.classList.remove('dragging');commitRatio(ratio);releasePreview();
-            });
+                if(ev.pointerType==='touch'){
+                    ev.preventDefault();
+                    ev.stopImmediatePropagation();
+                }
+            },true);
+            wrap.addEventListener('lostpointercapture',ev=>{
+                if(!dragging||ev.pointerId!==pointerId)return;
+                /* Losing capture means the gesture was cancelled (for example by
+                   the browser/OS). Never commit a stale/zero position here. */
+                dragging=false;pointerId=null;wrap.classList.remove('dragging');
+                if(rafId){cancelAnimationFrame(rafId);rafId=0;}
+                releasePreview();
+            },{capture:true});
             window.addEventListener('resize',()=>{if(dragging)positionPreview(pendingRatio);},{passive:true});
             window.addEventListener('orientationchange',()=>{setTimeout(()=>{if(dragging)positionPreview(pendingRatio);},60);},{passive:true});
             window.__lessonSeekScrubber={isDragging:()=>dragging};
@@ -10751,6 +10757,8 @@ body.light-mode .full-page-card:hover,body.light-mode .lesson-card:hover,body.li
 
 /* ---------- Video progress: force a live, RTL-safe, paint-stable progress bar ---------- */
 .lesson-platform-controls .progress-bar-wrap{
+  touch-action:none !important;
+  -ms-touch-action:none !important;
   direction:ltr !important;
   overflow:visible !important;
   isolation:isolate;
