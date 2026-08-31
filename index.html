@@ -4243,7 +4243,7 @@ body.light-mode #fullPageAssignmentsContainer .assignment-full-card>div:first-ch
     <!-- Suspend an enrollment code -->
     <div class="edit-modal" id="courseAccessSuspendModal" style="max-width:620px;">
         <button onclick="document.getElementById('courseAccessSuspendModal').classList.remove('active');" style="position:static; float:left; font-size:1.5rem; background:none; border:none; color:var(--text-muted); cursor:pointer;">&times;</button>
-        <h3 id="courseSuspendTitle">إيقاف الكود عن الدخول إلى الدورة</h3>
+        <h3 id="courseSuspendTitle">إيقاف الاشتراك عن الدخول إلى الدورة</h3>
         <div class="code-suspend-form">
             <div id="suspendCodeLabel" style="font-weight:700;margin-bottom:10px;"></div>
             <div class="code-suspend-users">
@@ -4273,7 +4273,7 @@ body.light-mode #fullPageAssignmentsContainer .assignment-full-card>div:first-ch
             </div>
             <label id="courseSuspendReasonLabel">سبب الإيقاف (اختياري)</label>
             <textarea id="courseSuspendReason" rows="3" placeholder="اكتب سبب الإيقاف..."></textarea>
-            <button id="confirmCourseSuspendBtn" class="code-action-btn danger" style="width:100%;padding:11px;font-weight:700;">إيقاف الكود</button>
+            <button id="confirmCourseSuspendBtn" class="code-action-btn danger" style="width:100%;padding:11px;font-weight:700;">إيقاف الاشتراك</button>
         </div>
     </div>
 
@@ -4442,7 +4442,7 @@ body.light-mode #fullPageAssignmentsContainer .assignment-full-card>div:first-ch
                 addAssignmentModalTitle: 'إضافة واجب جديد', addAssignmentTitleArLbl: 'عنوان الواجب (عربي)', addAssignmentTitleEnLbl: 'عنوان الواجب (English)', addAssignmentDescArLbl: 'الوصف (عربي)', addAssignmentDescEnLbl: 'الوصف (English)', addAssignmentXPLbl: 'نقاط الخبرة عند الموافقة', addAssignmentLessonLbl: 'ربط الواجب بحصة (اختياري)', saveAssignmentBtn: 'حفظ الواجب',
                 addQuizModalTitle: 'إنشاء اختبار متقدم', addQuizTitleArLbl: 'عنوان الاختبار (عربي)', addQuizTitleEnLbl: 'عنوان الاختبار (English)', addQuizLessonLbl: 'ربط الاختبار بحصة (اختياري)', saveQuizBtn: 'حفظ الاختبار',
                 manageCodesTitle: 'إدارة أكواد الاشتراك', newCodeLabel: 'إنشاء كود جديد', codeStartLabel: 'وقت البداية', codeEndLabel: 'وقت النهاية (اختياري)', createCodeBtn: 'إنشاء الكود',
-                courseSuspendTitle: 'إيقاف الكود عن الدخول إلى الدورة', courseSuspendDurationLabel: 'مدة الإيقاف', suspend1d: 'يوم واحد', suspend3d: '3 أيام', suspend7d: '7 أيام', suspend30d: '30 يومًا', suspendCustom: 'حتى تاريخ ووقت محدد', suspendPermanent: 'حتى ألغي الإيقاف بنفسي', courseSuspendUntilLabel: 'ينتهي الإيقاف في', courseSuspendTimeNote: 'التاريخ والوقت حسب توقيت المملكة العربية السعودية.', courseSuspendReasonLabel: 'سبب الإيقاف (اختياري)', courseSuspendReasonPlaceholder: 'اكتب سبب الإيقاف...', confirmCourseSuspendLabel: 'إيقاف الدخول', mobileCoursesLabel: 'الدورات',
+                courseSuspendTitle: 'إيقاف الاشتراك عن الدخول إلى الدورة', courseSuspendDurationLabel: 'مدة الإيقاف', suspend1d: 'يوم واحد', suspend3d: '3 أيام', suspend7d: '7 أيام', suspend30d: '30 يومًا', suspendCustom: 'حتى تاريخ ووقت محدد', suspendPermanent: 'حتى ألغي الإيقاف بنفسي', courseSuspendUntilLabel: 'ينتهي الإيقاف في', courseSuspendTimeNote: 'التاريخ والوقت حسب توقيت المملكة العربية السعودية.', courseSuspendReasonLabel: 'سبب الإيقاف (اختياري)', courseSuspendReasonPlaceholder: 'اكتب سبب الإيقاف...', confirmCourseSuspendLabel: 'إيقاف الدخول', mobileCoursesLabel: 'الدورات',
                 
                 editCoursePageTextsTitle: 'تعديل نصوص صفحة الدورات',
                 editCPTCoursesPageTitleAr: 'عنوان الصفحة (عربي)', editCPTCoursesPageTitleEn: 'عنوان الصفحة (English)',
@@ -4890,7 +4890,12 @@ body.light-mode #fullPageAssignmentsContainer .assignment-full-card>div:first-ch
         function getCourseActionHTML(courseId) {
             if (!currentUser) return `<button type="button" class="btn btn-outline course-login-btn">تسجيل الدخول</button>`;
             const enrollment = userEnrollmentMap[courseId];
-            if (enrollment && enrollment.enrollmentActive !== false) return `<button class="btn btn-primary" onclick="openCourse('${courseId}')">الدخول للدورة</button>`;
+            if (enrollment && enrollment.enrollmentActive !== false) {
+                const until = enrollment.subscriptionSuspendedUntil?.toDate ? enrollment.subscriptionSuspendedUntil.toDate() : (enrollment.subscriptionSuspendedUntil ? new Date(enrollment.subscriptionSuspendedUntil) : null);
+                const suspended = enrollment.subscriptionSuspended === true && (!until || until.getTime() > Date.now());
+                if (suspended) return `<button type="button" class="btn btn-suspended-subscription" onclick="showSubscriptionSuspensionNotice('${courseId}')">الاشتراك موقوف</button>`;
+                return `<button class="btn btn-primary" onclick="openCourse('${courseId}')">الدخول للدورة</button>`;
+            }
             return `<button class="btn btn-primary" onclick="openCourse('${courseId}')">الاشتراك في الدورة</button>`;
         }
 
@@ -5147,7 +5152,7 @@ body.light-mode #fullPageAssignmentsContainer .assignment-full-card>div:first-ch
                         if (codeData.disabled && until && until.getTime() <= Date.now()) {
                             try {
                                 await codeRef.update({disabled:false, suspendedUntil:null, suspensionReason:null, suspensionUpdatedAt:firebase.firestore.FieldValue.serverTimestamp()});
-                            } catch(e) { console.warn('تعذر تنظيف إيقاف الكود المنتهي:', e); }
+                            } catch(e) { console.warn('تعذر تنظيف إيقاف الاشتراك المنتهي:', e); }
                         }
                     }
                 }
@@ -8579,7 +8584,7 @@ body.light-mode #fullPageAssignmentsContainer .assignment-full-card>div:first-ch
                     const suspensionActive = disabled && (!suspendedUntil || suspendedUntil.getTime() > Date.now());
                     const full = (c.usedCount || 0) >= (c.maxUses || 1);
                     const status = suspensionActive ? `<span style="color:#e74c3c;font-weight:700">موقوف للجميع${suspendedUntil ? ' حتى '+suspendedUntil.toLocaleString('ar-SA') : ''}</span>` : blockedUsersCount ? `<span style="color:#e67e22;font-weight:700">موقوف جزئيًا (${blockedUsersCount})</span>` : expired ? '<span style="color:#e67e22">منتهي</span>' : full ? '<span style="color:#e67e22">مكتمل الاستخدام</span>' : '<span style="color:#16a085">نشط</span>';
-                    const toggleLabel = suspensionActive ? 'إلغاء الإيقاف' : 'إيقاف';
+                    const toggleLabel = suspensionActive ? 'إلغاء إيقاف الاشتراك' : 'إيقاف الاشتراك';
                     const toggleClass = suspensionActive ? 'success' : 'danger';
                     html += `<tr data-code-row="${doc.id}">
                         <td><strong>${String(c.code || '').replace(/</g,'&lt;')}</strong></td>
@@ -8587,9 +8592,9 @@ body.light-mode #fullPageAssignmentsContainer .assignment-full-card>div:first-ch
                         <td>${c.usedCount || 0}/${c.maxUses || 1}</td>
                         <td>${status}</td>
                         <td><div class="code-actions">
-                            <button class="code-action-btn ${toggleClass}" onclick="toggleEnrollmentCode('${doc.id}', ${suspensionActive})">${toggleLabel}</button>
+                            <button class="code-action-btn ${toggleClass}" onclick="suspendSubscription('${doc.id}', ${suspensionActive})">${toggleLabel}</button>
                             ${(c.usedBy && c.usedBy.length) ? `<button class="code-action-btn" onclick="manageCodeUsers('${doc.id}')">المستخدمون (${c.usedBy.length})</button>` : ''}
-                            <button class="code-action-btn danger" onclick="deleteEnrollmentCode('${doc.id}')">حذف</button>
+                            <button class="code-action-btn danger" onclick="deleteSubscription('${doc.id}')">حذف الاشتراك</button>
                         </div></td>
                     </tr>`;
                 });
@@ -8597,32 +8602,32 @@ body.light-mode #fullPageAssignmentsContainer .assignment-full-card>div:first-ch
             } catch(e) { console.error(e); showCustomAlert('خطأ','تعذر تحميل الأكواد.'); }
         }
 
-        window.deleteEnrollmentCode = async function(codeId) {
+        window.deleteSubscription = async function(codeId) {
             if (!isAdmin || !activeCourseId) return showCustomAlert('غير مسموح','هذه العملية للمشرف فقط.');
-            showCustomConfirm('حذف الكود', 'هل أنت متأكد من حذف هذا الكود نهائيًا؟ لن يستطيع أي شخص استخدامه بعد الحذف.', async () => {
+            showCustomConfirm('حذف الاشتراك', 'هل أنت متأكد من حذف هذا الكود نهائيًا؟ لن يستطيع أي شخص استخدامه بعد الحذف.', async () => {
                 try {
                     await db.collection('courses').doc(activeCourseId).collection('codes').doc(codeId).delete();
                     const row = document.querySelector(`[data-code-row="${codeId}"]`);
                     if (row) row.remove();
                     const body = document.getElementById('codesTableBody');
                     if (body && !body.querySelector('tr[data-code-row]')) body.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--text-muted);">لا توجد أكواد بعد.</td></tr>';
-                    showCustomAlert('تم الحذف','تم حذف الكود نهائيًا.');
-                } catch(e) { showCustomAlert('خطأ','تعذر حذف الكود: '+e.message); }
+                    showCustomAlert('تم الحذف','تم حذف الاشتراك نهائيًا.');
+                } catch(e) { showCustomAlert('خطأ','تعذر حذف الاشتراك: '+e.message); }
             });
         };
 
         let courseSuspendTargetCodeId = null;
         let courseSuspendEditing = false;
         let courseSuspendUsersCache = [];
-        window.toggleEnrollmentCode = async function(codeId, currentlySuspended) {
+        window.suspendSubscription = async function(codeId, currentlySuspended) {
             if (!isAdmin || !activeCourseId) return showCustomAlert('غير مسموح','هذه العملية للمشرف فقط.');
             const codeRef = db.collection('courses').doc(activeCourseId).collection('codes').doc(codeId);
             if (currentlySuspended) {
                 try {
                     await codeRef.update({disabled:false,suspendedUntil:null,suspensionReason:null,suspensionUpdatedAt:firebase.firestore.FieldValue.serverTimestamp(),blockedUsers:[]});
                     await loadCodesForCourse(activeCourseId);
-                    showCustomAlert('تم الإلغاء','تم إلغاء إيقاف الكود بالكامل.');
-                } catch(e) { showCustomAlert('خطأ','تعذر إلغاء إيقاف الكود: '+e.message); }
+                    showCustomAlert('تم الإلغاء','تم إلغاء إيقاف الاشتراك بالكامل.');
+                } catch(e) { showCustomAlert('خطأ','تعذر إلغاء إيقاف الاشتراك: '+e.message); }
                 return;
             }
             courseSuspendTargetCodeId = codeId;
@@ -8760,8 +8765,8 @@ body.light-mode #fullPageAssignmentsContainer .assignment-full-card>div:first-ch
                 document.getElementById('courseAccessSuspendModal').classList.remove('active');
                 await loadCodesForCourse(activeCourseId);
                 showCustomAlert('تم الإيقاف','تم إيقاف الحسابات المحددة بالمدة التي اخترتها.');
-            }catch(e){showCustomAlert('خطأ','تعذر إيقاف الكود: '+e.message);}
-            finally{btn.disabled=false;btn.textContent=btn.dataset.originalText||'إيقاف الكود';}
+            }catch(e){showCustomAlert('خطأ','تعذر إيقاف الاشتراك: '+e.message);}
+            finally{btn.disabled=false;btn.textContent=btn.dataset.originalText||'إيقاف الاشتراك';}
         });
 
         window.removeCodeUserEnrollment = async function(codeId, uid) {
@@ -9829,10 +9834,10 @@ body.light-mode #fullPageAssignmentsContainer .assignment-full-card>div:first-ch
   // 2) If a code is deleted, its previous subscriber loses access;
   //    the deleted code can never be used to regain access.
   // ------------------------------------------------------------
-  const __oldDeleteEnrollmentCode=window.deleteEnrollmentCode;
-  window.deleteEnrollmentCode=async function(codeId){
+  const __oldDeleteEnrollmentCode=window.deleteSubscription;
+  window.deleteSubscription=async function(codeId){
     if(!isAdmin || !activeCourseId) return showCustomAlert('غير مسموح','هذه العملية للمشرف فقط.');
-    showCustomConfirm('حذف الكود','هل أنت متأكد من حذف هذا الكود؟ سيُمنع صاحب الحساب المرتبط به من دخول الدورة حتى يستخدم كودًا جديدًا.',async()=>{
+    showCustomConfirm('حذف الاشتراك','هل أنت متأكد من حذف هذا الكود؟ سيُمنع صاحب الحساب المرتبط به من دخول الدورة حتى يستخدم كودًا جديدًا.',async()=>{
       try{
         const ref=db.collection('courses').doc(activeCourseId).collection('codes').doc(codeId);
         const snap=await ref.get();
@@ -9847,8 +9852,8 @@ body.light-mode #fullPageAssignmentsContainer .assignment-full-card>div:first-ch
         await batch.commit();
         await ref.delete();
         const row=document.querySelector(`[data-code-row="${CSS.escape(String(codeId))}"]`); if(row) row.remove();
-        showCustomAlert('تم الحذف','تم حذف الكود ومنع الحساب المرتبط به من دخول الدورة حتى يستخدم كودًا جديدًا.');
-      }catch(e){showCustomAlert('خطأ','تعذر حذف الكود: '+e.message);}
+        showCustomAlert('تم الحذف','تم حذف الاشتراك ومنع الحساب المرتبط به من دخول الدورة حتى يستخدم كودًا جديدًا.');
+      }catch(e){showCustomAlert('خطأ','تعذر حذف الاشتراك: '+e.message);}
     });
   };
 
@@ -9863,30 +9868,14 @@ body.light-mode #fullPageAssignmentsContainer .assignment-full-card>div:first-ch
         const er=await db.collection('users').doc(currentUser.uid).collection('enrolledCourses').doc(courseId).get();
         if(er.exists){
           const en=er.data()||{};
-          // الحقول القديمة codeDeleted/accessBlocked لا تمنع إعادة الاشتراك
-          // عندما تكون وثيقة الاشتراك نفسها معلّمة كغير نشطة.
-          if((en.codeDeleted===true || en.accessBlocked===true) && en.enrollmentActive !== false){
+          if(en.codeDeleted===true || en.accessBlocked===true){
             return showCustomAlert('لا يمكن الدخول',en.accessBlockReason||'اشتراكك في هذه الدورة موقوف حاليًا.');
           }
           if(en.codeId){
             const cs=await db.collection('courses').doc(courseId).collection('codes').doc(en.codeId).get();
             if(!cs.exists){
-              // الكود المحذوف يعني انتهاء الاشتراك، وليس إيقافه؛ لذلك نعلّم
-              // وثيقة الاشتراك كغير نشطة حتى يتحول زر الدورة للاشتراك الجديد.
-              await er.set({
-                enrollmentActive:false,
-                codeDeleted:true,
-                accessBlocked:false,
-                accessBlockReason:null,
-                codeId:null,
-                codeUsed:null,
-                subscriptionEndedAt:firebase.firestore.FieldValue.serverTimestamp(),
-                previousSubscriptionEndReason:'تم حذف كود الاشتراك المرتبط بهذا الحساب.',
-                accessUpdatedAt:firebase.firestore.FieldValue.serverTimestamp()
-              },{merge:true});
-              if(typeof refreshUserEnrollmentMap==='function') await refreshUserEnrollmentMap(true).catch(()=>{});
-              try{updateCourseActionButtons?.();}catch(_){}
-              return __oldOpenCourse.apply(this,arguments);
+              await er.set({codeDeleted:true,accessBlocked:true,accessBlockReason:'تم حذف كود الاشتراك المرتبط بهذا الحساب. يجب استخدام كود جديد.',accessUpdatedAt:firebase.firestore.FieldValue.serverTimestamp()},{merge:true});
+              return showCustomAlert('لا يمكن الدخول','تم حذف كود الاشتراك المرتبط بهذا الحساب. يجب استخدام كود جديد للاشتراك مرة أخرى.');
             }
           }
         }
@@ -10277,16 +10266,16 @@ window.loadCodesForCourse=async function(courseId){
     }
     if(!window.__codeLifecycleFilter)window.__codeLifecycleFilter='unused';
     host.querySelectorAll('button').forEach(b=>b.classList.toggle('active',b.dataset.filter===window.__codeLifecycleFilter));
-    const rows=[];snap.forEach(doc=>{const c=doc.data()||{}, used=Number(c.usedCount||0)>0, end=c.endTime?.toDate?c.endTime.toDate():c.endTime?new Date(c.endTime):null, expired=!!end&&end.getTime()<Date.now();let category=expired?'expired':used?'used':'unused';if(category!==window.__codeLifecycleFilter)return;const info=Array.isArray(c.usedByInfo)?c.usedByInfo:[];const name=info[0]?.name||'كود غير مستخدم';const label=category==='used'?name:(c.code||'كود');rows.push(`<tr data-code-row="${doc.id}"><td colspan="6"><button class="code-card-button" onclick="__codeDetail('${courseId}','${doc.id}')"><span>${escapeHtml(label)}</span><small>${escapeHtml(c.code||'')}</small></button><div class="code-card-actions"><button class="code-action-btn danger" onclick="toggleEnrollmentCode('${doc.id}',${!!c.disabled})">${c.disabled?'إلغاء الإيقاف':'إيقاف'}</button><button class="code-action-btn danger" onclick="deleteEnrollmentCode('${doc.id}')">حذف</button></div></td></tr>`);});
+    const rows=[];snap.forEach(doc=>{const c=doc.data()||{}, used=Number(c.usedCount||0)>0, end=c.endTime?.toDate?c.endTime.toDate():c.endTime?new Date(c.endTime):null, expired=!!end&&end.getTime()<Date.now();let category=expired?'expired':used?'used':'unused';if(category!==window.__codeLifecycleFilter)return;const info=Array.isArray(c.usedByInfo)?c.usedByInfo:[];const name=info[0]?.name||'كود غير مستخدم';const label=category==='used'?name:(c.code||'كود');rows.push(`<tr data-code-row="${doc.id}"><td colspan="6"><button class="code-card-button" onclick="__codeDetail('${courseId}','${doc.id}')"><span>${escapeHtml(label)}</span><small>${escapeHtml(c.code||'')}</small></button><div class="code-card-actions"><button class="code-action-btn danger" onclick="suspendSubscription('${doc.id}')">${c.disabled?'إلغاء إيقاف الاشتراك':'إيقاف الاشتراك'}</button><button class="code-action-btn danger" onclick="deleteSubscription('${doc.id}')">حذف الاشتراك</button></div></td></tr>`);});
     tbody.innerHTML=rows.length?rows.join(''):'<tr><td colspan="6" style="text-align:center;color:var(--text-muted);padding:30px">لا توجد أكواد في هذه القائمة.</td></tr>';
   }catch(e){console.error(e);showCustomAlert('خطأ','تعذر تحميل الأكواد.');}
 };
 
 /* Delete = archive forever + block the linked account immediately. */
-window.deleteEnrollmentCode=async function(codeId){
+window.deleteSubscription=async function(codeId){
  if(!isAdmin||!activeCourseId)return showCustomAlert('غير مسموح','هذه العملية للمشرف فقط.');
- showCustomConfirm('حذف الكود','سيتم حذف الكود وأرشفته نهائيًا ومنع الحساب المرتبط به من الدخول حتى يستخدم كودًا جديدًا. هل أنت متأكد؟',async()=>{
-  try{const ref=db.collection('courses').doc(activeCourseId).collection('codes').doc(codeId),snap=await ref.get();if(!snap.exists)return;const d=snap.data()||{};await archiveCode(activeCourseId,d,'deleted');const batch=db.batch();for(const uid of (d.usedBy||[])){batch.set(db.collection('users').doc(String(uid)).collection('enrolledCourses').doc(activeCourseId),{codeDeleted:true,accessBlocked:true,accessBlockReason:'تم حذف كود الاشتراك. يجب استخدام كود جديد.',accessUpdatedAt:firebase.firestore.FieldValue.serverTimestamp()},{merge:true});}await batch.commit();await ref.delete();document.getElementById('codeDetailModalV12')?.classList.remove('active');await window.loadCodesForCourse(activeCourseId);showCustomAlert('تم الحذف','تم حذف الكود وأرشفته نهائيًا.');}catch(e){showCustomAlert('خطأ','تعذر حذف الكود: '+e.message);}
+ showCustomConfirm('حذف الاشتراك','سيتم حذف الاشتراك وأرشفته نهائيًا ومنع الحساب المرتبط به من الدخول حتى يستخدم كودًا جديدًا. هل أنت متأكد؟',async()=>{
+  try{const ref=db.collection('courses').doc(activeCourseId).collection('codes').doc(codeId),snap=await ref.get();if(!snap.exists)return;const d=snap.data()||{};await archiveCode(activeCourseId,d,'deleted');const batch=db.batch();for(const uid of (d.usedBy||[])){batch.set(db.collection('users').doc(String(uid)).collection('enrolledCourses').doc(activeCourseId),{codeDeleted:true,accessBlocked:true,accessBlockReason:'تم حذف كود الاشتراك. يجب استخدام كود جديد.',accessUpdatedAt:firebase.firestore.FieldValue.serverTimestamp()},{merge:true});}await batch.commit();await ref.delete();document.getElementById('codeDetailModalV12')?.classList.remove('active');await window.loadCodesForCourse(activeCourseId);showCustomAlert('تم الحذف','تم حذف الاشتراك وأرشفته نهائيًا.');}catch(e){showCustomAlert('خطأ','تعذر حذف الاشتراك: '+e.message);}
  });
 };
 
@@ -13089,48 +13078,17 @@ setInterval(enforceDirectoryAdminOnly,1500);
 function aaEjectFromCourse(message){
   if(isAdmin)return;
   try{stopLessonForNavigation?.();}catch(_){}
-  try{window.__accessUnsubs?.forEach?.(fn=>{try{fn()}catch(_){}});}catch(_){}
+  try{window.__accessUnsubs?.forEach?.(fn=>{try{fn()}catch(_){} });}catch(_){}
   try{window.__aaExpiryUnsub?.();}catch(_){}
   try{window.__aaExpiryCodeUnsub?.();}catch(_){}
-  try{window.__aaExpiryTimers?.forEach?.(t=>clearTimeout(t));window.__aaExpiryTimers=[];}catch(_){}
-  // إغلاق أي نافذة أو عارض مفتوح قبل مغادرة الدورة.
-  try{
-    document.querySelectorAll('.edit-modal.active,.auth-popup.active,.custom-alert-modal.active,#quizOverlay.active,.gallery-viewer.active,.platform-image-viewer.active,.file-viewer-overlay.active,.ananas-modal-overlay.active,#chatImageLightbox,#aaRebuiltProfilePage,#platformImageViewer,#platformGalleryViewer,dialog[open],[aria-modal=\"true\"]').forEach(el=>{
-      el.classList.remove('active','open','is-zoomed','is-opening');
-      if(typeof el.close==='function' && el.open) { try{el.close()}catch(_){} }
-      el.setAttribute?.('aria-hidden','true');
-      el.style.setProperty('display','none','important');
-    });
-    document.querySelectorAll('body *').forEach(el=>{
-      try{
-        const cs=getComputedStyle(el);
-        const z=Number.parseInt(cs.zIndex,10);
-        if(cs.position==='fixed' && Number.isFinite(z) && z>=4000 && !el.closest('#courseDetailView')){
-          el.classList.remove('active','open','show');
-          el.style.setProperty('display','none','important');
-        }
-      }catch(_){}
-    });
-    document.body.classList.remove('aa-chat-image-modal-open','aa-chat-lightbox-open','aa-chat-profile-over-lightbox','aa-profile-open','modal-open','overflow-hidden');
-    document.body.style.removeProperty('overflow');
-  }catch(_){}
-  try{
-    const raw=localStorage.getItem('ananas.lastCourseState');
-    if(raw){
-      const st=JSON.parse(raw);
-      if(!st.uid || !currentUser?.uid || String(st.uid)===String(currentUser.uid)) localStorage.removeItem('ananas.lastCourseState');
-    }
-  }catch(_){}
   try{activeCourseId=null;activeLessonId=null;activeQuizId=null;window.activeAssignmentDetailId=null;currentCoursePage='courses';}catch(_){}
   document.querySelectorAll('#courseDetailView > *').forEach(el=>{el.classList.remove('active');if(el.id==='courseOverviewContainer')el.style.display='none';else if(el.id!=='courseLearningView')el.style.display='none';});
-  const learning=$('courseLearningView');if(learning)learning.classList.remove('active');
   const dash=$('courseDashboard');if(dash)dash.style.display='none';
   const cp=$('coursesPage');if(cp)cp.style.display='block';
   try{window.mobileNavigate?.('courses');}catch(_){}
   try{renderCourses?.();}catch(_){}
-  // لا نعرض تنبيهًا بعد الطرد حتى لا تبقى أي نافذة منبثقة مفتوحة.
+  if(message)showCustomAlert?.('تم إنهاء الدخول',message);
 }
-
 const oldWatchCourseAccess=window.watchCourseAccess;
 if(oldWatchCourseAccess&&!window.__aaExpiryGuardPatched){
   window.__aaExpiryGuardPatched=true;
@@ -13179,7 +13137,7 @@ if(oldLoadCodes&&!window.__aaCodeListPatched){
     const r=await oldLoadCodes.apply(this,arguments);
     const rows=document.querySelectorAll('#codesTableBody tr[data-code-row]');
     for(const row of rows){
-      const id=row.dataset.codeRow,btn=row.querySelector('button[onclick*="toggleEnrollmentCode"]');
+      const id=row.dataset.codeRow,btn=row.querySelector('button[onclick*="suspendSubscription"]');
       if(btn){const txt=btn.textContent.trim();if(txt==='إيقاف')btn.textContent='إيقاف';else if(txt.includes('إلغاء الإيقاف'))btn.textContent='إلغاء الإيقاف';}
     }
     return r;
@@ -13769,7 +13727,7 @@ const nowMs=()=>Date.now();
        note.innerHTML='<div class="suspend-account-avatar" id="globalCodeSuspendAvatar"><i class="fas fa-user"></i></div><div class="suspend-account-copy"><strong id="globalCodeSuspendName">جاري تحميل بيانات الحساب...</strong><small class="suspend-account-email" id="globalCodeSuspendEmail">جاري تحميل البريد الإلكتروني...</small></div>';
        users.parentNode.insertBefore(note,users);
     }
-    const btn=$('confirmCourseSuspendBtn'); if(btn) btn.textContent='إيقاف الكود';
+    const btn=$('confirmCourseSuspendBtn'); if(btn) btn.textContent='إيقاف الاشتراك';
   }
   // Rebind only once for our new option buttons.
   if(!window.__aaCodeV11DurationBound){
@@ -13825,17 +13783,17 @@ window.loadCodesForCourse=async function(courseId){
       const untilTxt=st.until?st.until.toLocaleString('ar-SA',{timeZone:'Asia/Riyadh'}):'';
       const used=Number(c.usedCount||0),max=Number(c.maxUses||1);
       const toggle=st.key==='suspended'
-        ? `<button class="code-action-btn success" onclick="toggleEnrollmentCode('${esc(d.id)}',true)">إلغاء الإيقاف</button>`
+        ? `<button class="code-action-btn success" onclick="suspendSubscription('${esc(d.id)}',true)">إلغاء الإيقاف</button>`
         : st.key==='expired'
           ? `<button class="code-action-btn" disabled style="opacity:.55;cursor:not-allowed">منتهي</button>`
-          : `<button class="code-action-btn danger" onclick="toggleEnrollmentCode('${esc(d.id)}',false)">إيقاف الكود</button>`;
+          : `<button class="code-action-btn danger" onclick="suspendSubscription('${esc(d.id)}',false)">إيقاف الاشتراك</button>`;
       rows.push(`<tr data-code-row="${esc(d.id)}">
         <td><strong>${esc(c.code||d.id)}</strong><div style="color:var(--text-muted);font-size:.74rem;margin-top:4px">${st.key==='suspended'&&untilTxt?`الإيقاف حتى ${esc(untilTxt)}`:''}</div></td>
         <td>${esc(startTxt)}</td>
         <td>${esc(endTxt)}</td>
         <td>${used}/${max}</td>
         <td><span style="color:${st.color};font-weight:800">${st.label}</span></td>
-        <td><div class="code-actions">${toggle}${used?`<button class="code-action-btn" onclick="manageCodeUsers('${esc(d.id)}')">المستخدمون (${used})</button>`:''}<button class="code-action-btn danger" onclick="deleteEnrollmentCode('${esc(d.id)}')">حذف</button></div></td>
+        <td><div class="code-actions">${toggle}${used?`<button class="code-action-btn" onclick="manageCodeUsers('${esc(d.id)}')">المستخدمون (${used})</button>`:''}<button class="code-action-btn danger" onclick="deleteSubscription('${esc(d.id)}')">حذف</button></div></td>
       </tr>`);
     }
     tbody.innerHTML=rows.join('');
@@ -13843,19 +13801,18 @@ window.loadCodesForCourse=async function(courseId){
 };
 
 /* ---------- Open the global suspension modal ---------- */
-window.toggleEnrollmentCode=async function(codeId,currentlySuspended){
+window.suspendSubscription=async function(codeId,currentlySuspended){
   if(!isAdmin||!activeCourseId)return showCustomAlert?.('غير مسموح','هذه العملية للمشرف فقط.');
   const ref=db.collection('courses').doc(activeCourseId).collection('codes').doc(codeId);
   const snap=await ref.get(); if(!snap.exists)return showCustomAlert?.('خطأ','الكود غير موجود.');
   const c=await normalizeCodeState(activeCourseId,codeId,snap.data()||{});
-  window.__aaCodeSuspendTargetData={courseId:activeCourseId,codeId,data:c};
   if(codeStatus(c).key==='expired')return showCustomAlert?.('الكود منتهي','هذا الكود منتهي ولا يمكن إيقافه أو إعادة تشغيله.');
   if(currentlySuspended || codeStatus(c).key==='suspended'){
     try{
       await ref.update({disabled:false,suspendedUntil:null,suspensionReason:null,suspensionMode:null,suspensionUpdatedAt:firebase.firestore.FieldValue.serverTimestamp()});
       await window.loadCodesForCourse(activeCourseId);
-      showCustomAlert?.('تم الإلغاء','تم إلغاء إيقاف الكود، وعاد الكود نشطًا. سيتم السماح للحسابات بالدخول مجددًا.');
-    }catch(e){showCustomAlert?.('خطأ','تعذر إلغاء إيقاف الكود: '+e.message);}
+      showCustomAlert?.('تم الإلغاء','تم إلغاء إيقاف الاشتراك، وعاد الكود نشطًا. سيتم السماح للحسابات بالدخول مجددًا.');
+    }catch(e){showCustomAlert?.('خطأ','تعذر إلغاء إيقاف الاشتراك: '+e.message);}
     return;
   }
   window.__aaCodeSuspendTarget=codeId;
@@ -13893,17 +13850,8 @@ window.toggleEnrollmentCode=async function(codeId,currentlySuspended){
     const codeId=window.__aaCodeSuspendTarget;
     const codeRef=db.collection('courses').doc(activeCourseId).collection('codes').doc(codeId);
     try{
-      btn.disabled=true;const old=btn.textContent;btn.textContent='جاري إيقاف الكود...';
-      const targetData=window.__aaCodeSuspendTargetData;
-      let latestCodeData=targetData&&String(targetData.courseId)===String(activeCourseId)&&String(targetData.codeId)===String(codeId) ? (targetData.data||{}) : null;
-      if(!latestCodeData){
-        const latestSnap=await codeRef.get();
-        if(!latestSnap.exists)return showCustomAlert?.('خطأ','الكود غير موجود.');
-        latestCodeData=latestSnap.data()||{};
-      }
-      // إيقاف الكود ينهي اشتراك كل الحسابات المرتبطة به ويجعلها تحتاج كودًا جديدًا.
-      // تحديث الكود وإلغاء الاشتراكات بالتوازي لتقليل زمن الاستجابة للحسابات المفتوحة.
-      const codeUpdatePromise=codeRef.update({
+      btn.disabled=true;const old=btn.textContent;btn.textContent='جاري إيقاف الاشتراك...';
+      await codeRef.update({
         disabled:true,
         suspendedUntil:until?firebase.firestore.Timestamp.fromDate(until):null,
         suspensionReason:reason||null,
@@ -13911,15 +13859,11 @@ window.toggleEnrollmentCode=async function(codeId,currentlySuspended){
         suspensionUpdatedAt:firebase.firestore.FieldValue.serverTimestamp(),
         suspensionUpdatedBy:currentUser?.uid||null
       });
-      const removeEnrollmentsPromise=window.__aaRemoveEnrollmentForCode
-        ? window.__aaRemoveEnrollmentForCode(activeCourseId,codeId,latestCodeData,'suspended')
-        : Promise.resolve([]);
-      await Promise.all([codeUpdatePromise,removeEnrollmentsPromise]);
       $('courseAccessSuspendModal').classList.remove('active');
-      window.__aaCodeSuspendTargetData=null;
       await window.loadCodesForCourse(activeCourseId);
-    }catch(e){showCustomAlert?.('خطأ','تعذر إيقاف الكود: '+e.message);}
-    finally{btn.disabled=false;btn.textContent='إيقاف الكود';}
+      showCustomAlert?.('تم الإيقاف',until?`تم إيقاف الاشتراك حتى ${until.toLocaleString('ar-SA',{timeZone:'Asia/Riyadh'})}.`:'تم إيقاف الاشتراك حتى تلغي الإيقاف يدويًا.');
+    }catch(e){showCustomAlert?.('خطأ','تعذر إيقاف الاشتراك: '+e.message);}
+    finally{btn.disabled=false;btn.textContent='إيقاف الاشتراك';}
   };
 })();
 
@@ -13930,7 +13874,7 @@ function aaSafeEject(reason){
   try{ if(window.__aaExpiryCodeUnsub)window.__aaExpiryCodeUnsub(); }catch(_){ }
   try{ window.mobileNavigate?.('courses'); }catch(_){ }
   try{ if(window.activeCourseId!==undefined)window.activeCourseId=null; }catch(_){ }
-  // لا نعرض نافذة بعد الإخراج؛ المطلوب إغلاق الدورة والعودة للرئيسية فقط.
+  if(reason)showCustomAlert?.('تم إنهاء الدخول',reason);
 }
 
 async function aaInspectEnrollment(courseId){
@@ -14267,7 +14211,7 @@ const s=document.createElement('style');s.textContent=`
       const maxUses=maxUsesV12(c);
       const avatar=photo?`<img src="${escV12(photo)}" alt="">`:escV12(name.slice(0,1)||'م');
       const suspendDisabled=status.key==='expired'?' disabled':'';
-      const suspendLabel=status.key==='suspended'?'إلغاء الإيقاف':'إيقاف الكود';
+      const suspendLabel=status.key==='suspended'?'إلغاء الإيقاف':'إيقاف الاشتراك';
       const suspendIcon=status.key==='suspended'?'fa-circle-play':'fa-circle-stop';
       const statusClass=status.key==='active'?'code-detail-status-active':status.key==='suspended'?'code-detail-status-suspended':'code-detail-status-expired';
       const suspensionNote=status.key==='suspended' && c.suspendedUntil
@@ -14302,11 +14246,11 @@ const s=document.createElement('style');s.textContent=`
           ${suspensionNote}
         </div>
         <div class="code-detail-actions-v12">
-          <button type="button" class="code-detail-action-v12 suspend" onclick="toggleEnrollmentCode('${escV12(codeId)}',${status.key==='suspended'});event.stopPropagation()"${suspendDisabled}>
+          <button type="button" class="code-detail-action-v12 suspend" onclick="suspendSubscription('${escV12(codeId)}',${status.key==='suspended'});event.stopPropagation()"${suspendDisabled}>
             <i class="fas ${suspendIcon}"></i><span>${suspendLabel}</span>
           </button>
-          <button type="button" class="code-detail-action-v12 delete" onclick="deleteEnrollmentCode('${escV12(codeId)}');event.stopPropagation()">
-            <i class="fas fa-trash"></i><span>حذف الكود</span>
+          <button type="button" class="code-detail-action-v12 delete" onclick="deleteSubscription('${escV12(codeId)}');event.stopPropagation()">
+            <i class="fas fa-trash"></i><span>حذف الاشتراك</span>
           </button>
           <button type="button" class="code-detail-action-v12 expiry" onclick="openCodeExpiryEditorV12('${escV12(courseId)}','${escV12(codeId)}');event.stopPropagation()">
             <i class="fas fa-calendar-days"></i><span>تعديل تاريخ الانتهاء</span>
@@ -14345,14 +14289,14 @@ const s=document.createElement('style');s.textContent=`
           email=String(p.email||email||'لا يوجد بريد');
           photo=String(p.photoURL||p.photoUrl||p.photo||'');
         }
-      }catch(e){console.warn('تعذر تحميل صورة وبيانات حساب إيقاف الكود:',e)}
+      }catch(e){console.warn('تعذر تحميل صورة وبيانات حساب إيقاف الاشتراك:',e)}
     }
     if(nameEl)nameEl.textContent=name;
     if(emailEl)emailEl.textContent=email;
     if(avatar)avatar.innerHTML=photo?`<img src="${escV12(photo)}" alt="${escV12(name)}">`:escV12(name.slice(0,1)||'م');
   }
 
-  window.toggleEnrollmentCode=async function(codeId,currentlySuspended){
+  window.suspendSubscription=async function(codeId,currentlySuspended){
     if(!isAdmin||!activeCourseId)return showCustomAlert?.('غير مسموح','هذه العملية للمشرف فقط.');
     const ref=codeRefV12(activeCourseId,codeId);let snap=await ref.get();if(!snap.exists)return showCustomAlert?.('خطأ','الكود غير موجود.');
     let c=await normalizeLegacyCodeV12(activeCourseId,codeId,snap.data()||{});
@@ -14364,8 +14308,8 @@ const s=document.createElement('style');s.textContent=`
         await clearLegacyAccessBlockV12(activeCourseId,codeId,c.usedBy||[]);
         await window.loadCodesForCourse(activeCourseId);
         await window.__codeDetail(activeCourseId,codeId);
-        showCustomAlert?.('تم إلغاء الإيقاف','تم إلغاء إيقاف الكود وأصبح نشطًا من جديد.');
-      }catch(e){showCustomAlert?.('خطأ','تعذر إلغاء إيقاف الكود: '+e.message);}return;
+        showCustomAlert?.('تم إلغاء الإيقاف','تم إلغاء إيقاف الاشتراك وأصبح نشطًا من جديد.');
+      }catch(e){showCustomAlert?.('خطأ','تعذر إلغاء إيقاف الاشتراك: '+e.message);}return;
     }
     window.__aaCodeSuspendTarget=codeId;
     $v12('suspendCodeLabel').textContent=`الكود: ${c.code||codeId}`;
@@ -14382,20 +14326,16 @@ const s=document.createElement('style');s.textContent=`
     if(mode==='custom'){const raw=$v12('courseSuspendUntil').value;const m=raw&&raw.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/);if(!m)return showCustomAlert?.('تنبيه','حدد تاريخ ووقت صحيحين.');until=new Date(`${m[1]}-${m[2]}-${m[3]}T${m[4]}:00+03:00`);if(isNaN(until.getTime())||until.getTime()<=Date.now())return showCustomAlert?.('تنبيه','وقت الانتهاء يجب أن يكون في المستقبل.');}
     else if(mode!=='permanent'){const days=({'1d':1,'3d':3,'7d':7,'14d':14,'30d':30})[mode];if(!days)return showCustomAlert?.('تنبيه','اختر مدة صحيحة.');until=new Date(Date.now()+days*86400000);}
     const id=window.__aaCodeSuspendTarget;const ref=codeRefV12(activeCourseId,id);try{
-      this.disabled=true;this.textContent='جاري إيقاف الكود...';
+      this.disabled=true;this.textContent='جاري إيقاف الاشتراك...';
       const ss=await ref.get();if(!ss.exists)throw new Error('الكود غير موجود');
       const c=ss.data()||{};
-      // تحديث حالة الكود وحالة كل اشتراك مرتبط به داخل Batch واحد حتى تصل إشارة الإيقاف للحسابات المرتبطة كعملية واحدة.
-      const uids=[...(c.usedBy||[])].map(x=>String(typeof x==='string'?x:(x?.uid||''))).map(x=>x.trim()).filter(Boolean);
-      const batch=db.batch();
-      batch.update(ref,{disabled:true,isSuspended:true,status:'suspended',state:'suspended',suspensionStatus:'suspended',suspendedUntil:until?firebase.firestore.Timestamp.fromDate(until):null,suspensionReason:reason||null,suspensionMode:mode,suspensionUpdatedAt:firebase.firestore.FieldValue.serverTimestamp(),suspensionUpdatedBy:currentUser?.uid||null});
-      for(const uid of uids){
-        const er=db.collection('users').doc(uid).collection('enrolledCourses').doc(activeCourseId);
-        batch.set(er,{accessBlocked:true,blockedUntil:until?firebase.firestore.Timestamp.fromDate(until):null,blockReason:reason||'تم إيقاف كود الاشتراك.',accessBlockReason:reason||'تم إيقاف كود الاشتراك.',accessUpdatedAt:firebase.firestore.FieldValue.serverTimestamp()},{merge:true});
-      }
-      await batch.commit();
-      $v12('courseAccessSuspendModal').classList.remove('active');await window.loadCodesForCourse(activeCourseId);await window.__codeDetail(activeCourseId,id);showCustomAlert?.('تم الإيقاف',until?`تم إيقاف الكود حتى ${until.toLocaleString('ar-SA',{timeZone:'Asia/Riyadh'})}.`:'تم إيقاف الكود حتى تلغي الإيقاف يدويًا.');
-    }catch(e){console.error(e);showCustomAlert?.('خطأ','تعذر إيقاف الكود: '+e.message);}finally{this.disabled=false;this.textContent='إيقاف الكود';}
+      await ref.update({disabled:true,isSuspended:true,status:'suspended',state:'suspended',suspensionStatus:'suspended',suspendedUntil:until?firebase.firestore.Timestamp.fromDate(until):null,suspensionReason:reason||null,suspensionMode:mode,suspensionUpdatedAt:firebase.firestore.FieldValue.serverTimestamp(),suspensionUpdatedBy:currentUser?.uid||null});
+      // طرد الحسابات المرتبطة فعليًا بالكود مباشرةً، مع الإبقاء على codeId ليستطيع النظام السماح بالعودة بعد انتهاء الإيقاف.
+      const uids=(c.usedBy||[]).map(x=>String(x)).filter(Boolean);const batch=db.batch();
+      for(const uid of uids){const er=db.collection('users').doc(uid).collection('enrolledCourses').doc(activeCourseId);batch.set(er,{accessBlocked:true,blockedUntil:until?firebase.firestore.Timestamp.fromDate(until):null,blockReason:reason||'تم إيقاف كود الاشتراك.',accessBlockReason:reason||'تم إيقاف كود الاشتراك.',accessUpdatedAt:firebase.firestore.FieldValue.serverTimestamp()},{merge:true});}
+      if(uids.length)await batch.commit();
+      $v12('courseAccessSuspendModal').classList.remove('active');await window.loadCodesForCourse(activeCourseId);await window.__codeDetail(activeCourseId,id);showCustomAlert?.('تم الإيقاف',until?`تم إيقاف الاشتراك حتى ${until.toLocaleString('ar-SA',{timeZone:'Asia/Riyadh'})}.`:'تم إيقاف الاشتراك حتى تلغي الإيقاف يدويًا.');
+    }catch(e){console.error(e);showCustomAlert?.('خطأ','تعذر إيقاف الاشتراك: '+e.message);}finally{this.disabled=false;this.textContent='إيقاف الاشتراك';}
   };}
 
   window.loadCodesForCourse=async function(courseId){
@@ -14647,8 +14587,7 @@ const s=document.createElement('style');s.textContent=`
       const uid=uidOf(x); if(uid) uids.push(uid);
     }
     const unique=[...new Set(uids)];
-    // حدّث جميع الحسابات المرتبطة بالتوازي حتى لا ينتظر حساب انتهاء تحديث حساب آخر.
-    await Promise.all(unique.map(uid=>deactivateEnrollmentPreservingData(courseId,uid,codeId,codeData,reason)));
+    for(const uid of unique) await deactivateEnrollmentPreservingData(courseId,uid,codeId,codeData,reason);
     await refreshMainCourseButtons();
     return unique;
   }
@@ -14689,10 +14628,6 @@ const s=document.createElement('style');s.textContent=`
       }
       const e=snap.data()||{};
       if(e.enrollmentActive===false){ await refreshMainCourseButtons(); return; }
-      if(e.accessBlocked===true){
-        if(String(window.activeCourseId||'')===String(courseId)) window.aaEjectFromCourse?.();
-        return;
-      }
       const codeId=String(e.codeId||'');
       if(!codeId){ return; }
       const cr=db.collection('courses').doc(courseId).collection('codes').doc(codeId);
@@ -14700,10 +14635,7 @@ const s=document.createElement('style');s.textContent=`
       window.__aaExpiryTimers?.forEach?.(t=>clearTimeout(t)); window.__aaExpiryTimers=[];
       window.__aaExpiryCodeUnsub=cr.onSnapshot(async cs=>{
         if(!cs.exists){
-          // الحذف نفسه يُشغّل listener فورًا؛ ننهي الواجهة أولًا ثم نحدّث حالة الزر.
-          try{window.aaEjectFromCourse?.();}catch(_){}
-          await deactivateEnrollmentPreservingData(courseId,currentUser.uid,codeId,{usedBy:[currentUser.uid]},'deleted');
-          await refreshMainCourseButtons();
+          await ejectWithEnrollmentRemoval(courseId,codeId,{usedBy:[currentUser.uid]},'تم حذف كود الاشتراك، وعاد الدخول إلى الدورة إلى الاشتراك من جديد.','deleted');
           return;
         }
         const c=cs.data()||{},now=Date.now();
@@ -14719,9 +14651,13 @@ const s=document.createElement('style');s.textContent=`
           window.__aaExpiryTimers.push(setTimeout(()=>window.watchCourseAccess?.(courseId),ms+80));
         }
 
-        // إيقاف الكود يخرج الحساب فورًا، بينما تحديث الاشتراك إلى غير نشط يعيد الزر إلى «الاشتراك».
+        // Code suspension -> keep enrollment, but eject while blocked.
         if(c.disabled && (!until || until.getTime()>now)){
-          if(String(window.activeCourseId||'')===String(courseId)) window.aaEjectFromCourse?.();
+          if(String(window.activeCourseId||'')===String(courseId)) window.aaEjectFromCourse?.(
+            until?
+              `تم إيقاف كود الاشتراك، وتم إخراجك من الدورة حتى ${until.toLocaleString('ar-SA',{timeZone:'Asia/Riyadh'})}.`:
+              'تم إيقاف كود الاشتراك، وتم إخراجك من الدورة.'
+          );
           return;
         }
         if(c.disabled && until && until.getTime()<=now){
@@ -14797,7 +14733,7 @@ const s=document.createElement('style');s.textContent=`
           email=String(p.email||email);
           photo=String(p.photoURL||p.photoUrl||p.photo||'');
         }
-      }catch(e){console.warn('تعذر تحميل بيانات حساب تأكيد حذف الكود:',e)}
+      }catch(e){console.warn('تعذر تحميل بيانات حساب تأكيد حذف الاشتراك:',e)}
     }
     nameEl.textContent=name;
     emailEl.textContent=email;
@@ -14817,7 +14753,7 @@ const s=document.createElement('style');s.textContent=`
     if(card)card.classList.remove('active');
   }
 
-  window.deleteEnrollmentCode=async function(codeId){
+  window.deleteSubscription=async function(codeId){
     if(!isAdmin||!activeCourseId)return showCustomAlert?.('غير مسموح','هذه العملية للمشرف فقط.');
     const courseId=activeCourseId;
     try{
@@ -14827,26 +14763,23 @@ const s=document.createElement('style');s.textContent=`
       const preData=preSnap.data()||{};
       await prepareDeleteCodeConfirmAccountV12(preData);
     }catch(e){
-      console.warn('تعذر تجهيز بيانات حساب حذف الكود:',e);
+      console.warn('تعذر تجهيز بيانات حساب حذف الاشتراك:',e);
     }
-    showCustomConfirm('حذف الكود','سيتم حذف الكود وإخراج كل حساب استخدمه من الدورة. بعد الحذف سيصبح الدخول للدورة اشتراكًا من جديد. هل أنت متأكد؟',async()=>{
+    showCustomConfirm('حذف الاشتراك','سيتم حذف الاشتراك وإخراج كل حساب استخدمه من الدورة. بعد الحذف سيصبح الدخول للدورة اشتراكًا من جديد. هل أنت متأكد؟',async()=>{
       clearDeleteCodeConfirmAccountV12();
       try{
         const ref=db.collection('courses').doc(courseId).collection('codes').doc(codeId);
         const snap=await ref.get();
         if(!snap.exists)return showCustomAlert?.('خطأ','الكود غير موجود.');
         const codeData=snap.data()||{};
-        // الأرشفة اختيارية ولا يجب أن تمنع الحذف الفعلي إذا فشلت صلاحياتها.
-        await archiveCode(courseId,codeData,'deleted').catch(e=>console.warn('تعذر أرشفة الكود قبل حذفه:',e));
-        await Promise.all([
-          deactivateEnrollmentsForCode(courseId,codeId,codeData,'deleted'),
-          ref.delete()
-        ]);
-        if(String(window.activeCourseId||'')===String(courseId) && !isAdmin) window.aaEjectFromCourse?.();
+        await archiveCode(courseId,codeData,'deleted');
+        await deactivateEnrollmentsForCode(courseId,codeId,codeData,'deleted');
+        await ref.delete();
+        if(String(window.activeCourseId||'')===String(courseId) && !isAdmin) window.aaEjectFromCourse?.('تم حذف كود الاشتراك.');
         await refreshMainCourseButtons();
         await window.loadCodesForCourse?.(courseId);
-        showCustomAlert?.('تم الحذف','تم حذف الكود وإخراج الحسابات المرتبطة به من الدورة. أصبحت الدورة تتطلب اشتراكًا جديدًا.');
-      }catch(e){console.error('delete code lifecycle',e);showCustomAlert?.('خطأ','تعذر حذف الكود: '+e.message)}
+        showCustomAlert?.('تم الحذف','تم حذف الاشتراك وإخراج الحسابات المرتبطة به من الدورة. أصبحت الدورة تتطلب اشتراكًا جديدًا.');
+      }catch(e){console.error('delete code lifecycle',e);showCustomAlert?.('خطأ','تعذر حذف الاشتراك: '+e.message)}
     });
   };
 
@@ -22494,6 +22427,7 @@ body:not(.light-mode){--aa-auth-bg:#0d1020;--aa-auth-surface:#15192b;--aa-auth-s
 <!-- ===== ANANAS FILES PAGE — FINAL REBUILD ===== -->
 <style id="ananas-files-final-css">
 /* The file viewer/page is intentionally self-contained. */
+#mobileBottomNav{display:none !important}
 #courseFilesPage.aa-files-final{
   position:absolute!important; inset:0!important; z-index:40!important;
   display:none!important; overflow:auto!important; padding:clamp(20px,3vw,38px)!important;
@@ -23153,60 +23087,386 @@ body.light-mode #coursesPage .course-card:hover{
 .aa-final-thumb span{display:block!important;flex:0 0 auto!important;white-space:nowrap!important;line-height:1.2!important;}
 </style>
 
-<!-- ===== ANANAS MOBILE BOTTOM NAV RESTORE ===== -->
-<nav id="mobileBottomNav" class="mobile-bottom-nav" aria-label="التنقل السفلي">
-  <button type="button" class="mobile-nav-item active" data-page="courses" aria-label="الدورات">
-    <i class="fas fa-graduation-cap"></i><span>الدورات</span>
-  </button>
-</nav>
-<style id="ananas-mobile-bottom-nav-restore-final">
-@media (max-width: 768px){
-  .nav-actions-top #coursesNavBtn{display:none !important;}
-  #mobileBottomNav{
-    display:flex !important;
-    position:fixed !important;
-    left:0 !important;
-    right:0 !important;
-    bottom:0 !important;
-    top:auto !important;
-    width:100% !important;
-    height:calc(66px + env(safe-area-inset-bottom)) !important;
-    min-height:calc(66px + env(safe-area-inset-bottom)) !important;
-    z-index:100001 !important;
-    align-items:stretch !important;
-    justify-content:space-around !important;
-    background:rgba(20,20,24,.96) !important;
-    backdrop-filter:blur(16px) !important;
-    -webkit-backdrop-filter:blur(16px) !important;
-    border-top:1px solid var(--border) !important;
-    padding-bottom:env(safe-area-inset-bottom) !important;
-    overflow:hidden !important;
+<!-- ===== FINAL SUBSCRIPTION ACTIONS PATCH ===== -->
+<style id="aa-subscription-actions-v1-css">
+  .btn-suspended-subscription{
+    width:100%!important;min-height:46px!important;padding:0 15px!important;
+    display:inline-flex!important;align-items:center!important;justify-content:center!important;
+    border-radius:15px!important;border:1px solid rgba(231,76,60,.42)!important;
+    background:rgba(231,76,60,.11)!important;color:#e74c3c!important;
+    font-family:inherit!important;font-size:.82rem!important;font-weight:950!important;
+    cursor:pointer!important;transition:transform .2s ease,box-shadow .2s ease,background .2s ease!important;
   }
-  body.light-mode #mobileBottomNav{background:rgba(255,255,255,.96) !important;}
-  #mobileBottomNav .mobile-nav-item{
-    flex:1 !important;border:0 !important;background:transparent !important;
-    color:var(--text-muted) !important;display:flex !important;
-    flex-direction:column !important;align-items:center !important;
-    justify-content:center !important;gap:3px !important;
-    font-family:inherit !important;font-size:.68rem !important;cursor:pointer !important;
+  .btn-suspended-subscription:hover{transform:translateY(-2px)!important;background:rgba(231,76,60,.15)!important;box-shadow:0 12px 28px rgba(231,76,60,.12)!important;}
+  #aaDeleteSubscriptionModal{z-index:6500!important;}
+  #aaDeleteSubscriptionModal .aa-delete-subscription-reason{
+    width:100%;min-height:110px;resize:vertical;margin:8px 0 0;padding:11px 12px;
+    border-radius:16px;border:1px solid var(--border);background:var(--bg-secondary);color:var(--text-primary);
+    font:inherit;line-height:1.7;outline:none;
   }
-  #mobileBottomNav .mobile-nav-item i{font-size:1.05rem !important;}
-  #mobileBottomNav .mobile-nav-item.active{color:var(--accent1) !important;}
-}
-@media (min-width:769px){#mobileBottomNav{display:none !important;}}
+  #aaDeleteSubscriptionModal .aa-delete-subscription-reason:focus{border-color:var(--accent1);box-shadow:0 0 0 3px rgba(108,92,231,.10)}
+  #aaDeleteSubscriptionModal .aa-delete-subscription-note{color:var(--text-muted);font-size:.82rem;line-height:1.7;margin:0 0 10px;}
 </style>
-<script id="ananas-mobile-bottom-nav-final-wire">
+<script id="aa-final-subscription-actions-v1">
 (function(){
-  const nav=document.getElementById('mobileBottomNav');
-  const btn=nav?.querySelector('[data-page="courses"]');
-  if(!btn) return;
-  btn.addEventListener('click',function(e){
-    e.preventDefault();
-    try{ window.mobileNavigate?.('courses'); }catch(_){}
-    nav.querySelectorAll('.mobile-nav-item').forEach(x=>x.classList.toggle('active',x===btn));
-  });
+  'use strict';
+  const $=id=>document.getElementById(id);
+  const uidOf=v=>String(typeof v==='string'?v:(v?.uid||'')).trim();
+  const toDate=v=>{try{return v?.toDate?v.toDate():(v?new Date(v):null)}catch(_){return null}};
+  const fsNow=()=>firebase.firestore.FieldValue.serverTimestamp();
+  const tsFromDate=d=>d?firebase.firestore.Timestamp.fromDate(d):null;
+  const esc=v=>String(v??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+
+  function activeSuspension(enrollment){
+    if(!enrollment || enrollment.enrollmentActive===false || enrollment.subscriptionSuspended!==true) return null;
+    const until=toDate(enrollment.subscriptionSuspendedUntil);
+    if(until && until.getTime()<=Date.now()) return null;
+    return {until,reason:String(enrollment.subscriptionSuspensionReason||enrollment.suspensionReason||enrollment.accessBlockReason||'').trim()};
+  }
+  window.__aaActiveSubscriptionSuspension=activeSuspension;
+
+  function formatUntil(d){return d?d.toLocaleString('ar-SA',{timeZone:'Asia/Riyadh'}):'حتى يتم إلغاء الإيقاف يدويًا';}
+  function subscriptionSuspensionMessage(enrollment){
+    const s=activeSuspension(enrollment);
+    if(!s) return '';
+    return `اشتراكك في هذه الدورة موقوف حاليًا.\nينتهي الإيقاف: ${formatUntil(s.until)}${s.reason?`\nالسبب: ${s.reason}`:''}`;
+  }
+
+  function closeCourseInterfaces(){
+    try{window.stopLessonForNavigation?.()}catch(_){ }
+    try{window.pauseLessonForInternalNavigation?.()}catch(_){ }
+    const ids=['courseDetailView','courseOverviewContainer','courseDashboard','courseLessonsPage','courseLessonPlayerPage','courseQuizzesPage','courseAssignmentsPage','courseAssignmentDetailPage','courseFilesPage','courseChatPage','fullChatPage','courseLearningView','quizOverlay','chatImageLightbox','aaFinalViewer','codeDetailModalV12','codeExpiryEditModalV12','manageCodesModal','courseAccessSuspendModal','enrollTermsModal','enrollTermsPreviewModal'];
+    ids.forEach(id=>{const el=$(id);if(!el)return;el.classList.remove('active','open');if(['courseDetailView','courseOverviewContainer','courseDashboard','courseLessonsPage','courseLessonPlayerPage','courseQuizzesPage','courseAssignmentsPage','courseAssignmentDetailPage','courseFilesPage','courseChatPage','fullChatPage','courseLearningView'].includes(id)){el.style.display='none';}});
+    document.querySelectorAll('.edit-modal.active,.gallery-viewer.active,.platform-image-viewer.active,.file-viewer-overlay.active,.profile-self-modal.active,.custom-confirm-modal.active').forEach(el=>el.classList.remove('active','open'));
+    document.body.classList.remove('aa-chat-lightbox-open','aa-course-open');
+  }
+
+  async function refreshCards(){
+    try{
+      if(typeof refreshUserEnrollmentMap==='function') await refreshUserEnrollmentMap(true);
+    }catch(_){ }
+    try{if(typeof updateCourseActionButtons==='function')updateCourseActionButtons();else await renderCourses?.();}catch(_){ }
+  }
+
+  function ejectStudent(courseId,payload){
+    if(isAdmin)return;
+    closeCourseInterfaces();
+    try{activeCourseId=null;activeLessonId=null;activeQuizId=null;window.activeAssignmentDetailId=null;currentCoursePage='courses';}catch(_){ }
+    try{window.mobileNavigate?.('courses')}catch(_){ }
+    const suspension=payload?.type==='suspended';
+    const enrollment=payload?.enrollment||{};
+    if(suspension){
+      userEnrollmentMap=window.userEnrollmentMap||userEnrollmentMap||{};
+      userEnrollmentMap[courseId]={...enrollment,enrollmentActive:true,subscriptionSuspended:true};
+      window.userEnrollmentMap=userEnrollmentMap;
+    }else{
+      try{delete (window.userEnrollmentMap||{})[courseId];}catch(_){ }
+      try{delete userEnrollmentMap[courseId];}catch(_){ }
+    }
+    try{renderCourses?.()}catch(_){ }
+    setTimeout(()=>{
+      if(suspension){
+        showCustomAlert?.('تم إيقاف اشتراكك',payload.message||subscriptionSuspensionMessage(enrollment)||'اشتراكك في هذه الدورة موقوف حاليًا.');
+      }else if(payload?.message){
+        showCustomAlert?.('تم إنهاء الاشتراك',payload.message);
+      }
+    },30);
+  }
+  window.__aaEjectSubscriptionStudent=ejectStudent;
+
+  window.showSubscriptionSuspensionNotice=async function(courseId){
+    if(!currentUser||!courseId)return;
+    try{
+      const snap=await db.collection('users').doc(currentUser.uid).collection('enrolledCourses').doc(courseId).get();
+      if(!snap.exists)return;
+      const e=snap.data()||{},s=activeSuspension(e);
+      if(!s){await refreshCards();return window.openCourse?.(courseId);}
+      showCustomAlert?.('تم إيقاف اشتراكك',subscriptionSuspensionMessage(e));
+    }catch(_){showCustomAlert?.('تم إيقاف اشتراكك','اشتراكك في هذه الدورة موقوف حاليًا.');}
+  };
+
+  function ensureDeleteModal(){
+    let modal=$('aaDeleteSubscriptionModal');
+    if(modal)return modal;
+    modal=document.createElement('div');
+    modal.className='edit-modal';modal.id='aaDeleteSubscriptionModal';modal.style.maxWidth='620px';
+    modal.innerHTML=`
+      <button type="button" class="close-lightbox" style="position:absolute;top:15px;inset-inline-end:15px;background:none;border:none;color:var(--text-muted);font-size:1.5rem;cursor:pointer;" data-aa-delete-close>&times;</button>
+      <h3 style="color:#e74c3c;">حذف الاشتراك</h3>
+      <p class="aa-delete-subscription-note">سيتم حذف اشتراك الحساب من هذه الدورة، وإخراجه منها مباشرة، ويتحول زر الدورة إلى «الاشتراك في الدورة». سيتم الاحتفاظ بسجل التقدم السابق.</p>
+      <label for="aaDeleteSubscriptionReason" style="display:block;margin-top:12px;font-weight:700;">سبب حذف الاشتراك (اختياري)</label>
+      <textarea id="aaDeleteSubscriptionReason" class="aa-delete-subscription-reason" rows="4" placeholder="اكتب سبب حذف الاشتراك..."></textarea>
+      <div style="display:flex;gap:10px;margin-top:18px;">
+        <button type="button" class="code-action-btn" style="flex:1;min-height:46px;" data-aa-delete-cancel>إلغاء</button>
+        <button type="button" class="code-action-btn danger" style="flex:1;min-height:46px;" id="aaDeleteSubscriptionConfirm">حذف الاشتراك</button>
+      </div>`;
+    document.body.appendChild(modal);
+    modal.querySelector('[data-aa-delete-close]').onclick=()=>modal.classList.remove('active');
+    modal.querySelector('[data-aa-delete-cancel]').onclick=()=>modal.classList.remove('active');
+    return modal;
+  }
+
+  let deleteTarget=null;
+  window.deleteSubscription=async function(codeId){
+    if(!isAdmin||!activeCourseId)return showCustomAlert?.('غير مسموح','هذه العملية للمشرف فقط.');
+    const courseId=String(activeCourseId);
+    try{
+      const ref=db.collection('courses').doc(courseId).collection('codes').doc(String(codeId));
+      const snap=await ref.get();
+      if(!snap.exists)return showCustomAlert?.('خطأ','الكود غير موجود.');
+      const codeData=snap.data()||{};
+      const modal=ensureDeleteModal();
+      deleteTarget={courseId,codeId:String(codeId),codeData};
+      const reason=$('aaDeleteSubscriptionReason');if(reason)reason.value='';
+      modal.classList.add('active');
+      const confirm=$('aaDeleteSubscriptionConfirm');
+      confirm.onclick=async function(){
+        if(!deleteTarget)return;
+        const target=deleteTarget;this.disabled=true;this.textContent='جاري حذف الاشتراك...';
+        try{
+          const ref2=db.collection('courses').doc(target.courseId).collection('codes').doc(target.codeId);
+          const fresh=await ref2.get();if(!fresh.exists)throw new Error('الكود غير موجود.');
+          const freshData=fresh.data()||{};
+          const deleteReason=String($('aaDeleteSubscriptionReason')?.value||'').trim();
+          if(typeof archiveCode==='function')await archiveCode(target.courseId,freshData,'deleted');
+          const users=(Array.isArray(freshData.usedBy)?freshData.usedBy:[]).map(uidOf).filter(Boolean);
+          const batch=db.batch();
+          for(const uid of [...new Set(users)]){
+            const er=db.collection('users').doc(uid).collection('enrolledCourses').doc(target.courseId);
+            const es=await er.get();
+            if(!es.exists)continue;
+            const e=es.data()||{};
+            const linked=String(e.codeId||'')===target.codeId || String(e.codeUsed||'')===String(freshData.code||'');
+            if(!linked)continue;
+            batch.set(er,{
+              enrollmentActive:false,
+              previousCodeId:e.codeId||target.codeId,
+              previousCode:e.codeUsed||freshData.code||null,
+              subscriptionEndedAt:fsNow(),
+              previousSubscriptionEndReason:deleteReason||'تم حذف الاشتراك من قبل المشرف.',
+              subscriptionDeleteReason:deleteReason||null,
+              codeDeleted:true,
+              accessBlocked:false,accessBlockReason:null,blockedUntil:null,blockReason:null,
+              subscriptionSuspended:false,subscriptionSuspendedUntil:null,subscriptionSuspensionReason:null,
+              codeId:null,codeUsed:null,accessUpdatedAt:fsNow()
+            },{merge:true});
+          }
+          // Delete the code in the same commit as the subscription unlink.
+          batch.delete(ref2);
+          await batch.commit();
+          modal.classList.remove('active');deleteTarget=null;
+          await refreshCards();
+          try{await window.loadCodesForCourse?.(target.courseId)}catch(_){ }
+          try{$('codeDetailModalV12')?.classList.remove('active')}catch(_){ }
+          showCustomAlert?.('تم حذف الاشتراك','تم حذف الاشتراك وإخراج الحساب المرتبط به من الدورة. أصبح الدخول يتطلب اشتراكًا جديدًا.');
+        }catch(e){console.error('delete subscription',e);showCustomAlert?.('خطأ','تعذر حذف الاشتراك: '+e.message)}
+        finally{this.disabled=false;this.textContent='حذف الاشتراك';}
+      };
+    }catch(e){console.error(e);showCustomAlert?.('خطأ','تعذر فتح نافذة حذف الاشتراك: '+e.message)}
+  };
+
+  window.suspendSubscription=async function(codeId){
+    if(!isAdmin||!activeCourseId)return showCustomAlert?.('غير مسموح','هذه العملية للمشرف فقط.');
+    const courseId=String(activeCourseId),id=String(codeId);
+    const codeRef=db.collection('courses').doc(courseId).collection('codes').doc(id);
+    const snap=await codeRef.get();if(!snap.exists)return showCustomAlert?.('خطأ','الكود غير موجود.');
+    const c=snap.data()||{};
+    const uids=(Array.isArray(c.usedBy)?c.usedBy:[]).map(uidOf).filter(Boolean);
+    if(!uids.length)return showCustomAlert?.('تنبيه','لا يوجد حساب مشترك مرتبط بهذا الكود.');
+    let currentEnrollment=null;
+    try{const es=await db.collection('users').doc(uids[0]).collection('enrolledCourses').doc(courseId).get();currentEnrollment=es.exists?es.data()||{}:null}catch(_){ }
+    const current=activeSuspension(currentEnrollment);
+    if(current){
+      try{
+        const batch=db.batch();
+        batch.update(codeRef,{disabled:false,isSuspended:false,status:'active',state:'active',suspensionStatus:'active',suspendedUntil:null,suspensionReason:null,suspensionMode:null,suspensionUpdatedAt:fsNow(),suspensionUpdatedBy:currentUser?.uid||null});
+        for(const uid of [...new Set(uids)]){
+          const er=db.collection('users').doc(uid).collection('enrolledCourses').doc(courseId);
+          batch.set(er,{subscriptionSuspended:false,subscriptionSuspendedUntil:null,subscriptionSuspensionReason:null,accessBlocked:false,blockedUntil:null,blockReason:null,accessBlockReason:null,accessUpdatedAt:fsNow()},{merge:true});
+        }
+        await batch.commit();
+        await refreshCards();
+        await window.loadCodesForCourse?.(courseId);
+        showCustomAlert?.('تم إلغاء الإيقاف','تم إلغاء إيقاف الاشتراك وأصبح الدخول متاحًا من جديد.');
+      }catch(e){showCustomAlert?.('خطأ','تعذر إلغاء إيقاف الاشتراك: '+e.message)}
+      return;
+    }
+    const modal=$('courseAccessSuspendModal');
+    if(!modal)return showCustomAlert?.('خطأ','واجهة إيقاف الاشتراك غير موجودة.');
+    window.__aaSubscriptionSuspendTarget=id;
+    $('suspendCodeLabel')&&($('suspendCodeLabel').textContent=`الاشتراك: ${c.code||id}`);
+    $('courseSuspendDuration')&&($('courseSuspendDuration').value='1d');
+    document.querySelectorAll('.suspend-duration-choice').forEach(b=>b.classList.toggle('active',b.dataset.duration==='1d'));
+    $('courseSuspendUntil')&&($('courseSuspendUntil').value='');
+    $('courseSuspendReason')&&($('courseSuspendReason').value='');
+    $('courseSuspendCustomWrap')&&($('courseSuspendCustomWrap').style.display='none');
+    $('courseSuspendTitle')&&($('courseSuspendTitle').textContent='إيقاف الاشتراك');
+    $('confirmCourseSuspendBtn')&&($('confirmCourseSuspendBtn').textContent='إيقاف الاشتراك');
+    modal.classList.add('active');
+  };
+
+  const suspendConfirm=$('confirmCourseSuspendBtn');
+  if(suspendConfirm){
+    suspendConfirm.onclick=async function(){
+      if(!isAdmin||!activeCourseId||!window.__aaSubscriptionSuspendTarget)return;
+      const courseId=String(activeCourseId),id=String(window.__aaSubscriptionSuspendTarget);
+      const mode=String($('courseSuspendDuration')?.value||'1d');
+      const reason=String($('courseSuspendReason')?.value||'').trim();
+      let until=null;
+      if(mode==='custom'){
+        const raw=String($('courseSuspendUntil')?.value||'').trim();
+        const m=raw.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/);
+        if(!m)return showCustomAlert?.('تنبيه','حدد تاريخ ووقت صحيحين.');
+        until=new Date(`${m[1]}-${m[2]}-${m[3]}T${m[4]}:00+03:00`);
+        if(isNaN(until.getTime())||until.getTime()<=Date.now())return showCustomAlert?.('تنبيه','وقت انتهاء الإيقاف يجب أن يكون في المستقبل.');
+      }else if(mode!=='permanent'){
+        const days=({ '1d':1,'3d':3,'7d':7,'14d':14,'30d':30 })[mode];
+        if(!days)return showCustomAlert?.('تنبيه','اختر مدة صحيحة.');
+        until=new Date(Date.now()+days*86400000);
+      }
+      this.disabled=true;this.textContent='جاري إيقاف الاشتراك...';
+      try{
+        const codeRef=db.collection('courses').doc(courseId).collection('codes').doc(id);
+        const cs=await codeRef.get();if(!cs.exists)throw new Error('الكود غير موجود.');
+        const c=cs.data()||{};
+        const uids=[...new Set((Array.isArray(c.usedBy)?c.usedBy:[]).map(uidOf).filter(Boolean))];
+        if(!uids.length)throw new Error('لا يوجد حساب مشترك مرتبط بهذا الكود.');
+        const batch=db.batch();
+        batch.update(codeRef,{disabled:true,isSuspended:true,status:'suspended',state:'suspended',suspensionStatus:'suspended',suspendedUntil:tsFromDate(until),suspensionReason:reason||null,suspensionMode:mode,suspensionUpdatedAt:fsNow(),suspensionUpdatedBy:currentUser?.uid||null});
+        for(const uid of uids){
+          const er=db.collection('users').doc(uid).collection('enrolledCourses').doc(courseId);
+          batch.set(er,{enrollmentActive:true,subscriptionSuspended:true,subscriptionSuspendedAt:fsNow(),subscriptionSuspendedUntil:tsFromDate(until),subscriptionSuspensionReason:reason||null,accessBlocked:true,blockedUntil:tsFromDate(until),blockReason:reason||'تم إيقاف الاشتراك من قبل المشرف.',accessBlockReason:reason||'تم إيقاف الاشتراك من قبل المشرف.',accessUpdatedAt:fsNow()},{merge:true});
+        }
+        await batch.commit();
+        $('courseAccessSuspendModal')?.classList.remove('active');
+        await refreshCards();
+        await window.loadCodesForCourse?.(courseId);
+        showCustomAlert?.('تم إيقاف الاشتراك',until?`تم إيقاف الاشتراك حتى ${formatUntil(until)}.`:'تم إيقاف الاشتراك حتى تلغي الإيقاف يدويًا.');
+      }catch(e){console.error('suspend subscription',e);showCustomAlert?.('خطأ','تعذر إيقاف الاشتراك: '+e.message)}
+      finally{this.disabled=false;this.textContent='إيقاف الاشتراك';}
+    };
+  }
+
+  // Keep the suspension duration buttons synchronized with the hidden select used elsewhere.
+  document.addEventListener('click',e=>{
+    const b=e.target?.closest?.('.suspend-duration-choice');if(!b)return;
+    const sel=$('courseSuspendDuration');if(!sel)return;
+    sel.value=b.dataset.duration||'1d';
+    document.querySelectorAll('.suspend-duration-choice').forEach(x=>x.classList.toggle('active',x===b));
+    const custom=$('courseSuspendCustomWrap');if(custom)custom.style.display=b.dataset.duration==='custom'?'block':'none';
+  },true);
+
+  // Authoritative real-time watcher: subscription document is the source of truth for
+  // immediate suspension/deletion. Code watcher remains for expiry and legacy states.
+  let watcherCourseId=null;
+  window.watchCourseAccess=async function(courseId){
+    if(!currentUser||!courseId||isAdmin)return;
+    const cid=String(courseId);
+    if(watcherCourseId===cid&&window.__aaSubscriptionWatchBound)return;
+    watcherCourseId=cid;window.__aaSubscriptionWatchBound=true;
+    try{window.__aaExpiryUnsub?.()}catch(_){ }
+    try{window.__aaExpiryCodeUnsub?.()}catch(_){ }
+    window.__aaExpiryTimers?.forEach?.(t=>clearTimeout(t));window.__aaExpiryTimers=[];
+    const er=db.collection('users').doc(currentUser.uid).collection('enrolledCourses').doc(cid);
+    window.__aaExpiryUnsub=er.onSnapshot(async snap=>{
+      if(String(window.activeCourseId||'')!==cid && !window.__openingCourseFromCourses){
+        if(!snap.exists||snap.data()?.enrollmentActive===false){await refreshCards();}
+        return;
+      }
+      if(!snap.exists){
+        ejectStudent(cid,{type:'deleted',message:'تم حذف اشتراكك من هذه الدورة.'});
+        await refreshCards();return;
+      }
+      const e=snap.data()||{};
+      if(e.enrollmentActive===false){
+        ejectStudent(cid,{type:'deleted',message:e.previousSubscriptionEndReason||'تم حذف اشتراكك من هذه الدورة.'});
+        await refreshCards();return;
+      }
+      const s=activeSuspension(e);
+      if(s){
+        if(s.until){
+          const ms=s.until.getTime()-Date.now();
+          if(ms<=0){
+            await er.set({subscriptionSuspended:false,subscriptionSuspendedUntil:null,subscriptionSuspensionReason:null,accessBlocked:false,blockedUntil:null,blockReason:null,accessBlockReason:null,accessUpdatedAt:fsNow()},{merge:true});
+          }else{
+            window.__aaExpiryTimers.push(setTimeout(()=>window.watchCourseAccess?.(cid),ms+80));
+          }
+        }
+        if(String(window.activeCourseId||'')===cid){
+          ejectStudent(cid,{type:'suspended',enrollment:e,message:subscriptionSuspensionMessage(e)});
+        }else{await refreshCards();}
+        return;
+      }
+
+      const codeId=String(e.codeId||'');
+      if(!codeId){await refreshCards();return;}
+      try{window.__aaExpiryCodeUnsub?.()}catch(_){ }
+      const cr=db.collection('courses').doc(cid).collection('codes').doc(codeId);
+      window.__aaExpiryCodeUnsub=cr.onSnapshot(async cs=>{
+        if(!cs.exists){
+          // The code was deleted. Remove only the subscription link; history stays.
+          await er.set({enrollmentActive:false,previousCodeId:codeId,previousCode:e.codeUsed||null,subscriptionEndedAt:fsNow(),previousSubscriptionEndReason:'تم حذف الاشتراك من قبل المشرف.',subscriptionDeleteReason:null,codeDeleted:true,codeId:null,codeUsed:null,accessBlocked:false,blockedUntil:null,blockReason:null,accessBlockReason:null,subscriptionSuspended:false,subscriptionSuspendedUntil:null,subscriptionSuspensionReason:null,accessUpdatedAt:fsNow()},{merge:true});
+          return;
+        }
+        const c=cs.data()||{},now=Date.now();
+        const end=toDate(c.endTime);
+        const codeUntil=toDate(c.suspendedUntil);
+        if(end&&!isNaN(end.getTime())){
+          const ms=end.getTime()-now;
+          if(ms<=0){
+            await er.set({enrollmentActive:false,previousCodeId:codeId,previousCode:e.codeUsed||c.code||null,subscriptionEndedAt:fsNow(),previousSubscriptionEndReason:'انتهى الاشتراك.',codeDeleted:true,codeId:null,codeUsed:null,accessBlocked:false,blockedUntil:null,blockReason:null,accessBlockReason:null,subscriptionSuspended:false,subscriptionSuspendedUntil:null,subscriptionSuspensionReason:null,accessUpdatedAt:fsNow()},{merge:true});
+            return;
+          }
+          window.__aaExpiryTimers.push(setTimeout(()=>window.watchCourseAccess?.(cid),ms+80));
+        }
+        // Backward compatibility with legacy code-level suspension records.
+        if(c.disabled===true||c.isSuspended===true||c.status==='suspended'||c.state==='suspended'||c.suspensionStatus==='suspended'){
+          if(codeUntil&&codeUntil.getTime()<=now){
+            await cr.update({disabled:false,isSuspended:false,status:'active',state:'active',suspensionStatus:'active',suspendedUntil:null,suspensionReason:null,suspensionMode:null,suspensionUpdatedAt:fsNow()}).catch(()=>{});
+          }else{
+            await er.set({subscriptionSuspended:true,subscriptionSuspendedUntil:tsFromDate(codeUntil),subscriptionSuspensionReason:c.suspensionReason||null,accessBlocked:true,blockedUntil:tsFromDate(codeUntil),blockReason:c.suspensionReason||'تم إيقاف الاشتراك من قبل المشرف.',accessBlockReason:c.suspensionReason||'تم إيقاف الاشتراك من قبل المشرف.',accessUpdatedAt:fsNow()},{merge:true});
+          }
+        }
+      });
+    });
+  };
+
+  // Prevent opening a suspended course from any stale/old page state.
+  const oldOpenCourse=window.openCourse;
+  if(typeof oldOpenCourse==='function'&&!oldOpenCourse.__aaSubscriptionGuard){
+    const wrappedOpen=async function(courseId){
+      if(currentUser&&!isAdmin){
+        try{
+          const snap=await db.collection('users').doc(currentUser.uid).collection('enrolledCourses').doc(String(courseId)).get();
+          if(snap.exists){
+            const e=snap.data()||{},s=activeSuspension(e);
+            if(s){showCustomAlert?.('تم إيقاف اشتراكك',subscriptionSuspensionMessage(e));return;}
+          }
+        }catch(_){ }
+      }
+      return oldOpenCourse.apply(this,arguments);
+    };
+    wrappedOpen.__aaSubscriptionGuard=true;wrappedOpen.__original=oldOpenCourse;window.openCourse=wrappedOpen;
+  }
+
+  // Ensure every genuine course open starts the live watcher.
+  const oldOpenCourseContent=window.openCourseContent;
+  if(typeof oldOpenCourseContent==='function'&&!oldOpenCourseContent.__aaSubscriptionWatchOpen){
+    const wrappedContent=async function(courseId){
+      const result=await oldOpenCourseContent.apply(this,arguments);
+      if(currentUser&&!isAdmin&&String(window.activeCourseId||'')===String(courseId)){
+        try{window.watchCourseAccess(courseId)}catch(_){ }
+      }
+      return result;
+    };
+    wrappedContent.__aaSubscriptionWatchOpen=true;wrappedContent.__original=oldOpenCourseContent;window.openCourseContent=wrappedContent;
+  }
+
+  // Refresh the course cards whenever the current enrollment map changes elsewhere.
+  document.addEventListener('visibilitychange',()=>{if(!document.hidden&&currentUser&&!isAdmin&&window.activeCourseId)window.watchCourseAccess?.(window.activeCourseId)},true);
+
 })();
 </script>
+
 </body>
 </html>
-
