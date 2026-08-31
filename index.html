@@ -3278,6 +3278,50 @@ body.light-mode #fullPageAssignmentsContainer .assignment-full-card>div:first-ch
 }
 </style>
 
+
+<style id="aa-global-modal-background-lock-css-v1">
+html.aa-modal-background-locked,
+body.aa-modal-background-locked{
+  overscroll-behavior:none !important;
+  touch-action:none !important;
+}
+/* Freeze only the real application shell. Popup roots live outside these areas and remain interactive. */
+body.aa-modal-background-locked > .navbar,
+body.aa-modal-background-locked > #coursesPage,
+body.aa-modal-background-locked > #mobileBottomNav,
+body.aa-modal-background-locked > #courseDetailView{
+  pointer-events:none !important;
+}
+/* Popup roots stay interactive, including their own scrolling and touch gestures. */
+.custom-alert-modal.active,
+.edit-modal.active,
+.auth-popup.active,
+.ananas-modal-overlay.active,
+.profile-self-modal.active,
+#quizOverlay.active,
+#userProfileModal.active,
+#userProfilePage.active,
+#aaRebuiltProfilePage.active,
+#ananasV10ProfilePage.active,
+#ananasPrivateProfileOverlay.active,
+#ananasCanonicalProfilePage.active,
+#aaCoursePortfolioModal.active,
+#aaProfileSelfEditModal.active,
+#aaProfileSelfWorkModal.active,
+#aaProfileWorkModal.active,
+#aaProfileEditModal.active,
+#ananasFileUploadModal.active,
+#aaChatAdminModal.open,
+#aaFinalViewer.active,
+.gallery-viewer.active,
+.platform-image-viewer.active,
+.file-viewer-overlay.active,
+.aa-chat-image-preview-modal.active,
+[role="dialog"][aria-modal="true"]{
+  pointer-events:auto !important;
+  touch-action:auto !important;
+}
+</style>
 </head>
 <body class="light-mode">
     
@@ -24159,6 +24203,163 @@ body.light-mode #coursesPage .course-card:hover{
     const b=e.target?.closest?.('#confirmCourseSuspendBtn');
     if(b)setTimeout(()=>{if(window.__aaSubscriptionSuspendTarget?.courseId&&window.__aaSubscriptionSuspendTarget?.codeId)window.__codeDetail?.(window.__aaSubscriptionSuspendTarget.courseId,window.__aaSubscriptionSuspendTarget.codeId);},80);
   },true);
+})();
+</script>
+
+<script id="aa-global-modal-background-lock-v1">
+(function(){
+  'use strict';
+  if(window.__aaGlobalModalBackgroundLockV1) return;
+  window.__aaGlobalModalBackgroundLockV1=true;
+
+  const MODAL_SELECTORS=[
+    '.custom-alert-modal.active',
+    '.edit-modal.active',
+    '.auth-popup.active',
+    '.ananas-modal-overlay.active',
+    '#quizOverlay.active',
+    '#userProfileModal.active',
+    '#userProfilePage.active',
+    '#aaRebuiltProfilePage.active',
+    '#ananasV10ProfilePage.active',
+    '#ananasPrivateProfileOverlay.active',
+    '#ananasCanonicalProfilePage.active',
+    '#aaCoursePortfolioModal.active',
+    '#aaProfileSelfEditModal.active',
+    '#aaProfileSelfWorkModal.active',
+    '#aaProfileWorkModal.active',
+    '#aaProfileEditModal.active',
+    '#ananasFileUploadModal.active',
+    '#aaChatAdminModal.open',
+    '#aaFinalViewer.active',
+    '.gallery-viewer.active',
+    '.platform-image-viewer.active',
+    '.file-viewer-overlay.active',
+    '.aa-chat-image-preview-modal.active',
+    '.profile-self-modal.active',
+    '[role="dialog"][aria-modal="true"]:not([hidden]):not([aria-hidden="true"])'
+  ];
+
+  const state={
+    locked:false,
+    bodyOverflow:'',
+    bodyPaddingRight:'',
+    scrollY:0,
+    active:null,
+    raf:0
+  };
+
+  const visible=el=>{
+    if(!el||el.hidden)return false;
+    const cs=getComputedStyle(el);
+    if(cs.display==='none'||cs.visibility==='hidden'||Number(cs.opacity)===0)return false;
+    const r=el.getBoundingClientRect();
+    return r.width>0&&r.height>0;
+  };
+
+  function getOpenModals(){
+    const all=[];
+    for(const sel of MODAL_SELECTORS){
+      document.querySelectorAll(sel).forEach(el=>{if(visible(el)&&!all.includes(el))all.push(el);});
+    }
+    /* Catch future/dynamically-created popup roots without touching ordinary page elements. */
+    document.body?.children && Array.from(document.body.children).forEach(el=>{
+      if(all.includes(el)||!visible(el))return;
+      const cs=getComputedStyle(el), z=parseInt(cs.zIndex,10);
+      const token=(String(el.id||'')+' '+String(el.className||'')).toLowerCase();
+      const popupLike=/(modal|popup|overlay|lightbox|viewer|dialog)/.test(token);
+      const openLike=el.classList.contains('active')||el.classList.contains('open')||el.getAttribute('aria-modal')==='true';
+      if(cs.position==='fixed' && Number.isFinite(z) && z>=1000 && popupLike && openLike) all.push(el);
+    });
+    return all;
+  }
+
+  function topModal(){
+    const list=getOpenModals();
+    if(!list.length)return null;
+    list.sort((a,b)=>{
+      const za=parseInt(getComputedStyle(a).zIndex,10);const zb=parseInt(getComputedStyle(b).zIndex,10);
+      const aa=Number.isFinite(za)?za:0,bb=Number.isFinite(zb)?zb:0;
+      return aa-bb || (a.compareDocumentPosition(b)&Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1);
+    });
+    return list[list.length-1];
+  }
+
+  function isInsideModal(target,modal){
+    return !!modal && (target===modal || modal.contains(target));
+  }
+
+  function lock(){
+    if(state.locked)return;
+    state.locked=true;
+    state.active=topModal();
+    state.scrollY=window.scrollY||window.pageYOffset||0;
+    state.bodyOverflow=document.body.style.overflow;
+    state.bodyPaddingRight=document.body.style.paddingRight;
+    const scrollbarGap=Math.max(0,window.innerWidth-document.documentElement.clientWidth);
+    document.body.classList.add('aa-modal-background-locked');
+    document.documentElement.classList.add('aa-modal-background-locked');
+    if(scrollbarGap>0)document.body.style.paddingRight=scrollbarGap+'px';
+    document.body.style.overflow='hidden';
+    window.scrollTo(0,state.scrollY);
+  }
+
+  function unlock(){
+    if(!state.locked)return;
+    state.locked=false;
+    state.active=null;
+    document.body.classList.remove('aa-modal-background-locked');
+    document.documentElement.classList.remove('aa-modal-background-locked');
+    document.body.style.overflow=state.bodyOverflow;
+    document.body.style.paddingRight=state.bodyPaddingRight;
+    window.scrollTo(0,state.scrollY);
+  }
+
+  function sync(){
+    const modal=topModal();
+    if(modal){
+      if(!state.locked)lock();
+      else state.active=modal;
+    }else unlock();
+  }
+
+  const blockedKeys=new Set(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','PageUp','PageDown','Home','End',' ','Spacebar']);
+  const stopOutside=e=>{
+    const modal=state.active&&visible(state.active)?state.active:topModal();
+    if(!modal){unlock();return;}
+    state.active=modal;
+    if(isInsideModal(e.target,modal))return;
+    e.preventDefault();
+    e.stopImmediatePropagation();
+  };
+
+  document.addEventListener('wheel',stopOutside,{capture:true,passive:false});
+  document.addEventListener('touchmove',stopOutside,{capture:true,passive:false});
+  document.addEventListener('pointerdown',stopOutside,{capture:true,passive:false});
+  document.addEventListener('mousedown',stopOutside,{capture:true,passive:false});
+  document.addEventListener('click',stopOutside,{capture:true,passive:false});
+  document.addEventListener('dblclick',stopOutside,{capture:true,passive:false});
+  document.addEventListener('contextmenu',stopOutside,{capture:true,passive:false});
+  document.addEventListener('keydown',e=>{
+    const modal=state.active&&visible(state.active)?state.active:topModal();
+    if(!modal){unlock();return;}
+    if(isInsideModal(e.target,modal))return;
+    if(blockedKeys.has(e.key)||e.key==='Tab'){
+      e.preventDefault();
+      e.stopImmediatePropagation();
+    }
+  },true);
+
+  const observer=new MutationObserver(()=>{
+    cancelAnimationFrame(state.raf);
+    state.raf=requestAnimationFrame(sync);
+  });
+  observer.observe(document.documentElement,{subtree:true,childList:true,attributes:true,attributeFilter:['class','style','hidden','aria-hidden','open']});
+
+  window.addEventListener('resize',()=>{if(state.locked)window.scrollTo(0,state.scrollY);},{passive:true});
+  window.addEventListener('scroll',()=>{if(state.locked&&Math.abs((window.scrollY||0)-state.scrollY)>0)window.scrollTo(0,state.scrollY);},{passive:true});
+
+  sync();
 })();
 </script>
 
