@@ -22769,6 +22769,10 @@ body:not(.light-mode){--aa-auth-bg:#0d1020;--aa-auth-surface:#15192b;--aa-auth-s
 const $=id=>document.getElementById(id);
 const esc=x=>window.escapeHtml?escapeHtml(String(x??'')):String(x??'').replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','\"':'&quot;'}[c]));
 let allFiles=[], current=null, pdfDoc=null, pdfLib=null, pdfScale=1, activePage=1, renderToken=0, viewerEl=null;
+let pdfBaseRenderScale=1, pdfRerenderTimer=0, pdfLazyObserver=null;
+const AA_PDF_CACHE_DB='ananas-file-viewer-cache-v2';
+const AA_PDF_CACHE_STORE='pdfs';
+const AA_PDF_MEM_CACHE=new Map();
 const courseId=()=>window.activeCourseId||window.__activeCourseId||(typeof activeCourseId!=='undefined'?activeCourseId:null);
 const fileName=f=>String(f?.name||f?.originalName||'ملف بدون اسم');
 const fileMime=f=>String(f?.mime||f?.resourceType||'').toLowerCase();
@@ -22803,7 +22807,7 @@ function viewerMarkup(){if(viewerEl)return viewerEl;viewerEl=document.createElem
     pdfScroll.dataset.viewerGesturesBound='1';
     let pinchStartDistance=0,pinchStartZoom=1,pinchRAF=0,queuedZoom=null;
     const distance=(a,b)=>Math.hypot(a.clientX-b.clientX,a.clientY-b.clientY);
-    const applyQueuedZoom=()=>{pinchRAF=0;if(queuedZoom==null)return;const z=queuedZoom;queuedZoom=null;setZoom(z)};
+    const applyQueuedZoom=()=>{pinchRAF=0;if(queuedZoom==null)return;const z=queuedZoom;queuedZoom=null;setGestureZoom(z)};
     pdfScroll.addEventListener('wheel',e=>{
       if(!pdfDoc||!e.ctrlKey)return;
       e.preventDefault();
@@ -22820,15 +22824,24 @@ function viewerMarkup(){if(viewerEl)return viewerEl;viewerEl=document.createElem
       if(!pdfDoc||e.touches.length!==2||!pinchStartDistance)return;
       const d=distance(e.touches[0],e.touches[1]);
       if(d<=0)return;
-      const next=Math.max(.5,Math.min(2.5,pinchStartZoom*(d/pinchStartDistance)));
+      const next=Math.max(.5,Math.min(2.15,pinchStartZoom*(d/pinchStartDistance)));
       e.preventDefault();
       queuedZoom=next*100;
       if(!pinchRAF)pinchRAF=requestAnimationFrame(applyQueuedZoom);
     },{passive:false});
-    pdfScroll.addEventListener('touchend',e=>{if(e.touches.length<2){pinchStartDistance=0;schedulePdfQualityRerender()}},{passive:true});
-    pdfScroll.addEventListener('touchcancel',()=>{pinchStartDistance=0;schedulePdfQualityRerender()},{passive:true});
+    const finishPinch=()=>{
+      if(!pinchStartDistance)return;
+      pinchStartDistance=0;
+      const finalZoom=queuedZoom;
+      queuedZoom=null;
+      if(pinchRAF){cancelAnimationFrame(pinchRAF);pinchRAF=0;}
+      if(finalZoom!=null){setZoom(finalZoom,false);}
+      clearGestureZoom();
+    };
+    pdfScroll.addEventListener('touchend',finishPinch,{passive:true});
+    pdfScroll.addEventListener('touchcancel',finishPinch,{passive:true});
   }
-  document.addEventListener('keydown',e=>{if(!viewerEl?.classList.contains('active'))return;if(e.key==='Escape'){if($('aaFinalDrawer').classList.contains('open'))toggleDrawer(false);else closeViewer()}});window.addEventListener('resize',()=>{if(pdfDoc)rerenderPdf()},{passive:true});return viewerEl}
+  document.addEventListener('keydown',e=>{if(!viewerEl?.classList.contains('active'))return;if(e.key==='Escape'){if($('aaFinalDrawer').classList.contains('open'))toggleDrawer(false);else closeViewer()}});let resizeTimer=0,lastViewerWidth=0;window.addEventListener('resize',()=>{if(!pdfDoc)return;const w=window.innerWidth;if(Math.abs(w-lastViewerWidth)<18)return;lastViewerWidth=w;clearTimeout(resizeTimer);resizeTimer=setTimeout(()=>{if(pdfDoc)rerenderPdf()},180)},{passive:true});return viewerEl}
 function toggleDrawer(force){const open=typeof force==='boolean'?force:!$('aaFinalDrawer').classList.contains('open');$('aaFinalDrawer').classList.toggle('open',open);$('aaFinalDrawerOverlay').classList.toggle('open',open)}
 function setViewerHeader(f,t){$('aaFinalTitle').textContent=fileName(f);$('aaFinalSub').textContent=f.lessonTitle||'ملف عام للدورة';const pdf=t==='pdf';$('aaFinalPageBox').style.display=pdf?'inline-flex':'none';$('aaFinalZoomGroup').style.display=pdf?'inline-flex':'none';$('aaFinalThumbs').style.display=pdf?'inline-grid':'none';$('aaFinalDownload').style.display=f.allowDownload===false?'none':'inline-grid'}
 function resetViewer(){pdfDoc=null;activePage=1;pdfScale=window.matchMedia?.('(max-width:650px)').matches?.85:1;renderToken++;$('aaFinalPageInput').value='1';$('aaFinalPageTotal').textContent='/ 0';$('aaFinalDrawerCount').textContent='0 صفحة';$('aaFinalZoomInput').value=String(Math.round(pdfScale*100));$('aaFinalProgress').style.width='0';$('aaFinalPages').innerHTML='';$('aaFinalDrawerList').innerHTML=''}
@@ -22846,26 +22859,209 @@ function downloadFile(f){
 }
 async function ensurePdf(){if(pdfLib)return pdfLib;if(window.pdfjsLib)return window.pdfjsLib;pdfLib=await import('https://cdn.jsdelivr.net/npm/pdfjs-dist@6.2.108/build/pdf.min.mjs');pdfLib=pdfLib?.default||pdfLib;try{pdfLib.GlobalWorkerOptions.workerSrc='https://cdn.jsdelivr.net/npm/pdfjs-dist@6.2.108/build/pdf.worker.min.mjs'}catch(_){}return pdfLib}
 function sourceForPdf(f){const u=String(f?.url||'');if(/\.pdf(?:[?#]|$)/i.test(u))return u;return u}
+function cacheKeyForPdf(url){try{return new URL(url,location.href).href}catch(_){return String(url||'')}}
+function openPdfCacheDb(){return new Promise((resolve,reject)=>{try{const req=indexedDB.open(AA_PDF_CACHE_DB,1);req.onupgradeneeded=()=>{const db=req.result;if(!db.objectStoreNames.contains(AA_PDF_CACHE_STORE))db.createObjectStore(AA_PDF_CACHE_STORE)};req.onsuccess=()=>resolve(req.result);req.onerror=()=>reject(req.error||new Error('indexeddb-open'))}catch(e){reject(e)}})}
+async function getCachedPdfBytes(url){
+  const key=cacheKeyForPdf(url);
+  if(AA_PDF_MEM_CACHE.has(key))return AA_PDF_MEM_CACHE.get(key);
+  try{const db=await openPdfCacheDb();const value=await new Promise((resolve,reject)=>{const tx=db.transaction(AA_PDF_CACHE_STORE,'readonly'),req=tx.objectStore(AA_PDF_CACHE_STORE).get(key);req.onsuccess=()=>resolve(req.result?.bytes||null);req.onerror=()=>reject(req.error)});db.close();if(value){const bytes=value instanceof ArrayBuffer?new Uint8Array(value):new Uint8Array(value);AA_PDF_MEM_CACHE.set(key,bytes);return bytes}}catch(_){}
+  return null;
+}
+async function putCachedPdfBytes(url,bytes){
+  const key=cacheKeyForPdf(url);
+  try{AA_PDF_MEM_CACHE.set(key,bytes);const db=await openPdfCacheDb();await new Promise((resolve,reject)=>{const tx=db.transaction(AA_PDF_CACHE_STORE,'readwrite');tx.objectStore(AA_PDF_CACHE_STORE).put({bytes:bytes.buffer.slice(bytes.byteOffset,bytes.byteOffset+bytes.byteLength),savedAt:Date.now()},key);tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error)});db.close()}catch(_){}
+}
+async function loadPdfBytesCached(url){
+  const cached=await getCachedPdfBytes(url);if(cached)return cached;
+  const res=await fetch(url,{mode:'cors',credentials:'omit',cache:'default'});if(!res.ok)throw new Error('pdf-fetch-'+res.status);
+  const bytes=new Uint8Array(await res.arrayBuffer());
+  if(bytes.byteLength>0)putCachedPdfBytes(url,bytes);
+  return bytes;
+}
 async function openViewer(f){if(!f?.url||f.deleted)return;current=f;const v=viewerMarkup();resetViewer();setViewerHeader(f,fileType(f));toggleDrawer(false);v.classList.add('active');document.body.style.overflow='hidden';const t=fileType(f);if(t==='pdf'){await openPdf(f);return}if(t==='image'){$('aaFinalPages').innerHTML=`<div class="aa-final-image-wrap"><img src="${esc(f.url)}" alt="${esc(fileName(f))}"></div>`;return}if(t==='text'){try{const r=await fetch(f.url,{mode:'cors'});if(!r.ok)throw Error();$('aaFinalPages').innerHTML=`<div class="aa-final-text-wrap">${esc(await r.text())}</div>`}catch(_){showGeneric('تعذر عرض الملف','لا يمكن قراءة محتوى هذا الملف داخل الموقع.')}return}showGeneric('المعاينة الداخلية غير متاحة','هذا النوع من الملفات لا يملك عارضًا داخليًا مخصصًا داخل الموقع.')}
-let pdfLazyObserver=null,pdfRerenderTimer=0,pdfBaseRenderScale=1;
-async function openPdf(f){const pages=$('aaFinalPages');pages.innerHTML='<div class="aa-final-page-loading"><div class="aa-final-page-loading-inner"><i class="fas fa-spinner fa-spin"></i><strong>جاري تجهيز الصفحات...</strong></div></div>';try{const lib=await ensurePdf(),task=lib.getDocument({url:sourceForPdf(f),disableAutoFetch:false,disableStream:false});pdfDoc=await task.promise;const token=++renderToken;$('aaFinalPageTotal').textContent=`/ ${pdfDoc.numPages}`;$('aaFinalDrawerCount').textContent=`${pdfDoc.numPages} صفحة`;pages.innerHTML='';for(let i=1;i<=pdfDoc.numPages;i++){const s=document.createElement('section');s.className='aa-final-pdf-page';s.id=`aaFinalPage_${i}`;s.dataset.page=String(i);s.innerHTML='<div class="aa-final-page-loading"><div class="aa-final-page-loading-inner"><i class="fas fa-spinner fa-spin"></i><span>جاري تجهيز الصفحة...</span></div></div>';pages.appendChild(s)}buildThumbs();bindPdfLazyRendering(token);await renderPage(1,token);renderNeighborPages(1,token);(async()=>{for(let i=1;i<=Math.min(pdfDoc.numPages,8);i++){if(token!==renderToken)break;try{const pg=await pdfDoc.getPage(i);await renderThumb(i,pg)}catch(_){}}})();updateViewerScroll()}catch(e){console.error('final pdf viewer',e);showGeneric('تعذر عرض ملف PDF','تعذر قراءة ملف PDF من الرابط الحالي. تأكد من أن Cloudinary يسمح بتسليم PDF.')}}
+async function openPdf(f){
+  const pages=$('aaFinalPages');
+  pages.innerHTML='<div class="aa-final-page-loading"><div class="aa-final-page-loading-inner"><i class="fas fa-spinner fa-spin"></i><strong>جاري تجهيز الصفحات...</strong></div></div>';
+  try{
+    const lib=await ensurePdf();
+    const source=sourceForPdf(f);
+    let data=null;
+    try{data=await loadPdfBytesCached(source)}catch(_){data=null}
+    const task=data?lib.getDocument({data,disableAutoFetch:true,disableStream:true,disableFontFace:false}):lib.getDocument({url:source,disableAutoFetch:false,disableStream:false});
+    pdfDoc=await task.promise;
+    pdfBaseRenderScale=1;
+    const token=++renderToken;
+    $('aaFinalPageTotal').textContent=`/ ${pdfDoc.numPages}`;
+    $('aaFinalDrawerCount').textContent=`${pdfDoc.numPages} صفحة`;
+    pages.innerHTML='';
+    const frag=document.createDocumentFragment();
+    for(let i=1;i<=pdfDoc.numPages;i++){
+      const node=document.createElement('section');
+      node.className='aa-final-pdf-page';
+      node.id=`aaFinalPage_${i}`;
+      node.dataset.page=String(i);
+      node.innerHTML='<div class="aa-final-page-loading"><div class="aa-final-page-loading-inner"><i class="fas fa-spinner fa-spin"></i><span>جاري تجهيز الصفحة...</span></div></div>';
+      frag.appendChild(node);
+    }
+    pages.appendChild(frag);
+    buildThumbs();
+    bindPdfLazyRendering(token);
+    await renderPage(1,token);
+    renderNeighborPages(1,token);
+    (async()=>{for(let i=1;i<=Math.min(pdfDoc.numPages,4);i++){if(token!==renderToken)break;try{const pg=await pdfDoc.getPage(i);await renderThumb(i,pg)}catch(_){}}})();
+    updateViewerScroll();
+  }catch(e){
+    console.error('final pdf viewer',e);
+    showGeneric('تعذر عرض ملف PDF','تعذر قراءة ملف PDF من الرابط الحالي. تأكد من أن الملف متاح من الرابط الحالي.');
+  }
+}
 function bindPdfLazyRendering(token){if(pdfLazyObserver){try{pdfLazyObserver.disconnect()}catch(_){}}const root=$('aaFinalScroll');if(!root||!window.IntersectionObserver)return;pdfLazyObserver=new IntersectionObserver(entries=>{for(const entry of entries){if(entry.isIntersecting){const n=Number(entry.target.dataset.page)||1;renderPage(n,token);renderPage(n-1,token);renderPage(n+1,token)} }},{root,rootMargin:'900px 0px',threshold:.01});document.querySelectorAll('#aaFinalPages .aa-final-pdf-page').forEach(el=>pdfLazyObserver.observe(el))}
 function renderNeighborPages(n,token){[n-1,n+1,n+2].forEach(x=>{if(x>=1&&x<=pdfDoc.numPages)renderPage(x,token)})}
-function getPageWidth(){const sc=$('aaFinalScroll');return Math.max(360,Math.min(980,sc.clientWidth-50))}
-async function renderPage(n,token){if(!pdfDoc||token!==renderToken)return;const holder=$(`aaFinalPage_${n}`);if(!holder||holder.dataset.rendering==='1'||holder.dataset.rendered==='1')return;holder.dataset.rendering='1';try{const p=await pdfDoc.getPage(n),scale=pdfBaseRenderScale,base=p.getViewport({scale:1}),vp=p.getViewport({scale}),dpr=Math.min(window.devicePixelRatio||1.35,1.6),canvas=document.createElement('canvas');canvas.width=Math.ceil(vp.width*dpr);canvas.height=Math.ceil(vp.height*dpr);canvas.dataset.baseWidth=String(vp.width);canvas.dataset.baseHeight=String(vp.height);canvas.style.width=vp.width+'px';canvas.style.height=vp.height+'px';canvas.style.maxWidth='none';const ctx=canvas.getContext('2d',{alpha:false,desynchronized:true});if(ctx){ctx.imageSmoothingEnabled=true;ctx.imageSmoothingQuality='medium'}await p.render({canvasContext:ctx,viewport:p.getViewport({scale:scale*dpr})}).promise;if(token!==renderToken)return;holder.innerHTML='';holder.appendChild(canvas);holder.dataset.rendered='1';holder.dataset.renderedScale=String(scale);applyViewerZoomToCanvas(canvas);if(n===activePage)updateViewerScroll()}catch(e){if(token!==renderToken)return;console.error('render page',n,e);holder.innerHTML='<div class="aa-final-page-loading"><div class="aa-final-page-loading-inner"><i class="fas fa-triangle-exclamation"></i><span>تعذر عرض الصفحة</span></div></div>'}finally{holder.dataset.rendering='0'}}
-function applyViewerZoomToCanvas(canvas){if(!canvas)return;const z=Math.max(.25,Math.min(4,pdfScale||1));const bw=Number(canvas.dataset.baseWidth)||parseFloat(canvas.style.width)||1;const bh=Number(canvas.dataset.baseHeight)||parseFloat(canvas.style.height)||1;canvas.style.width=Math.max(1,bw*z)+'px';canvas.style.height=Math.max(1,bh*z)+'px';const holder=canvas.closest('.aa-final-pdf-page');if(holder){holder.style.width=Math.max(1,bw*z)+'px';holder.style.minWidth=Math.max(1,bw*z)+'px';}}
-function updatePdfVisualZoom(){document.querySelectorAll('#aaFinalPages canvas').forEach(applyViewerZoomToCanvas);requestAnimationFrame(updateViewerScroll)}
-function schedulePdfQualityRerender(){clearTimeout(pdfRerenderTimer);pdfRerenderTimer=setTimeout(async()=>{if(!pdfDoc)return;const token=++renderToken;const targets=[activePage-1,activePage,activePage+1].filter(n=>n>=1&&n<=pdfDoc.numPages);targets.forEach(n=>{const h=$(`aaFinalPage_${n}`);if(h){h.dataset.rendered='';h.dataset.rendering='';h.innerHTML='<div class="aa-final-page-loading"><div class="aa-final-page-loading-inner"><i class="fas fa-spinner fa-spin"></i><span>جاري تحسين الدقة...</span></div></div>'}});for(const n of targets)await renderPage(n,token)},280)}
-async function renderThumb(n,p){const b=$(`aaFinalThumb_${n}`);if(!b)return;try{const img=b.querySelector('img');if(!img)return;const hostWidth=Math.max(150,Math.min(360,b.clientWidth||260));const base=p.getViewport({scale:1});const cssScale=Math.max(.18,Math.min(.42,hostWidth/base.width));const dpr=Math.min(window.devicePixelRatio||1.5,2);const renderScale=cssScale*dpr;const vp=p.getViewport({scale:renderScale});const c=document.createElement('canvas');c.width=Math.ceil(vp.width);c.height=Math.ceil(vp.height);const ctx=c.getContext('2d',{alpha:false});if(!ctx)return;ctx.imageSmoothingEnabled=true;ctx.imageSmoothingQuality='high';await p.render({canvasContext:ctx,viewport:vp,background:'#ffffff'}).promise;const dataUrl=c.toDataURL('image/jpeg',0.88);img.src=dataUrl;img.width=Math.ceil(base.width*cssScale);img.height=Math.ceil(base.height*cssScale);img.setAttribute('aria-hidden','true');img.draggable=false;c.width=1;c.height=1}catch(_){} }
-function buildThumbs(){const list=$('aaFinalDrawerList');list.innerHTML='';for(let i=1;i<=pdfDoc.numPages;i++){const b=document.createElement('button');b.type='button';b.className='aa-final-thumb';b.id=`aaFinalThumb_${i}`;b.setAttribute('aria-label',`الانتقال إلى الصفحة ${i}`);b.innerHTML=`<img alt="" aria-hidden="true" draggable="false"><span aria-hidden="true">صفحة ${i}</span>`;b.onclick=()=>{gotoPage(i,true);toggleDrawer(false)};list.appendChild(b)}}
-function gotoPage(n,focus){if(!pdfDoc)return;const page=Math.max(1,Math.min(pdfDoc.numPages,Math.round(Number(n)||1)));activePage=page;$('aaFinalPageInput').value=String(page);const el=$(`aaFinalPage_${page}`);if(el)el.scrollIntoView({behavior:focus?'smooth':'auto',block:'start'});updateThumbs(page);renderPage(page,renderToken)}
-function updateThumbs(n){document.querySelectorAll('#aaFinalDrawerList .aa-final-thumb.active').forEach(x=>x.classList.remove('active'));$(`aaFinalThumb_${n}`)?.classList.add('active')}
-function updateViewerScroll(){if(!pdfDoc)return;const sc=$('aaFinalScroll'),marker=sc.scrollTop+sc.clientHeight*.22;let best=1,dist=Infinity;document.querySelectorAll('.aa-final-pdf-page').forEach(el=>{const d=Math.abs(el.offsetTop-marker);if(d<dist){dist=d;best=Number(el.dataset.page)||best}});activePage=best;$('aaFinalPageInput').value=String(best);updateThumbs(best);const max=sc.scrollHeight-sc.clientHeight;$('aaFinalProgress').style.width=(max>0?Math.min(100,Math.max(0,sc.scrollTop/max*100)):100)+'%'}
-async function rerenderPdf(){if(!pdfDoc)return;const keepPage=activePage||1;const token=++renderToken;document.querySelectorAll('#aaFinalPages .aa-final-pdf-page').forEach(h=>{h.dataset.rendered='';h.dataset.rendering='';if(Number(h.dataset.page)<=(keepPage+2)&&Number(h.dataset.page)>=(keepPage-2))h.innerHTML='<div class="aa-final-page-loading"><div class="aa-final-page-loading-inner"><i class="fas fa-spinner fa-spin"></i><span>جاري تحديث الصفحة...</span></div></div>'});bindPdfLazyRendering(token);await renderPage(keepPage,token);renderNeighborPages(keepPage,token);gotoPage(keepPage,false)}
-async function setZoom(value){if(!pdfDoc)return;let pct=Math.round(Number(value)||100);pct=Math.max(50,Math.min(250,pct));pdfScale=pct/100;$('aaFinalZoomInput').value=String(pct);updatePdfVisualZoom();if(Math.abs(pdfScale-pdfBaseRenderScale)>=.35)schedulePdfQualityRerender()}
+function getPageWidth(){const sc=$('aaFinalScroll');return Math.max(280,Math.min(860,sc.clientWidth-(window.innerWidth<=700?18:50)))}
+function devicePixelRatioSafe(){return Math.min(window.devicePixelRatio||1,1.35)}
+function gestureVisualScale(){return Math.max(.5,Math.min(2.15,pdfScale||1))}
+function setGestureZoom(pct){
+  if(!pdfDoc)return;
+  const z=Math.max(.5,Math.min(2.15,(Number(pct)||100)/100));
+  const v=$('aaFinalViewer');
+  if(!v)return;
+  v.style.setProperty('--aa-gesture-zoom',String(z));
+  v.classList.add('aa-gesture-zooming','aa-final-gesture-live');
+  const input=$('aaFinalZoomInput');if(input)input.value=String(Math.round(z*100));
+}
+function clearGestureZoom(){const v=$('aaFinalViewer');if(v)v.classList.remove('aa-gesture-zooming','aa-final-gesture-live')}
+function bindPdfLazyRendering(token){
+  try{pdfLazyObserver?.disconnect()}catch(_){}
+  const root=$('aaFinalScroll');
+  if(!root||!window.IntersectionObserver||!pdfDoc)return;
+  pdfLazyObserver=new IntersectionObserver(entries=>{
+    for(const entry of entries){
+      if(!entry.isIntersecting)continue;
+      const n=Number(entry.target.dataset.page)||1;
+      renderPage(n,token);
+      if(n>1)renderPage(n-1,token);
+      if(n<pdfDoc.numPages)renderPage(n+1,token);
+      if(n+2<=pdfDoc.numPages)renderPage(n+2,token);
+    }
+    releaseFarPages(activePage);
+  },{root,rootMargin:window.innerWidth<=700?'520px 0px':'900px 0px',threshold:.01});
+  document.querySelectorAll('#aaFinalPages .aa-final-pdf-page').forEach(el=>pdfLazyObserver.observe(el));
+}
+function renderNeighborPages(n,token){[n-1,n+1,n+2].forEach(x=>{if(x>=1&&x<=pdfDoc.numPages)renderPage(x,token)})}
+async function renderPage(n,token){
+  if(!pdfDoc||token!==renderToken)return;
+  const holder=$(`aaFinalPage_${n}`);
+  if(!holder||holder.dataset.rendering==='1'||holder.dataset.rendered==='1')return;
+  holder.dataset.rendering='1';
+  try{
+    const p=await pdfDoc.getPage(n);
+    if(token!==renderToken)return;
+    const base=p.getViewport({scale:1});
+    const targetWidth=Math.min(860,getPageWidth());
+    const scale=Math.max(.35,Math.min(1.2,targetWidth/base.width));
+    pdfBaseRenderScale=scale;
+    const vp=p.getViewport({scale});
+    const dpr=devicePixelRatioSafe();
+    const canvas=document.createElement('canvas');
+    canvas.width=Math.ceil(vp.width*dpr);
+    canvas.height=Math.ceil(vp.height*dpr);
+    canvas.dataset.baseWidth=String(vp.width);
+    canvas.dataset.baseHeight=String(vp.height);
+    canvas.style.width=vp.width+'px';
+    canvas.style.height=vp.height+'px';
+    canvas.style.maxWidth='none';
+    const ctx=canvas.getContext('2d',{alpha:false,desynchronized:true});
+    if(!ctx)throw new Error('canvas-context');
+    ctx.imageSmoothingEnabled=true;
+    ctx.imageSmoothingQuality='medium';
+    await p.render({canvasContext:ctx,viewport:p.getViewport({scale:scale*dpr}),background:'#ffffff'}).promise;
+    if(token!==renderToken)return;
+    holder.replaceChildren(canvas);
+    holder.dataset.rendered='1';
+    holder.dataset.renderedScale=String(scale);
+    holder.style.width=vp.width+'px';
+    holder.style.minWidth=vp.width+'px';
+  }catch(e){
+    if(token!==renderToken)return;
+    holder.innerHTML='<div class="aa-final-page-loading"><div class="aa-final-page-loading-inner"><i class="fas fa-triangle-exclamation"></i><span>تعذر عرض الصفحة</span></div></div>';
+  }finally{holder.dataset.rendering='0'}
+}
+function releaseFarPages(center){
+  if(!pdfDoc||pdfDoc.numPages<8)return;
+  const keep=window.innerWidth<=700?3:4;
+  document.querySelectorAll('#aaFinalPages .aa-final-pdf-page[data-page]').forEach(holder=>{
+    const n=Number(holder.dataset.page);
+    if(Math.abs(n-center)<=keep)return;
+    if(holder.dataset.rendered==='1'){
+      holder.replaceChildren();
+      holder.dataset.rendered='';
+      holder.dataset.renderedScale='';
+      holder.dataset.rendering='';
+      holder.innerHTML='<div class="aa-final-page-loading"><div class="aa-final-page-loading-inner"><i class="fas fa-file"></i><span>سيتم تجهيزها عند الاقتراب منها</span></div></div>';
+    }
+  });
+}
+function updateViewerScroll(){
+  if(!pdfDoc)return;
+  const sc=$('aaFinalScroll');
+  if(!sc)return;
+  const marker=sc.scrollTop+sc.clientHeight*.22;
+  let best=activePage||1,dist=Infinity;
+  document.querySelectorAll('.aa-final-pdf-page').forEach(el=>{const d=Math.abs(el.offsetTop-marker);if(d<dist){dist=d;best=Number(el.dataset.page)||best}});
+  activePage=best;
+  $('aaFinalPageInput').value=String(best);
+  updateThumbs(best);
+  const max=sc.scrollHeight-sc.clientHeight;
+  $('aaFinalProgress').style.width=(max>0?Math.min(100,Math.max(0,sc.scrollTop/max*100)):100)+'%';
+  releaseFarPages(best);
+}
+function schedulePdfQualityRerender(){
+  clearTimeout(pdfRerenderTimer);
+  pdfRerenderTimer=setTimeout(async()=>{
+    if(!pdfDoc)return;
+    const token=++renderToken;
+    const center=activePage||1;
+    const targets=[center-1,center,center+1].filter(n=>n>=1&&n<=pdfDoc.numPages);
+    for(const n of targets){
+      const h=$(`aaFinalPage_${n}`);
+      if(h){h.dataset.rendered='';h.dataset.rendering='';h.replaceChildren();h.innerHTML='<div class="aa-final-page-loading"><div class="aa-final-page-loading-inner"><i class="fas fa-spinner fa-spin"></i><span>جاري تحسين الدقة...</span></div></div>';}
+    }
+    for(const n of targets)await renderPage(n,token);
+  },220);
+}
+async function rerenderPdf(){
+  if(!pdfDoc)return;
+  const keep=activePage||1;
+  const token=++renderToken;
+  document.querySelectorAll('#aaFinalPages .aa-final-pdf-page').forEach(h=>{
+    h.dataset.rendered='';h.dataset.rendering='';
+    const n=Number(h.dataset.page);
+    if(Math.abs(n-keep)<=2)h.replaceChildren();
+    if(Math.abs(n-keep)<=2)h.innerHTML='<div class="aa-final-page-loading"><div class="aa-final-page-loading-inner"><i class="fas fa-spinner fa-spin"></i><span>جاري تحديث الصفحة...</span></div></div>';
+  });
+  bindPdfLazyRendering(token);
+  await renderPage(keep,token);
+  renderNeighborPages(keep,token);
+}
+async function setZoom(value,quality=true){
+  if(!pdfDoc)return;
+  let pct=Math.round(Number(value)||100);
+  pct=Math.max(50,Math.min(215,pct));
+  pdfScale=pct/100;
+  $('aaFinalZoomInput').value=String(pct);
+  const v=$('aaFinalViewer');if(v)v.style.setProperty('--aa-user-zoom',String(pdfScale));
+  updatePdfVisualZoom();
+  if(quality)schedulePdfQualityRerender();
+}
 function changeZoom(delta){if(!pdfDoc)return;return setZoom(Math.round(pdfScale*100)+delta)}
+function updatePdfVisualZoom(){
+  const v=$('aaFinalViewer');
+  if(!v)return;
+  v.style.setProperty('--aa-user-zoom',String(Math.max(.5,Math.min(2.15,pdfScale||1))));
+  requestAnimationFrame(()=>{document.querySelectorAll('#aaFinalPages .aa-final-pdf-page').forEach(h=>{const c=h.querySelector('canvas');if(!c)return;const bw=Number(c.dataset.baseWidth)||parseFloat(c.style.width)||1;const bh=Number(c.dataset.baseHeight)||parseFloat(c.style.height)||1;const z=Math.max(.5,Math.min(2.15,pdfScale||1));c.style.width=(bw*z)+'px';c.style.height=(bh*z)+'px';h.style.width=(bw*z)+'px';h.style.minWidth=(bw*z)+'px'})});
+}
 function showGeneric(title,msg){$('aaFinalPageBox').style.display='none';$('aaFinalZoomGroup').style.display='none';$('aaFinalThumbs').style.display='none';$('aaFinalPages').innerHTML=`<div class="aa-final-generic"><i class="fas fa-file-circle-xmark"></i><h3>${esc(title)}</h3><p>${esc(msg)}</p></div>`}
-function closeViewer(){if(!viewerEl)return;viewerEl.classList.remove('active');toggleDrawer(false);document.body.style.overflow='';current=null;pdfDoc=null}
+function closeViewer(){if(!viewerEl)return;viewerEl.classList.remove('active');toggleDrawer(false);document.body.style.overflow='';try{pdfLazyObserver?.disconnect()}catch(_){}try{pdfDoc?.destroy?.()}catch(_){}pdfDoc=null;current=null;clearGestureZoom()}
 window.openCourseFileViewer=openViewer;window.openFileViewer=openViewer;window.renderFilesGrid=(files,box)=>{if(box?.id==='courseFilesPageGrid'){allFiles=(files||[]).filter(f=>!f.deleted&&f.url);ensureShell();updateStats();fillLessons().then(renderFiles);return}if(box){const old=allFiles;allFiles=(files||[]).filter(f=>!f.deleted&&f.url);renderFiles();allFiles=old}};
 window.loadCourseFilesPage=loadFiles;window.openCourseFileUploadModal=openUpload;
 window.uploadCourseFile=async(file,lessonId='')=>{if(!courseId()||!file)return;const bad=/\.(exe|js|html?|php|sh|bat|cmd|msi|apk|dmg)$/i.test(file.name);if(bad)throw Error('نوع ملف غير مسموح');if(file.size>25*1024*1024)throw Error('الحد الأقصى 25 ميجابايت');const url=await uploadImage(file);if(!url)throw Error('تعذر الرفع');let lessonTitle='';if(lessonId){const s=await db.collection('courses').doc(courseId()).collection('lessons').doc(lessonId).get();if(s.exists)lessonTitle=s.data()?.titleAr||'حصة'}const data={name:file.name,url,mime:file.type||'',size:file.size||0,lessonId:lessonId||'',lessonTitle,allowDownload:true,uploadedAt:firebase.firestore.FieldValue.serverTimestamp(),uploadedBy:currentUser?.uid||'',deleted:false,storageProvider:'cloudinary'};await db.collection('courses').doc(courseId()).collection('files').add(data);return data};
@@ -24240,6 +24436,14 @@ body.light-mode #coursesPage .course-card:hover{
 </html>
 
 
+<style id="aa-final-viewer-mobile-performance">
+#aaFinalViewer .aa-final-pages-scroll{touch-action:pan-y pinch-zoom;overscroll-behavior-y:contain;-webkit-overflow-scrolling:touch;}
+#aaFinalViewer .aa-final-pages{contain:layout style paint;transform:translateZ(0);will-change:contents;}
+#aaFinalViewer .aa-final-pdf-page{contain:layout paint;content-visibility:auto;}
+#aaFinalViewer.aa-final-gesture-live .aa-final-pdf-page canvas{pointer-events:none;}
+#aaFinalViewer.aa-final-gesture-live .aa-final-pages{transform:translateZ(0) scale(var(--aa-gesture-zoom,1));transform-origin:50% 0;}
+@media(max-width:700px){#aaFinalViewer .aa-final-pages-scroll{touch-action:pan-y pinch-zoom;}#aaFinalViewer .aa-final-pdf-page{contain:layout paint;}}
+</style>
 <style id="aa-final-viewer-mobile-toolbar-fix">
 /* Mobile-only viewer toolbar layout fix. Functionality untouched. */
 @media (max-width: 650px){
