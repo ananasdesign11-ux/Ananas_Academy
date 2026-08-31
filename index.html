@@ -13980,6 +13980,10 @@ const s=document.createElement('style');s.textContent=`
 #aaCodeSearchInput::placeholder{color:var(--text-muted);}
 #aaCodeSearchClear{width:32px;height:32px;min-width:32px;border:0;border-radius:10px;background:transparent;color:var(--text-muted);cursor:pointer;display:grid;place-items:center;}
 #aaCodeSearchClear:hover{background:rgba(108,92,231,.08);color:var(--accent1);}
+.aa-code-card-person{display:flex;align-items:center;gap:9px;min-width:0;}
+.aa-code-card-avatar{width:34px;height:34px;min-width:34px;flex:0 0 34px;border-radius:50%;overflow:hidden;display:grid;place-items:center;background:var(--bg-secondary);border:1px solid var(--border);}
+.aa-code-card-avatar img{width:100%;height:100%;object-fit:cover;display:block;}
+.aa-code-card-avatar-fallback{display:grid;place-items:center;width:100%;height:100%;background:var(--accent-gradient);color:#fff;font-weight:900;font-size:.78rem;}
 .aa-code-search-empty{grid-column:1/-1;padding:28px 16px;text-align:center;color:var(--text-muted);border:1px dashed var(--border);border-radius:16px;}
 @media(max-width:600px){.aa-code-search-box{width:100%;}#aaCodeSearchInput{font-size:.82rem!important;}}
 </style>
@@ -14075,6 +14079,17 @@ const s=document.createElement('style');s.textContent=`
   }
   function expiredV12(c){const end=asDateV12(c?.endTime);return !!end&&end.getTime()<=Date.now();}
   function categoryV12(c){return expiredV12(c)?'expired':usedCountV12(c)>0?'used':'unused';}
+
+  function isPermanentlyDeletedCodeV12(c){
+    if(!c) return false;
+    if(c.deleted===true || c.subscriptionDeleted===true || c.permanentlyDeleted===true || c.codeDeleted===true) return true;
+    const revoked=Array.isArray(c.revokedUsers)?c.revokedUsers:[];
+    const used=Array.isArray(c.usedBy)?c.usedBy.filter(Boolean):[];
+    // Old subscription-removal logic left a zero-use code with a revoked user.
+    // Such a code is a deleted subscription code and must never reappear or be reusable.
+    if(!used.length && revoked.length) return true;
+    return false;
+  }
   function suspensionLabelV12(c){
     const until=asDateV12(c?.suspendedUntil);
     if(!legacySuspendedV12(c))return '';
@@ -14415,7 +14430,7 @@ const s=document.createElement('style');s.textContent=`
     if(!board)return;
     const source=Array.isArray(window.__aaSubscriptionCodeSearchData)?window.__aaSubscriptionCodeSearchData:[];
     const query=String(window.__aaSubscriptionCodeSearchQuery||'');
-    const filtered=source.filter(item=>aaCodeSearchMatches(item,query));
+    const filtered=source.filter(item=>!item.deletedPermanently&&aaCodeSearchMatches(item,query));
     const groups={unused:[],used:[],expired:[]};
     filtered.forEach(item=>{if(groups[item.category])groups[item.category].push(item);});
 
@@ -14427,9 +14442,11 @@ const s=document.createElement('style');s.textContent=`
         const email=u.email||'';
         const uid=String(u.uid||c.usedBy?.[0]||'');
         const code=String(c.code||id);
-        const suspended=legacySuspendedV12(c);
-        const statusText=suspended?'موقوف الاشتراك':key==='expired'?'منتهي':key==='used'?'مشترك':'غير مستخدم';
-        return `<div class="code-card-v12-wrap" data-aa-code-search-item="1" data-aa-code-search-text="${escV12([name,email,uid,code].join(' '))}"><button type="button" class="code-card-v12 ${key}${suspended?' suspended':''}" onclick="__codeDetail('${escV12(courseId)}','${escV12(id)}')"><span class="code-card-v12-main"><strong>${escV12(name)}</strong><small style="display:block!important;margin-top:4px;color:var(--text-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escV12(code)}${email?` · ${escV12(email)}`:''}</small><small style="display:block!important;margin-top:3px;color:${suspended?'#e74c3c':'var(--text-muted)'};font-weight:800">${escV12(statusText)}${uid?` · ${escV12(uid)}`:''}</small></span></button></div>`;
+        const photo=String(u.photoURL||u.photoUrl||u.photo||'');
+        const avatar=photo
+          ? `<img src="${escV12(photo)}" alt="" loading="lazy" decoding="async">`
+          : `<span class="aa-code-card-avatar-fallback">${escV12((name||'م').slice(0,1))}</span>`;
+        return `<div class="code-card-v12-wrap" data-aa-code-search-item="1" data-aa-code-search-text="${escV12([name,email,uid,code].join(' '))}"><button type="button" class="code-card-v12 ${key}" onclick="__codeDetail('${escV12(courseId)}','${escV12(id)}')"><span class="code-card-v12-main"><span class="aa-code-card-person"><span class="aa-code-card-avatar">${avatar}</span><strong>${escV12(name)}</strong></span></span></button></div>`;
       }).join(''):'<div class="code-lifecycle-empty">لا توجد اشتراكات مطابقة.</div>'}</div></section>`;
     };
 
@@ -14454,13 +14471,43 @@ const s=document.createElement('style');s.textContent=`
     }
     board.innerHTML='<div style="grid-column:1/-1;padding:22px;text-align:center;color:var(--text-muted)">جاري تحميل الاشتراكات...</div>';
     try{
-      const snap=await db.collection('courses').doc(courseId).collection('codes').get();
+      const [snap,archiveSnap]=await Promise.all([
+        db.collection('courses').doc(courseId).collection('codes').get(),
+        db.collection('courses').doc(courseId).collection('codeArchive').get()
+      ]);
+      const archivedCodes=new Set(archiveSnap.docs.map(d=>normCode(d.id)).filter(Boolean));
       const source=[];
+      const staleDeletedRefs=[];
       for(const d of snap.docs){
         const c=await normalizeLegacyCodeV12(courseId,d.id,d.data()||{});
-        // Deleted/archived subscription codes never belong to any live list.
-        if(c.deleted===true||c.subscriptionDeleted===true||c.permanentlyDeleted===true||c.codeDeleted===true)continue;
-        source.push({id:d.id,c,category:categoryV12(c)});
+        const normalized=normCode(c.normalizedCode||c.code);
+        const deletedPermanently=isPermanentlyDeletedCodeV12(c)||archivedCodes.has(normalized);
+        if(deletedPermanently){
+          staleDeletedRefs.push(d.ref);
+          continue;
+        }
+        if(categoryV12(c)==='used') {
+          const info=Array.isArray(c.usedByInfo)?c.usedByInfo[0]:null;
+          const uid=String(info?.uid||c.usedBy?.[0]||'');
+          if(uid && !info?.photoURL && !info?.photoUrl && !info?.photo){
+            try{
+              const us=await db.collection('users').doc(uid).get();
+              if(us.exists){
+                const u=us.data()||{};
+                const enriched={...(info||{}),photoURL:u.photoURL||u.photoUrl||u.photo||''};
+                c.usedByInfo=[enriched,...(Array.isArray(c.usedByInfo)?c.usedByInfo.slice(1):[])];
+              }
+            }catch(_){}
+          }
+        }
+        source.push({id:d.id,c,category:categoryV12(c),deletedPermanently:false});
+      }
+      // Remove stale deleted-code documents left by older versions. The archive remains
+      // as the permanent uniqueness lock, so these codes can never be recreated.
+      if(staleDeletedRefs.length){
+        const batch=db.batch();
+        staleDeletedRefs.forEach(ref=>batch.delete(ref));
+        await batch.commit().catch(e=>console.warn('cleanup deleted subscription codes',e));
       }
       window.__aaSubscriptionCodeSearchCourse=cacheKey;
       window.__aaSubscriptionCodeSearchData=source;
