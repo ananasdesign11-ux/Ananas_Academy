@@ -4192,16 +4192,6 @@ body.light-mode #fullPageAssignmentsContainer .assignment-full-card>div:first-ch
     <div class="edit-modal" id="manageCodesModal">
         <button onclick="document.getElementById('manageCodesModal').classList.remove('active');" style="position:static; float:left; font-size:1.5rem; background:none; border:none; color:var(--text-muted); cursor:pointer;">&times;</button>
         <h3 id="manageCodesTitle"></h3>
-        <div id="aaCodeSearchToolbar" class="aa-code-search-toolbar">
-            <button type="button" id="aaCodeSearchToggle" class="aa-code-search-toggle" aria-label="البحث عن اشتراك" title="البحث">
-                <i class="fas fa-search" aria-hidden="true"></i>
-            </button>
-            <div id="aaCodeSearchBox" class="aa-code-search-box" hidden>
-                <i class="fas fa-search" aria-hidden="true"></i>
-                <input id="aaCodeSearchInput" type="search" autocomplete="off" spellcheck="false" placeholder="ابحث بالاسم أو البريد الإلكتروني أو كود الطالب..." aria-label="البحث بالاسم أو البريد الإلكتروني أو كود الطالب">
-                <button type="button" id="aaCodeSearchClear" class="aa-code-search-clear" aria-label="مسح البحث" title="مسح البحث"><i class="fas fa-xmark" aria-hidden="true"></i></button>
-            </div>
-        </div>
         <div>
             <div style="background: var(--bg-secondary); padding: 15px; border-radius: var(--radius); border: 1px solid var(--border); margin-bottom: 15px;">
                 <label id="newCodeLabel"></label><input type="text" id="newCodeInput" placeholder="اكتب الكود الجديد">
@@ -13813,6 +13803,25 @@ window.loadCodesForCourse=async function(courseId){
     const rows=[];
     for(const d of snap.docs){
       let c=await normalizeCodeState(courseId,d.id,d.data()||{});
+      // Permanently deleted/archived codes must never appear in any lifecycle list.
+      // This also repairs legacy records that were archived but left behind in /codes.
+      try{
+        if(await window.isCodePermanentlyArchived?.(courseId,c.normalizedCode||c.code)){
+          await d.ref.delete();
+          continue;
+        }
+        // Legacy subscription deletion used revokedUsers before the final lifecycle rule.
+        // Treat any such code as permanently deleted as well.
+        if(Array.isArray(c.revokedUsers)&&c.revokedUsers.length){
+          await archiveCode(courseId,c,'deleted');
+          await d.ref.delete();
+          continue;
+        }
+      }catch(cleanErr){
+        console.warn('legacy deleted code cleanup',d.id,cleanErr);
+        // Never render a code that is explicitly marked as revoked even if cleanup failed.
+        if(Array.isArray(c.revokedUsers)&&c.revokedUsers.length) continue;
+      }
       const st=codeStatus(c);
       const start=asDate(c.startTime),end=asDate(c.endTime);
       const startTxt=start?start.toLocaleString('ar-SA',{timeZone:'Asia/Riyadh'}):'—';
@@ -13969,24 +13978,6 @@ const s=document.createElement('style');s.textContent=`
 
 </script>
 
-<style id="aa-subscription-search-css">
-#aaCodeSearchToolbar{display:flex;align-items:center;justify-content:flex-start;gap:8px;margin:0 0 14px;width:100%;}
-#aaCodeSearchToggle{width:42px;height:42px;min-width:42px;border:1px solid var(--border);border-radius:14px;background:var(--bg-secondary);color:var(--text-muted);display:inline-grid;place-items:center;cursor:pointer;font-family:inherit;transition:.2s ease;}
-#aaCodeSearchToggle:hover{color:var(--accent1);border-color:var(--accent1);transform:translateY(-1px);}
-.aa-code-search-box{display:flex;align-items:center;gap:8px;width:min(100%,620px);min-height:42px;padding:0 10px;border:1px solid var(--border);border-radius:14px;background:var(--bg-secondary);box-sizing:border-box;}
-.aa-code-search-box:focus-within{border-color:var(--accent1);box-shadow:0 0 0 3px rgba(108,92,231,.08);}
-.aa-code-search-box>i{color:var(--text-muted);font-size:.86rem;flex:0 0 auto;}
-#aaCodeSearchInput{flex:1;min-width:0;height:40px;border:0!important;outline:0!important;background:transparent!important;color:var(--text-primary)!important;font:inherit!important;margin:0!important;padding:0 4px!important;box-shadow:none!important;}
-#aaCodeSearchInput::placeholder{color:var(--text-muted);}
-#aaCodeSearchClear{width:32px;height:32px;min-width:32px;border:0;border-radius:10px;background:transparent;color:var(--text-muted);cursor:pointer;display:grid;place-items:center;}
-#aaCodeSearchClear:hover{background:rgba(108,92,231,.08);color:var(--accent1);}
-.aa-code-card-person{display:flex;align-items:center;gap:9px;min-width:0;}
-.aa-code-card-avatar{width:34px;height:34px;min-width:34px;flex:0 0 34px;border-radius:50%;overflow:hidden;display:grid;place-items:center;background:var(--bg-secondary);border:1px solid var(--border);}
-.aa-code-card-avatar img{width:100%;height:100%;object-fit:cover;display:block;}
-.aa-code-card-avatar-fallback{display:grid;place-items:center;width:100%;height:100%;background:var(--accent-gradient);color:#fff;font-weight:900;font-size:.78rem;}
-.aa-code-search-empty{grid-column:1/-1;padding:28px 16px;text-align:center;color:var(--text-muted);border:1px dashed var(--border);border-radius:16px;}
-@media(max-width:600px){.aa-code-search-box{width:100%;}#aaCodeSearchInput{font-size:.82rem!important;}}
-</style>
 <style id="aa-code-manager-v12-style">
 #codesTableWrapV12{margin-top:14px;}
 #codeLifecycleBoardV12{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;margin-top:14px;}
@@ -14079,17 +14070,6 @@ const s=document.createElement('style');s.textContent=`
   }
   function expiredV12(c){const end=asDateV12(c?.endTime);return !!end&&end.getTime()<=Date.now();}
   function categoryV12(c){return expiredV12(c)?'expired':usedCountV12(c)>0?'used':'unused';}
-
-  function isPermanentlyDeletedCodeV12(c){
-    if(!c) return false;
-    if(c.deleted===true || c.subscriptionDeleted===true || c.permanentlyDeleted===true || c.codeDeleted===true) return true;
-    const revoked=Array.isArray(c.revokedUsers)?c.revokedUsers:[];
-    const used=Array.isArray(c.usedBy)?c.usedBy.filter(Boolean):[];
-    // Old subscription-removal logic left a zero-use code with a revoked user.
-    // Such a code is a deleted subscription code and must never reappear or be reusable.
-    if(!used.length && revoked.length) return true;
-    return false;
-  }
   function suspensionLabelV12(c){
     const until=asDateV12(c?.suspendedUntil);
     if(!legacySuspendedV12(c))return '';
@@ -14407,145 +14387,22 @@ const s=document.createElement('style');s.textContent=`
     }catch(e){console.error(e);showCustomAlert?.('خطأ','تعذر إيقاف الكود: '+e.message);}finally{this.disabled=false;this.textContent='إيقاف الكود';}
   };}
 
-  function aaCodeSearchNormalize(value){
-    return String(value??'').toLocaleLowerCase('ar-SA').trim();
-  }
-
-  function aaCodeSearchMatches(item,query){
-    if(!query)return true;
-    const q=aaCodeSearchNormalize(query);
-    const c=item.c||{};
-    const infos=Array.isArray(c.usedByInfo)?c.usedByInfo:[];
-    const values=[
-      c.code,
-      c.normalizedCode,
-      ...infos.flatMap(x=>[x?.name,x?.displayName,x?.email,x?.uid]),
-      ...(Array.isArray(c.usedBy)?c.usedBy.map(uidFrom):[])
-    ].filter(v=>v!==undefined&&v!==null).map(aaCodeSearchNormalize);
-    return values.some(v=>v.includes(q));
-  }
-
-  function aaRenderCodeLifecycleBoard(courseId){
-    const board=$v12('codeLifecycleBoardV12');
-    if(!board)return;
-    const source=Array.isArray(window.__aaSubscriptionCodeSearchData)?window.__aaSubscriptionCodeSearchData:[];
-    const query=String(window.__aaSubscriptionCodeSearchQuery||'');
-    const filtered=source.filter(item=>!item.deletedPermanently&&aaCodeSearchMatches(item,query));
-    const groups={unused:[],used:[],expired:[]};
-    filtered.forEach(item=>{if(groups[item.category])groups[item.category].push(item);});
-
-    const panel=(key,title)=>{
-      const items=groups[key]||[];
-      return `<section class="code-lifecycle-panel"><h4><span>${title}</span><small>${items.length} اشتراك</small></h4><div class="code-lifecycle-list">${items.length?items.map(({id,c})=>{
-        const info=usedInfoV12(c),u=info[0]||{};
-        const name=u.name||'كود غير مستخدم';
-        const email=u.email||'';
-        const uid=String(u.uid||c.usedBy?.[0]||'');
-        const code=String(c.code||id);
-        const photo=String(u.photoURL||u.photoUrl||u.photo||'');
-        const avatar=photo
-          ? `<img src="${escV12(photo)}" alt="" loading="lazy" decoding="async">`
-          : `<span class="aa-code-card-avatar-fallback">${escV12((name||'م').slice(0,1))}</span>`;
-        return `<div class="code-card-v12-wrap" data-aa-code-search-item="1" data-aa-code-search-text="${escV12([name,email,uid,code].join(' '))}"><button type="button" class="code-card-v12 ${key}" onclick="__codeDetail('${escV12(courseId)}','${escV12(id)}')"><span class="code-card-v12-main"><span class="aa-code-card-person"><span class="aa-code-card-avatar">${avatar}</span><strong>${escV12(name)}</strong></span></span></button></div>`;
-      }).join(''):'<div class="code-lifecycle-empty">لا توجد اشتراكات مطابقة.</div>'}</div></section>`;
-    };
-
-    if(!source.length){
-      board.innerHTML='<div class="aa-code-search-empty">لا توجد أكواد أو اشتراكات.</div>';
-    }else if(query&&!filtered.length){
-      board.innerHTML=`<div class="aa-code-search-empty">لا توجد نتائج مطابقة لـ <strong>${escV12(query)}</strong>.</div>`;
-    }else{
-      board.innerHTML=panel('unused','غير مستخدمة')+panel('used','مستخدمة')+panel('expired','منتهية');
-    }
-    const oldTable=$v12('codesTable');if(oldTable)oldTable.style.display='none';
-  }
-
   window.loadCodesForCourse=async function(courseId){
-    if(!isAdmin||!courseId)return;
-    const oldTable=$v12('codesTable'),board=ensureLifecycleBoardV12();
-    if(!board)return;
-    const cacheKey=String(courseId);
-    if(String(window.__aaSubscriptionCodeSearchCourse||'')===cacheKey&&Array.isArray(window.__aaSubscriptionCodeSearchData)){
-      aaRenderCodeLifecycleBoard(courseId);
-      return;
-    }
-    board.innerHTML='<div style="grid-column:1/-1;padding:22px;text-align:center;color:var(--text-muted)">جاري تحميل الاشتراكات...</div>';
+    if(!isAdmin||!courseId)return;const oldTable=$v12('codesTable'),board=ensureLifecycleBoardV12();if(!board)return;
+    board.innerHTML='<div style="grid-column:1/-1;padding:22px;text-align:center;color:var(--text-muted)">جاري تحميل الأكواد...</div>';
     try{
-      const [snap,archiveSnap]=await Promise.all([
-        db.collection('courses').doc(courseId).collection('codes').get(),
-        db.collection('courses').doc(courseId).collection('codeArchive').get()
-      ]);
-      const archivedCodes=new Set(archiveSnap.docs.map(d=>normCode(d.id)).filter(Boolean));
-      const source=[];
-      const staleDeletedRefs=[];
+      const snap=await db.collection('courses').doc(courseId).collection('codes').get();
+      const groups={unused:[],used:[],expired:[]};
       for(const d of snap.docs){
-        const c=await normalizeLegacyCodeV12(courseId,d.id,d.data()||{});
-        const normalized=normCode(c.normalizedCode||c.code);
-        const deletedPermanently=isPermanentlyDeletedCodeV12(c)||archivedCodes.has(normalized);
-        if(deletedPermanently){
-          staleDeletedRefs.push(d.ref);
-          continue;
-        }
-        if(categoryV12(c)==='used') {
-          const info=Array.isArray(c.usedByInfo)?c.usedByInfo[0]:null;
-          const uid=String(info?.uid||c.usedBy?.[0]||'');
-          if(uid && !info?.photoURL && !info?.photoUrl && !info?.photo){
-            try{
-              const us=await db.collection('users').doc(uid).get();
-              if(us.exists){
-                const u=us.data()||{};
-                const enriched={...(info||{}),photoURL:u.photoURL||u.photoUrl||u.photo||''};
-                c.usedByInfo=[enriched,...(Array.isArray(c.usedByInfo)?c.usedByInfo.slice(1):[])];
-              }
-            }catch(_){}
-          }
-        }
-        source.push({id:d.id,c,category:categoryV12(c),deletedPermanently:false});
+        const c=await normalizeLegacyCodeV12(courseId,d.id,d.data()||{});groups[categoryV12(c)].push({id:d.id,c});
       }
-      // Remove stale deleted-code documents left by older versions. The archive remains
-      // as the permanent uniqueness lock, so these codes can never be recreated.
-      if(staleDeletedRefs.length){
-        const batch=db.batch();
-        staleDeletedRefs.forEach(ref=>batch.delete(ref));
-        await batch.commit().catch(e=>console.warn('cleanup deleted subscription codes',e));
-      }
-      window.__aaSubscriptionCodeSearchCourse=cacheKey;
-      window.__aaSubscriptionCodeSearchData=source;
-      aaRenderCodeLifecycleBoard(courseId);
+      const panel=(key,title)=>{const items=groups[key];return `<section class="code-lifecycle-panel"><h4><span>${title}</span><small>${items.length} كود</small></h4><div class="code-lifecycle-list">${items.length?items.map(({id,c})=>{
+        const info=usedInfoV12(c),u=info[0]||{},name=u.name||'كود غير مستخدم';
+        return `<div class="code-card-v12-wrap"><button type="button" class="code-card-v12 ${key}${legacySuspendedV12(c)?' suspended':''}" onclick="__codeDetail('${escV12(courseId)}','${escV12(id)}')"><span class="code-card-v12-main"><strong>${escV12(name)}</strong></span></button></div>`;}).join(''):'<div class="code-lifecycle-empty">لا توجد أكواد في هذه الفئة.</div>'}</div></section>`};
+      board.innerHTML=panel('unused','غير مستخدمة')+panel('used','مستخدمة')+panel('expired','منتهية');
       if(oldTable)oldTable.style.display='none';
-    }catch(e){
-      console.error('code lifecycle v12 search loader',e);
-      board.innerHTML='<div style="grid-column:1/-1;padding:22px;text-align:center;color:#e74c3c">تعذر تحميل الاشتراكات.</div>';
-    }
+    }catch(e){console.error('code lifecycle v12',e);board.innerHTML='<div style="grid-column:1/-1;padding:22px;text-align:center;color:#e74c3c">تعذر تحميل الأكواد.</div>';}
   };
-
-  (function bindAaCodeSearch(){
-    if(window.__aaSubscriptionCodeSearchBound)return;
-    const toggle=$v12('aaCodeSearchToggle'),box=$v12('aaCodeSearchBox'),input=$v12('aaCodeSearchInput'),clear=$v12('aaCodeSearchClear');
-    if(!toggle||!box||!input)return;
-    window.__aaSubscriptionCodeSearchBound=true;
-    toggle.addEventListener('click',()=>{
-      const opening=box.hidden;
-      box.hidden=!opening;
-      toggle.style.display=opening?'none':'inline-grid';
-      if(opening){input.value=String(window.__aaSubscriptionCodeSearchQuery||'');requestAnimationFrame(()=>input.focus());}
-      else{window.__aaSubscriptionCodeSearchQuery='';input.value='';if(activeCourseId)aaRenderCodeLifecycleBoard(activeCourseId);}
-    });
-    input.addEventListener('input',()=>{
-      window.__aaSubscriptionCodeSearchQuery=String(input.value||'');
-      if(activeCourseId)aaRenderCodeLifecycleBoard(activeCourseId);
-    });
-    clear?.addEventListener('click',()=>{
-      input.value='';
-      window.__aaSubscriptionCodeSearchQuery='';
-      input.focus();
-      if(activeCourseId)aaRenderCodeLifecycleBoard(activeCourseId);
-    });
-    document.addEventListener('keydown',e=>{
-      if(e.key==='Escape'&&!box.hidden){box.hidden=true;toggle.style.display='inline-grid';window.__aaSubscriptionCodeSearchQuery='';input.value='';if(activeCourseId)aaRenderCodeLifecycleBoard(activeCourseId);}
-    });
-  })();
-
   window.manageCodeUsers=window.manageCodeUsers||function(){};
 })();
 </script>
@@ -16588,40 +16445,103 @@ body.light-mode #lessonVideoWrapper .aa-speed-value{color:#172033!important;}
 })();
 </script>
 
-<script id="aa-authoritative-fullscreen-only-v3">
+<script id="aa-authoritative-fullscreen-only-v4">
 (function(){
   'use strict';
-  if(window.__aaAuthoritativeFullscreenOnlyV3)return;
-  window.__aaAuthoritativeFullscreenOnlyV3=true;
+  if(window.__aaAuthoritativeFullscreenOnlyV4)return;
+  window.__aaAuthoritativeFullscreenOnlyV4=true;
+
+  const isTouch=()=>{
+    try{return window.matchMedia('(hover:none), (pointer:coarse)').matches || (navigator.maxTouchPoints||0)>0;}
+    catch(_){return (navigator.maxTouchPoints||0)>0;}
+  };
 
   const invoke=async()=>{
     try{
       const el=document.getElementById('lessonVideoWrapper');
       if(!el)return;
-      if(document.fullscreenElement||document.webkitFullscreenElement){
+      const active=document.fullscreenElement||document.webkitFullscreenElement;
+      if(active){
         if(document.exitFullscreen)await document.exitFullscreen();
         else if(document.webkitExitFullscreen)await document.webkitExitFullscreen();
         return;
       }
+
+      // iPhone/iPad Safari exposes native fullscreen primarily on the HTML5 <video>.
+      if(isTouch() && typeof lessonHtmlVideo!=='undefined' && lessonHtmlVideo?.webkitEnterFullscreen){
+        try{lessonHtmlVideo.webkitEnterFullscreen();return;}catch(_){ }
+      }
+
+      // Preferred path: fullscreen the whole custom player when the browser supports it.
       const req=el.requestFullscreen?.bind(el)||el.webkitRequestFullscreen?.bind(el);
-      if(req){const r=req();if(r?.then)await r;return;}
-      if(typeof lessonHtmlVideo!=='undefined'&&lessonHtmlVideo?.webkitEnterFullscreen){lessonHtmlVideo.webkitEnterFullscreen();}
-    }catch(err){console.warn('fullscreen only failed',err);}
+      if(req){
+        const r=req();
+        if(r?.then)await r;
+        try{await applyLessonFullscreenOrientation?.();}catch(_){ }
+        return;
+      }
+
+      // Vimeo can expose its own fullscreen API on touch browsers.
+      if(typeof lessonVimeoInstance!=='undefined' && lessonVimeoInstance?.requestFullscreen){
+        await Promise.resolve(lessonVimeoInstance.requestFullscreen());
+        return;
+      }
+
+      // Final iframe fallback for YouTube/Vimeo embeds.
+      const frame=el.querySelector('iframe');
+      const frameReq=frame?.requestFullscreen?.bind(frame)||frame?.webkitRequestFullscreen?.bind(frame);
+      if(frameReq){
+        const r=frameReq();
+        if(r?.then)await r;
+        try{await applyLessonFullscreenOrientation?.();}catch(_){ }
+        return;
+      }
+
+      // Some Safari builds expose only the native HTML5 video fallback.
+      const nativeVideo=el.querySelector('video');
+      if(nativeVideo?.webkitEnterFullscreen){nativeVideo.webkitEnterFullscreen();return;}
+    }catch(err){console.warn('fullscreen v4 failed',err);}
   };
+  window.__aaLessonFullscreenOnlyInvoke=invoke;
 
   const bind=()=>{
     const old=document.getElementById('lessonFullscreenBtn');
-    if(!old||old.dataset.aaFsOnlyBound==='1')return;
+    if(!old||old.dataset.aaFsOnlyBoundV4==='1')return;
     const btn=old.cloneNode(true);
-    btn.dataset.aaFsOnlyBound='1';
+    btn.dataset.aaFsOnlyBoundV4='1';
     old.replaceWith(btn);
-    const stop=(e)=>{e.preventDefault();e.stopPropagation();e.stopImmediatePropagation();};
-    ['pointerdown','mousedown','pointerup','mouseup','touchstart','touchend'].forEach(type=>btn.addEventListener(type,stop,true));
-    btn.addEventListener('click',async e=>{stop(e);await invoke();},true);
+
+    let suppressClickUntil=0;
+    btn.addEventListener('pointerup',e=>{
+      if(e.pointerType!=='touch')return;
+      suppressClickUntil=Date.now()+900;
+      e.preventDefault();
+      e.stopPropagation();
+      e.stopImmediatePropagation();
+      invoke();
+    },true);
+    btn.addEventListener('click',async e=>{
+      if(Date.now()<suppressClickUntil){
+        e.preventDefault();
+        e.stopPropagation();
+        e.stopImmediatePropagation();
+        return;
+      }
+      e.preventDefault();
+      e.stopPropagation();
+      e.stopImmediatePropagation();
+      await invoke();
+    },true);
     btn.addEventListener('keydown',async e=>{
-      if(e.key==='Enter'||e.key===' '){stop(e);await invoke();}
+      if(e.key==='Enter'||e.key===' '){
+        e.preventDefault();
+        e.stopPropagation();
+        e.stopImmediatePropagation();
+        await invoke();
+      }
     },true);
   };
+
   bind();
   document.addEventListener('DOMContentLoaded',bind,{once:true});
   new MutationObserver(bind).observe(document.body,{subtree:true,childList:true});
@@ -23579,7 +23499,7 @@ body.light-mode #coursesPage .course-card:hover{
   }
 
   window.deleteEnrollmentCode=async function(codeId){
-    if(!isAdmin||!activeCourseId) return showCustomAlert?.('غير مسموح','هذه العملية للمشرف فقط.');
+    if(!isAdmin||!activeCourseId)return showCustomAlert?.('غير مسموح','هذه العملية للمشرف فقط.');
     const courseId=activeCourseId;
     let resolved;
     try{
@@ -23587,7 +23507,7 @@ body.light-mode #coursesPage .course-card:hover{
     }catch(e){
       return showCustomAlert?.('خطأ',e.message||'تعذر العثور على الحساب.');
     }
-    const {uid,codeData}=resolved;
+    const {uid}=resolved;
     try{
       const {exists,data}=await getEnrollment(courseId,uid);
       if(!exists || data.enrollmentActive===false)
@@ -23596,85 +23516,29 @@ body.light-mode #coursesPage .course-card:hover{
       return showCustomAlert?.('خطأ','تعذر قراءة الاشتراك.');
     }
 
-    // Keep the existing generic confirmation modal; only the requested reason field is added for deletion.
-
     showSubscriptionDeleteConfirm(
-      'حذف الاشتراك',
-      'سيتم حذف اشتراك هذا الحساب من هذه الدورة وحذف كود الاشتراك المرتبط به نهائيًا. لن يمكن إنشاء أو استخدام هذا الكود مرة أخرى. هل أنت متأكد؟',
+      'حذف الاشتراك والكود',
+      'سيتم حذف اشتراك الحساب من هذه الدورة وحذف كود الاشتراك نفسه نهائيًا. لن يظهر الكود في أي قائمة ولن يمكن استخدامه مرة أخرى. هل أنت متأكد؟',
       async reason=>{
         const latestRef=db.collection('courses').doc(courseId).collection('codes').doc(codeId);
         const latestSnap=await latestRef.get();
-        if(!latestSnap.exists) throw new Error('الكود غير موجود.');
+        if(!latestSnap.exists)throw new Error('الكود غير موجود.');
         const latest=latestSnap.data()||{};
-        const currentInfo=Array.isArray(latest.usedByInfo)?latest.usedByInfo:[];
-        const revoked=Array.isArray(latest.revokedUsers)?latest.revokedUsers.slice():[];
-        const inf=currentInfo.find(x=>String(x?.uid)===String(uid))||{};
-        if(!revoked.some(x=>uidFrom(x)===String(uid))){
-          revoked.push({
-            uid:String(uid),
-            name:String(inf.name||''),
-            email:String(inf.email||''),
-            revokedAt:new Date().toISOString(),
-            reason:reason||null
-          });
-        }
 
-        // Archive the exact code first inside the same Firestore batch, then delete the code.
-        // The archive is the permanent uniqueness lock used by isCodePermanentlyArchived().
-        const normalized=normCode(latest.normalizedCode||latest.code);
-        if(!normalized) throw new Error('تعذر تحديد قيمة الكود لحظره نهائيًا.');
-        const archiveRef=db.collection('courses').doc(courseId).collection('codeArchive').doc(normalized);
-        const enrollmentRef=db.collection('users').doc(String(uid)).collection('enrolledCourses').doc(String(courseId));
-        const batch=db.batch();
-        batch.set(archiveRef,{
-          normalizedCode:normalized,
-          code:latest.code||normalized,
-          reason:'subscription-deleted',
-          deletedWithSubscription:true,
-          deletedSubscriptionUid:String(uid),
-          deletedAt:firebase.firestore.FieldValue.serverTimestamp(),
-          deletedBy:currentUser?.uid||null,
-          originalCodeId:String(codeId),
-          originalUsedBy:Array.isArray(latest.usedBy)?latest.usedBy.slice():[],
-          originalUsedByInfo:currentInfo.slice(),
-          revokedUsers:revoked
-        },{merge:true});
-        batch.set(enrollmentRef,{
-          enrollmentActive:false,
-          previousCodeId:dataOr(latest.codeId,codeId),
-          previousCode:String(latest.code||''),
-          subscriptionDeleted:true,
-          subscriptionDeletedReason:reason||null,
-          subscriptionDeletedAt:firebase.firestore.FieldValue.serverTimestamp(),
-          subscriptionEndedAt:firebase.firestore.FieldValue.serverTimestamp(),
-          previousSubscriptionEndReason:reason||'تم حذف الاشتراك من قبل المشرف.',
-          accessBlocked:false,
-          blockedUntil:null,
-          blockReason:null,
-          accessBlockReason:null,
-          subscriptionSuspended:false,
-          subscriptionSuspendedUntil:null,
-          subscriptionSuspensionReason:null,
-          subscriptionSuspensionMode:null,
-          subscriptionSuspensionUpdatedAt:firebase.firestore.FieldValue.serverTimestamp(),
-          subscriptionSuspensionUpdatedBy:currentUser?.uid||null,
-          codeDeleted:true,
-          codeId:null,
-          codeUsed:null,
-          accessUpdatedAt:firebase.firestore.FieldValue.serverTimestamp()
-        },{merge:true});
-        batch.delete(latestRef);
-        await batch.commit();
+        // Archive first so the normalized code can never be recreated or reused.
+        await archiveCode(courseId,latest,'deleted');
 
-        window.__aaSubscriptionCodeSearchCourse=null;
-        window.__aaSubscriptionCodeSearchData=null;
+        // Disable every enrollment tied to this code, preserving learning history.
+        await deactivateEnrollmentsForCode(courseId,codeId,latest,'deleted');
+
+        // The /codes document is removed completely, so it cannot land in unused/used/expired.
+        await latestRef.delete();
+
+        try{document.getElementById('codeDetailModalV12')?.classList.remove('active');}catch(_){ }
+        try{document.getElementById('subscriptionDeleteReasonWrap')?.style.setProperty('display','none');}catch(_){ }
         await refreshCourseCards();
         await window.loadCodesForCourse?.(courseId);
 
-        // The deleted code no longer has a detail document; close its detail view instead.
-        document.getElementById('codeDetailModalV12')?.classList.remove('active');
-
-        // The user's live enrollment listener sees the document update and ejects in the same change cycle.
         if(currentOpenCourseId()===String(courseId) && !isAdmin){
           await ejectNow(buildDeletionMessage({
             subscriptionDeleted:true,
@@ -23682,9 +23546,7 @@ body.light-mode #coursesPage .course-card:hover{
             previousSubscriptionEndReason:reason
           }));
         }else{
-          showCustomAlert?.('تم حذف الاشتراك',
-            `تم حذف الاشتراك والكود المرتبط به نهائيًا. لن يمكن استخدام الكود مرة أخرى.${reason?`\nالسبب: ${reason}`:''}`
-          );
+          showCustomAlert?.('تم الحذف','تم حذف الاشتراك والكود نهائيًا من هذه الدورة. لن يظهر الكود في أي قائمة ولن يمكن استخدامه مرة أخرى.'+(reason?`\nالسبب: ${reason}`:''));
         }
       }
     );
@@ -24043,191 +23905,6 @@ body.light-mode #coursesPage .course-card:hover{
     const b=e.target?.closest?.('#confirmCourseSuspendBtn');
     if(b)setTimeout(()=>{if(window.__aaSubscriptionSuspendTarget?.courseId&&window.__aaSubscriptionSuspendTarget?.codeId)window.__codeDetail?.(window.__aaSubscriptionSuspendTarget.courseId,window.__aaSubscriptionSuspendTarget.codeId);},80);
   },true);
-})();
-</script>
-
-
-<!-- ===== FINAL SUBSCRIPTION DELETED-CODE + MOBILE VIDEO FULLSCREEN FIX ===== -->
-<style id="aa-final-deleted-code-and-mobile-video-fix">
-  /* Mobile fallback for browsers that do not support element fullscreen. */
-  #lessonVideoWrapper.aa-mobile-fullscreen-fallback{
-    position:fixed!important;
-    inset:0!important;
-    width:100vw!important;
-    height:100dvh!important;
-    max-width:none!important;
-    max-height:none!important;
-    margin:0!important;
-    border-radius:0!important;
-    z-index:2147483000!important;
-    background:#000!important;
-  }
-  #lessonVideoWrapper.aa-mobile-fullscreen-fallback .yt-player-container,
-  #lessonVideoWrapper.aa-mobile-fullscreen-fallback .yt-player-container>video,
-  #lessonVideoWrapper.aa-mobile-fullscreen-fallback .yt-player-container>iframe{
-    width:100%!important;
-    height:100%!important;
-  }
-  body.aa-mobile-video-fullscreen-lock{overflow:hidden!important;touch-action:none!important;}
-  @media (max-width:768px){
-    #lessonVideoWrapper.aa-mobile-fullscreen-fallback .lesson-platform-controls{
-      padding-bottom:calc(10px + env(safe-area-inset-bottom))!important;
-    }
-  }
-</style>
-<script id="aa-final-deleted-code-and-mobile-video-fix-js">
-(function(){
-  'use strict';
-  if(window.__aaFinalDeletedCodeMobileVideoFix)return;
-  window.__aaFinalDeletedCodeMobileVideoFix=true;
-
-  const $=id=>document.getElementById(id);
-  const uidOf=v=>String(typeof v==='string'?v:(v?.uid||'')).trim();
-  const norm=v=>String(v||'').toUpperCase().replace(/\s+/g,'').trim();
-  const courseOpen=()=>String((typeof activeCourseId!=='undefined'&&activeCourseId)||window.activeCourseId||'');
-  const isDeletedCode=data=>{
-    const c=data||{};
-    if(c.deleted===true||c.archived===true||c.codeDeleted===true||c.subscriptionDeleted===true||c.deletedWithSubscription===true)return true;
-    const revoked=Array.isArray(c.revokedUsers)?c.revokedUsers:[];
-    const used=Array.isArray(c.usedBy)?c.usedBy.filter(Boolean):[];
-    // Older versions implemented "delete subscription" by removing the only user
-    // from usedBy and leaving revokedUsers behind. Treat those codes as deleted too.
-    if(revoked.length>0 && used.length===0)return true;
-    return false;
-  };
-
-  async function permanentlyRemoveLegacyDeletedCodes(courseId,snap){
-    const bad=[];
-    snap.forEach(doc=>{if(isDeletedCode(doc.data()||{}))bad.push({id:doc.id,data:doc.data()||{}});});
-    if(!bad.length)return;
-    for(const item of bad){
-      try{
-        const normalized=norm(item.data.normalizedCode||item.data.code);
-        if(normalized){
-          await db.collection('courses').doc(String(courseId)).collection('codeArchive').doc(normalized).set({
-            normalizedCode:normalized,
-            code:item.data.code||normalized,
-            reason:item.data.subscriptionDeleted===true||Array.isArray(item.data.revokedUsers)&&item.data.revokedUsers.length?'subscription-deleted':'deleted',
-            permanentlyDeleted:true,
-            archivedAt:firebase.firestore.FieldValue.serverTimestamp(),
-            originalCodeId:String(item.id)
-          },{merge:true});
-        }
-        await db.collection('courses').doc(String(courseId)).collection('codes').doc(String(item.id)).delete();
-      }catch(e){console.warn('legacy deleted code cleanup',item.id,e)}
-    }
-  }
-
-  // Make the final code manager renderer hide and purge all historically deleted codes.
-  const previousLoader=window.loadCodesForCourse;
-  if(typeof previousLoader==='function'&&!previousLoader.__aaDeletedCodeFinalized){
-    const wrapped=async function(courseId){
-      try{
-        const snap=await db.collection('courses').doc(String(courseId)).collection('codes').get();
-        await permanentlyRemoveLegacyDeletedCodes(courseId,snap);
-      }catch(e){console.warn('pre-render deleted-code cleanup',e)}
-      return previousLoader.apply(this,arguments);
-    };
-    wrapped.__aaDeletedCodeFinalized=true;
-    wrapped.__original=previousLoader;
-    window.loadCodesForCourse=wrapped;
-  }
-
-  // Prevent any still-existing legacy renderer from putting a deleted code back in view.
-  const rawQuery=db.collection('courses');
-  if(!window.__aaDeletedCodeLiveGuardBound){
-    window.__aaDeletedCodeLiveGuardBound=true;
-    window.__aaDeletedCodeLiveGuardTimer=setInterval(async()=>{
-      if(!isAdmin||!courseOpen())return;
-      try{
-        const id=courseOpen();
-        const snap=await rawQuery.doc(id).collection('codes').get();
-        let removed=false;
-        for(const d of snap.docs){
-          if(!isDeletedCode(d.data()||{}))continue;
-          const n=norm(d.data()?.normalizedCode||d.data()?.code);
-          if(n)await rawQuery.doc(id).collection('codeArchive').doc(n).set({normalizedCode:n,code:d.data()?.code||n,reason:'subscription-deleted',permanentlyDeleted:true,archivedAt:firebase.firestore.FieldValue.serverTimestamp(),originalCodeId:d.id},{merge:true}).catch(()=>{});
-          await rawQuery.doc(id).collection('codes').doc(d.id).delete().catch(()=>{});
-          removed=true;
-        }
-        if(removed) await window.loadCodesForCourse?.(id);
-      }catch(_){ }
-    },1500);
-  }
-
-  // Mobile fullscreen fallback. Native fullscreen is retained where available.
-  const mobileTouch=()=>window.matchMedia?.('(pointer:coarse)').matches===true || (navigator.maxTouchPoints||0)>0;
-  const wrapper=()=>$('lessonVideoWrapper');
-  const isFallback=()=>wrapper()?.classList.contains('aa-mobile-fullscreen-fallback');
-  const enterFallback=()=>{
-    const w=wrapper();if(!w)return;
-    w.classList.add('aa-mobile-fullscreen-fallback');
-    document.body.classList.add('aa-mobile-video-fullscreen-lock');
-    w.querySelector('#lessonFullscreenBtn')?.setAttribute('aria-label','تصغير');
-    w.querySelector('#lessonFullscreenBtn i')?.classList.remove('fa-expand');
-    w.querySelector('#lessonFullscreenBtn i')?.classList.add('fa-compress');
-  };
-  const exitFallback=()=>{
-    const w=wrapper();if(!w)return;
-    w.classList.remove('aa-mobile-fullscreen-fallback');
-    document.body.classList.remove('aa-mobile-video-fullscreen-lock');
-    w.querySelector('#lessonFullscreenBtn')?.setAttribute('aria-label','ملء الشاشة');
-    w.querySelector('#lessonFullscreenBtn i')?.classList.remove('fa-compress');
-    w.querySelector('#lessonFullscreenBtn i')?.classList.add('fa-expand');
-  };
-  window.__aaExitMobileVideoFullscreenFallback=exitFallback;
-
-  async function finalFullscreen(){
-    const w=wrapper();if(!w)return;
-    if(isFallback()){exitFallback();return;}
-    if(document.fullscreenElement||document.webkitFullscreenElement){
-      try{if(document.exitFullscreen)await document.exitFullscreen();else if(document.webkitExitFullscreen)await document.webkitExitFullscreen();}catch(_){ }
-      return;
-    }
-    let nativeStarted=false;
-    try{
-      const req=w.requestFullscreen?.bind(w)||w.webkitRequestFullscreen?.bind(w);
-      if(req){
-        const r=req();
-        if(r?.then)await r;
-        nativeStarted=!!(document.fullscreenElement||document.webkitFullscreenElement);
-        if(nativeStarted)return;
-      }
-    }catch(e){console.warn('native lesson fullscreen failed',e)}
-    if(!nativeStarted && typeof lessonHtmlVideo!=='undefined' && lessonHtmlVideo?.webkitEnterFullscreen){
-      try{lessonHtmlVideo.webkitEnterFullscreen();}catch(_){ }
-      setTimeout(()=>{
-        if(!document.fullscreenElement&&!document.webkitFullscreenElement&&!isFallback()){
-          if(mobileTouch())enterFallback();
-        }
-      },180);
-      return;
-    }
-    if(mobileTouch())enterFallback();
-  }
-
-  function bindFullscreenButton(){
-    const old=$('lessonFullscreenBtn');
-    if(!old||old.dataset.aaFinalMobileFsBound==='1')return;
-    const btn=old.cloneNode(true);
-    btn.dataset.aaFinalMobileFsBound='1';
-    old.replaceWith(btn);
-    const stop=e=>{e.preventDefault();e.stopPropagation();e.stopImmediatePropagation();};
-    ['pointerdown','pointerup','touchstart','touchend','mousedown','mouseup'].forEach(t=>btn.addEventListener(t,stop,true));
-    btn.addEventListener('click',async e=>{stop(e);await finalFullscreen();},true);
-    btn.addEventListener('keydown',async e=>{if(e.key==='Enter'||e.key===' '){stop(e);await finalFullscreen();}},true);
-  }
-  bindFullscreenButton();
-  document.addEventListener('DOMContentLoaded',bindFullscreenButton,{once:true});
-  new MutationObserver(bindFullscreenButton).observe(document.body,{subtree:true,childList:true});
-  document.addEventListener('fullscreenchange',()=>{
-    if(!document.fullscreenElement && !document.webkitFullscreenElement && isFallback()===false)return;
-    if(document.fullscreenElement||document.webkitFullscreenElement)exitFallback();
-  });
-  document.addEventListener('webkitfullscreenchange',()=>{
-    if(document.fullscreenElement||document.webkitFullscreenElement)exitFallback();
-  });
-  document.addEventListener('keydown',e=>{if(e.key==='Escape'&&isFallback())exitFallback();},true);
 })();
 </script>
 
