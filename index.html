@@ -4200,6 +4200,19 @@ body.light-mode #fullPageAssignmentsContainer .assignment-full-card>div:first-ch
                     <div><label id="codeEndLabel"></label><input type="datetime-local" id="codeEndDate"></div>
                 </div>
                 <button onclick="createNewCode()" style="width:100%; padding:12px; margin-top:10px; background:var(--accent1); color:#fff; border:none; border-radius:var(--btn-radius); font-weight:700; cursor:pointer;" id="createCodeBtn">إنشاء الكود</button>
+                <div id="codeSearchFilterV12" class="code-search-filter-v12">
+                    <div class="code-search-input-wrap-v12">
+                        <i class="fas fa-magnifying-glass"></i>
+                        <input id="codeSearchInputV12" type="search" autocomplete="off" placeholder="ابحث بالاسم أو البريد الإلكتروني">
+                        <button type="button" id="codeSearchClearV12" class="code-search-clear-v12" aria-label="مسح البحث" title="مسح البحث">&times;</button>
+                    </div>
+                    <div class="code-filter-row-v12" role="group" aria-label="فلترة الأكواد">
+                        <button type="button" class="code-filter-btn-v12 active" data-code-filter="all">الكل</button>
+                        <button type="button" class="code-filter-btn-v12" data-code-filter="unused">غير مستخدمة</button>
+                        <button type="button" class="code-filter-btn-v12" data-code-filter="used">مستخدمة</button>
+                        <button type="button" class="code-filter-btn-v12" data-code-filter="expired">منتهية</button>
+                    </div>
+                </div>
                 <button onclick="openTermsEditor()" style="width:100%; padding:10px; margin-top:8px; background:transparent; color:var(--text-primary); border:1px solid var(--border); border-radius:var(--btn-radius); font-weight:700; cursor:pointer;" id="manageTermsBtn"><i class="fas fa-file-contract"></i> إدارة الشروط والأحكام</button>
             </div>
             <table class="admin-table" id="codesTable">
@@ -14048,6 +14061,20 @@ const s=document.createElement('style');s.textContent=`
 #customConfirmAccountCardV12 .account-copy strong{display:block;font-size:.95rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 #customConfirmAccountCardV12 .account-copy small{display:block;color:var(--text-muted);margin-top:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 #customConfirmAccountCardV12 .account-copy .email{direction:ltr;text-align:right;}
+.code-search-filter-v12{margin-top:14px;padding-top:14px;border-top:1px solid var(--border);}
+.code-search-input-wrap-v12{position:relative;display:flex;align-items:center;gap:8px;min-height:46px;padding:0 12px;border:1px solid var(--border);border-radius:14px;background:var(--bg-card);transition:border-color .2s,box-shadow .2s;}
+.code-search-input-wrap-v12:focus-within{border-color:var(--accent1);box-shadow:0 0 0 3px rgba(108,92,231,.10);}
+.code-search-input-wrap-v12>i{color:var(--text-muted);font-size:.9rem;flex:0 0 auto;}
+.code-search-input-wrap-v12 input{width:100%;min-width:0;border:0!important;outline:0!important;background:transparent!important;color:var(--text-primary)!important;margin:0!important;padding:9px 2px!important;border-radius:0!important;font-family:inherit;font-size:.88rem;}
+.code-search-input-wrap-v12 input::placeholder{color:var(--text-muted);}
+.code-search-clear-v12{display:none;width:30px;height:30px;flex:0 0 30px;border:0;border-radius:50%;background:transparent;color:var(--text-muted);cursor:pointer;font-size:1.2rem;line-height:1;}
+.code-search-clear-v12.show{display:grid;place-items:center;}
+.code-search-clear-v12:hover{background:rgba(108,92,231,.10);color:var(--accent1);}
+.code-filter-row-v12{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:7px;margin-top:9px;}
+.code-filter-btn-v12{min-height:40px;padding:7px 9px;border:1px solid var(--border);border-radius:12px;background:var(--bg-secondary);color:var(--text-muted);font-family:inherit;font-size:.76rem;font-weight:800;cursor:pointer;transition:.2s;}
+.code-filter-btn-v12:hover{border-color:var(--accent1);color:var(--accent1);}
+.code-filter-btn-v12.active{background:var(--accent-gradient);border-color:transparent;color:#fff;box-shadow:0 8px 18px rgba(108,92,231,.16);}
+@media(max-width:600px){.code-filter-row-v12{grid-template-columns:repeat(2,minmax(0,1fr));}.code-search-input-wrap-v12{min-height:44px;}}
 @media(max-width:600px){#customConfirmAccountCardV12{align-items:flex-start;}}
 
 @media(max-width:600px){#codeExpiryEditModalV12 .expiry-actions{flex-direction:column;}#codeExpiryEditModalV12{padding:18px;}}
@@ -14387,19 +14414,63 @@ const s=document.createElement('style');s.textContent=`
     }catch(e){console.error(e);showCustomAlert?.('خطأ','تعذر إيقاف الكود: '+e.message);}finally{this.disabled=false;this.textContent='إيقاف الكود';}
   };}
 
+  function setupCodeSearchFilterV12(){
+    const root=$v12('codeSearchFilterV12');if(!root)return;
+    const input=$v12('codeSearchInputV12'),clear=$v12('codeSearchClearV12');
+    if(root.dataset.bound==='1')return;
+    root.dataset.bound='1';
+    input?.addEventListener('input',()=>{
+      window.__codeAdminSearchV12=String(input.value||'').trim().toLocaleLowerCase('ar-SA');
+      clear?.classList.toggle('show',!!input.value);
+      window.loadCodesForCourse?.(activeCourseId);
+    });
+    clear?.addEventListener('click',()=>{
+      if(input){input.value='';input.dispatchEvent(new Event('input',{bubbles:true}));input.focus();}
+    });
+    root.querySelectorAll('[data-code-filter]').forEach(btn=>btn.addEventListener('click',()=>{
+      root.querySelectorAll('[data-code-filter]').forEach(x=>x.classList.remove('active'));
+      btn.classList.add('active');
+      window.__codeAdminFilterV12=btn.dataset.codeFilter||'all';
+      window.loadCodesForCourse?.(activeCourseId);
+    }));
+    if(!window.__codeAdminFilterV12)window.__codeAdminFilterV12='all';
+  }
+
   window.loadCodesForCourse=async function(courseId){
-    if(!isAdmin||!courseId)return;const oldTable=$v12('codesTable'),board=ensureLifecycleBoardV12();if(!board)return;
+    if(!isAdmin||!courseId)return;
+    setupCodeSearchFilterV12();
+    const oldTable=$v12('codesTable'),board=ensureLifecycleBoardV12();if(!board)return;
     board.innerHTML='<div style="grid-column:1/-1;padding:22px;text-align:center;color:var(--text-muted)">جاري تحميل الأكواد...</div>';
     try{
       const snap=await db.collection('courses').doc(courseId).collection('codes').get();
       const groups={unused:[],used:[],expired:[]};
+      const q=String(window.__codeAdminSearchV12||'').trim().toLocaleLowerCase('ar-SA');
+      const selectedFilter=window.__codeAdminFilterV12||'all';
       for(const d of snap.docs){
-        const c=await normalizeLegacyCodeV12(courseId,d.id,d.data()||{});groups[categoryV12(c)].push({id:d.id,c});
+        const c=await normalizeLegacyCodeV12(courseId,d.id,d.data()||{});
+        const key=categoryV12(c);
+        if(selectedFilter!=='all'&&selectedFilter!==key)continue;
+        const info=usedInfoV12(c);
+        const searchable=[
+          c.code,c.normalizedCode,
+          ...info.flatMap(u=>[u?.name,u?.email]),
+          c.usedByEmail,c.userEmail,c.email,c.userName,c.name
+        ].filter(Boolean).join(' ').toLocaleLowerCase('ar-SA');
+        if(q&&!searchable.includes(q))continue;
+        groups[key].push({id:d.id,c});
       }
-      const panel=(key,title)=>{const items=groups[key];return `<section class="code-lifecycle-panel"><h4><span>${title}</span><small>${items.length} كود</small></h4><div class="code-lifecycle-list">${items.length?items.map(({id,c})=>{
-        const info=usedInfoV12(c),u=info[0]||{},name=u.name||'كود غير مستخدم';
-        return `<div class="code-card-v12-wrap"><button type="button" class="code-card-v12 ${key}${legacySuspendedV12(c)?' suspended':''}" onclick="__codeDetail('${escV12(courseId)}','${escV12(id)}')"><span class="code-card-v12-main"><strong>${escV12(name)}</strong></span></button></div>`;}).join(''):'<div class="code-lifecycle-empty">لا توجد أكواد في هذه الفئة.</div>'}</div></section>`};
-      board.innerHTML=panel('unused','غير مستخدمة')+panel('used','مستخدمة')+panel('expired','منتهية');
+      const totalShown=Object.values(groups).reduce((n,a)=>n+a.length,0);
+      const empty='<div class="code-lifecycle-empty">لا توجد أكواد مطابقة للبحث أو الفلترة الحالية.</div>';
+      const panel=(key,title)=>{
+        const items=groups[key];
+        if(selectedFilter!=='all'&&selectedFilter!==key)return '';
+        return `<section class="code-lifecycle-panel"><h4><span>${title}</span><small>${items.length} كود</small></h4><div class="code-lifecycle-list">${items.length?items.map(({id,c})=>{
+          const info=usedInfoV12(c),u=info[0]||{},name=u.name||'كود غير مستخدم',email=u.email||'';
+          const meta=email?`<small>${escV12(email)}</small>`:'';
+          return `<div class="code-card-v12-wrap"><button type="button" class="code-card-v12 ${key}${legacySuspendedV12(c)?' suspended':''}" onclick="__codeDetail('${escV12(courseId)}','${escV12(id)}')"><span class="code-card-v12-main"><strong>${escV12(name)}</strong>${meta}</span></button></div>`;
+        }).join(''):empty}</div></section>`;
+      };
+      board.innerHTML=totalShown?panel('unused','غير مستخدمة')+panel('used','مستخدمة')+panel('expired','منتهية'):'<div class="code-lifecycle-empty" style="grid-column:1/-1;padding:28px">لا توجد أكواد مطابقة للبحث أو الفلترة الحالية.</div>';
       if(oldTable)oldTable.style.display='none';
     }catch(e){console.error('code lifecycle v12',e);board.innerHTML='<div style="grid-column:1/-1;padding:22px;text-align:center;color:#e74c3c">تعذر تحميل الأكواد.</div>';}
   };
