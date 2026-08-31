@@ -23122,6 +23122,7 @@ body.light-mode #coursesPage .course-card:hover{
   'use strict';
 
   const $=id=>document.getElementById(id);
+  const currentOpenCourseId=()=>String((typeof activeCourseId!=='undefined'&&activeCourseId) || window.activeCourseId || '');
   const toDate=v=>{
     try{
       if(!v) return null;
@@ -23400,6 +23401,7 @@ body.light-mode #coursesPage .course-card:hover{
         $('courseAccessSuspendModal')?.classList.remove('active');
         await window.loadCodesForCourse?.(courseId);
         await window.__codeDetail?.(courseId,codeId);
+        try{ await window.__aaRefreshSubscriptionDetail?.(courseId,codeId,uid); }catch(_){}
         await refreshCourseCards();
         showCustomAlert?.('تم إيقاف الاشتراك',
           until?`تم إيقاف الاشتراك حتى ${formatUntil(until)}.${reason?`\nالسبب: ${reason}`:''}`:
@@ -23497,9 +23499,10 @@ body.light-mode #coursesPage .course-card:hover{
         await refreshCourseCards();
         await window.loadCodesForCourse?.(courseId);
         await window.__codeDetail?.(courseId,codeId);
+        try{ await window.__aaRefreshSubscriptionDetail?.(courseId,codeId,uid); }catch(_){}
 
         // The user's live enrollment listener sees the document update and ejects in the same change cycle.
-        if(String(window.activeCourseId||'')===String(courseId) && !isAdmin){
+        if(currentOpenCourseId()===String(courseId) && !isAdmin){
           await ejectNow(buildDeletionMessage({
             subscriptionDeleted:true,
             subscriptionDeletedReason:reason,
@@ -23528,14 +23531,14 @@ body.light-mode #coursesPage .course-card:hover{
     window.__aaExpiryUnsub=ref.onSnapshot(async snap=>{
       const e=snap.exists?(snap.data()||{}):null;
       if(!e){
-        if(String(window.activeCourseId||'')===String(courseId))
+        if(currentOpenCourseId()===String(courseId))
           await ejectNow('لم يعد لديك اشتراك فعال في هذه الدورة.');
         await refreshCourseCards();
         return;
       }
 
       if(e.subscriptionDeleted===true || e.enrollmentActive===false){
-        if(String(window.activeCourseId||'')===String(courseId)){
+        if(currentOpenCourseId()===String(courseId)){
           await ejectNow(buildDeletionMessage(e));
         }
         await refreshCourseCards();
@@ -23545,7 +23548,7 @@ body.light-mode #coursesPage .course-card:hover{
       if(e.subscriptionSuspended===true){
         const until=toDate(e.subscriptionSuspendedUntil);
         if(!until || until.getTime()>Date.now()){
-          if(String(window.activeCourseId||'')===String(courseId)){
+          if(currentOpenCourseId()===String(courseId)){
             await ejectNow(buildSuspensionMessage(e));
           }
           await refreshCourseCards();
@@ -23578,7 +23581,7 @@ body.light-mode #coursesPage .course-card:hover{
         const until=toDate(e.blockedUntil);
         if(!until || until.getTime()>Date.now()){
           const reason=String(e.blockReason||e.accessBlockReason||'تم إيقاف الاشتراك في هذه الدورة.');
-          if(String(window.activeCourseId||'')===String(courseId))
+          if(currentOpenCourseId()===String(courseId))
             await ejectNow(`اشتراكك في هذه الدورة موقوف حاليًا.\nينتهي الإيقاف: ${formatUntil(until)}\nالسبب: ${reason}`);
           await refreshCourseCards();
           return;
@@ -23635,7 +23638,7 @@ body.light-mode #coursesPage .course-card:hover{
   if(typeof oldOpenCourseContentSubscription==='function'&&!oldOpenCourseContentSubscription.__aaSubscriptionWatcher){
     const wrapped=async function(courseId){
       const result=await oldOpenCourseContentSubscription.apply(this,arguments);
-      if(currentUser&&!isAdmin&&String(window.activeCourseId||'')===String(courseId)){
+      if(currentUser&&!isAdmin&&currentOpenCourseId()===String(courseId)){
         try{ window.watchCourseAccess(courseId); }catch(_){}
       }
       return result;
@@ -23647,8 +23650,8 @@ body.light-mode #coursesPage .course-card:hover{
 
   // On auth/session restore, immediately attach the subscription watcher to the active course.
   document.addEventListener('visibilitychange',()=>{
-    if(document.hidden||!currentUser||isAdmin||!window.activeCourseId)return;
-    window.watchCourseAccess?.(window.activeCourseId);
+    if(document.hidden||!currentUser||isAdmin||!currentOpenCourseId())return;
+    window.watchCourseAccess?.(currentOpenCourseId());
   });
 
 })();
@@ -23666,6 +23669,7 @@ body.light-mode #coursesPage .course-card:hover{
   const toDate=v=>{try{return v?.toDate?v.toDate():(v?new Date(v):null)}catch(_){return null}};
   const uidFrom=v=>String(typeof v==='string'?v:(v?.uid||'')).trim();
   const enrollmentRef=(courseId,uid)=>db.collection('users').doc(String(uid)).collection('enrolledCourses').doc(String(courseId));
+  const currentOpenCourseId=()=>String((typeof activeCourseId!=='undefined'&&activeCourseId) || window.activeCourseId || '');
   const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const formatUntil=d=>d?d.toLocaleString('ar-SA',{timeZone:'Asia/Riyadh'}):'حتى يتم إلغاء الإيقاف يدويًا';
 
@@ -23684,7 +23688,7 @@ body.light-mode #coursesPage .course-card:hover{
   /* Reliable live binding: keep one listener for the currently open course.
      The interval only checks whether binding is needed; Firestore delivers the actual state change in realtime. */
   async function ensureLiveSubscriptionBinding(){
-    const courseId=window.activeCourseId||activeCourseId;
+    const courseId=currentOpenCourseId();
     const uid=currentUser?.uid;
     if(!courseId || !uid || isAdmin)return;
     if(window.__aaSubscriptionLiveCourse===String(courseId) && window.__aaSubscriptionLiveUid===String(uid) && window.__aaSubscriptionLiveUnsub)return;
@@ -23694,7 +23698,7 @@ body.light-mode #coursesPage .course-card:hover{
     window.__aaSubscriptionLiveUid=String(uid);
     const ref=enrollmentRef(courseId,uid);
     window.__aaSubscriptionLiveUnsub=ref.onSnapshot(async snap=>{
-      if(String(window.activeCourseId||activeCourseId||'')!==String(courseId))return;
+      if(currentOpenCourseId()!==String(courseId))return;
       const e=snap.exists?(snap.data()||{}):null;
       if(!e || e.enrollmentActive===false || e.subscriptionDeleted===true){
         await window.__aaFinalSubscriptionEject?.(e?buildDeletionMessageLocal(e):'تم إنهاء اشتراكك في هذه الدورة.');
@@ -23744,6 +23748,23 @@ body.light-mode #coursesPage .course-card:hover{
     }
   };
 
+  window.__aaRefreshSubscriptionDetail=async function(courseId,codeId,uid){
+    try{
+      const es=await enrollmentRef(courseId,uid).get();
+      const e=es.exists?(es.data()||{}):{};
+      const status=subscriptionStatusText(e);
+      document.querySelectorAll('#codeDetailBodyV12 .code-detail-item-v12').forEach(item=>{
+        const label=item.querySelector('strong');
+        const text=(label?.textContent||'').trim();
+        if(text==='حالة الكود'||text==='حالة الاشتراك'){
+          if(label)label.textContent='حالة الاشتراك';
+          const span=item.querySelector('span');
+          if(span){span.textContent=status;span.className=suspensionIsActive(e)?'code-detail-status-suspended':status==='محذوف'?'code-detail-status-expired':'code-detail-status-active';}
+        }
+      });
+    }catch(err){console.warn('refresh subscription detail',err);}
+  };
+
   /* Replace the admin detail renderer only at its output boundary.
      The underlying code document remains untouched by subscription suspension. */
   const oldDetail=window.__codeDetail;
@@ -23760,11 +23781,12 @@ body.light-mode #coursesPage .course-card:hover{
         const es=await enrollmentRef(courseId,uid).get();
         const e=es.exists?(es.data()||{}):{};
         const status=subscriptionStatusText(e);
-        const statusEls=document.querySelectorAll('#codeDetailBodyV12 .code-detail-item-v12');
-        statusEls.forEach(item=>{
+        const statusItems=document.querySelectorAll('#codeDetailBodyV12 .code-detail-item-v12');
+        statusItems.forEach(item=>{
           const label=item.querySelector('strong');
-          if(label && label.textContent.trim()==='حالة الكود'){
-            label.textContent='حالة الاشتراك';
+          const labelText=(label?.textContent||'').trim();
+          if(labelText==='حالة الكود' || labelText==='حالة الاشتراك'){
+            if(label)label.textContent='حالة الاشتراك';
             const span=item.querySelector('span');
             if(span){
               span.textContent=status;
@@ -23821,9 +23843,10 @@ body.light-mode #coursesPage .course-card:hover{
   /* Re-check binding cheaply while a student is inside a course. */
   if(!window.__aaSubscriptionBindingTimer){
     window.__aaSubscriptionBindingTimer=setInterval(()=>{
-      if(document.hidden||isAdmin||!currentUser||!window.activeCourseId)return;
-      ensureLiveSubscriptionBinding();
-    },300);
+      if(document.hidden||isAdmin||!currentUser)return;
+      const cid=currentOpenCourseId();
+      if(cid) ensureLiveSubscriptionBinding();
+    },250);
   }
 
   // Bind as soon as an enrollment session is restored/opened.
@@ -23831,7 +23854,10 @@ body.light-mode #coursesPage .course-card:hover{
   if(typeof originalOpen==='function'&&!originalOpen.__aaFinalSubscriptionOpenHook){
     const wrappedOpen=async function(courseId){
       const result=await originalOpen.apply(this,arguments);
-      if(currentUser&&!isAdmin&&String(window.activeCourseId||'')===String(courseId))ensureLiveSubscriptionBinding();
+      if(currentUser&&!isAdmin&&currentOpenCourseId()===String(courseId)){
+        ensureLiveSubscriptionBinding();
+        setTimeout(()=>{ if(currentOpenCourseId()===String(courseId)) ensureLiveSubscriptionBinding(); },50);
+      }
       return result;
     };
     wrappedOpen.__aaFinalSubscriptionOpenHook=true;
