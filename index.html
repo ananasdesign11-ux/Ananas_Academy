@@ -3349,6 +3349,14 @@ body.light-mode #fullPageAssignmentsContainer .assignment-full-card>div:first-ch
         </div>
     </nav>
 
+    <!-- ===== MOBILE BOTTOM NAVIGATION ===== -->
+    <nav id="mobileBottomNav" class="mobile-bottom-nav" aria-label="التنقل السفلي">
+        <button type="button" class="mobile-nav-item active" data-page="courses" aria-label="الدورات">
+            <i class="fas fa-graduation-cap" aria-hidden="true"></i>
+            <span id="mobileCoursesLabel">الدورات</span>
+        </button>
+    </nav>
+
     <!-- ===== COURSES PAGE ===== -->
     <div id="coursesPage">
         <div class="container" style="padding-bottom: 40px;">
@@ -7670,13 +7678,26 @@ body.light-mode #fullPageAssignmentsContainer .assignment-full-card>div:first-ch
                 const r=clampRatio(ratio),target=d*r;
                 const now=Date.now();
                 if(now-lastCommitAt<80 && Math.abs(r-lastCommitRatio)<0.002)return;
-                lastCommitAt=now;lastCommitRatio=r;window.__allowedLessonSeekUntil=now+1500;
+                lastCommitAt=now;lastCommitRatio=r;window.__allowedLessonSeekUntil=now+1800;
                 try{
-                    if(typeof setLessonCurrentTime==='function') setLessonCurrentTime(target);
-                    else if(lessonPlayerType==='html5'&&lessonHtmlVideo) lessonHtmlVideo.currentTime=target;
-                    else if(typeof lessonPlayer.seekTo==='function') lessonPlayer.seekTo(target,true);
-                }catch(err){try{if(typeof lessonPlayer.seekTo==='function') lessonPlayer.seekTo(target,true);}catch(_){} }
-                window.__lessonResumePosition=target;lessonWatchState.lastObservedPosition=target;updateLessonControls();window.saveLessonProgressNow?.();
+                    let seekResult;
+                    if(typeof setLessonCurrentTime==='function') seekResult=setLessonCurrentTime(target);
+                    else if(lessonPlayerType==='html5'&&lessonHtmlVideo){ lessonHtmlVideo.currentTime=target; seekResult=true; }
+                    else if(typeof lessonPlayer.seekTo==='function') seekResult=lessonPlayer.seekTo(target,true);
+                    window.__lessonResumePosition=target;
+                    lessonWatchState.lastObservedPosition=target;
+                    updateLessonControls();
+                    const saveAfterSeek=()=>{
+                        window.__lessonResumePosition=target;
+                        lessonWatchState.lastObservedPosition=target;
+                        updateLessonControls();
+                        window.saveLessonProgressNow?.();
+                    };
+                    if(seekResult && typeof seekResult.then==='function') seekResult.then(saveAfterSeek).catch(()=>{});
+                    else setTimeout(saveAfterSeek,120);
+                }catch(err){
+                    console.warn('lesson scrub seek failed',err);
+                }
             };
             wrap.addEventListener('pointerdown',ev=>{
                 if(!lessonPlayerReady||!lessonPlayer||ev.button>0)return;
@@ -22773,7 +22794,6 @@ body:not(.light-mode){--aa-auth-bg:#0d1020;--aa-auth-surface:#15192b;--aa-auth-s
 <!-- ===== ANANAS FILES PAGE — FINAL REBUILD ===== -->
 <style id="ananas-files-final-css">
 /* The file viewer/page is intentionally self-contained. */
-#mobileBottomNav{display:none !important}
 #courseFilesPage.aa-files-final{
   position:absolute!important; inset:0!important; z-index:40!important;
   display:none!important; overflow:auto!important; padding:clamp(20px,3vw,38px)!important;
