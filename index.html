@@ -9863,14 +9863,30 @@ body.light-mode #fullPageAssignmentsContainer .assignment-full-card>div:first-ch
         const er=await db.collection('users').doc(currentUser.uid).collection('enrolledCourses').doc(courseId).get();
         if(er.exists){
           const en=er.data()||{};
-          if(en.codeDeleted===true || en.accessBlocked===true){
+          // الحقول القديمة codeDeleted/accessBlocked لا تمنع إعادة الاشتراك
+          // عندما تكون وثيقة الاشتراك نفسها معلّمة كغير نشطة.
+          if((en.codeDeleted===true || en.accessBlocked===true) && en.enrollmentActive !== false){
             return showCustomAlert('لا يمكن الدخول',en.accessBlockReason||'اشتراكك في هذه الدورة موقوف حاليًا.');
           }
           if(en.codeId){
             const cs=await db.collection('courses').doc(courseId).collection('codes').doc(en.codeId).get();
             if(!cs.exists){
-              await er.set({codeDeleted:true,accessBlocked:true,accessBlockReason:'تم حذف كود الاشتراك المرتبط بهذا الحساب. يجب استخدام كود جديد.',accessUpdatedAt:firebase.firestore.FieldValue.serverTimestamp()},{merge:true});
-              return showCustomAlert('لا يمكن الدخول','تم حذف كود الاشتراك المرتبط بهذا الحساب. يجب استخدام كود جديد للاشتراك مرة أخرى.');
+              // الكود المحذوف يعني انتهاء الاشتراك، وليس إيقافه؛ لذلك نعلّم
+              // وثيقة الاشتراك كغير نشطة حتى يتحول زر الدورة للاشتراك الجديد.
+              await er.set({
+                enrollmentActive:false,
+                codeDeleted:true,
+                accessBlocked:false,
+                accessBlockReason:null,
+                codeId:null,
+                codeUsed:null,
+                subscriptionEndedAt:firebase.firestore.FieldValue.serverTimestamp(),
+                previousSubscriptionEndReason:'تم حذف كود الاشتراك المرتبط بهذا الحساب.',
+                accessUpdatedAt:firebase.firestore.FieldValue.serverTimestamp()
+              },{merge:true});
+              if(typeof refreshUserEnrollmentMap==='function') await refreshUserEnrollmentMap(true).catch(()=>{});
+              try{updateCourseActionButtons?.();}catch(_){}
+              return __oldOpenCourse.apply(this,arguments);
             }
           }
         }
@@ -22451,7 +22467,6 @@ body:not(.light-mode){--aa-auth-bg:#0d1020;--aa-auth-surface:#15192b;--aa-auth-s
 <!-- ===== ANANAS FILES PAGE — FINAL REBUILD ===== -->
 <style id="ananas-files-final-css">
 /* The file viewer/page is intentionally self-contained. */
-#mobileBottomNav{display:none !important}
 #courseFilesPage.aa-files-final{
   position:absolute!important; inset:0!important; z-index:40!important;
   display:none!important; overflow:auto!important; padding:clamp(20px,3vw,38px)!important;
@@ -23110,5 +23125,61 @@ body.light-mode #coursesPage .course-card:hover{
 .aa-final-thumb canvas{display:block!important;width:100%!important;height:auto!important;max-width:100%!important;object-fit:contain!important;image-rendering:auto!important;user-select:none!important;-webkit-user-drag:none!important;}
 .aa-final-thumb span{display:block!important;flex:0 0 auto!important;white-space:nowrap!important;line-height:1.2!important;}
 </style>
+
+<!-- ===== ANANAS MOBILE BOTTOM NAV RESTORE ===== -->
+<nav id="mobileBottomNav" class="mobile-bottom-nav" aria-label="التنقل السفلي">
+  <button type="button" class="mobile-nav-item active" data-page="courses" aria-label="الدورات">
+    <i class="fas fa-graduation-cap"></i><span>الدورات</span>
+  </button>
+</nav>
+<style id="ananas-mobile-bottom-nav-restore-final">
+@media (max-width: 768px){
+  .nav-actions-top #coursesNavBtn{display:none !important;}
+  #mobileBottomNav{
+    display:flex !important;
+    position:fixed !important;
+    left:0 !important;
+    right:0 !important;
+    bottom:0 !important;
+    top:auto !important;
+    width:100% !important;
+    height:calc(66px + env(safe-area-inset-bottom)) !important;
+    min-height:calc(66px + env(safe-area-inset-bottom)) !important;
+    z-index:100001 !important;
+    align-items:stretch !important;
+    justify-content:space-around !important;
+    background:rgba(20,20,24,.96) !important;
+    backdrop-filter:blur(16px) !important;
+    -webkit-backdrop-filter:blur(16px) !important;
+    border-top:1px solid var(--border) !important;
+    padding-bottom:env(safe-area-inset-bottom) !important;
+    overflow:hidden !important;
+  }
+  body.light-mode #mobileBottomNav{background:rgba(255,255,255,.96) !important;}
+  #mobileBottomNav .mobile-nav-item{
+    flex:1 !important;border:0 !important;background:transparent !important;
+    color:var(--text-muted) !important;display:flex !important;
+    flex-direction:column !important;align-items:center !important;
+    justify-content:center !important;gap:3px !important;
+    font-family:inherit !important;font-size:.68rem !important;cursor:pointer !important;
+  }
+  #mobileBottomNav .mobile-nav-item i{font-size:1.05rem !important;}
+  #mobileBottomNav .mobile-nav-item.active{color:var(--accent1) !important;}
+}
+@media (min-width:769px){#mobileBottomNav{display:none !important;}}
+</style>
+<script id="ananas-mobile-bottom-nav-final-wire">
+(function(){
+  const nav=document.getElementById('mobileBottomNav');
+  const btn=nav?.querySelector('[data-page="courses"]');
+  if(!btn) return;
+  btn.addEventListener('click',function(e){
+    e.preventDefault();
+    try{ window.mobileNavigate?.('courses'); }catch(_){}
+    nav.querySelectorAll('.mobile-nav-item').forEach(x=>x.classList.toggle('active',x===btn));
+  });
+})();
+</script>
 </body>
 </html>
+
