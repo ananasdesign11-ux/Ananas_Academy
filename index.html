@@ -7609,10 +7609,15 @@ body.light-mode #fullPageAssignmentsContainer .assignment-full-card>div:first-ch
             const previewTime=document.getElementById('lessonSeekPreviewTime');
             if(!wrap||!fill||!thumb||wrap.dataset.scrubberBound==='1')return;
             wrap.dataset.scrubberBound='1';
-            let dragging=false,pointerId=null,pendingRatio=0,rafId=0,previewRequest=0,previewReady=false,previewTarget=0;
+            let dragging=false,pointerId=null,pendingRatio=0,rafId=0,previewRequest=0,previewReady=false,previewTarget=0,lastCommitAt=0,lastCommitRatio=-1;
             const clampRatio=r=>Math.max(0,Math.min(1,Number(r)||0));
             const getDuration=()=>Number(lessonPlayer?.getDuration?.()||lessonWatchState.duration||0);
-            const ratioFromEvent=ev=>{const rect=wrap.getBoundingClientRect();return clampRatio((Number(ev.clientX)-rect.left)/Math.max(1,rect.width));};
+            const ratioFromEvent=ev=>{
+                const rect=wrap.getBoundingClientRect();
+                const x=Number(ev?.clientX);
+                if(!Number.isFinite(x))return pendingRatio;
+                return clampRatio((x-rect.left)/Math.max(1,rect.width));
+            };
             const paintScrub=ratio=>{
                 const d=getDuration(),t=d>0?d*ratio:0,pct=(ratio*100).toFixed(3)+'%';
                 fill.style.width=pct;thumb.style.left=pct;wrap.setAttribute('aria-valuenow',String(Math.round(ratio*100)));
@@ -7662,8 +7667,15 @@ body.light-mode #fullPageAssignmentsContainer .assignment-full-card>div:first-ch
             const commitRatio=ratio=>{
                 if(!lessonPlayerReady||!lessonPlayer)return;
                 const d=getDuration();if(d<=0)return;
-                const target=d*clampRatio(ratio);window.__allowedLessonSeekUntil=Date.now()+1500;
-                try{lessonPlayer.seekTo(target,true);}catch(err){try{lessonPlayer.seekTo(target);}catch(_){} }
+                const r=clampRatio(ratio),target=d*r;
+                const now=Date.now();
+                if(now-lastCommitAt<80 && Math.abs(r-lastCommitRatio)<0.002)return;
+                lastCommitAt=now;lastCommitRatio=r;window.__allowedLessonSeekUntil=now+1500;
+                try{
+                    if(typeof setLessonCurrentTime==='function') setLessonCurrentTime(target);
+                    else if(lessonPlayerType==='html5'&&lessonHtmlVideo) lessonHtmlVideo.currentTime=target;
+                    else if(typeof lessonPlayer.seekTo==='function') lessonPlayer.seekTo(target,true);
+                }catch(err){try{if(typeof lessonPlayer.seekTo==='function') lessonPlayer.seekTo(target,true);}catch(_){} }
                 window.__lessonResumePosition=target;lessonWatchState.lastObservedPosition=target;updateLessonControls();window.saveLessonProgressNow?.();
             };
             wrap.addEventListener('pointerdown',ev=>{
@@ -7687,6 +7699,15 @@ body.light-mode #fullPageAssignmentsContainer .assignment-full-card>div:first-ch
             };
             wrap.addEventListener('pointerup',finish,{passive:false});
             wrap.addEventListener('pointercancel',finish,{passive:false});
+            wrap.addEventListener('click',ev=>{
+                if(dragging)return;
+                if(!lessonPlayerReady||!lessonPlayer)return;
+                const ratio=ratioFromEvent(ev);
+                showPreviewForRatio(ratio);
+                commitRatio(ratio);
+                setTimeout(releasePreview,90);
+                ev.preventDefault();
+            },{passive:false});
             wrap.addEventListener('lostpointercapture',()=>{
                 if(!dragging)return;const ratio=clampRatio(pendingRatio);dragging=false;pointerId=null;wrap.classList.remove('dragging');commitRatio(ratio);releasePreview();
             });
@@ -13375,8 +13396,9 @@ html,body{max-width:100%;overflow-x:hidden;}
 }
 
 /* Generic modal/popup background lock: never scroll the page behind an open dialog. */
-body.aa-v9-modal-locked{overflow:hidden!important;touch-action:none!important;}
-html.aa-v9-modal-locked{overflow:hidden!important;}
+body.aa-v9-modal-locked{overflow:hidden!important;overscroll-behavior:none!important;}
+html.aa-v9-modal-locked{overflow:hidden!important;overscroll-behavior:none!important;}
+.edit-modal.active,.auth-popup.active,.custom-alert-modal.active,.gallery-viewer.active,.platform-image-viewer.active,.file-viewer-overlay.active,.ananas-modal-overlay.active,.profile-self-modal.active,#quizOverlay.active,[role="dialog"]{overscroll-behavior:contain;}
 .edit-modal.active,.auth-popup.active,.custom-alert-modal.active,#quizOverlay.active{overscroll-behavior:contain;}
 .edit-modal.active,.auth-popup.active{overflow-y:auto!important;}
 .custom-alert-modal.active{overflow:auto!important;}
@@ -13389,9 +13411,58 @@ html.aa-v9-modal-locked{overflow:hidden!important;}
 document.head.appendChild(mobileCSS);
 
 /* ---------- Lock the background while ANY actual popup/modal is open ---------- */
-function modalIsOpen(){return !!document.querySelector('.edit-modal.active,.auth-popup.active,.custom-alert-modal.active,#quizOverlay.active');}
-function syncModalLock(){document.body.classList.toggle('aa-v9-modal-locked',modalIsOpen());document.documentElement.classList.toggle('aa-v9-modal-locked',modalIsOpen());}
-const modalObs=new MutationObserver(syncModalLock);modalObs.observe(document.body,{subtree:true,attributes:true,attributeFilter:['class','style','hidden']});
+const AA_MODAL_SELECTOR=[
+  '.edit-modal.active','.auth-popup.active','.custom-alert-modal.active',
+  '.gallery-viewer.active','.platform-image-viewer.active','.file-viewer-overlay.active',
+  '.ananas-modal-overlay.active','.profile-self-modal.active','#quizOverlay.active',
+  '[role=\"dialog\"]:not([aria-hidden=\"true\"])',
+  '.modal.active','.popup.active','.overlay.open'
+].join(',');
+function modalIsOpen(){return !!document.querySelector(AA_MODAL_SELECTOR);}
+function activeModalElement(target){
+  try{return target?.closest?.(AA_MODAL_SELECTOR)||null;}catch(_){return null;}
+}
+let aaLockedScrollY=0,aaModalScrollLocked=false;
+function syncModalLock(){
+  const open=modalIsOpen();
+  document.body.classList.toggle('aa-v9-modal-locked',open);
+  document.documentElement.classList.toggle('aa-v9-modal-locked',open);
+  if(open&&!aaModalScrollLocked){
+    aaLockedScrollY=window.scrollY||window.pageYOffset||0;
+    aaModalScrollLocked=true;
+    document.body.style.setProperty('top',`-${aaLockedScrollY}px`,'important');
+    document.body.style.setProperty('position','fixed','important');
+    document.body.style.setProperty('left','0','important');
+    document.body.style.setProperty('right','0','important');
+    document.body.style.setProperty('width','100%','important');
+  }else if(!open&&aaModalScrollLocked){
+    aaModalScrollLocked=false;
+    document.body.style.removeProperty('top');
+    document.body.style.removeProperty('position');
+    document.body.style.removeProperty('left');
+    document.body.style.removeProperty('right');
+    document.body.style.removeProperty('width');
+    window.scrollTo(0,aaLockedScrollY);
+  }
+}
+function preventBackgroundGesture(e){
+  if(!modalIsOpen())return;
+  if(activeModalElement(e.target))return;
+  e.preventDefault();
+  e.stopImmediatePropagation();
+}
+const modalObs=new MutationObserver(syncModalLock);
+modalObs.observe(document.body,{subtree:true,attributes:true,attributeFilter:['class','style','hidden']});
+window.addEventListener('wheel',preventBackgroundGesture,{capture:true,passive:false});
+window.addEventListener('touchmove',preventBackgroundGesture,{capture:true,passive:false});
+window.addEventListener('touchstart',e=>{if(modalIsOpen()&&!activeModalElement(e.target)){e.preventDefault();e.stopImmediatePropagation();}},{capture:true,passive:false});
+window.addEventListener('gesturestart',preventBackgroundGesture,{capture:true,passive:false});
+window.addEventListener('keydown',e=>{
+  if(!modalIsOpen()||activeModalElement(e.target))return;
+  if(['ArrowUp','ArrowDown','PageUp','PageDown','Home','End',' ','Spacebar'].includes(e.key)){
+    e.preventDefault();e.stopImmediatePropagation();
+  }
+},{capture:true});
 syncModalLock();
 
 /* ---------- If profile page becomes visible, always keep directory admin-only and hide viewed card. ---------- */nsetInterval;
