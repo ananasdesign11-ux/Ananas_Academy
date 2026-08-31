@@ -24046,5 +24046,202 @@ body.light-mode #coursesPage .course-card:hover{
 })();
 </script>
 
+
+
+<!-- ===== FINAL REQUESTED FIXES: permanently hidden deleted subscriptions + mobile lesson fullscreen ===== -->
+<script id="aa-final-requested-fixes-v1">
+(function(){
+  'use strict';
+  const $=id=>document.getElementById(id);
+  const norm=v=>String(v??'').toUpperCase().replace(/\s+/g,'').trim();
+
+  /* ------------------------------------------------------------
+     1) Deleted subscription codes are permanently hidden.
+        The archive is the source of truth; revoked/marked-deleted
+        legacy records are hidden as an additional safety net.
+     ------------------------------------------------------------ */
+  async function getDeletedCodeSet(courseId){
+    const set=new Set();
+    if(!courseId)return set;
+    try{
+      const snap=await db.collection('courses').doc(String(courseId)).collection('codeArchive').get();
+      snap.forEach(d=>{
+        const data=d.data()||{};
+        const key=norm(d.id || data.normalizedCode || data.code);
+        if(key)set.add(key);
+      });
+    }catch(e){console.warn('deleted code archive read failed',e);}
+    return set;
+  }
+
+  async function getDeletedCodeIds(courseId){
+    const set=new Set();
+    if(!courseId)return set;
+    try{
+      const snap=await db.collection('courses').doc(String(courseId)).collection('codeArchive').get();
+      snap.forEach(d=>{
+        const id=String(d.data()?.originalCodeId||'').trim();
+        if(id)set.add(id);
+      });
+    }catch(e){console.warn('deleted code archive id read failed',e);}
+    return set;
+  }
+
+  function isLegacyDeletedCode(c){
+    if(!c)return false;
+    if(c.deleted===true || c.subscriptionDeleted===true || c.permanentlyDeleted===true || c.codeDeleted===true)return true;
+    const revoked=Array.isArray(c.revokedUsers)?c.revokedUsers:[];
+    const used=Array.isArray(c.usedBy)?c.usedBy.filter(Boolean):[];
+    return used.length===0 && revoked.length>0;
+  }
+
+  async function hardHideDeletedCodeData(courseId){
+    const [deleted,deletedIds]=await Promise.all([getDeletedCodeSet(courseId),getDeletedCodeIds(courseId)]);
+    const source=Array.isArray(window.__aaSubscriptionCodeSearchData)?window.__aaSubscriptionCodeSearchData:[];
+    const removedIds=new Set();
+    const kept=[];
+    source.forEach(item=>{
+      const c=item?.c||{};
+      const key=norm(c.normalizedCode||c.code||'');
+      const id=String(item?.id||'');
+      const remove=!!item?.deletedPermanently || isLegacyDeletedCode(c) || deleted.has(key) || deletedIds.has(id);
+      if(remove){if(id)removedIds.add(id);return;}
+      kept.push(item);
+    });
+    if(Array.isArray(window.__aaSubscriptionCodeSearchData))window.__aaSubscriptionCodeSearchData=kept;
+
+    const board=$('codeLifecycleBoardV12');
+    if(board){
+      board.querySelectorAll('.code-card-v12-wrap').forEach(w=>{
+        const btn=w.querySelector('.code-card-v12');
+        const match=String(btn?.getAttribute('onclick')||'').match(/__codeDetail\('(?:[^']*)','([^']+)'/);
+        if(match&&removedIds.has(String(match[1])))w.remove();
+      });
+      /* Also remove empty lifecycle sections after the hard filter. */
+      board.querySelectorAll('.code-lifecycle-panel').forEach(panel=>{
+        const list=panel.querySelector('.code-lifecycle-list');
+        if(list && !list.querySelector('.code-card-v12-wrap'))panel.remove();
+      });
+    }
+  }
+
+  const originalLoad=window.loadCodesForCourse;
+  if(typeof originalLoad==='function'&&!originalLoad.__aaDeletedCodeHardGuard){
+    const wrapped=async function(courseId){
+      /* Never reuse stale cached lifecycle data after a deletion. */
+      if(String(window.__aaSubscriptionCodeSearchCourse||'')===String(courseId)){
+        window.__aaSubscriptionCodeSearchCourse=null;
+        window.__aaSubscriptionCodeSearchData=null;
+      }
+      const result=await originalLoad.apply(this,arguments);
+      await hardHideDeletedCodeData(courseId);
+      return result;
+    };
+    wrapped.__aaDeletedCodeHardGuard=true;
+    wrapped.__original=originalLoad;
+    window.loadCodesForCourse=wrapped;
+  }
+
+  /* ------------------------------------------------------------
+     2) Mobile fullscreen/expand button.
+        Replace the final button binding so touch devices do not
+        lose the gesture to the older stopPropagation handlers.
+     ------------------------------------------------------------ */
+  function isTouchDevice(){
+    try{return (navigator.maxTouchPoints||0)>0 || 'ontouchstart' in window || window.matchMedia('(pointer:coarse)').matches;}catch(_){return false;}
+  }
+
+  async function enterFullscreenRobust(){
+    try{
+      const wrapper=$('lessonVideoWrapper');
+      if(!wrapper)return false;
+      const active=document.fullscreenElement||document.webkitFullscreenElement;
+      if(active){
+        try{
+          if(document.exitFullscreen)await document.exitFullscreen();
+          else if(document.webkitExitFullscreen)await document.webkitExitFullscreen();
+          return true;
+        }catch(_){ }
+      }
+
+      /* iOS Safari: native HTML5 video fullscreen is the most reliable route. */
+      if(isTouchDevice() && typeof lessonHtmlVideo!=='undefined' && lessonHtmlVideo?.webkitEnterFullscreen){
+        try{lessonHtmlVideo.webkitEnterFullscreen();return true;}catch(_){ }
+      }
+
+      /* For YouTube/Vimeo embeds, request fullscreen on the actual iframe first. */
+      const iframe=wrapper.querySelector('iframe');
+      const candidates=[iframe,wrapper].filter(Boolean);
+      for(const el of candidates){
+        try{
+          const req=el.requestFullscreen?.bind(el)||el.webkitRequestFullscreen?.bind(el);
+          if(!req)continue;
+          const r=req();
+          if(r?.then)await r;
+          return true;
+        }catch(_){ }
+      }
+
+      /* Final HTML5 fallback. */
+      if(typeof lessonHtmlVideo!=='undefined' && lessonHtmlVideo?.requestFullscreen){
+        const r=lessonHtmlVideo.requestFullscreen();
+        if(r?.then)await r;
+        return true;
+      }
+    }catch(e){console.warn('robust lesson fullscreen failed',e);}
+    return false;
+  }
+
+  function bindMobileFullscreen(){
+    const old=$('lessonFullscreenBtn');
+    if(!old)return;
+    if(old.dataset.aaFinalMobileFs==='1')return;
+    const btn=old.cloneNode(true);
+    btn.dataset.aaFinalMobileFs='1';
+    old.replaceWith(btn);
+
+    let handledAt=0;
+    const fire=async e=>{
+      e.preventDefault();e.stopPropagation();e.stopImmediatePropagation();
+      handledAt=Date.now();
+      await enterFullscreenRobust();
+    };
+
+    if(isTouchDevice()){
+      btn.addEventListener('pointerup',fire,true);
+      btn.addEventListener('touchend',fire,true);
+    }
+    btn.addEventListener('click',async e=>{
+      if(Date.now()-handledAt<700){
+        e.preventDefault();e.stopPropagation();e.stopImmediatePropagation();
+        return;
+      }
+      e.preventDefault();e.stopPropagation();e.stopImmediatePropagation();
+      await enterFullscreenRobust();
+    },true);
+    btn.addEventListener('keydown',async e=>{
+      if(e.key==='Enter'||e.key===' '){
+        e.preventDefault();e.stopPropagation();e.stopImmediatePropagation();
+        await enterFullscreenRobust();
+      }
+    },true);
+  }
+
+  bindMobileFullscreen();
+  document.addEventListener('DOMContentLoaded',bindMobileFullscreen,{once:true});
+  new MutationObserver(bindMobileFullscreen).observe(document.body,{subtree:true,childList:true});
+
+  document.addEventListener('fullscreenchange',()=>{
+    const btn=$('lessonFullscreenBtn');
+    if(btn){btn.innerHTML=(document.fullscreenElement||document.webkitFullscreenElement)?'<i class="fas fa-compress"></i>':'<i class="fas fa-expand"></i>';}
+  });
+  document.addEventListener('webkitfullscreenchange',()=>{
+    const btn=$('lessonFullscreenBtn');
+    const active=document.fullscreenElement||document.webkitFullscreenElement;
+    if(btn)btn.innerHTML=active?'<i class="fas fa-compress"></i>':'<i class="fas fa-expand"></i>';
+  });
+})();
+</script>
+
 </body>
 </html>
